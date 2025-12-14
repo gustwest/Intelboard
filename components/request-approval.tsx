@@ -35,7 +35,7 @@ export function RequestApproval({ request, onUpdate }: RequestApprovalProps) {
     }
 
     // Only show approval flow for New or Analyzing requests
-    if (request.status !== "New" && request.status !== "Analyzing") {
+    if (request.status !== "New") {
         return null;
     }
 

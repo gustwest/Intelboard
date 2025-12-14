@@ -83,7 +83,7 @@ export function KanbanBoard({
                                                                 <Badge variant="outline" className="text-[10px] px-1 py-0 h-5">
                                                                     {req.industry}
                                                                 </Badge>
-                                                                {req.tags.slice(0, 2).map((tag) => (
+                                                                {req.tags?.slice(0, 2).map((tag) => (
                                                                     <Badge
                                                                         key={tag}
                                                                         variant="secondary"
@@ -110,7 +110,7 @@ export function KanbanBoard({
                                                             )}
                                                         </CardContent>
                                                         <CardFooter className="p-4 pt-0 flex justify-between">
-                                                            {(column === "New" || column === "Analyzing") && !readOnly ? (
+                                                            {(column === "New") && !readOnly ? (
                                                                 <Button
                                                                     size="sm"
                                                                     variant="default"
