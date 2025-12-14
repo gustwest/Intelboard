@@ -1,65 +1,221 @@
-import Image from "next/image";
+"use client";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import Link from "next/link";
+import { ArrowRight, LayoutDashboard, PlusCircle, Users, Zap, ShieldCheck, BarChart3, Building2, Check } from "lucide-react";
+import { motion } from "framer-motion";
+import { LoginDialog } from "@/components/login-dialog";
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="flex flex-col gap-16 pb-16">
+      {/* Hero Section */}
+      <section className="space-y-6 pb-8 pt-6 md:pb-12 md:pt-10 lg:py-32">
+        <div className="container flex max-w-[64rem] flex-col items-center gap-4 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <h1 className="font-heading text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text pb-2">
+              The Future of Agile Staffing
+            </h1>
+          </motion.div>
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="max-w-[42rem] leading-normal text-muted-foreground sm:text-xl sm:leading-8"
+          >
+            Connect with top-tier consultants for high-impact microgigs. Get the critical intel and strategic insight you need to make your next best move with confidence.
+          </motion.p>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.4 }}
+            className="space-x-4 pt-4"
+          >
+            <LoginDialog />
+            <Button size="lg" variant="outline" asChild>
+              <Link href="/board">View Demo Board</Link>
+            </Button>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section className="container space-y-6 bg-slate-50 dark:bg-slate-900/50 py-12 lg:py-24 rounded-3xl">
+        <div className="mx-auto flex max-w-[58rem] flex-col items-center space-y-4 text-center">
+          <h2 className="font-heading text-3xl leading-[1.1] sm:text-3xl md:text-5xl font-bold">
+            Why IntelBoard?
+          </h2>
+          <p className="max-w-[85%] leading-normal text-muted-foreground sm:text-lg sm:leading-7">
+            Streamline your decision-making with targeted expertise.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <div className="mx-auto grid justify-center gap-4 sm:grid-cols-2 md:max-w-[64rem] md:grid-cols-3">
+          <FeatureCard
+            icon={<Zap className="h-10 w-10 mb-2 text-yellow-500" />}
+            title="Strategic Microgigs"
+            description="Engage experts for short, high-value tasks to unlock specific insights and direction."
+          />
+          <FeatureCard
+            icon={<LayoutDashboard className="h-10 w-10 mb-2 text-blue-500" />}
+            title="Actionable Intel"
+            description="Don't guess. Get the precise knowledge you need to determine your next best step."
+          />
+          <FeatureCard
+            icon={<ShieldCheck className="h-10 w-10 mb-2 text-green-500" />}
+            title="Verified Experts"
+            description="Access a curated network of top-tier consultants and entrepreneurs."
+          />
+          <FeatureCard
+            icon={<PlusCircle className="h-10 w-10 mb-2 text-purple-500" />}
+            title="Agile Native"
+            description="Built around User Stories and Acceptance Criteria for seamless integration."
+          />
+          <FeatureCard
+            icon={<Users className="h-10 w-10 mb-2 text-pink-500" />}
+            title="Role-Based Views"
+            description="Tailored experiences for Customers, Specialists, and Admins."
+          />
+          <FeatureCard
+            icon={<BarChart3 className="h-10 w-10 mb-2 text-orange-500" />}
+            title="Transparent Process"
+            description="Clear negotiation of acceptance criteria before work begins."
+          />
         </div>
-      </main>
+      </section>
+
+      {/* How it Works */}
+      <section className="container py-12 lg:py-24">
+        <div className="mx-auto flex max-w-[58rem] flex-col items-center space-y-4 text-center mb-12">
+          <h2 className="font-heading text-3xl leading-[1.1] sm:text-3xl md:text-5xl font-bold">
+            How It Works
+          </h2>
+        </div>
+        <div className="grid gap-8 md:grid-cols-3">
+          <StepCard
+            number="1"
+            title="Post Request"
+            description="Describe your need as an Agile User Story."
+          />
+          <StepCard
+            number="2"
+            title="Get Matched"
+            description="Our AI finds the best specialist for the job."
+          />
+          <StepCard
+            number="3"
+            title="Start Work"
+            description="Agree on criteria and track progress on the board."
+          />
+        </div>
+      </section>
+      {/* Sign Up Section */}
+      <section className="container py-12 lg:py-24">
+        <div className="mx-auto flex max-w-[58rem] flex-col items-center space-y-4 text-center mb-12">
+          <h2 className="font-heading text-3xl leading-[1.1] sm:text-3xl md:text-5xl font-bold">
+            Join the Ecosystem
+          </h2>
+          <p className="max-w-[85%] leading-normal text-muted-foreground sm:text-lg sm:leading-7">
+            Whether you need intel or provide it, we have a path for you.
+          </p>
+        </div>
+
+        <div className="grid gap-8 md:grid-cols-2 max-w-[64rem] mx-auto">
+          {/* Customer Card */}
+          <Card className="flex flex-col h-full border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-900/10">
+            <CardHeader>
+              <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center mb-4">
+                <Building2 className="h-6 w-6 text-white" />
+              </div>
+              <CardTitle className="text-2xl">For Corporate Leaders</CardTitle>
+              <CardDescription className="text-base">
+                Get the insights you need, faster and cheaper.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 space-y-4">
+              <ul className="space-y-3">
+                <li className="flex items-start gap-2">
+                  <Check className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+                  <span><strong>Unmatched Quality:</strong> Access top 1% talent verified by AI and human experts.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Check className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+                  <span><strong>Speed to Market:</strong> Skip the RFP process. Get matched in seconds, start in days.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Check className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+                  <span><strong>Economic Benefits:</strong> Pay for specific outcomes and microgigs, not idle bench time.</span>
+                </li>
+              </ul>
+            </CardContent>
+            <div className="p-6 pt-0 mt-auto">
+              <Button className="w-full bg-blue-600 hover:bg-blue-700">Sign Up as Customer</Button>
+            </div>
+          </Card>
+
+          {/* Agency Card */}
+          <Card className="flex flex-col h-full border-purple-200 dark:border-purple-900 bg-purple-50/50 dark:bg-purple-900/10">
+            <CardHeader>
+              <div className="w-12 h-12 rounded-full bg-purple-600 flex items-center justify-center mb-4">
+                <Users className="h-6 w-6 text-white" />
+              </div>
+              <CardTitle className="text-2xl">For Agencies & Consultants</CardTitle>
+              <CardDescription className="text-base">
+                Maximize utilization and consultant satisfaction.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 space-y-4">
+              <ul className="space-y-3">
+                <li className="flex items-start gap-2">
+                  <Check className="h-5 w-5 text-purple-600 shrink-0 mt-0.5" />
+                  <span><strong>High-Value Flow:</strong> Consistent stream of strategic microgigs that fit your expertise.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Check className="h-5 w-5 text-purple-600 shrink-0 mt-0.5" />
+                  <span><strong>Zero Sales Overhead:</strong> We bring the clients to you. Focus on delivery, not BD.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Check className="h-5 w-5 text-purple-600 shrink-0 mt-0.5" />
+                  <span><strong>Talent Retention:</strong> Keep your best consultants engaged with exciting, diverse challenges.</span>
+                </li>
+              </ul>
+            </CardContent>
+            <div className="p-6 pt-0 mt-auto">
+              <Button className="w-full bg-purple-600 hover:bg-purple-700">Join as Partner Agency</Button>
+            </div>
+          </Card>
+        </div>
+      </section>
     </div>
   );
+}
+
+function FeatureCard({ icon, title, description }: { icon: React.ReactNode, title: string, description: string }) {
+  return (
+    <motion.div whileHover={{ scale: 1.05 }} transition={{ type: "spring", stiffness: 300 }}>
+      <Card className="h-full border-none shadow-md bg-background/60 backdrop-blur">
+        <CardHeader>
+          <div className="mb-2">{icon}</div>
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>{description}</CardDescription>
+        </CardHeader>
+      </Card>
+    </motion.div>
+  );
+}
+
+function StepCard({ number, title, description }: { number: string, title: string, description: string }) {
+  return (
+    <div className="flex flex-col items-center text-center p-6">
+      <div className="w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xl font-bold mb-4">
+        {number}
+      </div>
+      <h3 className="text-xl font-bold mb-2">{title}</h3>
+      <p className="text-muted-foreground">{description}</p>
+    </div>
+  )
 }

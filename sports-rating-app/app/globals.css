@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0a0a0f;
+  --foreground: #ffffff;
+  --neon-blue: #00d9ff;
+  --electric-purple: #bf00ff;
+  --neon-pink: #ff00aa;
+  --cyber-green: #00ff88;
+  --dark-bg: #0a0a0f;
+  --card-bg: rgba(15, 15, 25, 0.6);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-neon-blue: var(--neon-blue);
+  --color-electric-purple: var(--electric-purple);
+  --color-neon-pink: var(--neon-pink);
+  --color-cyber-green: var(--cyber-green);
+  --color-dark-bg: var(--dark-bg);
+  --color-card-bg: var(--card-bg);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: linear-gradient(135deg, #0a0a0f 0%, #1a0a2e 100%);
+  color: var(--foreground);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Glassmorphism effect */
+.glass {
+  background: rgba(15, 15, 25, 0.6);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Neon glow effect */
+.neon-glow {
+  box-shadow:
+    0 0 10px rgba(0, 217, 255, 0.5),
+    0 0 20px rgba(0, 217, 255, 0.3),
+    0 0 30px rgba(0, 217, 255, 0.2);
+}
+
+.neon-glow-purple {
+  box-shadow:
+    0 0 10px rgba(191, 0, 255, 0.5),
+    0 0 20px rgba(191, 0, 255, 0.3),
+    0 0 30px rgba(191, 0, 255, 0.2);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 15, 25, 0.3);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--neon-blue), var(--electric-purple));
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, var(--electric-purple), var(--neon-pink));
+}

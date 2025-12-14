@@ -1,26 +1,121 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Earthy Theme - Light */
+  --background: #fdfcf8;
+  /* Warm off-white */
+  --foreground: #2c2825;
+  /* Dark earthy brown */
+
+  --card: #ffffff;
+  --card-foreground: #2c2825;
+
+  --popover: #ffffff;
+  --popover-foreground: #2c2825;
+
+  --primary: #4a6741;
+  /* Forest Green */
+  --primary-foreground: #ffffff;
+
+  --secondary: #e8e4d9;
+  /* Sand/Beige */
+  --secondary-foreground: #2c2825;
+
+  --muted: #f0efe9;
+  --muted-foreground: #78716c;
+  /* Stone */
+
+  --accent: #f5f2e9;
+  --accent-foreground: #2c2825;
+
+  --destructive: #d9534f;
+  /* Earthy Red */
+  --destructive-foreground: #ffffff;
+
+  --border: #e7e5e4;
+  --input: #e7e5e4;
+  --ring: #4a6741;
+
+  --radius: 0.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Earthy Theme - Dark */
+    --background: #1c1917;
+    /* Stone 900 */
+    --foreground: #f5f5f4;
+    /* Stone 100 */
+
+    --card: #292524;
+    /* Stone 800 */
+    --card-foreground: #f5f5f4;
+
+    --popover: #292524;
+    --popover-foreground: #f5f5f4;
+
+    --primary: #86a789;
+    /* Sage Green */
+    --primary-foreground: #1c1917;
+
+    --secondary: #44403c;
+    /* Stone 700 */
+    --secondary-foreground: #f5f5f4;
+
+    --muted: #44403c;
+    --muted-foreground: #a8a29e;
+
+    --accent: #44403c;
+    --accent-foreground: #f5f5f4;
+
+    --destructive: #7f1d1d;
+    --destructive-foreground: #f5f5f4;
+
+    --border: #44403c;
+    --input: #44403c;
+    --ring: #86a789;
+  }
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+
+  --font-sans: var(--font-sans);
+  --font-mono: monospace;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
