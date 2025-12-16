@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -26,7 +27,14 @@ export function SiteHeader() {
             <div className="container flex h-14 items-center px-4 md:px-6">
                 <div className="mr-4 hidden md:flex">
                     <Link href="/" className="mr-6 flex items-center space-x-2">
-                        <span className="hidden font-bold sm:inline-block">
+                        <Image
+                            src="/intelboard_logo.png"
+                            alt="Intelboard"
+                            width={40}
+                            height={40}
+                            className="rounded-sm"
+                        />
+                        <span className="hidden font-bold sm:inline-block sr-only">
                             {t.landing.title}
                         </span>
                     </Link>

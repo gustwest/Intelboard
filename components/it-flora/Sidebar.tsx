@@ -32,10 +32,17 @@ export function Sidebar({ onAddSystem, onAddProject, onEditProject, onManageSyst
 
     const activeProject = visibleProjects.find(p => p.id === activeProjectId);
 
-    // Filter systems list based on active project
+    // Filter systems list based on active project OR ownership
     const displayedSystems = activeProjectId
         ? systems.filter(s => activeProject?.systemIds.includes(s.id))
-        : systems;
+        : systems.filter(s => {
+            if (!currentUser) return false;
+            // Admins can see everything (optional, but good for demo/debug)
+            if (currentUser.role === 'Administrator') return true;
+
+            // Strict ownership or shared check
+            return s.ownerId === currentUser.id || s.sharedWith?.includes(currentUser.id);
+        });
 
     return (
         <div className="w-64 border-r border-border bg-card p-4 flex flex-col h-full shadow-sm">

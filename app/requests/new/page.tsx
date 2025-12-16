@@ -59,7 +59,7 @@ export default function NewRequestPage() {
             };
 
             addRequest(newRequest);
-            router.push("/board");
+            router.push(`/requests/${newRequest.id}`);
         }, 1000);
     };
 

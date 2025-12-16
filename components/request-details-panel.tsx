@@ -18,6 +18,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { ProjectLinker } from "@/components/project-linker";
+import { ACEditor } from "@/components/ac-editor";
 
 interface RequestDetailsPanelProps {
     request: Request;
@@ -48,7 +50,7 @@ export function RequestDetailsPanel({ request, onClose, onUpdate, isOwner }: Req
     };
 
     const handleSubmitForIntel = () => {
-        onUpdate({ ...formData, status: "Reviewing" });
+        onUpdate({ ...formData, status: "Submitted for Review" });
         onClose();
     };
 
@@ -56,7 +58,7 @@ export function RequestDetailsPanel({ request, onClose, onUpdate, isOwner }: Req
         <>
             {/* Backdrop */}
             <div
-                className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
+                className="fixed inset-0 z-40 bg-transparent"
                 onClick={onClose}
             />
 
@@ -123,7 +125,7 @@ export function RequestDetailsPanel({ request, onClose, onUpdate, isOwner }: Req
 
                                 <div className="flex gap-2">
                                     <Button className="flex-1" onClick={() => {
-                                        onUpdate({ ...request, status: "Waiting for Confirmation", actionNeeded: false });
+                                        onUpdate({ ...request, status: "Scope Approved", actionNeeded: false });
                                         onClose();
                                     }}>
                                         Accept Match
@@ -141,6 +143,26 @@ export function RequestDetailsPanel({ request, onClose, onUpdate, isOwner }: Req
                         )}
 
                         <div className="space-y-4">
+                            {/* Project Linker Section */}
+                            <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-200 dark:border-slate-800">
+                                <h3 className="font-semibold mb-3 flex items-center text-sm">
+                                    <span className="bg-blue-100 text-blue-700 p-1 rounded mr-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                                    </span>
+                                    Secure Workspace
+                                </h3>
+                                {(role === "Customer" || role === "Admin" || (role === "Specialist" && request.assignedSpecialistId && request.specialistNDASigned)) ? (
+                                    <ProjectLinker request={formData} onUpdate={(updated) => {
+                                        setFormData(updated);
+                                        onUpdate(updated);
+                                    }} />
+                                ) : (
+                                    <div className="text-sm text-muted-foreground italic">
+                                        Link available after assignment and NDA.
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="space-y-2">
                                 <Label htmlFor="title">Title</Label>
                                 <Input
@@ -203,11 +225,29 @@ export function RequestDetailsPanel({ request, onClose, onUpdate, isOwner }: Req
                             </div>
                         </div>
 
+                        {/* Acceptance Criteria */}
+                        <ACEditor request={formData} onUpdate={(updated) => {
+                            setFormData(updated);
+                            onUpdate(updated);
+                        }} />
+
                         {isDirty && (
                             <div className="pt-4">
                                 <Button onClick={handleSave} variant="secondary" className="w-full">
                                     Save Changes
                                 </Button>
+                            </div>
+                        )}
+
+                        {/* Submit for Review Action */}
+                        {!isDirty && request.status === "New" && isOwner && (
+                            <div className="pt-4 border-t mt-6">
+                                <Button onClick={handleSubmitForIntel} className="w-full" size="lg">
+                                    Submit for Review
+                                </Button>
+                                <p className="text-xs text-muted-foreground text-center mt-2">
+                                    This will notify our specialists to review your request.
+                                </p>
                             </div>
                         )}
                     </div>

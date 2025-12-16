@@ -38,21 +38,17 @@ export function RequestProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const addRequest = (newRequest: Request) => {
-        setRequests((prev) => {
-            const updated = [...prev, newRequest];
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-            return updated;
-        });
+        const updated = [...requests, newRequest];
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        setRequests(updated);
     };
 
     const updateRequest = (updatedRequest: Request) => {
-        setRequests((prev) => {
-            const updated = prev.map((r) =>
-                r.id === updatedRequest.id ? updatedRequest : r
-            );
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-            return updated;
-        });
+        const updated = requests.map((r) =>
+            r.id === updatedRequest.id ? updatedRequest : r
+        );
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        setRequests(updated);
     };
 
     const getRequest = (id: string) => {

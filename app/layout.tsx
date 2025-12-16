@@ -9,6 +9,8 @@ import { Toaster } from "@/components/ui/toaster";
 
 import { RequestProvider } from "@/components/request-provider";
 
+import { PlannerAuthSync } from "@/components/it-flora/PlannerAuthSync";
+
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
@@ -27,6 +29,7 @@ export default function RootLayout({
         <LanguageProvider>
           <RoleProvider>
             <RequestProvider>
+              <PlannerAuthSync />
               <div className="relative flex min-h-screen flex-col">
                 <SiteHeader />
                 <div className="flex-1 px-4 md:px-6">{children}</div>

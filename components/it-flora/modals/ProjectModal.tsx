@@ -9,9 +9,12 @@ interface ProjectModalProps {
     isOpen: boolean;
     onClose: () => void;
     projectId?: string | null;
+    initialName?: string;
+    initialDescription?: string;
+    onSave?: (newProjectId: string) => void;
 }
 
-export function ProjectModal({ isOpen, onClose, projectId }: ProjectModalProps) {
+export function ProjectModal({ isOpen, onClose, projectId, initialName, initialDescription, onSave }: ProjectModalProps) {
     const projects = useStore((state) => state.projects);
     const addProject = useStore((state) => state.addProject);
     const updateProject = useStore((state) => state.updateProject);
@@ -32,20 +35,24 @@ export function ProjectModal({ isOpen, onClose, projectId }: ProjectModalProps) 
                 setSharedWith(project.sharedWith || []);
             }
         } else {
-            setName('');
-            setDescription('');
+            setName(initialName || '');
+            setDescription(initialDescription || '');
             setSharedWith([]);
         }
-    }, [isOpen, projectId, projects]);
+    }, [isOpen, projectId, projects, initialName, initialDescription]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (projectId) {
             updateProject(projectId, { name, description, sharedWith });
+            onClose();
         } else {
-            addProject({ name, description, systemIds: [] });
+            const newId = addProject({ name, description, systemIds: [] });
+            if (onSave) {
+                onSave(newId);
+            }
+            onClose();
         }
-        onClose();
     };
 
     const handleDelete = () => {

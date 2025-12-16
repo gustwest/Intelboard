@@ -25,7 +25,7 @@ export function ACEditor({ request, onUpdate }: ACEditorProps) {
         if (!newAC.trim()) return;
         const updated = {
             ...request,
-            acceptanceCriteria: [...request.acceptanceCriteria, newAC],
+            acceptanceCriteria: [...(request.acceptanceCriteria || []), newAC],
             acStatus: "Draft" as ACStatus,
         };
         onUpdate(updated);
@@ -35,7 +35,7 @@ export function ACEditor({ request, onUpdate }: ACEditorProps) {
     const handleRemoveAC = (index: number) => {
         const updated = {
             ...request,
-            acceptanceCriteria: request.acceptanceCriteria.filter((_, i) => i !== index),
+            acceptanceCriteria: (request.acceptanceCriteria || []).filter((_, i) => i !== index),
             acStatus: "Draft" as ACStatus,
         };
         onUpdate(updated);
@@ -43,11 +43,11 @@ export function ACEditor({ request, onUpdate }: ACEditorProps) {
 
     const handleStartEdit = (index: number) => {
         setEditingIndex(index);
-        setEditValue(request.acceptanceCriteria[index]);
+        setEditValue((request.acceptanceCriteria || [])[index] || "");
     };
 
     const handleSaveEdit = (index: number) => {
-        const newCriteria = [...request.acceptanceCriteria];
+        const newCriteria = [...(request.acceptanceCriteria || [])];
         newCriteria[index] = editValue;
         const updated = {
             ...request,
@@ -72,7 +72,7 @@ export function ACEditor({ request, onUpdate }: ACEditorProps) {
 
         const updated = {
             ...request,
-            acceptanceCriteria: [...request.acceptanceCriteria, ...suggestions],
+            acceptanceCriteria: [...(request.acceptanceCriteria || []), ...suggestions],
             acStatus: "Proposed" as ACStatus,
         };
         onUpdate(updated);
@@ -99,12 +99,12 @@ export function ACEditor({ request, onUpdate }: ACEditorProps) {
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
                 <div className="space-y-2">
-                    {request.acceptanceCriteria.length === 0 && (
+                    {(request.acceptanceCriteria || []).length === 0 && (
                         <p className="text-sm text-muted-foreground italic">
                             No acceptance criteria defined yet.
                         </p>
                     )}
-                    {request.acceptanceCriteria.map((ac, index) => (
+                    {(request.acceptanceCriteria || []).map((ac, index) => (
                         <div
                             key={index}
                             className="flex items-center justify-between p-2 rounded-md border bg-slate-50 dark:bg-slate-900"

@@ -12,10 +12,10 @@ interface RequestApprovalProps {
 
 export function RequestApproval({ request, onUpdate }: RequestApprovalProps) {
     const handleApprove = () => {
-        onUpdate({ ...request, status: "Pending Review" });
+        onUpdate({ ...request, status: "Submitted for Review" });
     };
 
-    if (request.status === "Pending Review") {
+    if (request.status === "Submitted for Review") {
         return (
             <Card className="border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-900/10">
                 <CardContent className="pt-6 flex flex-col items-center text-center space-y-4">

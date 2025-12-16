@@ -1,79 +1,83 @@
 @import "tailwindcss";
 
 :root {
-  /* Earthy Theme - Light */
-  --background: #fdfcf8;
-  /* Warm off-white */
-  --foreground: #2c2825;
-  /* Dark earthy brown */
+  /* Vibrant Theme - Light */
+  --background: #ffffff;
+  --foreground: #1e293b;
+  /* Slate 800 */
 
   --card: #ffffff;
-  --card-foreground: #2c2825;
+  --card-foreground: #1e293b;
 
   --popover: #ffffff;
-  --popover-foreground: #2c2825;
+  --popover-foreground: #1e293b;
 
-  --primary: #4a6741;
-  /* Forest Green */
+  --primary: #2962FF;
+  /* Vibrant Blue */
   --primary-foreground: #ffffff;
 
-  --secondary: #e8e4d9;
-  /* Sand/Beige */
-  --secondary-foreground: #2c2825;
+  --secondary: #F4D03F;
+  /* Mustard Yellow */
+  --secondary-foreground: #1e293b;
 
-  --muted: #f0efe9;
-  --muted-foreground: #78716c;
-  /* Stone */
+  --muted: #f1f5f9;
+  /* Slate 100 */
+  --muted-foreground: #64748b;
+  /* Slate 500 */
 
-  --accent: #f5f2e9;
-  --accent-foreground: #2c2825;
+  --accent: #E67E22;
+  /* Orange */
+  --accent-foreground: #ffffff;
 
-  --destructive: #d9534f;
-  /* Earthy Red */
+  --destructive: #ef4444;
   --destructive-foreground: #ffffff;
 
-  --border: #e7e5e4;
-  --input: #e7e5e4;
-  --ring: #4a6741;
+  --border: #e2e8f0;
+  /* Slate 200 */
+  --input: #e2e8f0;
+  --ring: #2962FF;
 
   --radius: 0.5rem;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    /* Earthy Theme - Dark */
-    --background: #1c1917;
-    /* Stone 900 */
-    --foreground: #f5f5f4;
-    /* Stone 100 */
+    /* Vibrant Theme - Dark */
+    --background: #0f172a;
+    /* Slate 900 */
+    --foreground: #f8fafc;
+    /* Slate 50 */
 
-    --card: #292524;
-    /* Stone 800 */
-    --card-foreground: #f5f5f4;
+    --card: #1e293b;
+    /* Slate 800 */
+    --card-foreground: #f8fafc;
 
-    --popover: #292524;
-    --popover-foreground: #f5f5f4;
+    --popover: #1e293b;
+    --popover-foreground: #f8fafc;
 
-    --primary: #86a789;
-    /* Sage Green */
-    --primary-foreground: #1c1917;
+    --primary: #5c8aff;
+    /* Lighter Blue for dark mode */
+    --primary-foreground: #ffffff;
 
-    --secondary: #44403c;
-    /* Stone 700 */
-    --secondary-foreground: #f5f5f4;
+    --secondary: #fade65;
+    /* Lighter Yellow */
+    --secondary-foreground: #1e293b;
 
-    --muted: #44403c;
-    --muted-foreground: #a8a29e;
+    --muted: #334155;
+    /* Slate 700 */
+    --muted-foreground: #94a3b8;
+    /* Slate 400 */
 
-    --accent: #44403c;
-    --accent-foreground: #f5f5f4;
+    --accent: #f97316;
+    /* Lighter Orange */
+    --accent-foreground: #ffffff;
 
-    --destructive: #7f1d1d;
-    --destructive-foreground: #f5f5f4;
+    --destructive: #f87171;
+    --destructive-foreground: #ffffff;
 
-    --border: #44403c;
-    --input: #44403c;
-    --ring: #86a789;
+    --border: #334155;
+    --input: #334155;
+    --ring: #5c8aff;
   }
 }
 

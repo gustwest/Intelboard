@@ -5,7 +5,7 @@ export const translations = {
         common: {
             login: "Login",
             logout: "Log out",
-            dashboard: "Dashboard",
+            dashboard: "Your Intelboard",
             newRequest: "New Request",
             back: "Back",
             submit: "Submit",
@@ -23,12 +23,12 @@ export const translations = {
             learnMore: "Learn More",
         },
         board: {
-            title: "Request Board",
+            title: "Your Intelboard",
             new: "New Request",
-            reviewing: "Reviewing",
-            waiting: "Waiting for Confirmation",
-            active: "Microgig Active",
-            completed: "Completed",
+            reviewing: "Submitted for Review",
+            waiting: "Scope Refinement Required",
+            active: "Active Efforts",
+            completed: "Done",
             noRequests: "No requests found.",
         },
         request: {
@@ -56,7 +56,7 @@ export const translations = {
         common: {
             login: "Logga in",
             logout: "Logga ut",
-            dashboard: "Översikt",
+            dashboard: "Din Intelboard",
             newRequest: "Ny Förfrågan",
             back: "Tillbaka",
             submit: "Skicka",

@@ -9,16 +9,16 @@ import { LoginDialog } from "@/components/login-dialog";
 
 export default function Home() {
   return (
-    <div className="flex flex-col gap-16 pb-16">
+    <div className="flex flex-col gap-12 pb-16 max-w-5xl mx-auto px-4">
       {/* Hero Section */}
-      <section className="space-y-6 pb-8 pt-6 md:pb-12 md:pt-10 lg:py-32">
-        <div className="container flex max-w-[64rem] flex-col items-center gap-4 text-center">
+      <section className="space-y-6 md:min-h-[calc(100vh-200px)] flex flex-col items-center justify-center py-12 lg:py-0">
+        <div className="container flex flex-col items-center gap-4 text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <h1 className="font-heading text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text pb-2">
+            <h1 className="font-heading text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold bg-gradient-to-r from-primary to-accent text-transparent bg-clip-text pb-2">
               The Future of Agile Staffing
             </h1>
           </motion.div>
@@ -126,10 +126,10 @@ export default function Home() {
 
         <div className="grid gap-8 md:grid-cols-2 max-w-[64rem] mx-auto">
           {/* Customer Card */}
-          <Card className="flex flex-col h-full border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-900/10">
+          <Card className="flex flex-col h-full border-primary/20 dark:border-primary/20 bg-primary/5 dark:bg-primary/10">
             <CardHeader>
-              <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center mb-4">
-                <Building2 className="h-6 w-6 text-white" />
+              <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center mb-4">
+                <Building2 className="h-6 w-6 text-primary-foreground" />
               </div>
               <CardTitle className="text-2xl">For Corporate Leaders</CardTitle>
               <CardDescription className="text-base">
@@ -139,29 +139,29 @@ export default function Home() {
             <CardContent className="flex-1 space-y-4">
               <ul className="space-y-3">
                 <li className="flex items-start gap-2">
-                  <Check className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+                  <Check className="h-5 w-5 text-primary shrink-0 mt-0.5" />
                   <span><strong>Unmatched Quality:</strong> Access top 1% talent verified by AI and human experts.</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <Check className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+                  <Check className="h-5 w-5 text-primary shrink-0 mt-0.5" />
                   <span><strong>Speed to Market:</strong> Skip the RFP process. Get matched in seconds, start in days.</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <Check className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+                  <Check className="h-5 w-5 text-primary shrink-0 mt-0.5" />
                   <span><strong>Economic Benefits:</strong> Pay for specific outcomes and microgigs, not idle bench time.</span>
                 </li>
               </ul>
             </CardContent>
             <div className="p-6 pt-0 mt-auto">
-              <Button className="w-full bg-blue-600 hover:bg-blue-700">Sign Up as Customer</Button>
+              <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">Sign Up as Customer</Button>
             </div>
           </Card>
 
           {/* Agency Card */}
-          <Card className="flex flex-col h-full border-purple-200 dark:border-purple-900 bg-purple-50/50 dark:bg-purple-900/10">
+          <Card className="flex flex-col h-full border-accent/20 dark:border-accent/20 bg-accent/5 dark:bg-accent/10">
             <CardHeader>
-              <div className="w-12 h-12 rounded-full bg-purple-600 flex items-center justify-center mb-4">
-                <Users className="h-6 w-6 text-white" />
+              <div className="w-12 h-12 rounded-full bg-accent flex items-center justify-center mb-4">
+                <Users className="h-6 w-6 text-accent-foreground" />
               </div>
               <CardTitle className="text-2xl">For Agencies & Consultants</CardTitle>
               <CardDescription className="text-base">
@@ -171,21 +171,21 @@ export default function Home() {
             <CardContent className="flex-1 space-y-4">
               <ul className="space-y-3">
                 <li className="flex items-start gap-2">
-                  <Check className="h-5 w-5 text-purple-600 shrink-0 mt-0.5" />
+                  <Check className="h-5 w-5 text-accent shrink-0 mt-0.5" />
                   <span><strong>High-Value Flow:</strong> Consistent stream of strategic microgigs that fit your expertise.</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <Check className="h-5 w-5 text-purple-600 shrink-0 mt-0.5" />
+                  <Check className="h-5 w-5 text-accent shrink-0 mt-0.5" />
                   <span><strong>Zero Sales Overhead:</strong> We bring the clients to you. Focus on delivery, not BD.</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <Check className="h-5 w-5 text-purple-600 shrink-0 mt-0.5" />
+                  <Check className="h-5 w-5 text-accent shrink-0 mt-0.5" />
                   <span><strong>Talent Retention:</strong> Keep your best consultants engaged with exciting, diverse challenges.</span>
                 </li>
               </ul>
             </CardContent>
             <div className="p-6 pt-0 mt-auto">
-              <Button className="w-full bg-purple-600 hover:bg-purple-700">Join as Partner Agency</Button>
+              <Button className="w-full bg-accent hover:bg-accent/90 text-accent-foreground">Join as Partner Agency</Button>
             </div>
           </Card>
         </div>

@@ -31,7 +31,14 @@ import { MatchingDialog } from "@/components/matching-dialog";
 import { RequestDetailsPanel } from "@/components/request-details-panel";
 import { PotentialGigCard } from "@/components/potential-gig-card";
 
-const columns: RequestStatus[] = ["New", "Matched", "Reviewing", "Waiting for Confirmation", "Microgig Active", "Completed"];
+const columns: RequestStatus[] = [
+    "New",
+    "Submitted for Review",
+    "Scope Refinement Required",
+    "Scope Approved",
+    "Active Efforts",
+    "Done"
+];
 
 export default function BoardPage() {
     const { requests, updateRequest, isLoaded } = useRequests();
@@ -72,7 +79,7 @@ export default function BoardPage() {
             updateRequest({
                 ...matchingRequest,
                 assignedSpecialistId: specialistId,
-                status: "Matched"
+                status: "Submitted for Review"
             });
             setMatchingRequest(null);
         }
@@ -91,12 +98,13 @@ export default function BoardPage() {
         }
 
         // Validation for moving to Matched
-        if (destination.droppableId === "Matched") {
+        // Validation for moving to Submitted for Review
+        if (destination.droppableId === "Submitted for Review") {
             const request = requests.find(r => r.id === draggableId);
             if (request && !request.assignedSpecialistId) {
                 toast({
-                    title: "Cannot move to Matched",
-                    description: "You must assign a specialist before moving a request to Matched status.",
+                    title: "Cannot move to Submitted for Review",
+                    description: "You must assign a specialist before moving a request to this status.",
                     variant: "destructive"
                 });
                 return;
@@ -122,7 +130,7 @@ export default function BoardPage() {
         if (!currentUser) return false;
 
         if (role === "Admin") {
-            const matchesCustomer = customerFilter.length === 0 || customerFilter.includes(req.creatorId);
+            const matchesCustomer = customerFilter.length === 0 || (req.creatorId && customerFilter.includes(req.creatorId));
             const matchesCategory = categoryFilter.length === 0 || (req.category && categoryFilter.includes(req.category));
             return matchesCustomer && matchesCategory;
         }
@@ -133,21 +141,19 @@ export default function BoardPage() {
         // Specialists see Matched/Active gigs assigned to them
         if (role === "Specialist") {
             // "New" matches (Potential Gigs) OR Active/Completed gigs
-            return (req.status === "Matched" && req.assignedSpecialistId === currentUser.id) ||
+            return (req.status === "Submitted for Review" && req.assignedSpecialistId === currentUser.id) ||
                 (req.assignedSpecialistId === currentUser.id);
         }
         return false;
     });
 
-    // Separate potential gigs for Specialists
-    const potentialGigs = role === "Specialist"
-        ? requests.filter(r => r.status === "Matched" && r.assignedSpecialistId === currentUser?.id)
-        : [];
-
-    // Filter out potential gigs from the main board for Specialists to avoid duplication/confusion
-    const boardRequests = role === "Specialist"
-        ? filteredRequests.filter(r => r.status !== "Matched")
-        : filteredRequests;
+    // Specialist View: Map "Submitted for Review" (Matched) to "New" column
+    const getVisualColumn = (req: Request): RequestStatus => {
+        if (role === "Specialist" && req.status === "Submitted for Review") {
+            return "New";
+        }
+        return req.status;
+    };
 
     const selectedRequest = requests.find(r => r.id === selectedRequestId);
 
@@ -156,11 +162,12 @@ export default function BoardPage() {
 
         if (action === "Accept") {
             updatedRequest.actionNeeded = true;
-            updatedRequest.specialistNote = "Specialist has accepted the gig and is ready to start.";
-            // Status remains Matched until Customer confirms
+            updatedRequest.specialistNote = "Specialist has accepted the gig layout.";
+            updatedRequest.status = "Scope Approved";
         } else if (action === "Ask" && note) {
             updatedRequest.actionNeeded = true;
             updatedRequest.specialistNote = note;
+            updatedRequest.status = "Scope Refinement Required";
         }
 
         updateRequest(updatedRequest);
@@ -174,12 +181,13 @@ export default function BoardPage() {
         switch (status) {
             case "New":
                 return "bg-blue-500/10 text-blue-500 hover:bg-blue-500/20";
-            case "Reviewing":
-            case "Pending Review":
+            case "Scope Refinement Required":
+            case "Submitted for Review":
                 return "bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20";
-            case "Matched":
+            case "Scope Approved":
+            case "Active Efforts":
                 return "bg-green-500/10 text-green-500 hover:bg-green-500/20";
-            case "Completed":
+            case "Done":
                 return "bg-gray-500/10 text-gray-500 hover:bg-gray-500/20";
             default:
                 return "bg-slate-500/10 text-slate-500";
@@ -188,12 +196,12 @@ export default function BoardPage() {
 
     const getColumnTitle = (status: string) => {
         switch (status) {
-            case "New": return t.board.new;
-            case "Matched": return "Microgig sent to Specialist for review"; // Specific for Admin flow
-            case "Reviewing": return t.board.reviewing;
-            case "Waiting for Confirmation": return t.board.waiting;
-            case "Microgig Active": return t.board.active;
-            case "Completed": return t.board.completed;
+            case "New": return role === "Specialist" ? "New Opportunity" : t.board.new;
+            case "Submitted for Review": return "Submitted for Review";
+            case "Scope Refinement Required": return "Scope Refinement Required";
+            case "Scope Approved": return "Scope Approved";
+            case "Active Efforts": return "Active Efforts";
+            case "Done": return "Done";
             default: return status;
         }
     };
@@ -341,29 +349,10 @@ export default function BoardPage() {
                 </div>
             )}
 
-            {/* Specialist View: Potential Gigs Section */}
-            {role === "Specialist" && potentialGigs.length > 0 && (
-                <div className="mb-8">
-                    <h2 className="text-xl font-semibold mb-4 flex items-center">
-                        <Star className="mr-2 text-yellow-500 fill-yellow-500" />
-                        Potential Gigs ({potentialGigs.length})
-                    </h2>
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {potentialGigs.map(gig => (
-                            <PotentialGigCard
-                                key={gig.id}
-                                request={gig}
-                                onAccept={(r) => handleSpecialistAction(r, "Accept")}
-                                onAskDetails={(r, note) => handleSpecialistAction(r, "Ask", note)}
-                            />
-                        ))}
-                    </div>
-                    <div className="my-8 border-t" />
-                </div>
-            )}
+            {/* Specialist View: Potential Gigs Section Removed */}
 
             <div className="flex">
-                <div className={`flex-1 transition-all duration-300 ${selectedRequestId ? 'pr-[410px]' : ''}`}>
+                <div className="flex-1 transition-all duration-300">
                     <DragDropContext onDragEnd={onDragEnd}>
                         <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
                             {columns.map((status) => (
@@ -371,7 +360,7 @@ export default function BoardPage() {
                                     <div className="flex items-center justify-between">
                                         <h2 className="font-semibold text-sm truncate" title={getColumnTitle(status)}>{getColumnTitle(status)}</h2>
                                         <span className="text-xs text-muted-foreground">
-                                            {boardRequests.filter((r) => r.status === status).length}
+                                            {filteredRequests.filter((r) => getVisualColumn(r) === status).length}
                                         </span>
                                     </div>
                                     <Droppable droppableId={status}>
@@ -381,8 +370,8 @@ export default function BoardPage() {
                                                 ref={provided.innerRef}
                                                 className="bg-muted/50 rounded-lg p-4 min-h-[500px] space-y-4"
                                             >
-                                                {boardRequests
-                                                    .filter((req) => req.status === status)
+                                                {filteredRequests
+                                                    .filter((req) => getVisualColumn(req) === status)
                                                     .map((request, index) => (
                                                         <Draggable
                                                             key={request.id}
@@ -432,7 +421,7 @@ export default function BoardPage() {
                                                                                 <span>{request.budget}</span>
                                                                             </div>
                                                                         </CardContent>
-                                                                        {role === "Admin" && request.status === "New" && (
+                                                                        {role === "Admin" && (request.status === "New" || request.status === "Submitted for Review") && !request.assignedSpecialistId && (
                                                                             <div className="px-4 pb-4" onClick={(e) => e.stopPropagation()}>
                                                                                 <Button
                                                                                     size="sm"
@@ -443,6 +432,22 @@ export default function BoardPage() {
                                                                                     }}
                                                                                 >
                                                                                     Find Match
+                                                                                </Button>
+                                                                            </div>
+                                                                        )}
+                                                                        {/* Customer Submit Button */}
+                                                                        {(role === "Customer" || role === "Guest") && request.status === "New" && request.creatorId === currentUser?.id && (
+                                                                            <div className="px-4 pb-4" onClick={(e) => e.stopPropagation()}>
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    className="w-full"
+                                                                                    variant="secondary"
+                                                                                    onClick={(e) => {
+                                                                                        e.preventDefault();
+                                                                                        handleRequestClick(request);
+                                                                                    }}
+                                                                                >
+                                                                                    Submit for Review
                                                                                 </Button>
                                                                             </div>
                                                                         )}

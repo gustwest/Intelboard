@@ -1,0 +1,11 @@
+
+node_modules
+npm-debug.log
+Dockerfile
+.dockerignore
+.git
+.next
+.DS_Store
+sports-rating-app/
+Sportsratingapp/
+README.md

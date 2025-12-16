@@ -18,35 +18,25 @@ export interface User {
   id: string;
   name: string;
   role: string;
-  avatar?: string; // URL or placeholder
+  avatar?: string;
+  company?: string;
 }
 
 export interface SystemDocument {
   id: string;
   name: string;
-  type: string; // MIME type e.g., 'application/pdf'
-  content: string; // Base64 or text content? For PDFs, maybe we store a reference or Blob URL if persistent? 
-  // For this demo, we might just store metadata or small content. 
-  // Storing large Base64 strings in localStorage (via persist) is bad for performance.
-  // Let's assume we store metadata and maybe a simulated "url" or just keep it in memory if possible?
-  // The user wants to "store documents". 
-  // We'll store metadata + a simulated URL or small content. 
-  // CAUTION: LocalStorage has 5MB limit. Storing PDFs will crash it.
-  // We should probably NOT persist the actual file content in localStorage if it's large.
-  // But since we don't have a backend, we might have to warn or limit.
-  // Let's store metadata only for now, and maybe "content" if it's text.
-  // For PDFs, we might just pretend to store it or use IndexedDB (too complex for now).
-  // Let's stick to metadata and maybe a warning.
-  uploadedBy: string; // User ID
-  uploadedAt: string; // ISO Date
+  type: string;
+  content: string;
+  uploadedBy: string;
+  uploadedAt: string;
 }
 
 export interface Asset {
   id: string;
   name: string;
-  type: string; // e.g., 'Table', 'View', 'File', 'Report'
+  type: string;
   description?: string;
-  schema?: string; // Database schema (e.g., 'public', 'finance')
+  schema?: string;
   systemId: string;
   status: 'Existing' | 'Planned';
   verificationStatus?: 'Verified' | 'Unverified';
@@ -60,8 +50,9 @@ export interface System {
   description?: string;
   assets: Asset[];
   documents: SystemDocument[];
-  // Position for the node in the flow
   position: { x: number; y: number };
+  ownerId: string; // New: Ownership
+  sharedWith: string[]; // New: Sharing
 }
 
 export interface Integration {
@@ -69,8 +60,8 @@ export interface Integration {
   sourceAssetId: string;
   targetSystemId: string;
   description?: string;
-  technology?: string; // e.g., 'Kafka', 'OGG', 'Informatica', 'API'
-  mode?: string; // e.g., 'Streaming', 'Batch', 'CDC'
+  technology?: string;
+  mode?: string;
 }
 
 export interface Project {
@@ -79,7 +70,12 @@ export interface Project {
   description?: string;
   systemIds: string[];
   ownerId: string;
-  sharedWith: string[]; // List of User IDs
+  sharedWith: string[];
+  notes?: string;
+  flowData?: {
+    nodes: Node[];
+    edges: Edge[];
+  };
 }
 
 interface AppState {
@@ -92,7 +88,7 @@ interface AppState {
   currentUser: User | null;
 
   // Actions
-  addSystem: (system: Omit<System, 'id' | 'assets' | 'documents'> & { id?: string; assets?: Asset[]; documents?: SystemDocument[] }) => void;
+  addSystem: (system: Omit<System, 'id' | 'assets' | 'documents' | 'ownerId' | 'sharedWith'> & { id?: string; assets?: Asset[]; documents?: SystemDocument[] }) => void;
   updateSystem: (id: string, updates: Partial<Omit<System, 'id' | 'assets'>>) => void;
   deleteSystem: (id: string) => void;
   updateSystemPosition: (id: string, position: { x: number; y: number }) => void;
@@ -108,7 +104,7 @@ interface AppState {
   removeIntegration: (id: string) => void;
 
   // Project Actions
-  addProject: (project: Omit<Project, 'id' | 'ownerId' | 'sharedWith'>) => void;
+  addProject: (project: Omit<Project, 'id' | 'sharedWith'> & { ownerId?: string }) => string;
   updateProject: (id: string, updates: Partial<Omit<Project, 'id'>>) => void;
   deleteProject: (id: string) => void;
   setActiveProject: (id: string | null) => void;
@@ -117,6 +113,7 @@ interface AppState {
   // User & Document Actions
   addUser: (user: Omit<User, 'id'>) => void;
   switchUser: (userId: string) => void;
+  setCurrentUser: (user: User | null) => void; // New action
   addDocument: (systemId: string, document: Omit<SystemDocument, 'id' | 'uploadedAt'>) => void;
   removeDocument: (systemId: string, documentId: string) => void;
 
@@ -137,7 +134,9 @@ export const useStore = create<AppState>()(
       users: [
         { id: '1', name: 'Admin User', role: 'Administrator', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin' }
       ],
-      currentUser: { id: '1', name: 'Admin User', role: 'Administrator', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin' },
+      currentUser: null, // Default to null, will be synced
+
+      setCurrentUser: (user) => set({ currentUser: user }),
 
       addSystem: (system) => set((state) => {
         const newSystemId = system.id || uuidv4();
@@ -153,7 +152,9 @@ export const useStore = create<AppState>()(
               ...system,
               id: newSystemId,
               assets: system.assets || [],
-              documents: system.documents || []
+              documents: system.documents || [],
+              ownerId: state.currentUser?.id || 'unknown', // Capture owner
+              sharedWith: []
             }
           ],
           projects: newProjects
@@ -271,14 +272,18 @@ export const useStore = create<AppState>()(
       })),
 
       // Project Actions
-      addProject: (project) => set((state) => ({
-        projects: [...state.projects, {
-          ...project,
-          id: uuidv4(),
-          ownerId: state.currentUser?.id || 'unknown',
-          sharedWith: []
-        }]
-      })),
+      addProject: (project) => {
+        const newId = uuidv4();
+        set((state) => ({
+          projects: [...state.projects, {
+            ...project,
+            id: newId,
+            ownerId: project.ownerId || state.currentUser?.id || 'unknown',
+            sharedWith: []
+          }]
+        }));
+        return newId;
+      },
 
       updateProject: (id, updates) => set((state) => ({
         projects: state.projects.map((p) =>

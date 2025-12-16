@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 
 import '@xyflow/react/dist/style.css';
+import { PlannerAuthSync } from "@/components/it-flora/PlannerAuthSync";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -17,6 +18,7 @@ export default function ITPlannerLayout({
 }>) {
   return (
     <>
+      <PlannerAuthSync />
       {children}
     </>
   );

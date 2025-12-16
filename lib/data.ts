@@ -14,34 +14,35 @@ export type Specialist = {
 
 export type RequestStatus =
     | "New"
-    | "Reviewing"
-    | "Waiting for Confirmation"
-    | "Microgig Active"
-    | "Completed"
-    | "Pending Review"
-    | "Matched";
+    | "Submitted for Review"
+    | "Scope Refinement Required"
+    | "Scope Approved"
+    | "Active Efforts"
+    | "Done";
 
 export type ACStatus = "Draft" | "Proposed" | "Agreed";
 
-export type Request = {
+export interface Request {
     id: string;
     title: string;
     description: string;
+    status: RequestStatus;
     industry: string;
     budget?: string;
-    tags?: string[];
-    status: RequestStatus;
-    assignedSpecialistId?: string;
-    creatorId: string;
-    acceptanceCriteria: string[];
-    acStatus: ACStatus;
-    attachments: string[];
+    tags: string[];
     createdAt: string;
-    urgency: "Low" | "Medium" | "High" | "Critical";
-    actionNeeded?: boolean;
-    specialistNote?: string;
+    creatorId?: string; // ID of the user who created the request
+    assignedSpecialistId?: string; // ID of the specialist assigned
+    actionNeeded?: boolean; // If true, requires attention (e.g. from Customer)
+    specialistNote?: string; // Last note from specialist
+    linkedProjectId?: string; // ID of the linked IT Planner project
+    specialistNDASigned?: boolean; // Whether the specialist has signed the NDA
+    acceptanceCriteria?: string[];
+    acStatus?: ACStatus;
+    attachments?: string[];
+    urgency?: "Low" | "Medium" | "High" | "Critical";
     category?: "IT" | "CRM" | "Architecture" | "Finance" | "Other";
-};
+}
 
 export type User = {
     id: string;
@@ -152,7 +153,7 @@ export const initialRequests: Request[] = [
         description: "Assess our current on-premise infrastructure and propose a migration plan to AWS.",
         industry: "Finance",
         tags: ["Cloud", "AWS", "Migration"],
-        status: "Reviewing",
+        status: "Submitted for Review",
         creatorId: "c1",
         acceptanceCriteria: [
             "Complete inventory of current servers",

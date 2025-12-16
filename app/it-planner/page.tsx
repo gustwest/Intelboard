@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useRequests } from "@/hooks/use-requests";
 import { Sidebar } from '@/components/it-flora/Sidebar';
 import { CreateSystemModal } from '@/components/it-flora/modals/CreateSystemModal';
 import { EditSystemModal } from '@/components/it-flora/modals/EditSystemModal';
@@ -13,8 +15,27 @@ import { AIImportModal } from '@/components/it-flora/modals/AIImportModal';
 import { UserManagementModal } from '@/components/it-flora/modals/UserManagementModal';
 import { SystemDetailsPanel } from '@/components/it-flora/SystemDetailsPanel';
 import FlowCanvas from '@/components/it-flora/flow/FlowCanvas';
+import { useStore } from "@/store/it-flora/useStore";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ProjectNotes } from "@/components/it-flora/ProjectNotes";
+import { FreeformFlow } from "@/components/it-flora/FreeformFlow";
 
 export default function Home() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { requests, updateRequest } = useRequests();
+  const setActiveProject = useStore((state) => state.setActiveProject);
+
+  // Redirect State
+  const createForRequestId = searchParams.get('createForRequestId');
+  const requestTitle = searchParams.get('requestTitle');
+  const deepLinkProjectId = searchParams.get('projectId');
+
+  useEffect(() => {
+    if (deepLinkProjectId) {
+      setActiveProject(deepLinkProjectId);
+    }
+  }, [deepLinkProjectId, setActiveProject]);
   const [isSystemModalOpen, setIsSystemModalOpen] = useState(false);
   const [isEditSystemModalOpen, setIsEditSystemModalOpen] = useState(false);
   const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
@@ -29,6 +50,25 @@ export default function Home() {
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [selectedIntegrationId, setSelectedIntegrationId] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const activeProjectId = useStore((state) => state.activeProjectId);
+
+  // Trigger modal if params exist
+  useEffect(() => {
+    if (createForRequestId) {
+      setIsProjectModalOpen(true);
+    }
+  }, [createForRequestId]);
+
+  const handleProjectCreated = (newProjectId: string) => {
+    if (createForRequestId) {
+      const request = requests.find(r => r.id === createForRequestId);
+      if (request) {
+        updateRequest({ ...request, linkedProjectId: newProjectId });
+        // Redirect back to request
+        router.push(`/requests/${createForRequestId}`);
+      }
+    }
+  };
 
   // System Details Panel State
   const [detailsSystemId, setDetailsSystemId] = useState<string | null>(null);
@@ -92,15 +132,45 @@ export default function Home() {
         onOpenUserManagement={() => setIsUserManagementModalOpen(true)}
       />
 
-      <div className="flex-1 relative bg-slate-50/50">
-        <FlowCanvas
-          onAddAsset={handleAddAsset}
-          onEditAsset={handleEditAsset}
-          onEdgeClick={handleEdgeClick}
-          onEditSystem={handleEditSystem}
-          onSystemClick={handleSystemClick}
-          selectedAssetIdForLineage={selectedAssetIdForLineage}
-        />
+      <div className="flex-1 relative bg-slate-50/50 flex flex-col overflow-hidden">
+        <Tabs defaultValue="lineage" className="flex-1 flex flex-col">
+          <div className="px-4 pt-2 border-b bg-white flex justify-between items-center">
+            <TabsList>
+              <TabsTrigger value="lineage">System Lineage</TabsTrigger>
+              <TabsTrigger value="flowchart" disabled={!activeProjectId}>Freeform Flowchart</TabsTrigger>
+            </TabsList>
+            {!activeProjectId && <span className="text-xs text-muted-foreground mr-2">Select a project to enable Flowchart & Notes</span>}
+          </div>
+
+          <TabsContent value="lineage" className="flex-1 relative m-0 p-0 h-full">
+            <FlowCanvas
+              onAddAsset={handleAddAsset}
+              onEditAsset={handleEditAsset}
+              onEdgeClick={handleEdgeClick}
+              onEditSystem={handleEditSystem}
+              onSystemClick={handleSystemClick}
+              selectedAssetIdForLineage={selectedAssetIdForLineage}
+            />
+          </TabsContent>
+
+          <TabsContent value="flowchart" className="flex-1 relative m-0 p-4 h-full overflow-hidden">
+            {activeProjectId ? (
+              <FreeformFlow projectId={activeProjectId} />
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground">Select a project to use the whiteboard</div>
+            )}
+          </TabsContent>
+        </Tabs>
+
+        {/* Project Notes Section - Always visible if a project is active, or maybe context sensitive? 
+            User requested "bottom of the page notes per project".
+            Let's put it below the tabs content, but scrollable if needed.
+        */}
+        {activeProjectId && (
+          <div className="border-t bg-white p-4 max-h-[300px] overflow-y-auto shrink-0">
+            <ProjectNotes projectId={activeProjectId} />
+          </div>
+        )}
       </div>
 
       {/* Right Side Panel */}
@@ -140,6 +210,8 @@ export default function Home() {
         isOpen={isProjectModalOpen}
         onClose={() => setIsProjectModalOpen(false)}
         projectId={selectedProjectId}
+        initialName={requestTitle ? `Project for: ${decodeURIComponent(requestTitle)}` : undefined}
+        onSave={handleProjectCreated}
       />
 
       <ManageProjectSystemsModal
