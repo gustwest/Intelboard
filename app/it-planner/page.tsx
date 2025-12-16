@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useRequests } from "@/hooks/use-requests";
@@ -20,7 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProjectNotes } from "@/components/it-flora/ProjectNotes";
 import { FreeformFlow } from "@/components/it-flora/FreeformFlow";
 
-export default function Home() {
+function ITPlannerContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { requests, updateRequest } = useRequests();
@@ -235,5 +236,13 @@ export default function Home() {
         onClose={() => setIsUserManagementModalOpen(false)}
       />
     </main>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ITPlannerContent />
+    </Suspense>
   );
 }

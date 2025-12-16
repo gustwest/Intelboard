@@ -104,7 +104,7 @@ interface AppState {
   removeIntegration: (id: string) => void;
 
   // Project Actions
-  addProject: (project: Omit<Project, 'id' | 'sharedWith'> & { ownerId?: string }) => string;
+  addProject: (project: Omit<Project, 'id' | 'sharedWith' | 'ownerId'> & { ownerId?: string }) => string;
   updateProject: (id: string, updates: Partial<Omit<Project, 'id'>>) => void;
   deleteProject: (id: string) => void;
   setActiveProject: (id: string | null) => void;

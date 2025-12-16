@@ -77,7 +77,7 @@ export function RequestRefinement({ request, onUpdate }: RequestRefinementProps)
     };
 
     const handleAddOutcome = (outcome: string) => {
-        const updatedAC = [...request.acceptanceCriteria, outcome];
+        const updatedAC = [...(request.acceptanceCriteria || []), outcome];
         onUpdate({ ...request, acceptanceCriteria: updatedAC });
         setOutcomes(prev => prev.filter(o => o !== outcome));
     };

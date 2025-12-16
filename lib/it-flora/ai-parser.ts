@@ -33,7 +33,9 @@ export function parseContractText(text: string): ParsedResult {
             type,
             position: { x: Math.random() * 500, y: Math.random() * 500 },
             assets: [],
-            documents: []
+            documents: [],
+            ownerId: 'ai-parser',
+            sharedWith: []
         };
         systems.push(newSystem);
         return newSystem;
