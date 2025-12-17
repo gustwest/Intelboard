@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { liveblocks } from '@liveblocks/zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { Edge, Node } from '@xyflow/react';
+import { client } from "@/lib/liveblocks";
 
 // --- Types ---
 
@@ -20,6 +21,7 @@ export interface User {
   role: string;
   avatar?: string;
   company?: string;
+  color?: string; // Visually distinguish users
 }
 
 export interface SystemDocument {
@@ -124,19 +126,31 @@ interface AppState {
 
 // --- Store ---
 
+// Helper to safely read from localStorage
+const getSavedUser = (): User | null => {
+  if (typeof window === 'undefined') return null;
+  const saved = localStorage.getItem('it-planner-user');
+  return saved ? JSON.parse(saved) : null;
+};
+
 export const useStore = create<AppState>()(
-  persist(
+  liveblocks(
     (set, get) => ({
       systems: [],
       integrations: [],
       projects: [],
       activeProjectId: null,
       users: [
-        { id: '1', name: 'Admin User', role: 'Administrator', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin' }
+        { id: '1', name: 'Admin User', role: 'Administrator', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin', color: '#EF4444' }
       ],
-      currentUser: null, // Default to null, will be synced
+      // Use saved user or default to Admin
+      currentUser: getSavedUser() || { id: '1', name: 'Admin User', role: 'Administrator', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin', color: '#EF4444' },
 
-      setCurrentUser: (user) => set({ currentUser: user }),
+      setCurrentUser: (user) => {
+        if (user) localStorage.setItem('it-planner-user', JSON.stringify(user));
+        else localStorage.removeItem('it-planner-user');
+        set({ currentUser: user });
+      },
 
       addSystem: (system) => set((state) => {
         const newSystemId = system.id || uuidv4();
@@ -274,6 +288,7 @@ export const useStore = create<AppState>()(
       // Project Actions
       addProject: (project) => {
         const newId = uuidv4();
+        // Ensure new projects are added to state correctly
         set((state) => ({
           projects: [...state.projects, {
             ...project,
@@ -356,7 +371,16 @@ export const useStore = create<AppState>()(
       },
     }),
     {
-      name: 'it-system-workflow-storage',
+      client,
+      storageMapping: {
+        systems: true,
+        integrations: true,
+        projects: true,
+        users: true
+      },
+      presenceMapping: {
+        currentUser: true
+      }
     }
   )
 );

@@ -42,6 +42,7 @@ export interface Request {
     attachments?: string[];
     urgency?: "Low" | "Medium" | "High" | "Critical";
     category?: "IT" | "CRM" | "Architecture" | "Finance" | "Other";
+    attributes?: Record<string, string>; // Dynamic attributes for freeform categories
 }
 
 export type User = {

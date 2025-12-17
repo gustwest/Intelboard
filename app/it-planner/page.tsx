@@ -20,6 +20,11 @@ import { useStore } from "@/store/it-flora/useStore";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProjectNotes } from "@/components/it-flora/ProjectNotes";
 import { FreeformFlow } from "@/components/it-flora/FreeformFlow";
+import { RoomProvider } from "@liveblocks/react/suspense";
+import { LiveblocksProvider } from "@liveblocks/react";
+import { LiveCursor } from "@/components/LiveCursor";
+import { ClientSideSuspense } from "@liveblocks/react";
+import { client, API_KEY } from "@/liveblocks.config";
 
 function ITPlannerContent() {
   const router = useRouter();
@@ -52,6 +57,21 @@ function ITPlannerContent() {
   const [selectedIntegrationId, setSelectedIntegrationId] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const activeProjectId = useStore((state) => state.activeProjectId);
+
+  // Join the Liveblocks room for Zustand store sync
+  useEffect(() => {
+    // @ts-ignore - liveblocks middleware attaches this to the hook
+    const lb = useStore.liveblocks;
+    if (lb) {
+      const { enterRoom, leaveRoom } = lb;
+      enterRoom('it-planner-room');
+      return () => {
+        leaveRoom('it-planner-room');
+      };
+    } else {
+      console.warn("Liveblocks middleware not found on useStore");
+    }
+  }, []);
 
   // Trigger modal if params exist
   useEffect(() => {
@@ -122,7 +142,8 @@ function ITPlannerContent() {
   };
 
   return (
-    <main className="flex h-[calc(100vh-3.5rem)] w-full bg-white text-slate-900 overflow-hidden">
+    <main className="flex h-[calc(100vh-3.5rem)] w-full bg-white text-slate-900 overflow-hidden relative">
+      {/* <LiveCursor /> */}
       <Sidebar
         onAddSystem={() => setIsSystemModalOpen(true)}
         onAddProject={handleAddProject}
@@ -162,16 +183,6 @@ function ITPlannerContent() {
             )}
           </TabsContent>
         </Tabs>
-
-        {/* Project Notes Section - Always visible if a project is active, or maybe context sensitive? 
-            User requested "bottom of the page notes per project".
-            Let's put it below the tabs content, but scrollable if needed.
-        */}
-        {activeProjectId && (
-          <div className="border-t bg-white p-4 max-h-[300px] overflow-y-auto shrink-0">
-            <ProjectNotes projectId={activeProjectId} />
-          </div>
-        )}
       </div>
 
       {/* Right Side Panel */}
@@ -241,8 +252,18 @@ function ITPlannerContent() {
 
 export default function Home() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <ITPlannerContent />
+    <Suspense fallback={<div>Loading Details...</div>}>
+      <LiveblocksProvider publicApiKey="pk_dev_t94HHDVA1uBZWUJ7u6glPN8-cFC0YLH-jO5QDAY9KovG3mwy5CHlgx9i1kLcCRpN">
+        <RoomProvider
+          id="it-planner-room"
+          initialPresence={{ cursor: null }}
+          initialStorage={{ systems: [], integrations: [], projects: [] }}
+        >
+          <ClientSideSuspense fallback={<div>Loading Collaborative Environment...</div>}>
+            {() => <ITPlannerContent />}
+          </ClientSideSuspense>
+        </RoomProvider>
+      </LiveblocksProvider>
     </Suspense>
   );
 }

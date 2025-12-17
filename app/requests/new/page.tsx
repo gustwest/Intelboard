@@ -13,6 +13,7 @@ import { SmartImport } from "@/components/smart-import";
 import { useRequests } from "@/hooks/use-requests";
 import { useRole } from "@/components/role-provider";
 import { useLanguage } from "@/components/language-provider";
+import { Plus, X } from "lucide-react";
 
 export default function NewRequestPage() {
     const router = useRouter();
@@ -24,11 +25,15 @@ export default function NewRequestPage() {
     const [formData, setFormData] = useState({
         title: "",
         description: "",
-        industry: "",
         budget: "",
         urgency: "Medium" as "Low" | "Medium" | "High" | "Critical",
         tags: "",
     });
+
+    const [attributes, setAttributes] = useState<Array<{ key: string; value: string }>>([
+        { key: "Industry", value: "" },
+        { key: "Tech Stack", value: "" }
+    ]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -40,6 +45,13 @@ export default function NewRequestPage() {
             return;
         }
 
+        const attributesRecord: Record<string, string> = {};
+        attributes.forEach(attr => {
+            if (attr.key.trim() && attr.value.trim()) {
+                attributesRecord[attr.key.trim()] = attr.value.trim();
+            }
+        });
+
         // Simulate API call
         setTimeout(() => {
             const newRequest: Request = {
@@ -47,7 +59,7 @@ export default function NewRequestPage() {
                 title: formData.title,
                 description: formData.description,
                 status: "New" as RequestStatus,
-                industry: formData.industry,
+                industry: attributesRecord["Industry"] || "Other", // Fallback for backward compatibility
                 budget: formData.budget,
                 tags: formData.tags.split(",").map(t => t.trim()).filter(Boolean),
                 createdAt: new Date().toISOString(),
@@ -56,6 +68,7 @@ export default function NewRequestPage() {
                 acceptanceCriteria: [],
                 acStatus: "Draft",
                 attachments: [],
+                attributes: attributesRecord,
             };
 
             addRequest(newRequest);
@@ -63,8 +76,44 @@ export default function NewRequestPage() {
         }, 1000);
     };
 
-    const handleSmartImport = (data: Partial<typeof formData>) => {
-        setFormData(prev => ({ ...prev, ...data }));
+    const handleSmartImport = (data: {
+        title: string;
+        description: string;
+        urgency: "Low" | "Medium" | "High" | "Critical";
+        attributes: Record<string, string>;
+    }) => {
+        setFormData(prev => ({
+            ...prev,
+            title: data.title,
+            description: data.description,
+            urgency: data.urgency
+        }));
+
+        // Merge attributes
+        const newAttributes = [...attributes];
+        Object.entries(data.attributes).forEach(([key, value]) => {
+            const existingIndex = newAttributes.findIndex(a => a.key.toLowerCase() === key.toLowerCase());
+            if (existingIndex >= 0) {
+                newAttributes[existingIndex].value = value;
+            } else {
+                newAttributes.push({ key, value });
+            }
+        });
+        setAttributes(newAttributes);
+    };
+
+    const addAttribute = () => {
+        setAttributes([...attributes, { key: "", value: "" }]);
+    };
+
+    const removeAttribute = (index: number) => {
+        setAttributes(attributes.filter((_, i) => i !== index));
+    };
+
+    const updateAttribute = (index: number, field: 'key' | 'value', text: string) => {
+        const newAttributes = [...attributes];
+        newAttributes[index][field] = text;
+        setAttributes(newAttributes);
     };
 
     return (
@@ -97,11 +146,11 @@ export default function NewRequestPage() {
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="description">{t.request.descLabel}</Label>
+                                <Label htmlFor="description">{t.request.descLabel} (Agile User Story format recommended)</Label>
                                 <Textarea
                                     id="description"
-                                    placeholder="Describe your project needs..."
-                                    className="min-h-[100px]"
+                                    placeholder="As a [Role], I want [Feature], So that [Benefit]..."
+                                    className="min-h-[150px] font-mono text-sm leading-relaxed"
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                     required
@@ -109,16 +158,6 @@ export default function NewRequestPage() {
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="industry">{t.request.industryLabel}</Label>
-                                    <Input
-                                        id="industry"
-                                        placeholder="e.g., Finance, Auto"
-                                        value={formData.industry}
-                                        onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
-                                        required
-                                    />
-                                </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="budget">{t.request.budgetLabel}</Label>
                                     <Input
@@ -128,24 +167,61 @@ export default function NewRequestPage() {
                                         onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
                                     />
                                 </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="urgency">{t.request.urgencyLabel}</Label>
+                                    <Select
+                                        value={formData.urgency}
+                                        onValueChange={(value: "Low" | "Medium" | "High" | "Critical") => setFormData({ ...formData, urgency: value })}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select urgency" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="Low">Low</SelectItem>
+                                            <SelectItem value="Medium">Medium</SelectItem>
+                                            <SelectItem value="High">High</SelectItem>
+                                            <SelectItem value="Critical">Critical</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <Label htmlFor="urgency">{t.request.urgencyLabel}</Label>
-                                <Select
-                                    value={formData.urgency}
-                                    onValueChange={(value: "Low" | "Medium" | "High" | "Critical") => setFormData({ ...formData, urgency: value })}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select urgency" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="Low">Low</SelectItem>
-                                        <SelectItem value="Medium">Medium</SelectItem>
-                                        <SelectItem value="High">High</SelectItem>
-                                        <SelectItem value="Critical">Critical</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <Label>Additional Attributes</Label>
+                                    <Button type="button" variant="outline" size="sm" onClick={addAttribute}>
+                                        <Plus className="h-3 w-3 mr-1" /> Add Attribute
+                                    </Button>
+                                </div>
+
+                                {attributes.map((attr, index) => (
+                                    <div key={index} className="flex gap-2 items-start">
+                                        <div className="flex-1">
+                                            <Input
+                                                placeholder="Category (e.g. Compliance)"
+                                                value={attr.key}
+                                                onChange={(e) => updateAttribute(index, 'key', e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="flex-1">
+                                            <Input
+                                                placeholder="Value"
+                                                value={attr.value}
+                                                onChange={(e) => updateAttribute(index, 'value', e.target.value)}
+                                            />
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="text-muted-foreground hover:text-destructive"
+                                            onClick={() => removeAttribute(index)}
+                                        >
+                                            <X className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                ))}
                             </div>
 
                             <div className="space-y-2">
