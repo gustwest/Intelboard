@@ -369,10 +369,12 @@ function Flow({ projectId }: FreeformFlowProps) {
             if (!connectingNodeId.current) return;
 
             const target = event.target as HTMLElement;
-            // Check if dropped on pane (empty space)
+            // Check if dropped on pane (empty space) and NOT on a node or edge
             const isPane = target.classList.contains('react-flow__pane');
+            const isNode = !!target.closest('.react-flow__node');
+            const isEdge = !!target.closest('.react-flow__edge');
 
-            if (isPane) {
+            if (isPane && !isNode && !isEdge) {
                 recordHistory();
                 // We need to calculate the position where the user dropped the line
                 // event is MouseEvent or TouchEvent
