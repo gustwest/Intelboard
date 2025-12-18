@@ -24,6 +24,7 @@ import { UserRole, mockUsers, User } from "@/lib/data";
 import { useRole } from "@/components/role-provider";
 import { useLanguage } from "@/components/language-provider";
 import { ConsultantProfileForm } from "@/components/consultant-profile-form";
+import { useStore } from "@/store/it-flora/useStore";
 
 const generateId = () => `u${Date.now()}`;
 
@@ -32,6 +33,9 @@ export function LoginDialog() {
     const router = useRouter();
     const { login } = useRole();
     const { t } = useLanguage();
+    const users = useStore((state) => state.users);
+    const addUser = useStore((state) => state.addUser);
+    const setCurrentUser = useStore((state) => state.setCurrentUser);
 
     // Login State
     const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
@@ -46,7 +50,21 @@ export function LoginDialog() {
     };
 
     const handleUserSelect = (userId: string) => {
+        // Sync with RoleProvider
         login(userId);
+
+        // Sync with IT Planner store
+        const user = users.find(u => u.id === userId);
+        if (user) {
+            setCurrentUser({
+                id: user.id,
+                name: user.name,
+                role: user.role,
+                company: user.company,
+                avatar: user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.name}`
+            });
+        }
+
         setOpen(false);
         setSelectedRole(null);
         router.push("/board");
@@ -55,40 +73,43 @@ export function LoginDialog() {
     const handleSignUpDetailsSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         const formData = new FormData(e.target as HTMLFormElement);
+        const name = formData.get("name") as string;
+        const company = formData.get("company") as string;
+
         setNewUserData({
-            name: formData.get("name") as string,
+            name,
             role: signUpRole,
-            company: formData.get("company") as string,
+            company,
         });
 
         if (signUpRole === "Specialist") {
             setSignUpStep("profile");
         } else {
-            // Complete sign up for non-specialists immediately (mock)
             completeSignUp({
                 id: generateId(),
-                name: formData.get("name") as string,
+                name,
                 role: signUpRole,
-                company: formData.get("company") as string,
+                company,
+                avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`
             });
         }
     };
 
     const completeSignUp = (user: User) => {
-        // In a real app, we would save to backend. 
-        // Here we just log them in directly.
-        // We need to temporarily add them to mockUsers or just set them as current user
-        // For this demo, we'll just use the login function which expects an ID from mockUsers.
-        // To make this work properly without modifying data.ts extensively, we'll just simulate success
-        // and force a login state update in RoleProvider (which we might need to expose a direct setUser method for).
-        // For now, let's just alert and close.
+        // Persist to shared store
+        addUser({
+            name: user.name,
+            role: user.role,
+            company: user.company,
+            avatar: user.avatar
+        });
 
-        alert("Account created! (Simulation)");
+        alert("Account created and synced across devices! You can now log in.");
         setOpen(false);
-        // Ideally: login(user); 
+        setSelectedRole(null);
     };
 
-    const filteredUsers = mockUsers.filter((u) => u.role === selectedRole);
+    const filteredUsers = users.filter((u) => u.role === selectedRole);
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>

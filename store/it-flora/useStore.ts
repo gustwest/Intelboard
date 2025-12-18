@@ -3,6 +3,7 @@ import { liveblocks, WithLiveblocks } from '@liveblocks/zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { Edge, Node } from '@xyflow/react';
 import { client } from "@/lib/liveblocks";
+import { mockUsers } from "@/lib/data";
 
 // --- Types ---
 
@@ -140,10 +141,8 @@ const initialState = {
   integrations: [],
   projects: [],
   activeProjectId: null,
-  users: [
-    { id: '1', name: 'Admin User', role: 'Administrator', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin', color: '#EF4444' }
-  ],
-  currentUser: getSavedUser() || { id: '1', name: 'Admin User', role: 'Administrator', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin', color: '#EF4444' }
+  users: mockUsers as User[],
+  currentUser: getSavedUser() || (mockUsers[0] as User)
 };
 
 export const useStore = create<WithLiveblocks<AppState>>()(

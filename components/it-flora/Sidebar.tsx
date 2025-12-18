@@ -25,9 +25,17 @@ export function Sidebar({ onAddSystem, onAddProject, onEditProject, onManageSyst
 
     // Filter projects based on visibility
     const visibleProjects = projects.filter(p => {
-        if (!currentUser) return false;
-        if (currentUser.role === 'Administrator') return true;
-        return p.ownerId === currentUser.id || p.sharedWith?.includes(currentUser.id);
+        // Admins can see everything
+        if (currentUser?.role === 'Administrator' || currentUser?.role === 'Admin') return true;
+
+        // If we have a current user, check ownership or sharing
+        if (currentUser) {
+            return p.ownerId === currentUser.id || p.sharedWith?.includes(currentUser.id);
+        }
+
+        // Default visibility for Guests/Unauthenticated on a new device
+        // They should be able to see "shared" or owner-less projects in the room
+        return !p.ownerId || p.ownerId === 'unknown' || p.sharedWith?.includes('guest');
     });
 
     const activeProject = visibleProjects.find(p => p.id === activeProjectId);
