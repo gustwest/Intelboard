@@ -95,6 +95,7 @@ function Flow({ projectId }: FreeformFlowProps) {
 
     // Reconnection tracking
     const edgeReconnectSuccessful = useRef(true);
+    const wasConnectionSuccessful = useRef(false);
 
     // History State
     const [history, setHistory] = useState<{ nodes: Node[], edges: Edge[] }[]>([]);
@@ -353,6 +354,7 @@ function Flow({ projectId }: FreeformFlowProps) {
 
     const onConnect: OnConnect = useCallback(
         (params) => {
+            wasConnectionSuccessful.current = true;
             recordHistory();
             setEdges((eds) => addEdge({ ...params, type: 'labelled', markerEnd: { type: MarkerType.ArrowClosed } }, eds));
         },
@@ -362,19 +364,24 @@ function Flow({ projectId }: FreeformFlowProps) {
     const onConnectStart: OnConnectStart = useCallback((_, { nodeId, handleId }) => {
         connectingNodeId.current = nodeId;
         connectingHandleId.current = handleId;
+        wasConnectionSuccessful.current = false;
     }, []);
 
     const onConnectEnd: OnConnectEnd = useCallback(
         (event) => {
-            if (!connectingNodeId.current) return;
+            if (!connectingNodeId.current || wasConnectionSuccessful.current) return;
 
             const target = event.target as HTMLElement;
             // Check if dropped on pane (empty space) and NOT on a node or edge
-            const isPane = target.classList.contains('react-flow__pane');
-            const isNode = !!target.closest('.react-flow__node');
-            const isEdge = !!target.closest('.react-flow__edge');
+            const { clientX, clientY } = 'changedTouches' in event ? (event as TouchEvent).changedTouches[0] : (event as MouseEvent);
+            const elementUnderMouse = document.elementFromPoint(clientX, clientY);
 
-            if (isPane && !isNode && !isEdge) {
+            const isPane = target.classList.contains('react-flow__pane') || elementUnderMouse?.classList.contains('react-flow__pane');
+            const isNode = !!target.closest('.react-flow__node') || !!elementUnderMouse?.closest('.react-flow__node');
+            const isEdge = !!target.closest('.react-flow__edge') || !!elementUnderMouse?.closest('.react-flow__edge');
+            const isHandle = !!target.closest('.react-flow__handle') || !!elementUnderMouse?.closest('.react-flow__handle');
+
+            if (isPane && !isNode && !isEdge && !isHandle) {
                 recordHistory();
                 // We need to calculate the position where the user dropped the line
                 // event is MouseEvent or TouchEvent
