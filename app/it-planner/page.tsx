@@ -28,6 +28,22 @@ import { client, API_KEY } from "@/liveblocks.config";
 
 function ITPlannerContent() {
   const router = useRouter();
+
+  // Explicitly connect the Zustand store to the Liveblocks room
+  useEffect(() => {
+    // @ts-ignore -- middleware might attach to store api or state
+    const lb = useStore.liveblocks || (useStore.getState() as any).liveblocks;
+
+    if (lb && lb.enterRoom) {
+      lb.enterRoom("it-planner-room");
+    }
+
+    return () => {
+      if (lb && lb.leaveRoom) {
+        lb.leaveRoom();
+      }
+    };
+  }, []);
   const searchParams = useSearchParams();
   const { requests, updateRequest } = useRequests();
   const setActiveProject = useStore((state) => state.setActiveProject);
@@ -155,13 +171,13 @@ function ITPlannerContent() {
       />
 
       <div className="flex-1 relative bg-slate-50/50 flex flex-col overflow-hidden">
-        <Tabs defaultValue="lineage" className="flex-1 flex flex-col">
+        <Tabs defaultValue="flowchart" className="flex-1 flex flex-col">
           <div className="px-4 pt-2 border-b bg-white flex justify-between items-center">
             <TabsList>
-              <TabsTrigger value="lineage">System Lineage</TabsTrigger>
               <TabsTrigger value="flowchart" disabled={!activeProjectId}>Freeform Flowchart</TabsTrigger>
+              <TabsTrigger value="lineage">System Lineage</TabsTrigger>
             </TabsList>
-            {!activeProjectId && <span className="text-xs text-muted-foreground mr-2">Select a project to enable Flowchart & Notes</span>}
+            {!activeProjectId && <span className="text-xs text-muted-foreground mr-2">Select a project from the sidebar to start</span>}
           </div>
 
           <TabsContent value="lineage" className="flex-1 relative m-0 p-0 h-full">
@@ -175,7 +191,7 @@ function ITPlannerContent() {
             />
           </TabsContent>
 
-          <TabsContent value="flowchart" className="flex-1 relative m-0 p-4 h-full overflow-hidden">
+          <TabsContent value="flowchart" className="flex-1 relative m-0 p-0 h-full overflow-hidden">
             {activeProjectId ? (
               <FreeformFlow projectId={activeProjectId} />
             ) : (
@@ -257,7 +273,7 @@ export default function Home() {
         <RoomProvider
           id="it-planner-room"
           initialPresence={{ cursor: null }}
-          initialStorage={{ systems: [], integrations: [], projects: [] }}
+          initialStorage={() => ({ systems: [], integrations: [], projects: [] })}
         >
           <ClientSideSuspense fallback={<div>Loading Collaborative Environment...</div>}>
             {() => <ITPlannerContent />}

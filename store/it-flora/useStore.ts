@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { liveblocks } from '@liveblocks/zustand';
+import { liveblocks, WithLiveblocks } from '@liveblocks/zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { Edge, Node } from '@xyflow/react';
 import { client } from "@/lib/liveblocks";
@@ -74,6 +74,7 @@ export interface Project {
   ownerId: string;
   sharedWith: string[];
   notes?: string;
+  projectImages?: string[];
   flowData?: {
     nodes: Node[];
     edges: Edge[];
@@ -133,18 +134,22 @@ const getSavedUser = (): User | null => {
   return saved ? JSON.parse(saved) : null;
 };
 
-export const useStore = create<AppState>()(
+// Safe initialization
+const initialState = {
+  systems: [],
+  integrations: [],
+  projects: [],
+  activeProjectId: null,
+  users: [
+    { id: '1', name: 'Admin User', role: 'Administrator', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin', color: '#EF4444' }
+  ],
+  currentUser: getSavedUser() || { id: '1', name: 'Admin User', role: 'Administrator', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin', color: '#EF4444' }
+};
+
+export const useStore = create<WithLiveblocks<AppState>>()(
   liveblocks(
     (set, get) => ({
-      systems: [],
-      integrations: [],
-      projects: [],
-      activeProjectId: null,
-      users: [
-        { id: '1', name: 'Admin User', role: 'Administrator', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin', color: '#EF4444' }
-      ],
-      // Use saved user or default to Admin
-      currentUser: getSavedUser() || { id: '1', name: 'Admin User', role: 'Administrator', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin', color: '#EF4444' },
+      ...initialState,
 
       setCurrentUser: (user) => {
         if (user) localStorage.setItem('it-planner-user', JSON.stringify(user));
@@ -331,9 +336,13 @@ export const useStore = create<AppState>()(
         users: [...state.users, { ...user, id: uuidv4() }]
       })),
 
-      switchUser: (userId) => set((state) => ({
-        currentUser: state.users.find(u => u.id === userId) || state.currentUser
-      })),
+      switchUser: (userId) => {
+        const user = get().users.find(u => u.id === userId);
+        if (user) {
+          localStorage.setItem('it-planner-user', JSON.stringify(user));
+          set({ currentUser: user });
+        }
+      },
 
       addDocument: (systemId, document) => set((state) => ({
         systems: state.systems.map((s) =>

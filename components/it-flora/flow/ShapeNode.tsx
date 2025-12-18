@@ -1,6 +1,20 @@
 import React, { memo, useState, useEffect, useRef, useCallback } from 'react';
-import { Handle, Position, NodeProps, NodeResizer, useReactFlow, Node } from '@xyflow/react';
+import { Handle, Position, NodeProps, NodeResizer, useReactFlow, Node, NodeToolbar } from '@xyflow/react';
 import { cn } from '@/lib/utils';
+import {
+    Box,
+    Circle,
+    Diamond,
+    Database,
+    Cloud,
+    User,
+    Star,
+    ArrowRight,
+    Triangle,
+    Hexagon,
+    Square,
+    StickyNote
+} from 'lucide-react';
 
 export type ShapeNodeType =
     | 'rectangle' | 'circle' | 'diamond'
@@ -11,14 +25,32 @@ export type ShapeNodeType =
 interface ShapeNodeData {
     label: string;
     shape?: ShapeNodeType;
-    color?: string; // Hex or tailwind class
-    width?: number;
-    height?: number;
+    color?: string;
     isEditing?: boolean;
     [key: string]: unknown;
 }
 
 type ShapeNodeProps = NodeProps<Node<ShapeNodeData>>;
+
+const colors = [
+    '#ffffff', '#fef2f2', '#fff7ed', '#fefce8', '#f0fdf4', '#eef2ff', '#fdf2f8', '#f5f5f4',
+    '#fca5a5', '#fbbf24', '#a3e635', '#34d399', '#60a5fa', '#a78bfa', '#f472b6', '#a1a1aa',
+];
+
+const sidebarItems = [
+    { type: 'rectangle', label: 'Rectangle', icon: Box },
+    { type: 'circle', label: 'Circle', icon: Circle },
+    { type: 'diamond', label: 'Diamond', icon: Diamond },
+    { type: 'database', label: 'Database', icon: Database },
+    { type: 'document', label: 'Document', icon: StickyNote },
+    { type: 'cloud', label: 'Cloud', icon: Cloud },
+    { type: 'triangle', label: 'Triangle', icon: Triangle },
+    { type: 'hexagon', label: 'Hexagon', icon: Hexagon },
+    { type: 'parallelogram', label: 'Parallelogram', icon: Square },
+    { type: 'star', label: 'Star', icon: Star },
+    { type: 'arrow-right', label: 'Arrow Right', icon: ArrowRight },
+    { type: 'actor', label: 'Actor', icon: User },
+];
 
 const ShapeNode = ({ id, data, selected }: ShapeNodeProps) => {
     const { setNodes } = useReactFlow();
@@ -30,35 +62,42 @@ const ShapeNode = ({ id, data, selected }: ShapeNodeProps) => {
     const [inputValue, setInputValue] = useState(label);
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
-    // Sync local state if label changes externally
     useEffect(() => {
         setInputValue(label);
     }, [label]);
 
-    // Focus when entering edit mode
     useEffect(() => {
         if (isEditing && inputRef.current) {
-            // Small timeout to Ensure rendering is done
-            setTimeout(() => {
+            const timer = setTimeout(() => {
                 inputRef.current?.focus();
                 inputRef.current?.select();
             }, 50);
+            return () => clearTimeout(timer);
         }
     }, [isEditing]);
 
-    const handleSave = useCallback(() => {
+    const updateNodeData = useCallback((key: string, value: any) => {
         setNodes((nds) =>
             nds.map((node) => {
                 if (node.id === id) {
                     return {
                         ...node,
-                        data: { ...node.data, label: inputValue, isEditing: false }
+                        data: { ...node.data, [key]: value },
                     };
                 }
                 return node;
             })
         );
-    }, [id, inputValue, setNodes]);
+    }, [id, setNodes]);
+
+    const handleSave = useCallback(() => {
+        updateNodeData('label', inputValue);
+        updateNodeData('isEditing', false);
+    }, [inputValue, updateNodeData]);
+
+    const handleQuickShapeChange = useCallback((newShape: string) => {
+        updateNodeData('shape', newShape);
+    }, [updateNodeData]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -89,25 +128,13 @@ const ShapeNode = ({ id, data, selected }: ShapeNodeProps) => {
 
     const renderShapeContent = () => {
         const commonStyle = { fill: color, stroke: '#94a3b8', strokeWidth: 2, vectorEffect: 'non-scaling-stroke' as const };
-        // vector-effect='non-scaling-stroke' ensures borders don't get too thick/thin when resizing
-        // Using 5-95 range to prevent clipping of the stroke
 
         switch (shape) {
             case 'circle':
-                // Using SVG for circle ensures it effectively becomes an ellipse if resized non-uniformly
                 return (
                     <div className="w-full h-full flex items-center justify-center">
                         <svg viewBox="0 0 100 100" className="w-full h-full absolute top-0 left-0" preserveAspectRatio="none">
                             <ellipse cx="50" cy="50" rx="45" ry="45" style={commonStyle} />
-                        </svg>
-                        {renderLabel("px-2")}
-                    </div>
-                );
-            case 'rectangle':
-                return (
-                    <div className="w-full h-full flex items-center justify-center">
-                        <svg viewBox="0 0 100 100" className="w-full h-full absolute top-0 left-0" preserveAspectRatio="none">
-                            <rect x="5" y="5" width="90" height="90" rx="5" ry="5" style={commonStyle} />
                         </svg>
                         {renderLabel("px-2")}
                     </div>
@@ -125,8 +152,8 @@ const ShapeNode = ({ id, data, selected }: ShapeNodeProps) => {
                 return (
                     <div className="w-full h-full flex items-center justify-center">
                         <svg viewBox="0 0 100 100" className="w-full h-full absolute top-0 left-0" preserveAspectRatio="none">
-                            <path d="M5,15 A45,15 0 0,0 95,15 A45,15 0 0,0 5,15 M5,15 L5,85 A45,15 0 0,0 95,85 L95,15 M5,85" style={commonStyle} fill={color} />
-                            <ellipse cx="50" cy="15" rx="45" ry="15" style={{ ...commonStyle, fill: 'none', stroke: '#94a3b8' }} />
+                            <path d="M5,15 A45,15 0 0,0 95,15 A45,15 0 0,0 5,15 M5,15 L5,85 A45,15 0 0,0 95,85 L95,15 M5,85" style={commonStyle} />
+                            <ellipse cx="50" cy="15" rx="45" ry="15" style={{ ...commonStyle, fill: 'none' }} />
                         </svg>
                         {renderLabel("mt-4 max-w-[80%]")}
                     </div>
@@ -180,7 +207,6 @@ const ShapeNode = ({ id, data, selected }: ShapeNodeProps) => {
                 return (
                     <div className="w-full h-full flex items-center justify-center">
                         <svg viewBox="0 0 100 100" className="w-full h-full absolute top-0 left-0" preserveAspectRatio="none">
-                            {/* Scaled/Translated star points to fit 5-95 */}
                             <polygon points="50,5 63,35 95,35 70,55 80,90 50,70 20,90 30,55 5,35 37,35" style={commonStyle} />
                         </svg>
                         {renderLabel("max-w-[50%]")}
@@ -224,76 +250,73 @@ const ShapeNode = ({ id, data, selected }: ShapeNodeProps) => {
 
     return (
         <>
+            <NodeToolbar
+                isVisible={selected}
+                position={Position.Top}
+                className="flex flex-col bg-white p-2 rounded-lg shadow-xl border border-slate-200 animate-in zoom-in-95 pointer-events-auto"
+            >
+                {/* COLORS SECTION */}
+                <div className="text-[10px] font-bold text-slate-400 mb-1 px-1 text-left w-full">COLORS</div>
+                <div className="flex flex-wrap gap-1 mb-2 max-w-[160px]">
+                    {colors.map((c) => (
+                        <button
+                            key={c}
+                            className="w-5 h-5 rounded-full border border-slate-200 hover:scale-110 transition-transform"
+                            style={{ backgroundColor: c }}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                updateNodeData('color', c);
+                            }}
+                        />
+                    ))}
+                </div>
+
+                <div className="w-full h-px bg-slate-100 my-1" />
+
+                {/* SHAPES SECTION */}
+                <div className="text-[10px] font-bold text-slate-400 mb-1 px-1 text-left w-full">CHANGE SHAPE</div>
+                <div className="grid grid-cols-6 gap-1">
+                    {sidebarItems.map((item) => (
+                        <button
+                            key={item.type}
+                            className={cn(
+                                "p-1 rounded hover:bg-slate-100 flex items-center justify-center transition-colors border",
+                                shape === item.type ? "border-primary bg-primary/5" : "border-transparent"
+                            )}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleQuickShapeChange(item.type);
+                            }}
+                            title={item.label}
+                        >
+                            <item.icon className="h-3.5 w-3.5 text-slate-600" />
+                        </button>
+                    ))}
+                </div>
+            </NodeToolbar>
+
             <NodeResizer minWidth={50} minHeight={50} isVisible={selected} />
             <div
                 className={cn(
-                    "relative w-full h-full transition-all",
-                    selected ? "ring-2 ring-primary ring-offset-4 rounded-lg" : ""
+                    "group relative flex flex-col items-center justify-center transition-all",
+                    selected ? "z-20" : "z-10"
                 )}
-                style={{
-                    minWidth: '100px',
-                    minHeight: '60px',
-                    width: '100%',
-                    height: '100%'
-                }}
+                style={{ width: '100%', height: '100%' }}
             >
                 {renderShapeContent()}
 
-                {/* Connection Handles - positioned slightly outside to clear strokes */}
-                <Handle
-                    type="target"
-                    position={Position.Top}
-                    className="w-3 h-3 bg-slate-400 border-2 border-white !top-[-8px]"
-                    id="t"
-                />
-                <Handle
-                    type="source"
-                    position={Position.Top}
-                    className="w-3 h-3 bg-slate-400 border-2 border-white !top-[-8px]"
-                    id="t-out"
-                />
-
-                <Handle
-                    type="target"
-                    position={Position.Right}
-                    className="w-3 h-3 bg-slate-400 border-2 border-white !right-[-8px]"
-                    id="r"
-                />
-                <Handle
-                    type="source"
-                    position={Position.Right}
-                    className="w-3 h-3 bg-slate-400 border-2 border-white !right-[-8px]"
-                    id="r-out"
-                />
-
-                <Handle
-                    type="target"
-                    position={Position.Bottom}
-                    className="w-3 h-3 bg-slate-400 border-2 border-white !bottom-[-8px]"
-                    id="b"
-                />
-                <Handle
-                    type="source"
-                    position={Position.Bottom}
-                    className="w-3 h-3 bg-slate-400 border-2 border-white !bottom-[-8px]"
-                    id="b-out"
-                />
-
-                <Handle
-                    type="target"
-                    position={Position.Left}
-                    className="w-3 h-3 bg-slate-400 border-2 border-white !left-[-8px]"
-                    id="l"
-                />
-                <Handle
-                    type="source"
-                    position={Position.Left}
-                    className="w-3 h-3 bg-slate-400 border-2 border-white !left-[-8px]"
-                    id="l-out"
-                />
+                <Handle type="target" position={Position.Top} className="w-3 h-3 bg-slate-400 border-2 border-white !top-[-8px]" id="t" />
+                <Handle type="source" position={Position.Top} className="w-3 h-3 bg-slate-400 border-2 border-white !top-[-8px]" id="t-out" />
+                <Handle type="target" position={Position.Right} className="w-3 h-3 bg-slate-400 border-2 border-white !right-[-8px]" id="r" />
+                <Handle type="source" position={Position.Right} className="w-3 h-3 bg-slate-400 border-2 border-white !right-[-8px]" id="r-out" />
+                <Handle type="target" position={Position.Bottom} className="w-3 h-3 bg-slate-400 border-2 border-white !bottom-[-8px]" id="b" />
+                <Handle type="source" position={Position.Bottom} className="w-3 h-3 bg-slate-400 border-2 border-white !bottom-[-8px]" id="b-out" />
+                <Handle type="target" position={Position.Left} className="w-3 h-3 bg-slate-400 border-2 border-white !left-[-8px]" id="l" />
+                <Handle type="source" position={Position.Left} className="w-3 h-3 bg-slate-400 border-2 border-white !left-[-8px]" id="l-out" />
             </div>
         </>
     );
 };
 
 export default memo(ShapeNode);
+

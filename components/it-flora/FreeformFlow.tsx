@@ -31,7 +31,8 @@ import { Button } from '@/components/ui/button';
 import {
     Save, Square, Circle, Diamond, Database, FileText, Cloud,
     Triangle, Hexagon, User, Star, ArrowRight, GripVertical,
-    Maximize, Minimize, Undo, Redo, X, StickyNote
+    Maximize, Minimize, Undo, Redo, X, StickyNote, ZoomIn, ZoomOut, Maximize2,
+    HelpCircle, MousePointer2, Keyboard, Move
 } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 import ShapeNode from './flow/ShapeNode';
@@ -48,9 +49,12 @@ interface FreeformFlowProps {
     projectId: string;
 }
 
+import NoteNode from './flow/NoteNode';
+
 const nodeTypes: NodeTypes = {
     shape: ShapeNode,
-    image: ImageNode
+    image: ImageNode,
+    note: NoteNode
 };
 
 const edgeTypes: EdgeTypes = {
@@ -68,7 +72,7 @@ function Flow({ projectId }: FreeformFlowProps) {
     const { projects, updateProject } = useStore();
     const project = projects.find((p) => p.id === projectId);
     const { toast } = useToast();
-    const { screenToFlowPosition } = useReactFlow();
+    const { screenToFlowPosition, zoomIn, zoomOut, fitView } = useReactFlow();
 
     const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -80,7 +84,10 @@ function Flow({ projectId }: FreeformFlowProps) {
     const [isMaximized, setIsMaximized] = useState(false);
     const [isNotesOpen, setIsNotesOpen] = useState(false);
     const [recentShapes, setRecentShapes] = useState<string[]>(['rectangle', 'diamond', 'circle', 'cloud']);
-    const [quickAddMenu, setQuickAddMenu] = useState<{ nodeId: string, x: number, y: number } | null>(null);
+    const [copiedElements, setCopiedElements] = useState<{ nodes: Node[], edges: Edge[] } | null>(null);
+    const [notesWidth, setNotesWidth] = useState(320); // Default 320px
+    const [isResizingNotes, setIsResizingNotes] = useState(false);
+    // quickAddMenu removed in favor of NodeToolbar in custom nodes
 
     // Connection tracking
     const connectingNodeId = useRef<string | null>(null);
@@ -107,18 +114,53 @@ function Flow({ projectId }: FreeformFlowProps) {
     // Load saved flow data when project changes
     useEffect(() => {
         if (project?.flowData) {
-            setNodes(project.flowData.nodes.length > 0 ? project.flowData.nodes : initialNodes);
-            setEdges(project.flowData.edges.length > 0 ? project.flowData.edges : initialEdges);
-            // Reset history on project load
-            setHistory([]);
-            setHistoryIndex(-1);
-        } else {
-            setNodes(initialNodes);
-            setEdges(initialEdges);
-            setHistory([]);
-            setHistoryIndex(-1);
+            // Only update if current state is different to avoid loops
+            // comparing JSON strings as a simple heuristic
+            if (JSON.stringify(project.flowData.nodes) !== JSON.stringify(nodes)) {
+                setNodes(project.flowData.nodes.length > 0 ? project.flowData.nodes : initialNodes);
+            }
+            if (JSON.stringify(project.flowData.edges) !== JSON.stringify(edges)) {
+                setEdges(project.flowData.edges.length > 0 ? project.flowData.edges : initialEdges);
+            }
         }
-    }, [project, setNodes, setEdges]);
+    }, [project?.id]); // Only on project switch
+
+    // Auto-save logic
+    useEffect(() => {
+        if (!project) return;
+
+        const saveTimeout = setTimeout(() => {
+            // Check if data actually changed from what's in store
+            const hasNodesChanged = JSON.stringify(nodes) !== JSON.stringify(project.flowData?.nodes);
+            const hasEdgesChanged = JSON.stringify(edges) !== JSON.stringify(project.flowData?.edges);
+
+            if (hasNodesChanged || hasEdgesChanged) {
+                updateProject(project.id, {
+                    flowData: { nodes, edges }
+                });
+            }
+        }, 1000); // 1s debounce
+
+        return () => clearTimeout(saveTimeout);
+    }, [nodes, edges, project?.id, updateProject]);
+
+    // Handle Notes Sidebar Resizing
+    const handleNotesResize = useCallback((e: MouseEvent) => {
+        if (!isResizingNotes) return;
+        const newWidth = window.innerWidth - e.clientX;
+        setNotesWidth(Math.max(250, Math.min(600, newWidth))); // Min 250, Max 600
+    }, [isResizingNotes]);
+
+    useEffect(() => {
+        if (isResizingNotes) {
+            window.addEventListener('mousemove', handleNotesResize);
+            window.addEventListener('mouseup', () => setIsResizingNotes(false));
+            return () => {
+                window.removeEventListener('mousemove', handleNotesResize);
+                window.removeEventListener('mouseup', () => setIsResizingNotes(false));
+            };
+        }
+    }, [isResizingNotes, handleNotesResize]);
 
     // History Snapshots
     const takeSnapshot = useCallback(() => {
@@ -175,37 +217,55 @@ function Flow({ projectId }: FreeformFlowProps) {
         const handleKeyDown = async (event: KeyboardEvent) => {
             const isCtrlOrCmd = event.ctrlKey || event.metaKey;
 
+            // Avoid triggering shortcuts when typing in inputs/textareas
+            const activeTag = document.activeElement?.tagName.toLowerCase();
+            if (activeTag === 'input' || activeTag === 'textarea') return;
+
             // Copy
             if (isCtrlOrCmd && event.key === 'c') {
-                if (selectedNode) {
-                    setCopiedNode(selectedNode);
+                const selectedNodes = nodes.filter(n => n.selected);
+                const selectedEdges = edges.filter(e => e.selected);
+
+                if (selectedNodes.length > 0 || selectedEdges.length > 0) {
+                    setCopiedElements({
+                        nodes: selectedNodes,
+                        edges: selectedEdges
+                    });
                 }
             }
 
             // Paste
             if (isCtrlOrCmd && event.key === 'v') {
-                // Check for image in clipboard explicitly if not handling text paste
-                // We do this via the clipboard API/event because 'v' key doesn't carry data
-                // Ideally paste should be a 'paste' listener, but let's try to handle standard object paste here
-                // and image paste via a separate listener or try to access navigator.clipboard
-
-                if (copiedNode) {
+                if (copiedElements) {
                     recordHistory();
-                    const position = {
-                        x: copiedNode.position.x + 50,
-                        y: copiedNode.position.y + 50,
-                    };
 
-                    const newNode: Node = {
-                        ...copiedNode,
+                    const idMap: Record<string, string> = {};
+
+                    const newNodes = copiedElements.nodes.map(node => {
+                        const newId = Math.random().toString();
+                        idMap[node.id] = newId;
+                        return {
+                            ...node,
+                            id: newId,
+                            position: {
+                                x: node.position.x + 50,
+                                y: node.position.y + 50
+                            },
+                            selected: true,
+                            data: { ...node.data, isEditing: false }
+                        };
+                    });
+
+                    const newEdges = copiedElements.edges.map(edge => ({
+                        ...edge,
                         id: Math.random().toString(),
-                        position,
-                        selected: true,
-                        data: { ...copiedNode.data, isEditing: false } // ensure paste doesn't trigger edit
-                    };
+                        source: idMap[edge.source] || edge.source,
+                        target: idMap[edge.target] || edge.target,
+                        selected: true
+                    }));
 
-                    setNodes((nds) => nds.map(n => ({ ...n, selected: false })).concat([newNode as any]));
-                    setSelectedNode(newNode);
+                    setNodes((nds) => nds.map(n => ({ ...n, selected: false })).concat(newNodes));
+                    setEdges((eds) => eds.map(e => ({ ...e, selected: false })).concat(newEdges));
                 }
             }
 
@@ -223,23 +283,24 @@ function Flow({ projectId }: FreeformFlowProps) {
 
             // Delete
             if (event.key === 'Backspace' || event.key === 'Delete' || event.key === '\\') {
-                // If editing text, don't delete node!
-                // We can check if document.activeElement is an input/textarea.
-                const activeTag = document.activeElement?.tagName.toLowerCase();
-                if (activeTag === 'input' || activeTag === 'textarea') return;
+                const selectedNodes = nodes.filter(n => n.selected);
+                const selectedEdges = edges.filter(e => e.selected);
 
-                if (selectedNode || selectedEdge) {
+                if (selectedNodes.length > 0 || selectedEdges.length > 0) {
                     recordHistory();
-                    if (selectedNode) {
-                        setNodes((nds) => nds.filter((n) => n.id !== selectedNode.id));
-                        setEdges((eds) => eds.filter((e) => e.source !== selectedNode.id && e.target !== selectedNode.id));
-                        setSelectedNode(null);
-                        setQuickAddMenu(null);
-                    }
-                    if (selectedEdge) {
-                        setEdges((eds) => eds.filter((e) => e.id !== selectedEdge.id));
-                        setSelectedEdge(null);
-                    }
+
+                    const nodeIdsToRemove = selectedNodes.map(n => n.id);
+                    const edgeIdsToRemove = selectedEdges.map(e => e.id);
+
+                    setNodes((nds) => nds.filter(n => !nodeIdsToRemove.includes(n.id)));
+                    setEdges((eds) => eds.filter(e =>
+                        !edgeIdsToRemove.includes(e.id) &&
+                        !nodeIdsToRemove.includes(e.source) &&
+                        !nodeIdsToRemove.includes(e.target)
+                    ));
+
+                    setSelectedNode(null);
+                    setSelectedEdge(null);
                 }
             }
         };
@@ -287,7 +348,7 @@ function Flow({ projectId }: FreeformFlowProps) {
             document.removeEventListener('keydown', handleKeyDown);
             document.removeEventListener('paste', handlePaste);
         };
-    }, [selectedNode, selectedEdge, copiedNode, setNodes, setEdges, undo, redo, recordHistory, screenToFlowPosition]);
+    }, [nodes, edges, copiedElements, selectedNode, selectedEdge, copiedNode, setNodes, setEdges, undo, redo, recordHistory, screenToFlowPosition]);
 
 
     const onConnect: OnConnect = useCallback(
@@ -354,13 +415,7 @@ function Flow({ projectId }: FreeformFlowProps) {
                 setNodes((nds) => [...nds.map(n => ({ ...n, selected: false })), newNode]);
                 setEdges((eds) => eds.concat(newEdge));
 
-                // Show Quick Add Menu above the new node
-                setQuickAddMenu({
-                    nodeId: newNodeId,
-                    x: position.x - 75,
-                    y: position.y - 100 // Position above
-                });
-
+                // NodeToolbar handled by child nodes
                 setSelectedNode(newNode);
                 setSelectedEdge(null);
                 addToRecents(shapeToUse);
@@ -416,20 +471,21 @@ function Flow({ projectId }: FreeformFlowProps) {
             // Default size improved for better aspect ratio
             const newNode: Node = {
                 id: Math.random().toString(),
-                type: 'shape',
+                type: shape === 'note' ? 'note' : 'shape',
                 position,
                 data: {
-                    label: `New ${shape}`,
-                    shape,
-                    color: '#ffffff',
-                    isEditing: false // Drag drop doesn't trigger edit by default unless requested? Let's keep it consistent.
+                    label: shape === 'note' ? '' : `New ${shape}`,
+                    shape: shape === 'note' ? undefined : shape,
+                    color: shape === 'note' ? undefined : '#ffffff',
+                    isEditing: true // Auto-edit after drop
                 },
-                style: { width: 150, height: 80 }
+                style: shape === 'note' ? { width: 150, height: 100 } : { width: 150, height: 80 }
             };
 
             setNodes((nds) => nds.concat(newNode));
+            setSelectedNode(newNode);
         },
-        [screenToFlowPosition, setNodes, recordHistory, addToRecents],
+        [screenToFlowPosition, setNodes, recordHistory, addToRecents, setSelectedNode],
     );
 
     const onDragStart = (event: React.DragEvent, nodeType: string, shapeType: string) => {
@@ -438,37 +494,46 @@ function Flow({ projectId }: FreeformFlowProps) {
         event.dataTransfer.effectAllowed = 'move';
     };
 
+    // handleSave is now automatic via useEffect
     const handleSave = () => {
         if (!project) return;
         updateProject(project.id, {
             flowData: { nodes, edges }
         });
         toast({
-            title: "Flowchart saved",
-            description: "Your flowchart has been saved to the project.",
+            title: "Changes Saved",
+            description: "Flowchart is up to date.",
         });
     };
 
     const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
         setSelectedNode(node);
         setSelectedEdge(null);
-        // If clicking a different node, close menu? User said "click anywhere... and options go away".
-        // If clicking the SAME node, maybe toggle? Let's just close if it's not the quick menu target.
-        if (quickAddMenu && quickAddMenu.nodeId !== node.id) {
-            setQuickAddMenu(null);
+
+        // Trigger inline edit on single click for shapes and notes
+        if (node.type === 'shape' || node.type === 'note') {
+            setNodes((nds) =>
+                nds.map(n => n.id === node.id
+                    ? { ...n, data: { ...n.data, isEditing: true } }
+                    : { ...n, data: { ...n.data, isEditing: false } }
+                )
+            );
         }
-    }, [quickAddMenu]);
+    }, [setNodes]);
 
     const onEdgeClick = useCallback((event: React.MouseEvent, edge: Edge) => {
         setSelectedEdge(edge);
         setSelectedNode(null);
-        setQuickAddMenu(null);
-    }, []);
+
+        // Trigger edge selection which LabelledEdge uses to show input
+        setEdges((eds) =>
+            eds.map(e => ({ ...e, selected: e.id === edge.id }))
+        );
+    }, [setEdges]);
 
     const onPaneClick = useCallback(() => {
         setSelectedNode(null);
         setSelectedEdge(null);
-        setQuickAddMenu(null);
         // Also handling blur logic via ShapeNode component
     }, []);
 
@@ -494,9 +559,55 @@ function Flow({ projectId }: FreeformFlowProps) {
         );
     };
 
+    const updateSelectedNodesBulk = (key: string, value: any) => {
+        const selectedNodes = nodes.filter(n => n.selected);
+        if (selectedNodes.length === 0) return;
+
+        recordHistory();
+        const selectedIds = selectedNodes.map(n => n.id);
+
+        setNodes((nds) =>
+            nds.map((node) => {
+                if (selectedIds.includes(node.id)) {
+                    return {
+                        ...node,
+                        data: {
+                            ...node.data,
+                            [key]: value,
+                        },
+                    };
+                }
+                return node;
+            })
+        );
+    };
+
+    const changeSelectedNodesShape = (shapeType: string) => {
+        const selectedNodes = nodes.filter(n => n.selected && n.type === 'shape');
+        if (selectedNodes.length === 0) return;
+
+        recordHistory();
+        const selectedIds = selectedNodes.map(n => n.id);
+
+        setNodes((nds) =>
+            nds.map((node) => {
+                if (selectedIds.includes(node.id)) {
+                    return {
+                        ...node,
+                        data: {
+                            ...node.data,
+                            type: shapeType,
+                        },
+                    };
+                }
+                return node;
+            })
+        );
+    };
+
     const updateSelectedEdge = (key: string, value: any) => {
         if (!selectedEdge) return;
-        recordHistory(); // Snap on type change
+        recordHistory();
 
         setEdges((eds) =>
             eds.map((edge) => {
@@ -511,33 +622,6 @@ function Flow({ projectId }: FreeformFlowProps) {
                 return edge;
             })
         );
-    };
-
-    const handleQuickShapeChange = (shape: string) => {
-        if (!quickAddMenu) return;
-
-        recordHistory();
-        addToRecents(shape);
-
-        setNodes((nds) =>
-            nds.map(node => {
-                if (node.id === quickAddMenu.nodeId) {
-                    return {
-                        ...node,
-                        data: { ...node.data, shape, label: node.data.label || `New ${shape}` }
-                        // Keep editing state if it was there? 
-                        // Probably safer to let it persist from component state or re-trigger if needed.
-                        // Ideally we don't mess with isEditing here, let ShapeNode handle it.
-                    };
-                }
-                return node;
-            })
-        );
-        // Keep menu open as per request "choose... if you want to... click anywhere... options go away",
-        // implying meaningful choice doesn't auto-dismiss? 
-        // Or "click on another connection point... without having to click again".
-        // Actually standard UX is usually to confirm and close. But the user phrasing "if not you can just click anywhere" suggests it stays.
-        // I will keep it open to allow rapid switching until satisfied.
     };
 
     const toggleMaximize = () => {
@@ -556,11 +640,12 @@ function Flow({ projectId }: FreeformFlowProps) {
         { type: 'actor', icon: User, label: 'User' },
         { type: 'star', icon: Star, label: 'Star' },
         { type: 'arrow-right', icon: ArrowRight, label: 'Input' },
+        { type: 'note', icon: StickyNote, label: 'Note' },
     ];
 
     const containerClasses = isMaximized
         ? "fixed inset-0 z-50 bg-white flex h-screen w-screen"
-        : "flex h-[600px] w-full border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 overflow-hidden relative";
+        : "flex h-full w-full border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 overflow-hidden relative";
 
     return (
         <div className={containerClasses}>
@@ -607,62 +692,173 @@ function Flow({ projectId }: FreeformFlowProps) {
                     className="bg-slate-50"
                     snapToGrid
                     snapGrid={[20, 20]}
+                    selectionOnDrag={true}
+                    selectionKeyCode="Shift"
+                    multiSelectionKeyCode={['Shift', 'Control', 'Meta']}
                 >
-                    <Controls />
                     <Background color="#94a3b8" gap={20} size={1} />
 
-                    <Panel position="top-right" className="flex gap-2 items-start">
-                        {/* Toolbar */}
-                        <div className="bg-white p-2 rounded-lg shadow-md border border-slate-200 flex items-center gap-1 mr-2">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={undo} disabled={historyIndex <= 0} title="Undo (Ctrl+Z)">
-                                <Undo className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={redo} disabled={historyIndex >= history.length - 1} title="Redo (Ctrl+Y)">
-                                <Redo className="h-4 w-4" />
-                            </Button>
-                            <div className="w-px h-6 bg-slate-200 mx-1" />
-                            <Button variant="ghost" size="sm" className={cn("h-8 gap-2", isNotesOpen && "bg-slate-100")} onClick={() => setIsNotesOpen(!isNotesOpen)}>
-                                <StickyNote className="h-4 w-4" /> Note
-                            </Button>
-                            <div className="w-px h-6 bg-slate-200 mx-1" />
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleMaximize} title={isMaximized ? "Minimize" : "Maximize"}>
-                                {isMaximized ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
-                            </Button>
-                        </div>
+                    <Panel position="top-right" className="flex gap-2 items-start z-[100]">
+                        {/* Unified Toolbar */}
+                        <div className="bg-white p-1.5 rounded-lg shadow-lg border border-slate-200 flex items-center gap-1.5 backdrop-blur-sm bg-white/90">
+                            {/* Zoom Section */}
+                            <div className="flex items-center gap-0.5">
+                                <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-100" onClick={() => zoomIn()} title="Zoom In">
+                                    <ZoomIn className="h-4 w-4 text-slate-600" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-100" onClick={() => zoomOut()} title="Zoom Out">
+                                    <ZoomOut className="h-4 w-4 text-slate-600" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-100" onClick={() => fitView()} title="Fit View">
+                                    <Maximize2 className="h-4 w-4 text-slate-600" />
+                                </Button>
+                            </div>
 
-                        <div className="bg-white p-2 rounded-lg shadow-md border border-slate-200">
-                            <Button size="sm" onClick={handleSave} className="gap-2 h-8">
-                                <Save className="h-4 w-4" /> Save
-                            </Button>
+                            <div className="w-px h-6 bg-slate-200 mx-0.5" />
+
+                            {/* History Section */}
+                            <div className="flex items-center gap-0.5">
+                                <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-100" onClick={undo} disabled={historyIndex <= 0} title="Undo (Ctrl+Z)">
+                                    <Undo className="h-4 w-4 text-slate-600" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-100" onClick={redo} disabled={historyIndex >= history.length - 1} title="Redo (Ctrl+Y)">
+                                    <Redo className="h-4 w-4 text-slate-600" />
+                                </Button>
+                            </div>
+
+                            <div className="w-px h-6 bg-slate-200 mx-0.5" />
+
+                            {/* Feature Section */}
+                            <div className="flex items-center gap-0.5">
+                                <Button variant="ghost" size="sm" className={cn("h-8 gap-2 px-3", isNotesOpen && "bg-slate-100 text-primary")} onClick={() => setIsNotesOpen(!isNotesOpen)}>
+                                    <StickyNote className="h-4 w-4" />
+                                    <span className="text-xs font-semibold">Notes</span>
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-100" onClick={toggleMaximize} title={isMaximized ? "Minimize" : "Maximize"}>
+                                    {isMaximized ? <Minimize className="h-4 w-4 text-slate-600" /> : <Maximize className="h-4 w-4 text-slate-600" />}
+                                </Button>
+
+                                <div className="w-px h-6 bg-slate-200 mx-0.5" />
+
+                                {/* Help Guide */}
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-100" title="Board Controls Guide">
+                                            <HelpCircle className="h-4 w-4 text-slate-600" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-80 p-4 border-slate-200 shadow-xl" align="end" sideOffset={10}>
+                                        <div className="space-y-4">
+                                            <div className="flex items-center gap-2 border-b pb-2">
+                                                <HelpCircle className="h-4 w-4 text-primary" />
+                                                <h3 className="font-bold text-sm">Board Controls Guide</h3>
+                                            </div>
+
+                                            <div className="space-y-3">
+                                                <div className="flex gap-3">
+                                                    <div className="p-1.5 bg-slate-100 rounded h-fit">
+                                                        <MousePointer2 className="h-4 w-4 text-slate-600" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs font-bold mb-0.5">Multi-Selection</p>
+                                                        <p className="text-xs text-slate-500 leading-relaxed">
+                                                            Hold <kbd className="px-1 py-0.5 bg-white border border-slate-300 rounded text-[10px]">Shift</kbd> or <kbd className="px-1 py-0.5 bg-white border border-slate-300 rounded text-[10px]">Ctrl/Cmd</kbd> and click shapes to select multiple.
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex gap-3">
+                                                    <div className="p-1.5 bg-slate-100 rounded h-fit">
+                                                        <Move className="h-4 w-4 text-slate-600" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs font-bold mb-0.5">Area Selection</p>
+                                                        <p className="text-xs text-slate-500 leading-relaxed">
+                                                            Hold <kbd className="px-1 py-0.5 bg-white border border-slate-300 rounded text-[10px]">Shift</kbd> and drag on the background to select items in an area.
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex gap-3">
+                                                    <div className="p-1.5 bg-slate-100 rounded h-fit">
+                                                        <Keyboard className="h-4 w-4 text-slate-600" />
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <p className="text-xs font-bold mb-0.5">Keyboard Shortcuts</p>
+                                                        <div className="grid grid-cols-2 gap-y-1 mt-1 font-mono text-[10px] text-slate-600">
+                                                            <span>Ctrl+C / V</span> <span>Copy / Paste</span>
+                                                            <span>Del / Bksp</span> <span>Delete Items</span>
+                                                            <span>Ctrl+Z / Y</span> <span>Undo / Redo</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                                                <p className="text-[10px] text-slate-500 italic">
+                                                    Tip: Double-click a Note to expand it. Connect shapes by dragging from the dots.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
                         </div>
                     </Panel>
 
-                    {/* Node Editing Panel */}
-                    {selectedNode && (
+                    {/* Node/Batch Editing Panel */}
+                    {(selectedNode || nodes.some(n => n.selected)) && (
                         <Panel position="top-left" className="bg-white p-4 rounded-lg shadow-lg border border-slate-200 w-64 space-y-4 animate-in fade-in slide-in-from-left-2 z-50">
                             <div>
-                                <h4 className="font-semibold text-sm mb-2">{selectedNode.type === 'image' ? 'Edit Image' : 'Edit Node'}</h4>
+                                <h4 className="font-semibold text-sm mb-2">
+                                    {nodes.filter(n => n.selected).length > 1
+                                        ? `Batch Edit (${nodes.filter(n => n.selected).length} items)`
+                                        : (selectedNode?.type === 'image' ? 'Edit Image' : 'Edit Node')}
+                                </h4>
                                 <div className="space-y-3">
-                                    <div className="space-y-1">
-                                        <Label className="text-xs">Label</Label>
-                                        <Input
-                                            value={selectedNode.data.label as string || ''}
-                                            onChange={(e) => updateSelectedNode('label', e.target.value)}
-                                            className="h-8 text-sm"
-                                        />
-                                    </div>
-                                    {selectedNode.type !== 'image' && (
+                                    {nodes.filter(n => n.selected).length === 1 && (
                                         <div className="space-y-1">
-                                            <Label className="text-xs">Color</Label>
-                                            <div className="flex flex-wrap gap-2">
-                                                {colors.map((c) => (
-                                                    <button
-                                                        key={c}
-                                                        className={`w-6 h-6 rounded-full border border-slate-200 transition-transform hover:scale-110 ${selectedNode.data.color === c ? 'ring-2 ring-primary ring-offset-1' : ''}`}
-                                                        style={{ backgroundColor: c }}
-                                                        onClick={() => updateSelectedNode('color', c)}
-                                                        title={c}
-                                                    />
+                                            <Label className="text-xs">Label</Label>
+                                            <Input
+                                                value={nodes.find(n => n.selected)?.data.label as string || ''}
+                                                onChange={(e) => updateSelectedNode('label', e.target.value)}
+                                                className="h-8 text-sm"
+                                            />
+                                        </div>
+                                    )}
+
+                                    {/* Color for any selection */}
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Color</Label>
+                                        <div className="flex flex-wrap gap-2">
+                                            {colors.map((c) => (
+                                                <button
+                                                    key={c}
+                                                    className={`w-6 h-6 rounded-full border border-slate-200 transition-transform hover:scale-110 ${nodes.find(n => n.selected)?.data.color === c ? 'ring-2 ring-primary ring-offset-1' : ''}`}
+                                                    style={{ backgroundColor: c }}
+                                                    onClick={() => updateSelectedNodesBulk('color', c)}
+                                                    title={c}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Bulk Shape Change */}
+                                    {nodes.filter(n => n.selected && n.type === 'shape').length > 0 && (
+                                        <div className="space-y-1 pt-1 border-t">
+                                            <Label className="text-xs">Shape Type</Label>
+                                            <div className="grid grid-cols-4 gap-2 py-1">
+                                                {sidebarItems.filter(i => i.type !== 'note').map((item) => (
+                                                    <Button
+                                                        key={item.type}
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8 hover:bg-slate-100 border border-transparent hover:border-slate-200"
+                                                        onClick={() => changeSelectedNodesShape(item.type)}
+                                                        title={item.label}
+                                                    >
+                                                        <item.icon className="h-4 w-4 text-slate-600" />
+                                                    </Button>
                                                 ))}
                                             </div>
                                         </div>
@@ -716,65 +912,30 @@ function Flow({ projectId }: FreeformFlowProps) {
                         </Panel>
                     )}
 
-                    {/* Quick Add Menu */}
-                    {quickAddMenu && (
-                        <div
-                            className="absolute z-50 bg-white p-2 rounded-lg shadow-xl border border-slate-200 animate-in zoom-in-95"
-                            style={{
-                                left: quickAddMenu.x,
-                                top: quickAddMenu.y,
-                                transform: 'translate(-50%, -100%)', // Center above
-                            }}
-                        >
-                            {/* RECENTS SECTION */}
-                            <div className="text-[10px] font-bold text-slate-400 mb-1 px-1">RECENTS</div>
-                            <div className="flex gap-1 mb-2">
-                                {recentShapes.map((shape) => {
-                                    const item = sidebarItems.find(i => i.type === shape);
-                                    if (!item) return null;
-                                    return (
-                                        <button
-                                            key={shape}
-                                            className="p-1.5 rounded hover:bg-slate-100 flex items-center justify-center transition-colors border border-slate-100"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleQuickShapeChange(shape);
-                                            }}
-                                            title={item.label}
-                                        >
-                                            <item.icon className="h-4 w-4 text-slate-600" />
-                                        </button>
-                                    );
-                                })}
-                            </div>
-
-                            <div className="w-full h-px bg-slate-100 my-1" />
-
-                            {/* ALL SHAPES */}
-                            <div className="text-[10px] font-bold text-slate-400 mb-1 px-1">ALL</div>
-                            <div className="grid grid-cols-4 gap-1">
-                                {sidebarItems.map((item) => (
-                                    <button
-                                        key={item.type}
-                                        className="p-1.5 rounded hover:bg-slate-100 flex items-center justify-center transition-colors"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleQuickShapeChange(item.type);
-                                        }}
-                                        title={item.label}
-                                    >
-                                        <item.icon className="h-4 w-4 text-slate-600" />
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
+                    {/* NodeToolbar is now inside custom nodes */}
                 </ReactFlow>
 
                 {/* Floating Project Notes Overlay */}
                 {isNotesOpen && (
-                    <div className="absolute bottom-4 right-4 w-80 z-50 animate-in slide-in-from-bottom-5">
-                        <div className="relative">
+                    <div
+                        className="absolute top-4 right-4 bottom-4 z-50 animate-in slide-in-from-right-5 pointer-events-none"
+                        style={{ width: `${notesWidth}px` }}
+                    >
+                        <div className="relative h-full pointer-events-auto group">
+                            {/* Resize Handle - Much wider hit area (64px) */}
+                            <div
+                                className="absolute top-0 bottom-0 -left-8 w-16 cursor-col-resize flex items-center justify-center group/handle z-[60] pointer-events-auto"
+                                onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    setIsResizingNotes(true);
+                                }}
+                            >
+                                <div className={cn(
+                                    "w-1 h-12 bg-slate-300 rounded-full transition-all duration-200",
+                                    isResizingNotes ? "h-full w-1.5 bg-primary" : "group-hover/handle:h-24 group-hover/handle:bg-slate-400 group-hover/handle:w-1.5"
+                                )} />
+                            </div>
+
                             <Button
                                 size="icon"
                                 variant="secondary"

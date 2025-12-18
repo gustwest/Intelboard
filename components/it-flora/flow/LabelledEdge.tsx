@@ -45,13 +45,11 @@ const LabelledEdge: FC<EdgeProps> = ({
 
     // Focus when editing starts
     useEffect(() => {
-        if (isEditing && inputRef.current) {
-            setTimeout(() => {
-                inputRef.current?.focus();
-                inputRef.current?.select();
-            }, 50)
+        if ((isEditing || selected) && inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.select();
         }
-    }, [isEditing]);
+    }, [isEditing, selected]);
 
     const onEdgeClick = (evt: React.MouseEvent) => {
         evt.stopPropagation();
