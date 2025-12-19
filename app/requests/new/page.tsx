@@ -53,7 +53,7 @@ export default function NewRequestPage() {
         });
 
         // Simulate API call
-        setTimeout(() => {
+        setTimeout(async () => {
             const newRequest: Request = {
                 id: `r${Date.now()}`,
                 title: formData.title,
@@ -71,7 +71,7 @@ export default function NewRequestPage() {
                 attributes: attributesRecord,
             };
 
-            addRequest(newRequest);
+            await addRequest(newRequest);
             router.push(`/requests/${newRequest.id}`);
         }, 1000);
     };
