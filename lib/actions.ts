@@ -24,6 +24,28 @@ export async function addRequest(data: any) {
         // Remove createdAt if present to let the server set it correctly
         const { createdAt, ...sanitizedData } = data;
 
+        // Ensure creator exists to prevent Foreign Key errors
+        if (sanitizedData.creatorId) {
+            const existingUser = await db.query.users.findFirst({
+                where: eq(users.id, sanitizedData.creatorId)
+            });
+
+            if (!existingUser) {
+                console.log(`Creator ${sanitizedData.creatorId} not found in DB. Creating placeholder...`);
+                // Try to find mock details
+                const mockDiff = mockUsers.find(u => u.id === sanitizedData.creatorId);
+
+                await db.insert(users).values({
+                    id: sanitizedData.creatorId,
+                    name: mockDiff?.name || "Guest User",
+                    email: mockDiff?.email || `${sanitizedData.creatorId}@placeholder.com`,
+                    role: (mockDiff?.role as any) || "Guest",
+                    company: mockDiff?.company || null,
+                    image: mockDiff?.avatar || null,
+                }).onConflictDoNothing();
+            }
+        }
+
         const [newRequest] = await db.insert(requests).values({
             ...sanitizedData,
             createdAt: new Date(),
