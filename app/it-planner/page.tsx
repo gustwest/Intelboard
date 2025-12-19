@@ -28,25 +28,23 @@ import { client, API_KEY } from "@/liveblocks.config";
 
 function ITPlannerContent() {
   const router = useRouter();
-
-  // Explicitly connect the Zustand store to the Liveblocks room
-  useEffect(() => {
-    // @ts-ignore -- middleware might attach to store api or state
-    const lb = useStore.liveblocks || (useStore.getState() as any).liveblocks;
-
-    if (lb && lb.enterRoom) {
-      lb.enterRoom("it-planner-room");
-    }
-
-    return () => {
-      if (lb && lb.leaveRoom) {
-        lb.leaveRoom();
-      }
-    };
-  }, []);
   const searchParams = useSearchParams();
   const { requests, updateRequest } = useRequests();
   const setActiveProject = useStore((state) => state.setActiveProject);
+  const activeProjectId = useStore((state) => state.activeProjectId);
+
+  // Join the Liveblocks room for Zustand store sync dynamically
+  useEffect(() => {
+    // @ts-ignore - liveblocks middleware attaches this to the store api
+    const lb = useStore.liveblocks;
+    if (lb && activeProjectId) {
+      const roomName = `project-${activeProjectId}`;
+      lb.enterRoom(roomName);
+      return () => {
+        lb.leaveRoom(roomName);
+      };
+    }
+  }, [activeProjectId]);
 
   // Redirect State
   const createForRequestId = searchParams.get('createForRequestId');
@@ -72,22 +70,6 @@ function ITPlannerContent() {
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [selectedIntegrationId, setSelectedIntegrationId] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const activeProjectId = useStore((state) => state.activeProjectId);
-
-  // Join the Liveblocks room for Zustand store sync
-  useEffect(() => {
-    // @ts-ignore - liveblocks middleware attaches this to the hook
-    const lb = useStore.liveblocks;
-    if (lb) {
-      const { enterRoom, leaveRoom } = lb;
-      enterRoom('it-planner-room');
-      return () => {
-        leaveRoom('it-planner-room');
-      };
-    } else {
-      console.warn("Liveblocks middleware not found on useStore");
-    }
-  }, []);
 
   // Trigger modal if params exist
   useEffect(() => {
@@ -267,11 +249,14 @@ function ITPlannerContent() {
 }
 
 export default function Home() {
+  const activeProjectId = useStore((state) => state.activeProjectId);
+  const roomName = activeProjectId ? `project-${activeProjectId}` : "it-planner-global";
+
   return (
     <Suspense fallback={<div>Loading Details...</div>}>
       <LiveblocksProvider publicApiKey="pk_dev_t94HHDVA1uBZWUJ7u6glPN8-cFC0YLH-jO5QDAY9KovG3mwy5CHlgx9i1kLcCRpN">
         <RoomProvider
-          id="it-planner-room"
+          id={roomName}
           initialPresence={{ cursor: null }}
           initialStorage={() => ({ systems: [], integrations: [], projects: [] })}
         >

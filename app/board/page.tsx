@@ -152,6 +152,10 @@ export default function BoardPage() {
         if (role === "Specialist" && req.status === "Submitted for Review") {
             return "New";
         }
+        // Customers/Guests see their feedback as "Under Review" (Submitted for Review)
+        if ((role === "Customer" || role === "Guest") && req.status === "New" && req.tags?.includes("Feedback")) {
+            return "Submitted for Review";
+        }
         return req.status;
     };
 
@@ -404,7 +408,20 @@ export default function BoardPage() {
                                                                         <CardContent className="p-4 pt-2">
                                                                             {role === "Admin" && request.creatorId && (
                                                                                 <div className="mb-2 text-xs text-blue-600 font-medium">
-                                                                                    Requested by: {mockUsers.find(u => u.id === request.creatorId)?.company || "Unknown"}
+                                                                                    Requested by: {
+                                                                                        (() => {
+                                                                                            const lowerId = request.creatorId.toLowerCase();
+                                                                                            const u = mockUsers.find(u => u.id.toLowerCase() === lowerId || u.email?.toLowerCase() === lowerId);
+                                                                                            if (u) return u.company || u.name;
+
+                                                                                            if (request.creatorId.includes('@')) {
+                                                                                                const prefix = request.creatorId.split('@')[0];
+                                                                                                if (prefix.toLowerCase().startsWith('c')) return "Customer " + prefix.slice(1);
+                                                                                                return prefix.charAt(0).toUpperCase() + prefix.slice(1);
+                                                                                            }
+                                                                                            return request.creatorId.charAt(0).toUpperCase() + request.creatorId.slice(1);
+                                                                                        })()
+                                                                                    }
                                                                                 </div>
                                                                             )}
                                                                             {request.actionNeeded && (role === "Customer" || role === "Guest" || role === "Admin") && (

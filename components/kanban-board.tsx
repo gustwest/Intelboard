@@ -64,8 +64,10 @@ export function KanbanBoard({
                                                         {...provided.draggableProps}
                                                         {...provided.dragHandleProps}
                                                         className={cn(
+                                                            "transition-all duration-200",
                                                             "bg-white dark:bg-slate-950",
-                                                            snapshot.isDragging && "opacity-50 ring-2 ring-primary"
+                                                            req.tags?.includes("Feedback") && "bg-purple-50 dark:bg-purple-900/10 border-purple-200 dark:border-purple-800 shadow-sm border-l-4 border-l-purple-500",
+                                                            snapshot.isDragging && "opacity-50 ring-2 ring-primary scale-105"
                                                         )}
                                                     >
                                                         <CardHeader className="p-4 pb-2">
@@ -73,6 +75,11 @@ export function KanbanBoard({
                                                                 <CardTitle className="text-base font-medium leading-tight hover:underline cursor-pointer">
                                                                     <a href={`/requests/${req.id}`}>{req.title}</a>
                                                                 </CardTitle>
+                                                                {req.tags?.includes("Feedback") && (
+                                                                    <Badge className="bg-purple-500 hover:bg-purple-600 text-white text-[9px] px-1 py-0 h-4">
+                                                                        FEEDBACK
+                                                                    </Badge>
+                                                                )}
                                                             </div>
                                                             <CardDescription className="text-xs mt-1 line-clamp-2">
                                                                 {req.description}

@@ -22,6 +22,15 @@ export type RequestStatus =
 
 export type ACStatus = "Draft" | "Proposed" | "Agreed";
 
+export type Comment = {
+    id: string;
+    text: string;
+    authorId: string;
+    authorName: string;
+    authorRole: UserRole;
+    createdAt: string;
+};
+
 export interface Request {
     id: string;
     title: string;
@@ -43,6 +52,7 @@ export interface Request {
     urgency?: "Low" | "Medium" | "High" | "Critical";
     category?: "IT" | "CRM" | "Architecture" | "Finance" | "Other";
     attributes?: Record<string, string>; // Dynamic attributes for freeform categories
+    comments?: Comment[];
 }
 
 export type User = {
@@ -51,6 +61,7 @@ export type User = {
     role: UserRole;
     company?: string; // For customers/agencies
     avatar?: string;
+    email?: string;
     // Profile fields for Specialists
     linkedInUrl?: string;
     cvFile?: string; // specific file path or name
@@ -62,26 +73,26 @@ export type User = {
 
 export const mockUsers: User[] = [
     // Customers
-    { id: "c1", name: "Acme Corp", role: "Customer", company: "Acme Corp" },
-    { id: "c2", name: "Global Tech", role: "Customer", company: "Global Tech" },
-    { id: "c3", name: "Logistics Inc", role: "Customer", company: "Logistics Inc" },
+    { id: "c1", name: "Alice", company: "Acme Group", role: "Customer", email: "c1@client.com" },
+    { id: "c2", name: "Bob Martin", company: "Global Tech", role: "Customer", email: "c2@client.com" },
+    { id: "c3", name: "Charlie Logistics", company: "Logistics Inc", role: "Customer", email: "c3@client.com" },
 
     // Agencies
-    { id: "a1", name: "Alpha Consultants", role: "Customer", company: "Alpha Consultants" }, // Agencies act as customers for now
-    { id: "a2", name: "Beta Solutions", role: "Customer", company: "Beta Solutions" },
-    { id: "a3", name: "Gamma Strategies", role: "Customer", company: "Gamma Strategies" },
+    { id: "a1", name: "Alpha Admin", company: "Alpha Consultants", role: "Customer", email: "a1@agency.com" },
+    { id: "a2", name: "Beta Lead", company: "Beta Solutions", role: "Customer", email: "a2@agency.com" },
+    { id: "a3", name: "Gamma Head", company: "Gamma Strategies", role: "Customer", email: "a3@agency.com" },
 
     // Specialists (mapped to specialists array)
-    { id: "s1", name: "Alice Chen", role: "Specialist" },
-    { id: "s2", name: "Bob Smith", role: "Specialist" },
-    { id: "s3", name: "Carol Davis", role: "Specialist" },
-    { id: "s4", name: "David Wilson", role: "Specialist" },
+    { id: "s1", name: "Alice Chen", role: "Specialist", email: "s1@specialist.com" },
+    { id: "s2", name: "Bob Smith", role: "Specialist", email: "s2@specialist.com" },
+    { id: "s3", name: "Carol Davis", role: "Specialist", email: "s3@specialist.com" },
+    { id: "s4", name: "David Wilson", role: "Specialist", email: "s4@specialist.com" },
 
     // Admin
-    { id: "admin1", name: "IntelBoard Admin", role: "Admin" },
+    { id: "admin1", name: "IntelBoard Admin", role: "Admin", email: "admin@intelboard.com" },
 
     // Guest
-    { id: "guest1", name: "Guest User", role: "Guest" },
+    { id: "guest1", name: "Guest User", role: "Guest", email: "guest@intelboard.com" },
 ];
 
 // Helper to generate mock specialists

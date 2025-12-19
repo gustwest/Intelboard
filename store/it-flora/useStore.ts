@@ -292,28 +292,48 @@ export const useStore = create<WithLiveblocks<AppState>>()(
       // Project Actions
       addProject: (project) => {
         const newId = uuidv4();
-        // Ensure new projects are added to state correctly
+        const projectData = {
+          ...project,
+          id: newId,
+          ownerId: project.ownerId || get().currentUser?.id || 'unknown',
+          sharedWith: []
+        };
+
+        // Push to Postgres
+        import("@/lib/actions").then(actions => {
+          actions.addProject(projectData);
+        });
+
         set((state) => ({
-          projects: [...state.projects, {
-            ...project,
-            id: newId,
-            ownerId: project.ownerId || state.currentUser?.id || 'unknown',
-            sharedWith: []
-          }]
+          projects: [...state.projects, projectData as any]
         }));
         return newId;
       },
 
-      updateProject: (id, updates) => set((state) => ({
-        projects: state.projects.map((p) =>
-          p.id === id ? { ...p, ...updates } : p
-        )
-      })),
+      updateProject: (id, updates) => {
+        // Push to Postgres
+        import("@/lib/actions").then(actions => {
+          actions.updateProject(id, updates);
+        });
 
-      deleteProject: (id) => set((state) => ({
-        projects: state.projects.filter((p) => p.id !== id),
-        activeProjectId: state.activeProjectId === id ? null : state.activeProjectId
-      })),
+        set((state) => ({
+          projects: state.projects.map((p) =>
+            p.id === id ? { ...p, ...updates } : p
+          )
+        }));
+      },
+
+      deleteProject: (id) => {
+        // Push to Postgres
+        import("@/lib/actions").then(actions => {
+          actions.deleteProject(id);
+        });
+
+        set((state) => ({
+          projects: state.projects.filter((p) => p.id !== id),
+          activeProjectId: state.activeProjectId === id ? null : state.activeProjectId
+        }));
+      },
 
       setActiveProject: (id) => set({ activeProjectId: id }),
 
