@@ -2,7 +2,12 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
 
-const connectionString = process.env.DATABASE_URL;
+// Fix for Cloud SQL socket connection strings which might be 'postgres://user:pass@/db?host=...'
+// The missing host causes Invalid URL errors, so we patch it to 'postgres://user:pass@localhost/db?host=...'
+let connectionString = process.env.DATABASE_URL;
+if (connectionString && connectionString.includes('@/') && connectionString.includes('?host=')) {
+    connectionString = connectionString.replace('@/', '@localhost/');
+}
 
 if (!connectionString) {
     if (process.env.NODE_ENV === 'production') {
