@@ -113,6 +113,8 @@ interface AppState {
   deleteProject: (id: string) => void;
   setActiveProject: (id: string | null) => void;
   toggleSystemInProject: (projectId: string, systemId: string) => void;
+  setProjects: (projects: Project[]) => void;
+  setSystems: (systems: System[]) => void;
 
   // User & Document Actions
   addUser: (user: Omit<User, 'id'>) => void;
@@ -349,6 +351,9 @@ export const useStore = create<WithLiveblocks<AppState>>()(
           };
         })
       })),
+
+      setProjects: (projects) => set({ projects }),
+      setSystems: (systems) => set({ systems }),
 
       // User & Document Actions
       addUser: (user) => set((state) => ({

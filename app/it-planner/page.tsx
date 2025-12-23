@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useRequests } from "@/hooks/use-requests";
 import { Sidebar } from '@/components/it-flora/Sidebar';
+import { getProjects, getSystems } from "@/lib/actions";
 import { CreateSystemModal } from '@/components/it-flora/modals/CreateSystemModal';
 import { EditSystemModal } from '@/components/it-flora/modals/EditSystemModal';
 import { AssetModal } from '@/components/it-flora/modals/AssetModal';
@@ -31,6 +32,8 @@ function ITPlannerContent() {
   const searchParams = useSearchParams();
   const { requests, updateRequest } = useRequests();
   const setActiveProject = useStore((state) => state.setActiveProject);
+  const setProjects = useStore((state) => state.setProjects);
+  const setSystems = useStore((state) => state.setSystems);
   const activeProjectId = useStore((state) => state.activeProjectId);
 
   // Join the Liveblocks room for Zustand store sync dynamically
@@ -45,6 +48,23 @@ function ITPlannerContent() {
       };
     }
   }, [activeProjectId]);
+
+  // Data synchronization from Postgres
+  useEffect(() => {
+    const syncData = async () => {
+      try {
+        const [dbProjects, dbSystems] = await Promise.all([
+          getProjects(),
+          getSystems(),
+        ]);
+        setProjects(dbProjects as any);
+        setSystems(dbSystems as any);
+      } catch (error) {
+        console.error("Failed to sync IT Planner data:", error);
+      }
+    };
+    syncData();
+  }, [setProjects, setSystems]);
 
   // Redirect State
   const createForRequestId = searchParams.get('createForRequestId');

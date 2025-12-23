@@ -50,11 +50,12 @@ export function LoginDialog() {
     };
 
     const handleUserSelect = (userId: string) => {
-        // Sync with RoleProvider
-        login(userId);
-
         // Sync with IT Planner store
         const user = users.find(u => u.id === userId);
+
+        // Sync with RoleProvider
+        login(userId, user?.name);
+
         if (user) {
             setCurrentUser({
                 id: user.id,

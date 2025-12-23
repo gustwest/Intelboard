@@ -7,6 +7,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 //     adapter: DrizzleAdapter(db),
 export const { handlers, auth, signIn, signOut } = NextAuth({
     session: { strategy: "jwt" },
+    debug: true,
     providers: [
         CredentialsProvider({
             name: "Credentials",

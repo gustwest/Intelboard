@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
     Command,
@@ -41,6 +42,16 @@ const columns: RequestStatus[] = [
 ];
 
 export default function BoardPage() {
+    return (
+        <Suspense fallback={<div className="container py-6">Loading board...</div>}>
+            <BoardContent />
+        </Suspense>
+    );
+}
+
+function BoardContent() {
+    const searchParams = useSearchParams();
+    const requestIdParam = searchParams.get("requestId");
     const { requests, updateRequest, isLoaded } = useRequests();
     const [matches, setMatches] = useState<Record<string, ScoredSpecialist[]>>({});
     const { role, currentUser } = useRole();
@@ -176,6 +187,12 @@ export default function BoardPage() {
 
         updateRequest(updatedRequest);
     };
+
+    useEffect(() => {
+        if (requestIdParam && isLoaded) {
+            setSelectedRequestId(requestIdParam);
+        }
+    }, [requestIdParam, isLoaded]);
 
     if (!isMounted) {
         return <div className="container py-6">Loading board...</div>;

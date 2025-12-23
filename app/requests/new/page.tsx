@@ -13,7 +13,10 @@ import { SmartImport } from "@/components/smart-import";
 import { useRequests } from "@/hooks/use-requests";
 import { useRole } from "@/components/role-provider";
 import { useLanguage } from "@/components/language-provider";
-import { Plus, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Plus, X, Link as LinkIcon, Paperclip } from "lucide-react";
+import { getProjects, addProject } from "@/lib/actions";
+import { useEffect } from "react";
 
 export default function NewRequestPage() {
     const router = useRouter();
@@ -25,17 +28,29 @@ export default function NewRequestPage() {
     const [formData, setFormData] = useState({
         title: "",
         description: "",
-        budget: "",
-        urgency: "Medium" as "Low" | "Medium" | "High" | "Critical",
-        tags: "",
+        industry: "",
+        deadline: "",
     });
 
-    const [attributes, setAttributes] = useState<Array<{ key: string; value: string }>>([
-        { key: "Industry", value: "" },
-        { key: "Tech Stack", value: "" }
-    ]);
+    const [acceptanceCriteria, setAcceptanceCriteria] = useState<string[]>([]);
+    const [newAC, setNewAC] = useState("");
+    const [userProjects, setUserProjects] = useState<any[]>([]);
+    const [linkedProjectId, setLinkedProjectId] = useState<string | null>(null);
+    const [isCreatingNewProject, setIsCreatingNewProject] = useState(false);
+    const [newProjectName, setNewProjectName] = useState("");
+    const [attachments, setAttachments] = useState<string[]>([]);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    useEffect(() => {
+        const fetchProjects = async () => {
+            if (currentUser) {
+                const projects = await getProjects();
+                setUserProjects(projects);
+            }
+        };
+        fetchProjects();
+    }, [currentUser]);
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
 
@@ -45,35 +60,53 @@ export default function NewRequestPage() {
             return;
         }
 
-        const attributesRecord: Record<string, string> = {};
-        attributes.forEach(attr => {
-            if (attr.key.trim() && attr.value.trim()) {
-                attributesRecord[attr.key.trim()] = attr.value.trim();
-            }
-        });
+        let finalProjectId = linkedProjectId;
 
-        // Simulate API call
-        setTimeout(async () => {
+        try {
+            // 1. Handle New Project Creation if needed
+            if (isCreatingNewProject && newProjectName.trim()) {
+                const newProject = await addProject({
+                    name: newProjectName.trim(),
+                    ownerId: currentUser.id,
+                    description: `Project created from request: ${formData.title}`,
+                });
+                finalProjectId = newProject.id;
+
+                // Open the new project in a new tab
+                window.open(`/it-planner?projectId=${newProject.id}`, '_blank');
+            }
+
+            const attributesRecord: Record<string, string> = {};
+            if (formData.industry) attributesRecord["Industry"] = formData.industry;
+            if (formData.deadline) attributesRecord["Deadline"] = formData.deadline;
+
+            // 2. Create the Request
             const newRequest: Request = {
                 id: `r${Date.now()}`,
                 title: formData.title,
                 description: formData.description,
                 status: "New" as RequestStatus,
-                industry: attributesRecord["Industry"] || "Other", // Fallback for backward compatibility
-                budget: formData.budget,
-                tags: formData.tags.split(",").map(t => t.trim()).filter(Boolean),
+                industry: formData.industry || "Other",
+                budget: "",
+                tags: [],
                 createdAt: new Date().toISOString(),
-                urgency: formData.urgency,
+                urgency: "Medium",
                 creatorId: currentUser.id,
-                acceptanceCriteria: [],
-                acStatus: "Draft",
-                attachments: [],
+                acceptanceCriteria: acceptanceCriteria,
+                acStatus: acceptanceCriteria.length > 0 ? "Proposed" : "Draft",
+                attachments: attachments,
+                linkedProjectId: finalProjectId || undefined,
                 attributes: attributesRecord,
             };
 
             await addRequest(newRequest);
-            router.push(`/requests/${newRequest.id}`);
-        }, 1000);
+            router.push(`/board?requestId=${newRequest.id}`);
+        } catch (error) {
+            console.error("Failed to submit request:", error);
+            alert("Failed to create request. Please try again.");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleSmartImport = (data: {
@@ -81,39 +114,27 @@ export default function NewRequestPage() {
         description: string;
         urgency: "Low" | "Medium" | "High" | "Critical";
         attributes: Record<string, string>;
+        acceptanceCriteria: string[];
     }) => {
         setFormData(prev => ({
             ...prev,
             title: data.title,
             description: data.description,
-            urgency: data.urgency
+            industry: data.attributes["Industry"] || prev.industry,
+            deadline: data.attributes["Timeline"] || data.attributes["Deadline"] || prev.deadline,
         }));
-
-        // Merge attributes
-        const newAttributes = [...attributes];
-        Object.entries(data.attributes).forEach(([key, value]) => {
-            const existingIndex = newAttributes.findIndex(a => a.key.toLowerCase() === key.toLowerCase());
-            if (existingIndex >= 0) {
-                newAttributes[existingIndex].value = value;
-            } else {
-                newAttributes.push({ key, value });
-            }
-        });
-        setAttributes(newAttributes);
+        setAcceptanceCriteria(data.acceptanceCriteria);
     };
 
-    const addAttribute = () => {
-        setAttributes([...attributes, { key: "", value: "" }]);
+    const addAC = () => {
+        if (newAC.trim()) {
+            setAcceptanceCriteria([...acceptanceCriteria, newAC.trim()]);
+            setNewAC("");
+        }
     };
 
-    const removeAttribute = (index: number) => {
-        setAttributes(attributes.filter((_, i) => i !== index));
-    };
-
-    const updateAttribute = (index: number, field: 'key' | 'value', text: string) => {
-        const newAttributes = [...attributes];
-        newAttributes[index][field] = text;
-        setAttributes(newAttributes);
+    const removeAC = (index: number) => {
+        setAcceptanceCriteria(acceptanceCriteria.filter((_, i) => i !== index));
     };
 
     return (
@@ -146,10 +167,10 @@ export default function NewRequestPage() {
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="description">{t.request.descLabel} (Agile User Story format recommended)</Label>
+                                <Label htmlFor="description">{t.request.descLabel}</Label>
                                 <Textarea
                                     id="description"
-                                    placeholder="As a [Role], I want [Feature], So that [Benefit]..."
+                                    placeholder={t.request.userStoryPlaceholder}
                                     className="min-h-[150px] font-mono text-sm leading-relaxed"
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -159,84 +180,167 @@ export default function NewRequestPage() {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="budget">{t.request.budgetLabel}</Label>
+                                    <Label htmlFor="industry">{t.request.industryLabel} ({t.common.optional})</Label>
                                     <Input
-                                        id="budget"
-                                        placeholder="e.g., $50k - $100k"
-                                        value={formData.budget}
-                                        onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                                        id="industry"
+                                        placeholder="e.g. Finance"
+                                        value={formData.industry}
+                                        onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
                                     />
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor="urgency">{t.request.urgencyLabel}</Label>
-                                    <Select
-                                        value={formData.urgency}
-                                        onValueChange={(value: "Low" | "Medium" | "High" | "Critical") => setFormData({ ...formData, urgency: value })}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select urgency" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="Low">Low</SelectItem>
-                                            <SelectItem value="Medium">Medium</SelectItem>
-                                            <SelectItem value="High">High</SelectItem>
-                                            <SelectItem value="Critical">Critical</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                                    <Label htmlFor="deadline">{t.request.deadlineLabel} ({t.common.optional})</Label>
+                                    <Input
+                                        id="deadline"
+                                        placeholder="e.g. Q1 2026"
+                                        value={formData.deadline}
+                                        onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 border-t pt-4">
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <Label className="flex items-center gap-2">
+                                            <LinkIcon className="h-4 w-4 text-muted-foreground" />
+                                            {t.request.linkedProjectLabel} ({t.common.optional})
+                                        </Label>
+                                        <Select
+                                            value={isCreatingNewProject ? "create-new" : (linkedProjectId || "none")}
+                                            onValueChange={(v) => {
+                                                if (v === "create-new") {
+                                                    setIsCreatingNewProject(true);
+                                                    setLinkedProjectId(null);
+                                                } else {
+                                                    setIsCreatingNewProject(false);
+                                                    setLinkedProjectId(v === "none" ? null : v);
+                                                }
+                                            }}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder={t.request.projectSelectPlaceholder} />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="none">None</SelectItem>
+                                                <SelectItem value="create-new" className="text-primary font-medium">
+                                                    + {t.request.createNewProject}
+                                                </SelectItem>
+                                                {userProjects.length > 0 && (
+                                                    <>
+                                                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t mt-1">
+                                                            Existing Projects
+                                                        </div>
+                                                        {userProjects.map((p) => (
+                                                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                                                        ))}
+                                                    </>
+                                                )}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    {isCreatingNewProject && (
+                                        <div className="space-y-2 animate-in slide-in-from-top-2 duration-200">
+                                            <Label htmlFor="newProjectName">{t.request.newProjectNameLabel}</Label>
+                                            <Input
+                                                id="newProjectName"
+                                                placeholder="e.g. Q1 Efficiency Initiative"
+                                                value={newProjectName}
+                                                onChange={(e) => setNewProjectName(e.target.value)}
+                                                required={isCreatingNewProject}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label className="flex items-center gap-2">
+                                        <Paperclip className="h-4 w-4 text-muted-foreground" />
+                                        {t.request.attachmentsLabel} ({t.common.optional})
+                                    </Label>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            type="file"
+                                            className="hidden"
+                                            id="file-upload"
+                                            onChange={(e) => {
+                                                if (e.target.files?.[0]) {
+                                                    setAttachments([...attachments, e.target.files[0].name]);
+                                                }
+                                            }}
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            className="w-full justify-start text-muted-foreground font-normal"
+                                            onClick={() => document.getElementById('file-upload')?.click()}
+                                        >
+                                            {attachments.length > 0 ? `${attachments.length} files attached` : "Attach files..."}
+                                        </Button>
+                                    </div>
+                                    {attachments.length > 0 && (
+                                        <div className="flex flex-wrap gap-2 mt-2">
+                                            {attachments.map((file, i) => (
+                                                <Badge key={i} variant="secondary" className="flex items-center gap-1">
+                                                    {file}
+                                                    <X className="h-3 w-3 cursor-pointer" onClick={() => setAttachments(attachments.filter((_, idx) => idx !== i))} />
+                                                </Badge>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
                             <div className="space-y-4">
                                 <div className="flex items-center justify-between">
-                                    <Label>Additional Attributes</Label>
-                                    <Button type="button" variant="outline" size="sm" onClick={addAttribute}>
-                                        <Plus className="h-3 w-3 mr-1" /> Add Attribute
+                                    <Label>{t.request.acLabel} ({t.common.optional})</Label>
+                                </div>
+
+                                <div className="flex gap-2">
+                                    <Input
+                                        placeholder={t.request.acPlaceholder}
+                                        value={newAC}
+                                        onChange={(e) => setNewAC(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                addAC();
+                                            }
+                                        }}
+                                    />
+                                    <Button type="button" variant="outline" onClick={addAC}>
+                                        <Plus className="h-4 w-4" />
                                     </Button>
                                 </div>
 
-                                {attributes.map((attr, index) => (
-                                    <div key={index} className="flex gap-2 items-start">
-                                        <div className="flex-1">
-                                            <Input
-                                                placeholder="Category (e.g. Compliance)"
-                                                value={attr.key}
-                                                onChange={(e) => updateAttribute(index, 'key', e.target.value)}
-                                            />
-                                        </div>
-                                        <div className="flex-1">
-                                            <Input
-                                                placeholder="Value"
-                                                value={attr.value}
-                                                onChange={(e) => updateAttribute(index, 'value', e.target.value)}
-                                            />
-                                        </div>
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon"
-                                            className="text-muted-foreground hover:text-destructive"
-                                            onClick={() => removeAttribute(index)}
-                                        >
-                                            <X className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                ))}
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="tags">Tags (comma separated)</Label>
-                                <Input
-                                    id="tags"
-                                    placeholder="e.g., IoT, Cloud, Agile"
-                                    value={formData.tags}
-                                    onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-                                />
+                                {acceptanceCriteria.length > 0 && (
+                                    <ul className="space-y-2 border rounded-md p-4 bg-slate-50">
+                                        {acceptanceCriteria.map((ac, index) => (
+                                            <li key={index} className="flex items-start justify-between gap-2 group">
+                                                <div className="flex gap-2 text-sm">
+                                                    <span className="text-muted-foreground font-mono">{index + 1}.</span>
+                                                    <span>{ac}</span>
+                                                </div>
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    onClick={() => removeAC(index)}
+                                                >
+                                                    <X className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                                                </Button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
                             </div>
 
                             <div className="pt-4 flex justify-end">
                                 <Button type="submit" size="lg" disabled={isLoading}>
-                                    {isLoading ? "Submitting..." : t.request.submitButton}
+                                    {isLoading ? t.common.loading : t.request.submitButton}
                                 </Button>
                             </div>
                         </form>

@@ -59,6 +59,12 @@ export async function addRequest(data: any) {
     }
 }
 
+export async function getSystems() {
+    // Note: 'systems' table is currently only in-memory/Liveblocks. 
+    // Return empty for now to satisfy sync logic.
+    return [];
+}
+
 export async function updateRequest(id: string, data: any) {
     try {
         const [updated] = await db.update(requests)
@@ -153,6 +159,7 @@ export async function getProjects() {
 export async function addProject(data: any) {
     try {
         const [newProject] = await db.insert(projects).values({
+            flowData: { nodes: [], edges: [] },
             ...data,
             createdAt: new Date(),
         }).returning();

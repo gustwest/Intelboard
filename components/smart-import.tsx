@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { useLanguage } from "@/components/language-provider";
 
 interface SmartImportProps {
     onImport: (data: {
@@ -13,13 +14,15 @@ interface SmartImportProps {
         description: string;
         urgency: "Low" | "Medium" | "High" | "Critical";
         attributes: Record<string, string>;
+        acceptanceCriteria: string[];
     }) => void;
 }
 
 export function SmartImport({ onImport }: SmartImportProps) {
     const [isProcessing, setIsProcessing] = useState(false);
     const [textInput, setTextInput] = useState("");
-    const [mode, setMode] = useState<"drop" | "text">("drop");
+    const [mode, setMode] = useState<"drop" | "text">("text");
+    const { t } = useLanguage();
 
     const processContent = async (content: string, filename?: string) => {
         setIsProcessing(true);
@@ -29,17 +32,34 @@ export function SmartImport({ onImport }: SmartImportProps) {
 
         // Mock AI extraction logic
         const lowerContent = content.toLowerCase();
-        let title = filename ? filename.split(".")[0] : "New Request";
-        let urgency: "Low" | "Medium" | "High" | "Critical" = "Medium";
-        const attributes: Record<string, string> = {};
+        // Generate a descriptive title based on content keywords
+        let extractedTitle = filename ? filename.split(".")[0] : "New Request";
 
-        // Extract Title from text if possible
-        if (!filename) {
-            const lines = content.split('\n');
-            if (lines.length > 0 && lines[0].length < 100) {
-                title = lines[0].trim();
+        if (lowerContent.includes("analytics") || lowerContent.includes("dwh")) {
+            extractedTitle = "Modernisering av Analytics / DWH";
+        } else if (lowerContent.includes("erp") || lowerContent.includes("crm")) {
+            extractedTitle = "Strategisk översyn: ERP & CRM Integration";
+        } else if (lowerContent.includes("ai") || lowerContent.includes("data science")) {
+            extractedTitle = "AI & Data Science Förstudie";
+        } else if (lowerContent.includes("arkitektur") || lowerContent.includes("arkitekt")) {
+            extractedTitle = "Arkitekturell rådgivning: Framtidssäkring";
+        } else {
+            // If no specific keyword, try to take the first few words and capitalize
+            const words = content.trim().split(/\s+/).slice(0, 5);
+            if (words.length > 0) {
+                const firstWords = words.join(" ");
+                extractedTitle = firstWords.charAt(0).toUpperCase() + firstWords.slice(1);
+            } else {
+                // Fallback to first line if no words found
+                const lines = content.split('\n');
+                if (lines.length > 0 && lines[0].length < 100) {
+                    extractedTitle = lines[0].trim();
+                }
             }
         }
+        let title = extractedTitle;
+        let urgency: "Low" | "Medium" | "High" | "Critical" = "Medium";
+        const attributes: Record<string, string> = {};
 
         // Extract Urgency
         if (lowerContent.includes("urgent") || lowerContent.includes("crash") || lowerContent.includes("critical") || lowerContent.includes("immediately")) {
@@ -68,13 +88,72 @@ export function SmartImport({ onImport }: SmartImportProps) {
             attributes["Compliance"] = "Required";
         }
 
-        // Auto-extract "As a... I want... So that..." for user story if present
-        let description = content;
-        if (!lowerContent.includes("as a") && !lowerContent.includes("i want")) {
-            description = `Based on the input, here is a suggested User Story:\n\n**As a** [User Role]\n**I want** to ${title.toLowerCase()}\n**So that** I can [Benefit]\n\nOriginal Input:\n${content}`;
+        // Strictly transform input into the requested one-sentence "User Story" format.
+        // We do NOT include the original content or any metadata.
+
+        let extractedRole = "[Person/Roll]";
+        if (lowerContent.includes("verksamhetschef")) extractedRole = "Verksamhetschef";
+        else if (lowerContent.includes("it-chef") || lowerContent.includes("bi manager")) extractedRole = "IT-ledare";
+        else if (lowerContent.includes("arkitekt")) extractedRole = "IT-arkitekt";
+        else if (lowerContent.includes("specialist")) extractedRole = "Specialist";
+
+        let extractedNeed = title.toLowerCase();
+        if (lowerContent.includes("analytics") || lowerContent.includes("dwh")) extractedNeed = "modernisering av analytics-plattform";
+        if (lowerContent.includes("förstudie")) extractedNeed = "en förstudie kring tekniska vägval";
+        if (lowerContent.includes("erp") || lowerContent.includes("crm")) extractedNeed = "kartläggning av systemberoenden";
+
+        let extractedBenefit = "[Nytta]";
+        if (lowerContent.includes("datadriven")) extractedBenefit = "bli mer datadrivna";
+        if (lowerContent.includes("ai") || lowerContent.includes("analys")) extractedBenefit = "möjliggöra avancerad analys";
+        if (lowerContent.includes("effektiv")) extractedBenefit = "öka effektiviteten";
+        if (lowerContent.includes("skalbar")) extractedBenefit = "få en skalbar lösning";
+
+        // Generate a brief context summary (simulated AI summary)
+        let contextSummary = "";
+        if (lowerContent.includes("analytics") || lowerContent.includes("dwh")) {
+            contextSummary = "Bakgrunden är ett behov av att modernisera nuvarande on-prem DWH-lösning för att möta krav på AI och bättre prestanda.";
+        } else if (lowerContent.includes("erp") || lowerContent.includes("crm")) {
+            contextSummary = "Behovet rör kartläggning av beroenden mellan pågående ERP- och CRM-projekt.";
+        } else {
+            contextSummary = content.split('\n')[0].slice(0, 100) + "..."; // Fallback to first line
         }
 
-        onImport({ title, description, urgency, attributes });
+        // Extract "Nuläge" and "Önskat läge" (simulated AI extraction)
+        let nulage = "Information saknas";
+        let onskatLage = "Information saknas";
+
+        if (lowerContent.includes("analytics") || lowerContent.includes("dwh")) {
+            nulage = "Nuvarande miljö är on-prem (SQL Server) med tunga ETL-flöden som blivit en flaskhals för verksamheten.";
+            onskatLage = "En modern, molnbaserad dataplattform som stödjer AI, skalbarhet och snabbare leveranser till verksamheten.";
+        } else if (lowerContent.includes("erp") || lowerContent.includes("crm")) {
+            nulage = "Pågående parallella uppgraderingar av ERP och CRM skapar osäkerhet kring dataflöden.";
+            onskatLage = "En tydligt kartlagd bild av alla systemberoenden och en synkad roadmap för integrationer.";
+        }
+
+        const description = `**User Story:** Jag/vi är en ${extractedRole} som behöver ${extractedNeed} för att uppnå ${extractedBenefit}.\n\n**Kontext:** ${contextSummary}\n\n**Nuläge:** ${nulage}\n\n**Önskat läge:** ${onskatLage}`;
+
+        // Suggest Acceptance Criteria (AC) - FOCUS: Insights and Next Steps
+        const suggestedAC: string[] = [
+            "Genomföra en 1-4h workshop/diskussion med expert för att bryta ner problematiken",
+            "Identifiera och prioritera kritiska insikter för nästa steg",
+            "Utforska 2-3 olika tillvägagångssätt och deras förutsättningar"
+        ];
+
+        if (lowerContent.includes("beslut") || lowerContent.includes("vägval")) {
+            suggestedAC.push("Skapa ett beslutsunderlag med rekommenderade vägval framåt");
+        }
+
+        if (lowerContent.includes("analys") || lowerContent.includes("nuläge")) {
+            suggestedAC.push("Sammanställa lärdomar från nulägesanalysen för att sänka risken i projektet");
+        }
+
+        onImport({
+            title: extractedTitle,
+            description,
+            urgency,
+            attributes,
+            acceptanceCriteria: suggestedAC
+        });
         setIsProcessing(false);
         setTextInput("");
         setMode("drop");
@@ -127,25 +206,25 @@ export function SmartImport({ onImport }: SmartImportProps) {
                 <button
                     className={cn(
                         "flex-1 py-3 text-sm font-medium transition-colors hover:bg-slate-50",
-                        mode === "drop" ? "bg-slate-50 border-b-2 border-primary text-primary" : "text-muted-foreground"
-                    )}
-                    onClick={() => setMode("drop")}
-                >
-                    <div className="flex items-center justify-center gap-2">
-                        <Upload className="h-4 w-4" />
-                        File Upload
-                    </div>
-                </button>
-                <button
-                    className={cn(
-                        "flex-1 py-3 text-sm font-medium transition-colors hover:bg-slate-50",
                         mode === "text" ? "bg-slate-50 border-b-2 border-primary text-primary" : "text-muted-foreground"
                     )}
                     onClick={() => setMode("text")}
                 >
                     <div className="flex items-center justify-center gap-2">
                         <Text className="h-4 w-4" />
-                        Free Text / Paste
+                        Free text / Notes regarding the need
+                    </div>
+                </button>
+                <button
+                    className={cn(
+                        "flex-1 py-3 text-sm font-medium transition-colors hover:bg-slate-50",
+                        mode === "drop" ? "bg-slate-50 border-b-2 border-primary text-primary" : "text-muted-foreground"
+                    )}
+                    onClick={() => setMode("drop")}
+                >
+                    <div className="flex items-center justify-center gap-2">
+                        <Upload className="h-4 w-4" />
+                        File upload
                     </div>
                 </button>
             </div>

@@ -10,7 +10,7 @@ interface RoleContextType {
     role: UserRole;
     setRole: (role: UserRole) => void;
     currentUser: User | null;
-    login: (userId: string) => void;
+    login: (userId: string, name?: string) => void;
     logout: () => void;
 }
 
@@ -39,11 +39,12 @@ export function RoleProvider({ children }: { children: ReactNode }) {
         }
     }, [session, status]);
 
-    const login = (userId: string) => {
+    const login = (userId: string, name?: string) => {
         console.log("RoleProvider: Initiating login for userId:", userId);
 
-        // Find actual mock user to get their real name
+        // Find actual mock user to get their real name (fallback if name not provided)
         const mockUser = mockUsers.find(u => u.id === userId);
+        const resolvedName = name || mockUser?.name || userId;
 
         // Construct a pseudo-email for NextAuth to handle roles correctly
         let email = `${userId}@intelboard.com`;
@@ -54,11 +55,11 @@ export function RoleProvider({ children }: { children: ReactNode }) {
         else if (userId.startsWith("c")) email = `${userId}@client.com`;
         else if (userId === "guest1") email = "guest@intelboard.com";
 
-        console.log("RoleProvider: signIn with email:", email, "name:", mockUser?.name);
+        console.log("RoleProvider: signIn with email:", email, "name:", resolvedName);
         signIn("credentials", {
             email,
             password: "password",
-            name: mockUser?.name || userId,
+            name: resolvedName,
             callbackUrl: "/board"
         });
     };
