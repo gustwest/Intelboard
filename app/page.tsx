@@ -190,6 +190,10 @@ export default function Home() {
           </Card>
         </div>
       </section>
+
+      <footer className="py-10 border-t border-slate-200 mt-20 text-center">
+        <p className="text-slate-400 text-sm">© 2025 IntelBoard. All rights reserved. <span className="opacity-50">v1.1.0-deploy-fix</span></p>
+      </footer>
     </div>
   );
 }
