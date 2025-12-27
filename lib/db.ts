@@ -3,17 +3,18 @@ import postgres from 'postgres';
 import * as schema from './schema';
 
 // Fix for Cloud SQL socket connection strings which might be 'postgres://user:pass@/db?host=...'
-// The missing host between '@' and '/' can cause Invalid URL errors in some environments,
-// but for postgres-js we should preserve it if it's a Unix socket.
+// The empty host between '@' and '/' causes 'Invalid URL' errors in Node.js.
+// We must provide a placeholder host like 'localhost' even if using a Unix socket.
 let connectionString = process.env.DATABASE_URL;
 
+if (connectionString && connectionString.includes('@/')) {
+    console.log("[db] Patching empty host in connection string...");
+    connectionString = connectionString.replace('@/', '@localhost/');
+}
+
 if (connectionString) {
-    if (connectionString.includes('?host=/cloudsql/')) {
-        console.log("Cloud SQL Unix socket detected in DATABASE_URL.");
-    } else if (connectionString.includes('@/') && !connectionString.includes('localhost')) {
-        console.log("Patching empty host in connection string for local development...");
-        connectionString = connectionString.replace('@/', '@localhost/');
-    }
+    const masked = connectionString.replace(/:([^@]+)@/, ':****@');
+    console.log("[db] Connecting with patched URL:", masked);
 }
 
 if (!connectionString) {
