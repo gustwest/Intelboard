@@ -23,49 +23,62 @@ export async function getRequests() {
 }
 
 export async function addRequest(data: any) {
-    console.log("[addRequest] Attempting to add new request:", { id: data.id, title: data.title, creatorId: data.creatorId });
+    console.log("[addRequest] START", { id: data.id, title: data.title, creatorId: data.creatorId });
     try {
-        // Remove createdAt if present to let the server set it correctly
         const { createdAt, ...sanitizedData } = data;
+        let finalCreatorId = sanitizedData.creatorId;
 
-        // Ensure creator exists to prevent Foreign Key errors
-        if (sanitizedData.creatorId) {
-            const existingUser = await db.query.users.findFirst({
-                where: eq(users.id, sanitizedData.creatorId)
-            });
+        // 1. Resolve Creator ID if it's an email or we need to verify it
+        if (finalCreatorId) {
+            console.log(`[addRequest] Resolving creator: ${finalCreatorId}`);
+            // Check by ID first
+            const [userById] = await db.select().from(users).where(eq(users.id, finalCreatorId));
 
-            if (!existingUser) {
-                console.log(`[addRequest] Creator ${sanitizedData.creatorId} not found in DB. Creating placeholder...`);
-                // Try to find mock details
-                const mockDiff = mockUsers.find(u => u.id === sanitizedData.creatorId);
-
-                await db.insert(users).values({
-                    id: sanitizedData.creatorId,
-                    name: mockDiff?.name || "Guest User",
-                    email: mockDiff?.email || `${sanitizedData.creatorId}@placeholder.com`,
-                    role: (mockDiff?.role as any) || "Guest",
-                    company: mockDiff?.company || null,
-                    image: mockDiff?.avatar || null,
-                }).onConflictDoNothing();
+            if (userById) {
+                console.log(`[addRequest] Found user by ID: ${userById.name}`);
             } else {
-                console.log(`[addRequest] Found existing creator: ${existingUser.name} (${existingUser.role})`);
+                // Not found by ID, try email
+                console.log(`[addRequest] User not found by ID. Checking email...`);
+                const [userByEmail] = await db.select().from(users).where(eq(users.email, finalCreatorId));
+
+                if (userByEmail) {
+                    console.log(`[addRequest] Resolved email ${finalCreatorId} to short ID: ${userByEmail.id}`);
+                    finalCreatorId = userByEmail.id;
+                } else {
+                    console.log(`[addRequest] No user found for ${finalCreatorId}. Creating placeholder...`);
+                    const mockDiff = mockUsers.find(u => u.id === finalCreatorId || u.email === finalCreatorId);
+
+                    await db.insert(users).values({
+                        id: finalCreatorId,
+                        name: mockDiff?.name || "Guest User",
+                        email: mockDiff?.email || (finalCreatorId.includes('@') ? finalCreatorId : `${finalCreatorId}@placeholder.com`),
+                        role: (mockDiff?.role as any) || "Guest",
+                    }).onConflictDoNothing();
+                }
             }
         }
 
-        console.log("[addRequest] Inserting data into database...");
+        console.log(`[addRequest] Final Creator ID: ${finalCreatorId}`);
+
+        // 2. Insert the Request
         const [newRequest] = await db.insert(requests).values({
             ...sanitizedData,
+            creatorId: finalCreatorId,
             createdAt: new Date(),
         }).returning();
 
-        console.log("[addRequest] Successfully inserted request:", newRequest.id);
+        console.log("[addRequest] SUCCESS:", newRequest.id);
 
         revalidatePath("/requests");
+        revalidatePath("/board");
         return newRequest;
-    } catch (error) {
-        console.error("[addRequest] CRITICAL ERROR:");
-        console.dir(error, { depth: null });
-        throw new Error("Failed to add request");
+    } catch (error: any) {
+        console.error("[addRequest] FAILED:");
+        console.error("Error Message:", error.message);
+        console.error("Error Stack:", error.stack);
+        if (error.query) console.error("Failed Query:", error.query);
+        if (error.params) console.error("Failed Params:", error.params);
+        throw new Error("Failed to add request: " + error.message);
     }
 }
 

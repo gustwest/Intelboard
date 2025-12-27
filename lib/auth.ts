@@ -1,6 +1,8 @@
 import NextAuth from "next-auth";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { db } from "./db";
+import { users } from "./schema";
+import { eq } from "drizzle-orm";
 import CredentialsProvider from "next-auth/providers/credentials";
 
 // export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -23,9 +25,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     console.log(`[auth:authorize] Success for: ${credentials?.email}`);
 
                     // Try to find user in DB to get the correct ID (e.g. "c1" instead of email)
-                    const existingUser = await db.query.users.findFirst({
-                        where: (users, { eq }) => eq(users.email, credentials.email as string)
-                    });
+                    console.log(`[auth:authorize] Looking up user by email: ${credentials.email}`);
+                    const [existingUser] = await db.select().from(users).where(eq(users.email, credentials.email as string));
 
                     if (existingUser) {
                         console.log(`[auth:authorize] Found DB user: ${existingUser.name} (id: ${existingUser.id}, role: ${existingUser.role})`);
