@@ -9,17 +9,21 @@ import { mockUsers } from "./data";
 // --- Request Actions ---
 
 export async function getRequests() {
+    console.log("[getRequests] Fetching all requests from DB...");
     try {
-        return await db.query.requests.findMany({
+        const result = await db.query.requests.findMany({
             orderBy: [desc(requests.createdAt)],
         });
+        console.log(`[getRequests] Successfully fetched ${result.length} requests.`);
+        return result;
     } catch (error) {
-        console.error("Failed to fetch requests:", error);
+        console.error("[getRequests] Failed to fetch requests:", error);
         return [];
     }
 }
 
 export async function addRequest(data: any) {
+    console.log("[addRequest] Attempting to add new request:", { id: data.id, title: data.title, creatorId: data.creatorId });
     try {
         // Remove createdAt if present to let the server set it correctly
         const { createdAt, ...sanitizedData } = data;
@@ -31,7 +35,7 @@ export async function addRequest(data: any) {
             });
 
             if (!existingUser) {
-                console.log(`Creator ${sanitizedData.creatorId} not found in DB. Creating placeholder...`);
+                console.log(`[addRequest] Creator ${sanitizedData.creatorId} not found in DB. Creating placeholder...`);
                 // Try to find mock details
                 const mockDiff = mockUsers.find(u => u.id === sanitizedData.creatorId);
 
@@ -43,17 +47,23 @@ export async function addRequest(data: any) {
                     company: mockDiff?.company || null,
                     image: mockDiff?.avatar || null,
                 }).onConflictDoNothing();
+            } else {
+                console.log(`[addRequest] Found existing creator: ${existingUser.name} (${existingUser.role})`);
             }
         }
 
+        console.log("[addRequest] Inserting data into database...");
         const [newRequest] = await db.insert(requests).values({
             ...sanitizedData,
             createdAt: new Date(),
         }).returning();
+
+        console.log("[addRequest] Successfully inserted request:", newRequest.id);
+
         revalidatePath("/requests");
         return newRequest;
     } catch (error) {
-        console.error("Failed to add request details:");
+        console.error("[addRequest] CRITICAL ERROR:");
         console.dir(error, { depth: null });
         throw new Error("Failed to add request");
     }

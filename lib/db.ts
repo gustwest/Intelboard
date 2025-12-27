@@ -3,10 +3,17 @@ import postgres from 'postgres';
 import * as schema from './schema';
 
 // Fix for Cloud SQL socket connection strings which might be 'postgres://user:pass@/db?host=...'
-// The missing host causes Invalid URL errors, so we patch it to 'postgres://user:pass@localhost/db?host=...'
+// The missing host between '@' and '/' can cause Invalid URL errors in some environments,
+// but for postgres-js we should preserve it if it's a Unix socket.
 let connectionString = process.env.DATABASE_URL;
-if (connectionString && connectionString.includes('@/') && connectionString.includes('?host=')) {
-    connectionString = connectionString.replace('@/', '@localhost/');
+
+if (connectionString) {
+    if (connectionString.includes('?host=/cloudsql/')) {
+        console.log("Cloud SQL Unix socket detected in DATABASE_URL.");
+    } else if (connectionString.includes('@/') && !connectionString.includes('localhost')) {
+        console.log("Patching empty host in connection string for local development...");
+        connectionString = connectionString.replace('@/', '@localhost/');
+    }
 }
 
 if (!connectionString) {
@@ -20,6 +27,7 @@ console.log("Connecting to database with:", connectionString?.split('@')[1] || "
 const queryClient = postgres(connectionString || "postgres://localhost/placeholder", {
     onnotice: (notice) => console.log('DB Notice:', notice),
     onparameter: (name, value) => console.log('DB Param:', name, value),
+    connect_timeout: 10,
 });
 export const db = drizzle(queryClient, { schema });
 

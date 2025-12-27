@@ -20,7 +20,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 console.log("Authorize attempt for:", credentials?.email);
 
                 if (credentials?.password === "password") {
-                    console.log("Authorize success for:", credentials?.email);
+                    console.log(`[auth:authorize] Success for: ${credentials?.email}`);
 
                     // Try to find user in DB to get the correct ID (e.g. "c1" instead of email)
                     const existingUser = await db.query.users.findFirst({
@@ -28,6 +28,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     });
 
                     if (existingUser) {
+                        console.log(`[auth:authorize] Found DB user: ${existingUser.name} (id: ${existingUser.id}, role: ${existingUser.role})`);
                         return {
                             id: existingUser.id,
                             name: existingUser.name,
@@ -36,6 +37,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                         };
                     }
 
+                    console.log(`[auth:authorize] No DB user found for email: ${credentials.email}. Using fallback logic.`);
                     // Fallback for new users or if not found (Map some known emails to roles for better demo experience)
                     let role = "Guest";
                     if (credentials.email === "admin@intelboard.com") role = "Admin";
@@ -46,6 +48,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     const displayName = baseName.replace(/[^a-zA-Z0-9]/g, ' ').trim();
                     const capitalizedName = displayName ? (displayName.charAt(0).toUpperCase() + displayName.slice(1)) : "";
 
+                    console.log(`[auth:authorize] Fallback role assigned: ${role}`);
                     return {
                         id: credentials.email as string,
                         name: (credentials.name as string) || capitalizedName || baseName,
