@@ -21,7 +21,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
                 if (credentials?.password === "password") {
                     console.log("Authorize success for:", credentials?.email);
-                    // Map some known emails to roles for better demo experience
+
+                    // Try to find user in DB to get the correct ID (e.g. "c1" instead of email)
+                    const existingUser = await db.query.users.findFirst({
+                        where: (users, { eq }) => eq(users.email, credentials.email as string)
+                    });
+
+                    if (existingUser) {
+                        return {
+                            id: existingUser.id,
+                            name: existingUser.name,
+                            email: existingUser.email,
+                            role: existingUser.role as any
+                        };
+                    }
+
+                    // Fallback for new users or if not found (Map some known emails to roles for better demo experience)
                     let role = "Guest";
                     if (credentials.email === "admin@intelboard.com") role = "Admin";
                     else if (credentials.email?.toString().includes("specialist")) role = "Specialist";

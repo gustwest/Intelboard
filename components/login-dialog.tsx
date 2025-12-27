@@ -115,7 +115,7 @@ export function LoginDialog() {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant="outline">{t.common.login}</Button>
+                <Button variant="outline" data-testid="login-button">{t.common.login}</Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[500px]">
                 <Tabs defaultValue="login" className="w-full">
