@@ -22,6 +22,7 @@ export interface User {
   role: string;
   avatar?: string;
   company?: string;
+  companyId?: string; // Links to DB company
   color?: string; // Visually distinguish users
 }
 

@@ -57,6 +57,24 @@ export function SiteHeader() {
                         >
                             IT Planner tool
                         </Link>
+                        <Link
+                            href="/team"
+                            className={cn(
+                                "transition-colors hover:text-foreground/80",
+                                pathname === "/team" ? "text-foreground" : "text-foreground/60"
+                            )}
+                        >
+                            Team
+                        </Link>
+                        <Link
+                            href="/account"
+                            className={cn(
+                                "transition-colors hover:text-foreground/80",
+                                pathname === "/account" ? "text-foreground" : "text-foreground/60"
+                            )}
+                        >
+                            My Profile
+                        </Link>
                     </nav>
                 </div>
                 <div className="flex flex-1 items-center justify-between space-x-2 md:justify-end">

@@ -14,7 +14,6 @@ import { ProjectModal } from '@/components/it-flora/modals/ProjectModal';
 import { ManageProjectSystemsModal } from '@/components/it-flora/modals/ManageProjectSystemsModal';
 import { DataCatalogueModal } from '@/components/it-flora/modals/DataCatalogueModal';
 import { AIImportModal } from '@/components/it-flora/modals/AIImportModal';
-import { UserManagementModal } from '@/components/it-flora/modals/UserManagementModal';
 import { SystemDetailsPanel } from '@/components/it-flora/SystemDetailsPanel';
 import FlowCanvas from '@/components/it-flora/flow/FlowCanvas';
 import { useStore } from "@/store/it-flora/useStore";
@@ -169,7 +168,6 @@ function ITPlannerContent() {
         onManageSystems={() => setIsManageSystemsModalOpen(true)}
         onOpenCatalogue={() => setIsCatalogueModalOpen(true)}
         onImportAI={() => setIsAIImportModalOpen(true)}
-        onOpenUserManagement={() => setIsUserManagementModalOpen(true)}
       />
 
       <div className="flex-1 relative bg-slate-50/50 flex flex-col overflow-hidden">
@@ -258,11 +256,6 @@ function ITPlannerContent() {
       <AIImportModal
         isOpen={isAIImportModalOpen}
         onClose={() => setIsAIImportModalOpen(false)}
-      />
-
-      <UserManagementModal
-        isOpen={isUserManagementModalOpen}
-        onClose={() => setIsUserManagementModalOpen(false)}
       />
     </main>
   );

@@ -1,15 +1,31 @@
 import { pgTable, text, timestamp, boolean, jsonb, primaryKey, integer } from "drizzle-orm/pg-core";
 import { AdapterAccount } from "next-auth/adapters";
 
+export const companies = pgTable("companies", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    name: text("name").notNull(),
+    domain: text("domain").unique().notNull(), // e.g., "autoliv.com"
+    logo: text("logo"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const users = pgTable("user", {
     id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
     name: text("name"),
     email: text("email").unique(),
     emailVerified: timestamp("emailVerified", { mode: "date" }),
     image: text("image"),
+    password: text("password"), // Hashed password
     role: text("role").default("Guest").notNull(),
-    company: text("company"),
+    companyId: text("company_id").references(() => companies.id),
+    approvalStatus: text("approval_status").default("APPROVED").notNull(), // 'PENDING', 'APPROVED', 'REJECTED'
     avatar: text("avatar"),
+    skills: jsonb("skills").$type<string[]>().default([]),
+    bio: text("bio"),
+    experience: text("experience"),
+    industry: jsonb("industry").$type<string[]>().default([]),
+    linkedin: text("linkedin"),
+    availability: text("availability").default("Available"), // 'Available', 'Busy', 'Open to offers'
 });
 
 export const accounts = pgTable(

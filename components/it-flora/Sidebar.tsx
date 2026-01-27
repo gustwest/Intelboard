@@ -1,10 +1,15 @@
-import { Plus, Settings, Search, FolderPlus, Sparkles, UserCircle, Lightbulb } from 'lucide-react';
+"use client";
+
+import { Plus, Settings, Search, FolderPlus, Sparkles, UserCircle, Lightbulb, Check, X, Briefcase } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { getCompanyUsers, approveUserAccess } from '@/lib/actions';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store/it-flora/useStore';
 import { generateBankFlora } from '@/lib/it-flora/simulation';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import Link from "next/link";
 
 interface SidebarProps {
     onAddSystem: () => void;
@@ -13,15 +18,36 @@ interface SidebarProps {
     onManageSystems: () => void;
     onOpenCatalogue: () => void;
     onImportAI: () => void;
-    onOpenUserManagement: () => void;
 }
 
-export function Sidebar({ onAddSystem, onAddProject, onEditProject, onManageSystems, onOpenCatalogue, onImportAI, onOpenUserManagement }: SidebarProps) {
+export function Sidebar({ onAddSystem, onAddProject, onEditProject, onManageSystems, onOpenCatalogue, onImportAI }: SidebarProps) {
     const systems = useStore((state) => state.systems);
     const projects = useStore((state) => state.projects);
     const activeProjectId = useStore((state) => state.activeProjectId);
     const setActiveProject = useStore((state) => state.setActiveProject);
     const currentUser = useStore((state) => state.currentUser);
+
+    // Pending Approvals State
+    const [pendingUsers, setPendingUsers] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (currentUser?.companyId) {
+            getCompanyUsers(currentUser.companyId).then(users => {
+                setPendingUsers(users.filter((u: any) => u.approvalStatus === 'PENDING'));
+            });
+        } else {
+            setPendingUsers([]);
+        }
+    }, [currentUser?.companyId]);
+
+    const handleApprove = async (userId: string) => {
+        const result = await approveUserAccess(userId);
+        if (result.success) {
+            setPendingUsers(prev => prev.filter(u => u.id !== userId));
+            // simplified toast/alert
+            alert(`Approved ${result.user?.name}`);
+        }
+    };
 
     // Filter projects based on visibility
     const visibleProjects = projects.filter(p => {
@@ -124,6 +150,15 @@ export function Sidebar({ onAddSystem, onAddProject, onEditProject, onManageSyst
                         Data Catalogue
                     </Button>
                     <Button
+                        onClick={() => window.location.href = '/talent'}
+                        variant="outline"
+                        size="sm"
+                        className="w-full justify-start mt-1"
+                    >
+                        <Briefcase className="mr-2 h-4 w-4" />
+                        Talent Directory
+                    </Button>
+                    <Button
                         onClick={() => window.location.href = '/architect'}
                         variant="ghost"
                         size="sm"
@@ -174,28 +209,50 @@ export function Sidebar({ onAddSystem, onAddProject, onEditProject, onManageSyst
                 </div>
             </div>
 
-            {/* User Profile */}
-            <div className="mt-4 pt-4 border-t border-border">
-                <div
-                    className="flex items-center gap-3 p-2 rounded-md hover:bg-accent/50 cursor-pointer transition-colors"
-                    onClick={onOpenUserManagement}
-                >
-                    <Avatar className="h-9 w-9 border border-border">
-                        <AvatarImage src={currentUser?.avatar} alt={currentUser?.name || "User"} />
-                        <AvatarFallback>
-                            {currentUser?.name ? currentUser.name[0] : <UserCircle className="w-5 h-5" />}
-                        </AvatarFallback>
-                    </Avatar>
-
-                    <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-foreground truncate">
-                            {currentUser?.name || 'Guest User'}
-                        </div>
-                        <div className="text-xs text-muted-foreground truncate">
-                            {currentUser?.role || 'Viewer'}
-                        </div>
+            {/* Pending Approvals Section */}
+            {pendingUsers.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-border">
+                    <h3 className="text-xs font-medium text-amber-600 uppercase tracking-wider mb-2 flex items-center">
+                        <UserCircle className="w-3 h-3 mr-1" />
+                        Pending Approvals ({pendingUsers.length})
+                    </h3>
+                    <div className="space-y-2">
+                        {pendingUsers.map(user => (
+                            <div key={user.id} className="p-2 bg-amber-50 rounded-md border border-amber-100 dark:bg-amber-900/20 dark:border-amber-800">
+                                <div className="text-xs font-semibold mb-1">{user.name}</div>
+                                <div className="text-[10px] text-muted-foreground mb-2 truncate">{user.email}</div>
+                                <Button size="sm" className="w-full h-6 text-xs bg-amber-600 hover:bg-amber-700 text-white px-2 py-0" onClick={() => handleApprove(user.id)}>
+                                    Approve Access
+                                </Button>
+                            </div>
+                        ))}
                     </div>
                 </div>
+            )}
+
+            {/* User Profile */}
+            <div className="mt-4 pt-4 border-t border-border">
+                <Link href="/account">
+                    <div
+                        className="flex items-center gap-3 p-2 rounded-md hover:bg-accent/50 cursor-pointer transition-colors"
+                    >
+                        <Avatar className="h-9 w-9 border border-border">
+                            <AvatarImage src={currentUser?.avatar} alt={currentUser?.name || "User"} />
+                            <AvatarFallback>
+                                {currentUser?.name ? currentUser.name[0] : <UserCircle className="w-5 h-5" />}
+                            </AvatarFallback>
+                        </Avatar>
+
+                        <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-foreground truncate">
+                                {currentUser?.name || 'Guest User'}
+                            </div>
+                            <div className="text-xs text-muted-foreground truncate">
+                                {currentUser?.role || 'Viewer'}
+                            </div>
+                        </div>
+                    </div>
+                </Link>
             </div>
         </div>
     );
