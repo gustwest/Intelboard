@@ -39,7 +39,11 @@ async function processTextWithAI(text: string) {
 
     try {
         const result = await model.generateContent(prompt);
-        const responseText = result.response.text();
+        let responseText = result.response.text();
+
+        // Clean up markdown code blocks if present
+        responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+
         const data = JSON.parse(responseText);
         return { success: true, data };
     } catch (error: any) {
