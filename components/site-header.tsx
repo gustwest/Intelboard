@@ -58,6 +58,15 @@ export function SiteHeader() {
                             IT Planner tool
                         </Link>
                         <Link
+                            href="/talent"
+                            className={cn(
+                                "transition-colors hover:text-foreground/80",
+                                pathname === "/talent" ? "text-foreground" : "text-foreground/60"
+                            )}
+                        >
+                            Talent Directory
+                        </Link>
+                        <Link
                             href="/team"
                             className={cn(
                                 "transition-colors hover:text-foreground/80",
@@ -67,10 +76,10 @@ export function SiteHeader() {
                             Team
                         </Link>
                         <Link
-                            href="/account"
+                            href="/profile"
                             className={cn(
                                 "transition-colors hover:text-foreground/80",
-                                pathname === "/account" ? "text-foreground" : "text-foreground/60"
+                                pathname === "/profile" ? "text-foreground" : "text-foreground/60"
                             )}
                         >
                             My Profile

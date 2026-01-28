@@ -45,6 +45,13 @@ export function UserMenu() {
                         My Account
                     </Link>
                 </DropdownMenuItem>
+                {(role === 'Admin' || currentUser?.role === 'Admin' || currentUser?.companyId) && (
+                    <DropdownMenuItem asChild>
+                        <Link href="/team" className="w-full cursor-pointer">
+                            Team Management
+                        </Link>
+                    </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={() => logout()} className="text-red-600 focus:text-red-600">
                     Log out
                 </DropdownMenuItem>
