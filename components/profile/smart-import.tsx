@@ -55,7 +55,7 @@ export function SmartImport({ onImport }: SmartImportProps) {
             console.error("Text import error:", error);
             toast({
                 title: "Error",
-                description: "An unexpected error occurred.",
+                description: error instanceof Error ? error.message : "An unexpected error occurred.",
                 variant: "destructive"
             });
         } finally {
