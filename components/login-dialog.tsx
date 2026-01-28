@@ -388,13 +388,18 @@ export function LoginDialog() {
                         ) : (
                             <div className="py-4">
                                 <ConsultantProfileForm onComplete={(profileData) => {
+                                    const { skills, files, ...rest } = profileData;
                                     completeSignUp({
                                         id: generateId(),
                                         name: newUserData.name!,
                                         role: "Specialist",
-                                        ...profileData
+                                        ...rest,
+                                        cvFile: files[0]?.name,
+                                        personalLetterFile: files[1]?.name,
+                                        skills: skills.split(',').map(s => ({ name: s.trim(), category: "General" })).filter(s => s.name)
                                     });
                                 }} />
+
                             </div>
                         )}
                     </TabsContent>
