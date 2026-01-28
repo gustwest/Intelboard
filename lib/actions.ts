@@ -315,11 +315,14 @@ export async function updateUserProfile(userId: string, data: {
             if (workData) {
                 await tx.delete(workExperience).where(eq(workExperience.userId, userId));
                 if (workData.length > 0) {
-                    await tx.insert(workExperience).values(workData.map(w => ({
-                        ...w,
-                        userId, // Ensure userId is set
-                        startDate: new Date(w.startDate), // Ensure dates are Date objects
-                        endDate: w.endDate ? new Date(w.endDate) : null
+                    await tx.insert(workExperience).values(workData.map((w: any) => ({
+                        userId,
+                        company: w.company,
+                        title: w.title,
+                        startDate: new Date(w.startDate),
+                        endDate: w.endDate ? new Date(w.endDate) : null,
+                        description: w.description || null,
+                        location: w.location || null,
                     })));
                 }
             }
@@ -328,9 +331,11 @@ export async function updateUserProfile(userId: string, data: {
             if (eduData) {
                 await tx.delete(education).where(eq(education.userId, userId));
                 if (eduData.length > 0) {
-                    await tx.insert(education).values(eduData.map(e => ({
-                        ...e,
+                    await tx.insert(education).values(eduData.map((e: any) => ({
                         userId,
+                        school: e.school,
+                        degree: e.degree,
+                        fieldOfStudy: e.fieldOfStudy || null,
                         startDate: new Date(e.startDate),
                         endDate: e.endDate ? new Date(e.endDate) : null
                     })));
