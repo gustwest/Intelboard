@@ -507,6 +507,7 @@ export async function scrapeLinkedInProfile(url: string) {
                 ],
                 workExperience: [
                     {
+                        id: "mock-exp-1",
                         company: "Autoliv",
                         title: "Project Manager / Product Owner",
                         startDate: "2019-01-01",
@@ -514,6 +515,7 @@ export async function scrapeLinkedInProfile(url: string) {
                         description: "Leading digital transformation initiatives within HR and production."
                     },
                     {
+                        id: "mock-exp-2",
                         company: "Top of Minds AB",
                         title: "IT Consultant",
                         startDate: "2011-05-01",
@@ -523,6 +525,7 @@ export async function scrapeLinkedInProfile(url: string) {
                 ],
                 education: [
                     {
+                        id: "mock-edu-1",
                         school: "University of Skövde",
                         degree: "Bachelor's degree",
                         fieldOfStudy: "Cognitive Science",
@@ -550,6 +553,7 @@ export async function scrapeLinkedInProfile(url: string) {
             ],
             workExperience: [
                 {
+                    id: "mock-default-exp-1",
                     company: "Tech Corp",
                     title: "Senior Developer",
                     startDate: "2020-01-01",
