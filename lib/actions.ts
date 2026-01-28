@@ -290,6 +290,7 @@ export async function getRequestCreator(creatorId: string) {
 export async function updateUserProfile(userId: string, data: {
     name?: string;
     bio?: string;
+    jobTitle?: string;
     skills?: string[];
     industry?: string[];
     experience?: string;

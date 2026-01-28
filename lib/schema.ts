@@ -22,6 +22,7 @@ export const users = pgTable("user", {
     avatar: text("avatar"),
     skills: jsonb("skills").$type<string[]>().default([]),
     bio: text("bio"),
+    jobTitle: text("job_title"),
     experience: text("experience"),
     industry: jsonb("industry").$type<string[]>().default([]),
     linkedin: text("linkedin"),

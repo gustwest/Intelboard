@@ -70,6 +70,7 @@ export type User = {
     personalLetterFile?: string;
     experience?: string;
     skills?: string; // comma separated string as used in form
+    jobTitle?: string;
     background?: string;
 };
 

@@ -31,6 +31,7 @@ export default function AccountPage() {
     const [isEditing, setIsEditing] = useState(false);
     const [newName, setNewName] = useState("");
     const [bio, setBio] = useState("");
+    const [jobTitle, setJobTitle] = useState("");
     const [experience, setExperience] = useState("");
     const [skills, setSkills] = useState("");
     const [linkedin, setLinkedin] = useState("");
@@ -46,6 +47,7 @@ export default function AccountPage() {
         if (currentUser) {
             setNewName(currentUser.name || "");
             setBio((currentUser as any).bio || "");
+            setJobTitle((currentUser as any).jobTitle || "");
             setExperience((currentUser as any).experience || "");
             setSkills(((currentUser as any).skills || []).join(", "));
             setLinkedin((currentUser as any).linkedin || "");
@@ -68,6 +70,7 @@ export default function AccountPage() {
             const result = await updateUserProfile(currentUser.id, {
                 name: newName,
                 bio,
+                jobTitle,
                 experience,
                 skills: skills.split(",").map(s => s.trim()).filter(Boolean),
                 linkedin
@@ -237,11 +240,16 @@ export default function AccountPage() {
                         </Card>
 
                         <Card>
-                            <CardHeader>
-                                <CardTitle>Professional Profile</CardTitle>
-                                <CardDescription>Showcase your skills and experience to get matched with projects.</CardDescription>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <div className="flex flex-col space-y-1.5">
+                                    <CardTitle>Professional Profile</CardTitle>
+                                    <CardDescription>Showcase your skills and experience to get matched with projects.</CardDescription>
+                                </div>
+                                {!isEditing && (
+                                    <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>Edit</Button>
+                                )}
                             </CardHeader>
-                            <CardContent className="space-y-6">
+                            <CardContent className="space-y-6 pt-6">
                                 <div className="grid gap-4">
                                     <div className="grid gap-2">
                                         <Label>Bio / Summary</Label>
@@ -258,7 +266,12 @@ export default function AccountPage() {
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="grid gap-2">
                                             <Label>Job Title / Role</Label>
-                                            <Input value={currentUser.role} disabled />
+                                            <Input
+                                                placeholder={currentUser.role}
+                                                value={isEditing ? jobTitle : ((currentUser as any).jobTitle || currentUser.role)}
+                                                onChange={(e) => setJobTitle(e.target.value)}
+                                                disabled={!isEditing}
+                                            />
                                         </div>
                                         <div className="grid gap-2">
                                             <Label>Experience</Label>
