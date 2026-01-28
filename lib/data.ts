@@ -68,10 +68,25 @@ export type User = {
     linkedInUrl?: string;
     cvFile?: string; // specific file path or name
     personalLetterFile?: string;
-    experience?: string;
-    skills?: string; // comma separated string as used in form
+    experience?: string; // Legacy string field
     jobTitle?: string;
     background?: string;
+    workExperience?: {
+        id: string;
+        company: string;
+        title: string;
+        startDate: string;
+        endDate?: string;
+        description?: string;
+    }[];
+    education?: {
+        id: string;
+        school: string;
+        degree: string;
+        startDate: string;
+        endDate?: string;
+    }[];
+    skills?: { name: string; category: string }[];
 };
 
 export const mockUsers: User[] = [

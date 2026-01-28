@@ -20,7 +20,8 @@ export const users = pgTable("user", {
     companyId: text("company_id").references(() => companies.id),
     approvalStatus: text("approval_status").default("APPROVED").notNull(), // 'PENDING', 'APPROVED', 'REJECTED'
     avatar: text("avatar"),
-    skills: jsonb("skills").$type<string[]>().default([]),
+    // Skills is now: { name: string, category: string }[]
+    skills: jsonb("skills").$type<{ name: string; category: string }[]>().default([]),
     bio: text("bio"),
     jobTitle: text("job_title"),
     experience: text("experience"),
@@ -107,4 +108,25 @@ export const projects = pgTable("projects", {
     notes: text("notes"),
     flowData: jsonb("flow_data").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const workExperience = pgTable("work_experience", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    company: text("company").notNull(),
+    title: text("title").notNull(),
+    startDate: timestamp("start_date").notNull(),
+    endDate: timestamp("end_date"), // Null means "Present"
+    description: text("description"),
+    location: text("location"),
+});
+
+export const education = pgTable("education", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    school: text("school").notNull(),
+    degree: text("degree"),
+    fieldOfStudy: text("field_of_study"),
+    startDate: timestamp("start_date").notNull(),
+    endDate: timestamp("end_date"),
 });

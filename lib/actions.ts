@@ -3,8 +3,8 @@
 import { auth } from "./auth";
 
 import { db } from "./db";
-import { requests, projects, users, companies } from "./schema";
-import { eq, desc, or } from "drizzle-orm";
+import { requests, projects, users, companies, workExperience, education } from "./schema";
+import { eq, desc, or, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { mockUsers } from "./data";
 
@@ -291,20 +291,60 @@ export async function updateUserProfile(userId: string, data: {
     name?: string;
     bio?: string;
     jobTitle?: string;
-    skills?: string[];
+    skills?: { name: string; category: string }[];
     industry?: string[];
     experience?: string;
     linkedin?: string;
     availability?: string;
+    // New relational data
+    workExperience?: any[];
+    education?: any[];
 }) {
     try {
-        const [updated] = await db.update(users)
-            .set(data)
-            .where(eq(users.id, userId))
-            .returning();
+        const { workExperience: workData, education: eduData, ...userData } = data;
+
+        await db.transaction(async (tx) => {
+            // 1. Update basic user fields
+            if (Object.keys(userData).length > 0) {
+                await tx.update(users)
+                    .set(userData as any)
+                    .where(eq(users.id, userId));
+            }
+
+            // 2. Handle Work Experience (Delete all and re-insert for MVP simplicity)
+            if (workData) {
+                await tx.delete(workExperience).where(eq(workExperience.userId, userId));
+                if (workData.length > 0) {
+                    await tx.insert(workExperience).values(workData.map(w => ({
+                        ...w,
+                        userId, // Ensure userId is set
+                        startDate: new Date(w.startDate), // Ensure dates are Date objects
+                        endDate: w.endDate ? new Date(w.endDate) : null
+                    })));
+                }
+            }
+
+            // 3. Handle Education
+            if (eduData) {
+                await tx.delete(education).where(eq(education.userId, userId));
+                if (eduData.length > 0) {
+                    await tx.insert(education).values(eduData.map(e => ({
+                        ...e,
+                        userId,
+                        startDate: new Date(e.startDate),
+                        endDate: e.endDate ? new Date(e.endDate) : null
+                    })));
+                }
+            }
+        });
+
+        const [updated] = await db.select().from(users).where(eq(users.id, userId));
 
         revalidatePath("/account");
         revalidatePath(`/profile/${userId}`);
+        // Also revalidate the specialized profile page if we have one
+        revalidatePath("/profile");
+
         return { success: true, user: updated };
     } catch (error) {
         console.error("Failed to update user profile:", error);
@@ -352,7 +392,7 @@ export async function searchUsers(query: string, filters?: { role?: string; skil
             const matchesRole = !filters?.role || u.role === filters.role;
 
             const matchesSkill = !filters?.skill ||
-                (u.skills as string[] || []).some(s => s.toLowerCase().includes(filters.skill!.toLowerCase()));
+                (u.skills as { name: string; category: string }[] || []).some(s => s.name.toLowerCase().includes(filters.skill!.toLowerCase()));
 
             return matchesQuery && matchesRole && matchesSkill;
         });
@@ -449,7 +489,7 @@ export async function getCompanyByDomain(domain: string) {
 
 export async function scrapeLinkedInProfile(url: string) {
     // Simulating a delay for "scraping"
-    await new Promise(resolve => setTimeout(resolve, 500)); // Reduced to 500ms
+    await new Promise(resolve => setTimeout(resolve, 800));
 
     // Check for specific user's URL to return "real" data for the demo
     if (url.includes("gustav-westergren") || url.includes("6282942b")) {
@@ -457,10 +497,42 @@ export async function scrapeLinkedInProfile(url: string) {
             success: true,
             data: {
                 bio: "Account and project manager with focus on digital solutions. Since way back I've been hooked on digital services, both privately and professionally. I love innovation and smart solutions that literally change the way we live, interact and perceive things in our world.",
-                skills: ["Change Management", "Project Management", "Coaching", "Communication", "Digital Solutions", "Innovation", "Agile Methodologies"],
-                experience: "Project Manager and Product Owner at Autoliv (4 yrs 9 mos), IT Consultant at Top of Minds AB (7 yrs 8 mos)",
-                industry: ["Information Technology", "Automotive"],
-                linkedin: url
+                skills: [
+                    { name: "Change Management", category: "Project Management" },
+                    { name: "Project Management", category: "Project Management" },
+                    { name: "Agile Methodologies", category: "Methodologies" },
+                    { name: "Digital Solutions", category: "Digital" },
+                    { name: "Innovation", category: "Strategy" },
+                    { name: "Coaching", category: "Leadership" }
+                ],
+                workExperience: [
+                    {
+                        company: "Autoliv",
+                        title: "Project Manager / Product Owner",
+                        startDate: "2019-01-01",
+                        endDate: null,
+                        description: "Leading digital transformation initiatives within HR and production."
+                    },
+                    {
+                        company: "Top of Minds AB",
+                        title: "IT Consultant",
+                        startDate: "2011-05-01",
+                        endDate: "2019-01-01",
+                        description: "Delivering IT solutions and project management for various clients."
+                    }
+                ],
+                education: [
+                    {
+                        school: "University of Skövde",
+                        degree: "Bachelor's degree",
+                        fieldOfStudy: "Cognitive Science",
+                        startDate: "2007-01-01",
+                        endDate: "2010-06-01"
+                    }
+                ],
+                experience: "4 yrs 9 mos at Autoliv, 7 yrs 8 mos at Top of Minds", // Legacy text summary
+                linkedin: url,
+                jobTitle: "Senior Solution Architect"
             }
         };
     }
@@ -470,9 +542,23 @@ export async function scrapeLinkedInProfile(url: string) {
         success: true,
         data: {
             bio: "Experienced Full Stack Developer with a demonstrated history of working in the computer software industry. Skilled in React, Node.js, and Cloud Architecture.",
-            skills: ["React", "Node.js", "TypeScript", "Next.js", "PostgreSQL", "AWS"],
+            skills: [
+                { name: "React", category: "Frontend" },
+                { name: "Node.js", category: "Backend" },
+                { name: "TypeScript", category: "Language" },
+                { name: "AWS", category: "Cloud" }
+            ],
+            workExperience: [
+                {
+                    company: "Tech Corp",
+                    title: "Senior Developer",
+                    startDate: "2020-01-01",
+                    endDate: null,
+                    description: "Building scalable web applications."
+                }
+            ],
+            education: [],
             experience: "7 years",
-            industry: ["Technology", "Software Development"],
             linkedin: url
         }
     };
