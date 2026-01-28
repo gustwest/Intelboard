@@ -41,14 +41,25 @@ async function processTextWithAI(text: string) {
         const result = await model.generateContent(prompt);
         let responseText = result.response.text();
 
-        // Clean up markdown code blocks if present
-        responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        console.log("--- RAW GEMINI RESPONSE ---");
+        console.log(responseText);
+        console.log("---------------------------");
+
+        // Robust JSON extraction: Find first '{' and last '}'
+        const startIndex = responseText.indexOf('{');
+        const endIndex = responseText.lastIndexOf('}');
+
+        if (startIndex !== -1 && endIndex !== -1) {
+            responseText = responseText.substring(startIndex, endIndex + 1);
+        } else {
+            throw new Error("No JSON object found in response");
+        }
 
         const data = JSON.parse(responseText);
         return { success: true, data };
     } catch (error: any) {
         console.error("Gemini Extraction Error:", error);
-        return { success: false, error: "Failed to parse AI response." };
+        return { success: false, error: `Failed to parse AI response: ${error.message}` };
     }
 }
 
