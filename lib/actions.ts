@@ -303,6 +303,24 @@ export async function updateUserProfile(userId: string, data: {
     try {
         const { workExperience: workData, education: eduData, ...userData } = data;
 
+        // Ensure user exists (Lazy creation for Mock Users in Cloud environment)
+        const existingUser = await db.query.users.findFirst({
+            where: eq(users.id, userId),
+        });
+
+        if (!existingUser) {
+            console.log(`User ${userId} not found in DB. Creating placeholder/mock...`);
+            const mockUser = mockUsers.find((u) => u.id === userId);
+            await db.insert(users).values({
+                id: userId,
+                name: mockUser?.name || userData.name || "Guest User",
+                email: mockUser?.email || `${userId}@placeholder.com`,
+                role: (mockUser?.role as any) || "Guest",
+                companyId: mockUser?.company || null,
+                image: mockUser?.avatar || null,
+            }).onConflictDoNothing();
+        }
+
         await db.transaction(async (tx) => {
             // 1. Update basic user fields
             if (Object.keys(userData).length > 0) {
