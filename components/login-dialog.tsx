@@ -196,7 +196,7 @@ export function LoginDialog() {
                         </DialogHeader>
                         {!selectedRole ? (
                             <div className="grid gap-4 py-4">
-                                {/* Corporate Client Button Removed */}
+                                {/* Corporate Client Button */}
                                 <Button
                                     variant="outline"
                                     className="h-24 flex-col gap-2 border-blue-800 bg-blue-50/50 hover:bg-blue-100/50"
@@ -215,30 +215,17 @@ export function LoginDialog() {
                                         Corporate Login
                                     </span>
                                 </Button>
-                                <Button
-                                    variant="outline"
-                                    className="h-24 flex-col gap-2"
-                                    onClick={() => handleRoleSelect("Specialist")}
-                                >
-                                    <span className="text-lg font-semibold">Specialist / Consultant</span>
-                                    <span className="text-sm text-muted-foreground">
-                                        Find projects and microgigs
-                                    </span>
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleRoleSelect("Admin")}
-                                >
-                                    IntelBoard Admin
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleRoleSelect("Guest")}
-                                >
-                                    Continue as Guest
-                                </Button>
+
+                                <div className="pt-4 flex justify-center">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-muted-foreground"
+                                        onClick={() => handleRoleSelect("Admin")}
+                                    >
+                                        System Admin Login
+                                    </Button>
+                                </div>
                             </div>
                         ) : (
                             <div className="space-y-4 py-4">

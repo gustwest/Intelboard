@@ -13,20 +13,14 @@ import { mockUsers } from "./data";
 export async function getRequests() {
     try {
         const session = await auth();
-        // If system admin (implement check later if needed), return all? 
-        // For now, if companyId exists, return all company requests.
-        // If Guest/No company, return only own?
-
         const companyId = (session?.user as any)?.companyId;
         const userId = session?.user?.id;
 
         if (companyId) {
-            // Get all requests where creator is in the same company
-            // This requires a join. Drizzle query builder:
             const teamUsers = await db.select({ id: users.id }).from(users).where(eq(users.companyId, companyId));
             const teamUserIds = teamUsers.map(u => u.id);
 
-            if (teamUserIds.length === 0) return []; // Should catch self at least
+            if (teamUserIds.length === 0) return [];
 
             return await db.query.requests.findMany({
                 where: (requests, { inArray }) => inArray(requests.creatorId, teamUserIds),
@@ -34,7 +28,6 @@ export async function getRequests() {
             });
         }
 
-        // Fallback for guests/individuals: see their own
         if (!userId) return [];
 
         return await db.query.requests.findMany({
@@ -50,10 +43,8 @@ export async function getRequests() {
 
 export async function addRequest(data: any) {
     try {
-        // Remove createdAt if present to let the server set it correctly
         const { createdAt, ...sanitizedData } = data;
 
-        // Ensure creator exists to prevent Foreign Key errors
         if (sanitizedData.creatorId) {
             const existingUser = await db.query.users.findFirst({
                 where: eq(users.id, sanitizedData.creatorId)
@@ -61,7 +52,6 @@ export async function addRequest(data: any) {
 
             if (!existingUser) {
                 console.log(`Creator ${sanitizedData.creatorId} not found in DB. Creating placeholder...`);
-                // Try to find mock details
                 const mockDiff = mockUsers.find(u => u.id === sanitizedData.creatorId);
 
                 await db.insert(users).values({
@@ -82,41 +72,29 @@ export async function addRequest(data: any) {
         revalidatePath("/requests");
         return newRequest;
     } catch (error) {
-        console.error("Failed to add request details:");
-        console.dir(error, { depth: null });
+        console.error("Failed to add request details:", error);
         throw new Error("Failed to add request");
     }
 }
 
 export async function getSystems() {
-    // Note: 'systems' table is currently only in-memory/Liveblocks. 
-    // Return empty for now to satisfy sync logic.
     return [];
 }
 
 export async function inviteUser(email: string, name: string, companyId: string) {
-    console.log("Inviting user:", email, name, companyId);
     try {
-        // 1. Check if user exists
         const [existingUser] = await db.select().from(users).where(eq(users.email, email));
 
         if (existingUser) {
-            // Logic: If user exists but no company, maybe add them? 
-            // For now, fail if exists
             if (existingUser.companyId && existingUser.companyId !== companyId) {
                 return { error: "User belongs to another company." };
             }
             if (existingUser.companyId === companyId) {
                 return { error: "User is already in your team." };
             }
-            // Update logic if needed, but for MVP let's assume invite new only
             return { error: "User already exists." };
         }
 
-        // 2. Create User
-        // Generate a random password for them? Or send invite link?
-        // Since we don't have email sending, we'll set a default password for testing: "password123"
-        // In real life, we would create a token and email it.
         const bcrypt = require("bcryptjs");
         const hashedPassword = await bcrypt.hash("password123", 10);
 
@@ -125,11 +103,9 @@ export async function inviteUser(email: string, name: string, companyId: string)
             name,
             companyId,
             password: hashedPassword,
-            role: "User", // Default role
+            role: "User",
             approvalStatus: "APPROVED"
         }).returning();
-
-        console.log(`[MOCK EMAIL] To: ${email} | Subject: You've been invited! | Body: Welcome to the team. Login with password123`);
 
         revalidatePath("/team");
         return { success: true, user: newUser };
@@ -141,7 +117,6 @@ export async function inviteUser(email: string, name: string, companyId: string)
 }
 
 export async function requestCompanyAccess(email: string, name: string, companyId: string) {
-    console.log("Requesting access for:", email, name, companyId);
     try {
         const [existingUser] = await db.select().from(users).where(eq(users.email, email));
 
@@ -149,13 +124,9 @@ export async function requestCompanyAccess(email: string, name: string, companyI
             if (existingUser.companyId === companyId) {
                 return { error: "You are already a member of this company." };
             }
-            // Allow claiming if guest?
             return { error: "Email already registered. Please contact support." };
         }
 
-        // Logic similar to invite but status is PENDING
-        // We'll set a placeholder password or require them to set one later.
-        // For MVP, we set a default password that they would supposedly get in email.
         const bcrypt = require("bcryptjs");
         const hashedPassword = await bcrypt.hash("password123", 10);
 
@@ -167,9 +138,6 @@ export async function requestCompanyAccess(email: string, name: string, companyI
             role: "User",
             approvalStatus: "PENDING"
         }).returning();
-
-        // Simulate email to Admin
-        console.log(`[MOCK EMAIL] To: ADMIN (Gustav) | Subject: New Access Request | Body: ${name} (${email}) requested access to Autoliv.`);
 
         return { success: true, user: newUser };
 
@@ -186,10 +154,7 @@ export async function approveUserAccess(userId: string) {
             .where(eq(users.id, userId))
             .returning();
 
-        // Notify user
-        console.log(`[MOCK EMAIL] To: ${updated.email} | Subject: Access Approved! | Body: You can now login.`);
-
-        revalidatePath("/team"); // or wherever admin manages this
+        revalidatePath("/team");
         return { success: true, user: updated };
     } catch (error) {
         console.error("Failed to approve user:", error);
@@ -238,44 +203,31 @@ export async function getUser(id: string) {
 
 export async function getRequestCreator(creatorId: string) {
     if (!creatorId) return null;
-
     const lowerId = creatorId.toLowerCase();
-
     try {
-        // 1. Check DB
         const dbUser = await getUser(creatorId);
         if (dbUser) return dbUser;
 
-        // 2. Check Mock Users (by ID or Email, case-insensitive)
         const mockUser = mockUsers.find(u =>
             u.id.toLowerCase() === lowerId ||
             u.email?.toLowerCase() === lowerId
         );
         if (mockUser) return mockUser;
 
-        // 3. Check pseudo-email IDs (special case for local dev)
         if (creatorId.includes("@")) {
             const emailPrefix = creatorId.split('@')[0];
             const lowerPrefix = emailPrefix.toLowerCase();
-
-            // Try to find a mock user whose ID is the prefix (case-insensitive)
             const mockByPrefix = mockUsers.find(u => u.id.toLowerCase() === lowerPrefix);
             if (mockByPrefix) return mockByPrefix;
 
-            // Generate a readable name from the prefix (e.g. 'c1' -> 'Customer 1')
             let name = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
             if (emailPrefix.startsWith('c')) name = "Customer " + emailPrefix.slice(1);
             if (emailPrefix.startsWith('s')) name = "Specialist " + emailPrefix.slice(1);
             if (emailPrefix.startsWith('a')) name = "Agency " + emailPrefix.slice(1);
 
-            return {
-                id: creatorId,
-                name: name,
-                role: "Guest"
-            };
+            return { id: creatorId, name: name, role: "Guest" };
         }
 
-        // 4. Last resort: just return the ID capitalized
         return {
             id: creatorId,
             name: creatorId.charAt(0).toUpperCase() + creatorId.slice(1),
@@ -284,6 +236,22 @@ export async function getRequestCreator(creatorId: string) {
     } catch (error) {
         console.error("Failed to get request creator:", error);
         return null;
+    }
+}
+
+export async function getUserWithProfile(userId: string) {
+    try {
+        const user = await db.query.users.findFirst({
+            where: eq(users.id, userId),
+            with: {
+                workExperience: true,
+                education: true,
+            }
+        });
+        return { success: true, user };
+    } catch (error) {
+        console.error("Failed to fetch user with profile:", error);
+        return { success: false, error: "Failed to fetch user" };
     }
 }
 
@@ -296,89 +264,148 @@ export async function updateUserProfile(userId: string, data: {
     experience?: string;
     linkedin?: string;
     availability?: string;
-    // New relational data
     workExperience?: any[];
     education?: any[];
 }) {
+    console.log(`[Profile Update] Starting update for user ${userId}`, JSON.stringify(data, null, 2));
+
     try {
         const { workExperience: workData, education: eduData, ...userData } = data;
 
-        // Ensure user exists (Lazy creation for Mock Users in Cloud environment)
         const existingUser = await db.query.users.findFirst({
             where: eq(users.id, userId),
         });
 
         if (!existingUser) {
-            console.log(`User ${userId} not found in DB. Creating placeholder/mock...`);
+            console.log(`[Profile Update] User ${userId} not found in DB. Creating placeholder...`);
             const mockUser = mockUsers.find((u) => u.id === userId);
-            await db.insert(users).values({
-                id: userId,
-                name: mockUser?.name || userData.name || "Guest User",
-                email: mockUser?.email || `${userId}@placeholder.com`,
-                role: (mockUser?.role as any) || "Guest",
-                companyId: mockUser?.company || null,
-                image: mockUser?.avatar || null,
-            }).onConflictDoNothing();
+            try {
+                await db.insert(users).values({
+                    id: userId,
+                    name: mockUser?.name || userData.name || "Guest User",
+                    email: mockUser?.email || `${userId}@placeholder.com`,
+                    role: (mockUser?.role as any) || "Guest",
+                    companyId: mockUser?.company || null,
+                    image: mockUser?.avatar || null,
+                }).onConflictDoNothing();
+            } catch (creationError) {
+                console.error(`[Profile Update] Failed to create placeholder user:`, creationError);
+                throw new Error("Failed to initialize user record.");
+            }
         }
 
         await db.transaction(async (tx) => {
-            // 1. Update basic user fields
             if (Object.keys(userData).length > 0) {
+                console.log(`[Profile Update] Updating user ${userId} fields:`, Object.keys(userData));
                 await tx.update(users)
                     .set(userData as any)
                     .where(eq(users.id, userId));
             }
 
-            // 2. Handle Work Experience (Delete all and re-insert for MVP simplicity)
             if (workData) {
+                console.log(`[Profile Update] Updating experience for ${userId}: ${workData.length} items`);
                 await tx.delete(workExperience).where(eq(workExperience.userId, userId));
+
                 if (workData.length > 0) {
-                    await tx.insert(workExperience).values(workData.map((w: any) => ({
-                        userId,
-                        company: w.company,
-                        title: w.title,
-                        startDate: new Date(w.startDate),
-                        endDate: w.endDate ? new Date(w.endDate) : null,
-                        description: w.description || null,
-                        location: w.location || null,
-                    })));
+                    const cleanWorkData = workData.map((w: any) => {
+                        const startDate = w.startDate ? new Date(w.startDate) : new Date();
+                        if (isNaN(startDate.getTime())) {
+                            throw new Error(`Invalid start date for experience at ${w.company}`);
+                        }
+
+                        let endDate = null;
+                        if (w.endDate && w.endDate !== "Present") {
+                            endDate = new Date(w.endDate);
+                            if (isNaN(endDate.getTime())) {
+                                throw new Error(`Invalid end date for experience at ${w.company}`);
+                            }
+                        }
+
+                        return {
+                            userId,
+                            company: w.company,
+                            title: w.title,
+                            startDate,
+                            endDate,
+                            description: w.description || null,
+                            location: w.location || null,
+                        };
+                    });
+
+                    await tx.insert(workExperience).values(cleanWorkData);
                 }
             }
 
-            // 3. Handle Education
             if (eduData) {
+                console.log(`[Profile Update] Updating education for ${userId}: ${eduData.length} items`);
                 await tx.delete(education).where(eq(education.userId, userId));
+
                 if (eduData.length > 0) {
-                    await tx.insert(education).values(eduData.map((e: any) => ({
-                        userId,
-                        school: e.school,
-                        degree: e.degree,
-                        fieldOfStudy: e.fieldOfStudy || null,
-                        startDate: new Date(e.startDate),
-                        endDate: e.endDate ? new Date(e.endDate) : null
-                    })));
+                    const cleanEduData = eduData.map((e: any) => {
+                        const startDate = e.startDate ? new Date(e.startDate) : new Date();
+                        if (isNaN(startDate.getTime())) {
+                            throw new Error(`Invalid start date for education at ${e.school}`);
+                        }
+
+                        let endDate = null;
+                        if (e.endDate) {
+                            endDate = new Date(e.endDate);
+                            if (isNaN(endDate.getTime())) {
+                                throw new Error(`Invalid end date for education at ${e.school}`);
+                            }
+                        }
+
+                        return {
+                            userId,
+                            school: e.school,
+                            degree: e.degree || null,
+                            fieldOfStudy: e.fieldOfStudy || null,
+                            startDate,
+                            endDate
+                        };
+                    });
+
+                    await tx.insert(education).values(cleanEduData);
                 }
             }
         });
 
-        const [updated] = await db.select().from(users).where(eq(users.id, userId));
+        const updated = await db.query.users.findFirst({
+            where: eq(users.id, userId),
+            with: {
+                workExperience: true,
+                education: true,
+            }
+        });
+
+        console.log(`[Profile Update] SUCCESS for ${userId}`);
 
         revalidatePath("/account");
         revalidatePath(`/profile/${userId}`);
-        // Also revalidate the specialized profile page if we have one
         revalidatePath("/profile");
+        revalidatePath("/talent");
 
         return { success: true, user: updated };
-    } catch (error) {
-        console.error("Failed to update user profile:", error);
-        return { error: "Failed to update profile." };
+    } catch (error: any) {
+        console.error(`[Profile Update] FAILED for ${userId}:`, error);
+
+        // Detailed error for debugging
+        let errorMessage = error.message || "Unknown error";
+        if (error.code) {
+            errorMessage += ` (DB Code: ${error.code})`;
+        }
+
+        if (error.code === '23505') return { success: false, error: "Data conflict: This record already exists." };
+        if (error.code === '23503') return { success: false, error: "Reference error: User or related record not found." };
+        if (errorMessage.includes("Invalid date")) return { success: false, error: errorMessage };
+
+        return { success: false, error: `Save failed: ${errorMessage}` };
     }
 }
 
 export async function updateUserRole(userId: string, newRole: string) {
     try {
         const session = await auth();
-        // Security check: Only Admins can change roles
         const requesterId = session?.user?.id;
         if (!requesterId) return { error: "Unauthorized" };
 
@@ -403,23 +430,16 @@ export async function updateUserRole(userId: string, newRole: string) {
 
 export async function searchUsers(query: string, filters?: { role?: string; skill?: string }) {
     try {
-        // Basic search implementation
-        // For real app, use full text search or filtered queries
         const allUsers = await db.select().from(users);
-
         const filtered = allUsers.filter(u => {
             const matchesQuery = !query ||
                 u.name?.toLowerCase().includes(query.toLowerCase()) ||
                 u.bio?.toLowerCase().includes(query.toLowerCase());
-
             const matchesRole = !filters?.role || u.role === filters.role;
-
             const matchesSkill = !filters?.skill ||
                 (u.skills as { name: string; category: string }[] || []).some(s => s.name.toLowerCase().includes(filters.skill!.toLowerCase()));
-
             return matchesQuery && matchesRole && matchesSkill;
         });
-
         return filtered;
     } catch (error) {
         console.error("Failed to search users:", error);
@@ -438,20 +458,16 @@ export async function getProjects() {
         if (companyId) {
             const teamUsers = await db.select({ id: users.id }).from(users).where(eq(users.companyId, companyId));
             const teamUserIds = teamUsers.map(u => u.id);
-
             return await db.query.projects.findMany({
                 where: (projects, { inArray }) => inArray(projects.ownerId, teamUserIds),
                 orderBy: [desc(projects.createdAt)],
             });
         }
-
         if (!userId) return [];
-
         return await db.query.projects.findMany({
             where: eq(projects.ownerId, userId),
             orderBy: [desc(projects.createdAt)],
         });
-
     } catch (error) {
         console.error("Failed to fetch projects:", error);
         return [];
@@ -508,29 +524,22 @@ export async function getCompanyByDomain(domain: string) {
         return null;
     }
 }
+
 // --- Scraper Actions ---
 
 export async function scrapeLinkedInProfile(url: string) {
-    // Simulating a delay for "scraping"
     await new Promise(resolve => setTimeout(resolve, 800));
-
-    // Check for specific user's URL to return "real" data for the demo
     if (url.includes("gustav-westergren") || url.includes("6282942b")) {
         return {
             success: true,
             data: {
-                bio: "Account and project manager with focus on digital solutions. Since way back I've been hooked on digital services, both privately and professionally. I love innovation and smart solutions that literally change the way we live, interact and perceive things in our world.",
+                bio: "Account and project manager with focus on digital solutions...",
                 skills: [
                     { name: "Change Management", category: "Project Management" },
-                    { name: "Project Management", category: "Project Management" },
-                    { name: "Agile Methodologies", category: "Methodologies" },
-                    { name: "Digital Solutions", category: "Digital" },
-                    { name: "Innovation", category: "Strategy" },
-                    { name: "Coaching", category: "Leadership" }
+                    { name: "Project Management", category: "Project Management" }
                 ],
                 workExperience: [
                     {
-                        id: "mock-exp-1",
                         company: "Autoliv",
                         title: "Project Manager / Product Owner",
                         startDate: "2019-01-01",
@@ -538,7 +547,6 @@ export async function scrapeLinkedInProfile(url: string) {
                         description: "Leading digital transformation initiatives within HR and production."
                     },
                     {
-                        id: "mock-exp-2",
                         company: "Top of Minds AB",
                         title: "IT Consultant",
                         startDate: "2011-05-01",
@@ -548,7 +556,6 @@ export async function scrapeLinkedInProfile(url: string) {
                 ],
                 education: [
                     {
-                        id: "mock-edu-1",
                         school: "University of Skövde",
                         degree: "Bachelor's degree",
                         fieldOfStudy: "Cognitive Science",
@@ -556,37 +563,14 @@ export async function scrapeLinkedInProfile(url: string) {
                         endDate: "2010-06-01"
                     }
                 ],
-                experience: "4 yrs 9 mos at Autoliv, 7 yrs 8 mos at Top of Minds", // Legacy text summary
+                experience: "4 yrs 9 mos at Autoliv, 7 yrs 8 mos at Top of Minds",
                 linkedin: url,
                 jobTitle: "Senior Solution Architect"
             }
         };
     }
-
-    // Default mock response for other URLs
     return {
-        success: true,
-        data: {
-            bio: "Experienced Full Stack Developer with a demonstrated history of working in the computer software industry. Skilled in React, Node.js, and Cloud Architecture.",
-            skills: [
-                { name: "React", category: "Frontend" },
-                { name: "Node.js", category: "Backend" },
-                { name: "TypeScript", category: "Language" },
-                { name: "AWS", category: "Cloud" }
-            ],
-            workExperience: [
-                {
-                    id: "mock-default-exp-1",
-                    company: "Tech Corp",
-                    title: "Senior Developer",
-                    startDate: "2020-01-01",
-                    endDate: null,
-                    description: "Building scalable web applications."
-                }
-            ],
-            education: [],
-            experience: "7 years",
-            linkedin: url
-        }
+        success: false,
+        error: "LinkedIn blocks automated access. Please enter details manually."
     };
 }

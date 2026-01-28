@@ -8,12 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, Loader2, Download } from "lucide-react";
 import Link from "next/link";
-import { updateUserProfile, scrapeLinkedInProfile } from "@/lib/actions";
+import { updateUserProfile, scrapeLinkedInProfile, getUserWithProfile } from "@/lib/actions";
 import { useToast } from "@/components/ui/use-toast";
 import { useRouter } from "next/navigation";
 import { ExperienceSection } from "@/components/profile/experience-section";
 import { EducationSection } from "@/components/profile/education-section";
 import { CategorizedSkillSelector } from "@/components/profile/skill-selector";
+import { SmartImport } from "@/components/profile/smart-import";
 
 export default function ProfilePage() {
     const { currentUser } = useRole();
@@ -33,29 +34,42 @@ export default function ProfilePage() {
     const [skills, setSkills] = useState<{ name: string; category: string }[]>([]);
     const [workExperience, setWorkExperience] = useState<any[]>([]);
     const [education, setEducation] = useState<any[]>([]);
-
     useEffect(() => {
-        if (currentUser) {
-            setBio((currentUser as any).bio || "");
-            setJobTitle((currentUser as any).jobTitle || "");
-            setLinkedin((currentUser as any).linkedin || "");
+        const fetchUserData = async () => {
+            if (currentUser?.id) {
+                const result = await getUserWithProfile(currentUser.id);
+                if (result.success && result.user) {
+                    const user = result.user;
+                    setBio(user.bio || "");
+                    setJobTitle(user.jobTitle || "");
+                    setLinkedin(user.linkedin || "");
 
-            // Handle potentially legacy or new format skills
-            const rawSkills = (currentUser as any).skills || [];
-            if (Array.isArray(rawSkills) && rawSkills.length > 0 && typeof rawSkills[0] === 'string') {
-                // Legacy string array -> map to generic category
-                setSkills(rawSkills.map(s => ({ name: s, category: "General" })));
-            } else {
-                setSkills(rawSkills);
+                    // Handle potentially legacy or new format skills
+                    const rawSkills = user.skills || [];
+                    if (Array.isArray(rawSkills) && rawSkills.length > 0 && typeof rawSkills[0] === 'string') {
+                        setSkills((rawSkills as any[]).map(s => ({ name: s, category: "General" })));
+                    } else {
+                        setSkills(rawSkills as any);
+                    }
+
+                    // CASTING: The DB relation returns proper objects, ensuring type safety isn't blocking us here if mismatch
+                    setWorkExperience((user as any).workExperience || []);
+                    setEducation((user as any).education || []);
+                }
             }
-
-            setWorkExperience((currentUser as any).workExperience || []);
-            setEducation((currentUser as any).education || []);
-        }
-    }, [currentUser]);
+        };
+        fetchUserData();
+    }, [currentUser?.id]); // Only re-run if ID changes
 
     const handleUpdateProfile = async () => {
-        if (!currentUser?.id) return;
+        if (!currentUser?.id) {
+            toast({
+                title: "Error",
+                description: "User ID is missing. Please try logging in again.",
+                variant: "destructive",
+            });
+            return;
+        }
         setIsLoading(true);
         try {
             const result = await updateUserProfile(currentUser.id, {
@@ -72,23 +86,59 @@ export default function ProfilePage() {
                     title: "Profile updated",
                     description: "Your professional profile has been updated.",
                 });
+
+                // Update local state with fresh data from server
+                if (result.user) {
+                    const user = result.user;
+                    setBio(user.bio || "");
+                    setJobTitle(user.jobTitle || "");
+                    setLinkedin(user.linkedin || "");
+                    setSkills((user.skills as any) || []);
+                    setWorkExperience((user as any).workExperience || []);
+                    setEducation((user as any).education || []);
+                }
+
                 setIsEditing(false);
                 router.refresh();
             } else {
                 toast({
                     title: "Error",
-                    description: "Failed to update profile",
+                    description: (result as any).error || "Failed to update profile",
                     variant: "destructive",
                 });
             }
         } catch (error) {
+            console.error("Profile update error:", error);
             toast({
                 title: "Error",
-                description: "An expected error occurred.",
+                description: "An unexpected error occurred.",
                 variant: "destructive",
             });
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleSmartImport = (data: any) => {
+        if (data.bio) setBio(data.bio);
+        if (data.jobTitle) setJobTitle(data.jobTitle);
+
+        if (data.skills && Array.isArray(data.skills)) {
+            setSkills(data.skills);
+        }
+
+        if (data.workExperience) {
+            setWorkExperience(data.workExperience.map((w: any) => ({
+                ...w,
+                id: crypto.randomUUID()
+            })));
+        }
+
+        if (data.education) {
+            setEducation(data.education.map((e: any) => ({
+                ...e,
+                id: crypto.randomUUID()
+            })));
         }
     };
 
@@ -183,29 +233,44 @@ export default function ProfilePage() {
                     </CardHeader>
 
                     <CardContent className="space-y-8 pt-8">
-                        {/* LinkedIn Import Section - Always visible when editing to encourage usage */}
+                        {/* Import Section */}
                         {isEditing && (
-                            <div className="bg-slate-50 p-4 rounded-lg border flex flex-col md:flex-row gap-4 items-end md:items-center justify-between">
-                                <div className="grid gap-2 w-full">
-                                    <Label className="text-slate-600">Import from LinkedIn</Label>
-                                    <div className="flex gap-2">
-                                        <Input
-                                            placeholder="https://linkedin.com/in/username"
-                                            value={linkedin}
-                                            onChange={(e) => setLinkedin(e.target.value)}
-                                        />
-                                        <Button
-                                            variant="secondary"
-                                            onClick={handleImportLinkedIn}
-                                            disabled={isImporting || !linkedin}
-                                        >
-                                            {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-                                            Import
-                                        </Button>
+                            <div className="space-y-6">
+                                {/* Smart CV Import */}
+                                <div className="space-y-2">
+                                    <Label className="text-base font-semibold">Smart Import</Label>
+                                    <SmartImport onImport={handleSmartImport} />
+                                </div>
+
+                                <div className="relative">
+                                    <div className="absolute inset-0 flex items-center">
+                                        <span className="w-full border-t" />
                                     </div>
-                                    <p className="text-[10px] text-muted-foreground">
-                                        Paste your profile URL to auto-fill experience and skills.
-                                    </p>
+                                    <div className="relative flex justify-center text-xs uppercase">
+                                        <span className="bg-background px-2 text-muted-foreground">Or import from</span>
+                                    </div>
+                                </div>
+
+                                {/* LinkedIn Import */}
+                                <div className="bg-slate-50 p-4 rounded-lg border flex flex-col md:flex-row gap-4 items-end md:items-center justify-between">
+                                    <div className="grid gap-2 w-full">
+                                        <Label className="text-slate-600">LinkedIn Profile</Label>
+                                        <div className="flex gap-2">
+                                            <Input
+                                                placeholder="https://linkedin.com/in/username"
+                                                value={linkedin}
+                                                onChange={(e) => setLinkedin(e.target.value)}
+                                            />
+                                            <Button
+                                                variant="secondary"
+                                                onClick={handleImportLinkedIn}
+                                                disabled={isImporting || !linkedin}
+                                            >
+                                                {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                                                Import
+                                            </Button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         )}
