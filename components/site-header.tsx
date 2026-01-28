@@ -28,7 +28,7 @@ export function SiteHeader() {
                 <div className="mr-4 hidden md:flex">
                     <Link href="/" className="mr-6 flex items-center space-x-2">
                         <Image
-                            src="/intelboard_logo.png"
+                            src="/autoliv_new_logo.png"
                             alt="Intelboard"
                             width={40}
                             height={40}
