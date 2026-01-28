@@ -17,7 +17,14 @@ if (!connectionString) {
 
 // For queries - use a fallback if missing to avoid crashes on import
 console.log("Connecting to database with:", connectionString?.split('@')[1] || "no connection string");
+
+const dbOptions: any = {};
+if (process.env.DB_SOCKET_PATH) {
+    dbOptions.host = process.env.DB_SOCKET_PATH;
+}
+
 const queryClient = postgres(connectionString || "postgres://localhost/placeholder", {
+    ...dbOptions,
     onnotice: (notice) => console.log('DB Notice:', notice),
     onparameter: (name, value) => console.log('DB Param:', name, value),
 });
