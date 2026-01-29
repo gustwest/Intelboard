@@ -141,7 +141,78 @@ export const projectViews = pgTable("project_views", {
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+
+export const systems = pgTable("systems", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    name: text("name").notNull(),
+    type: text("type").notNull(),
+    description: text("description"),
+    position: jsonb("position").$type<{ x: number; y: number }>().default({ x: 0, y: 0 }).notNull(),
+    ownerId: text("owner_id").notNull(),
+    sharedWith: jsonb("shared_with").$type<string[]>().default([]).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const assets = pgTable("assets", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    systemId: text("system_id").references(() => systems.id, { onDelete: "cascade" }).notNull(),
+    name: text("name").notNull(),
+    type: text("type").notNull(),
+    description: text("description"),
+    schema: text("schema"),
+    status: text("status").default("Existing").notNull(),
+    verificationStatus: text("verification_status").default("Unverified"),
+    columns: jsonb("columns").$type<{ name: string; type: string }[]>().default([]),
+});
+
+export const integrations = pgTable("integrations", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    sourceAssetId: text("source_asset_id").references(() => assets.id, { onDelete: "cascade" }).notNull(),
+    targetSystemId: text("target_system_id").references(() => systems.id, { onDelete: "cascade" }).notNull(),
+    description: text("description"),
+    technology: text("technology"),
+    mode: text("mode"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const systemDocuments = pgTable("system_documents", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    systemId: text("system_id").references(() => systems.id, { onDelete: "cascade" }).notNull(),
+    name: text("name").notNull(),
+    type: text("type").notNull(),
+    content: text("content"),
+    uploadedBy: text("uploaded_by").notNull(),
+    uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
+});
+
 // --- Relations ---
+
+export const systemsRelations = relations(systems, ({ many }) => ({
+    assets: many(assets),
+    documents: many(systemDocuments),
+    outgoingIntegrations: many(integrations, { relationName: "targetSystem" }), // Wait, target is SYSTEM. Incoming.
+}));
+
+export const assetsRelations = relations(assets, ({ one, many }) => ({
+    system: one(systems, {
+        fields: [assets.systemId],
+        references: [systems.id],
+    }),
+    outgoingIntegrations: many(integrations, { relationName: "sourceAsset" }),
+}));
+
+export const integrationsRelations = relations(integrations, ({ one }) => ({
+    sourceAsset: one(assets, {
+        fields: [integrations.sourceAssetId],
+        references: [assets.id],
+        relationName: "sourceAsset"
+    }),
+    targetSystem: one(systems, {
+        fields: [integrations.targetSystemId],
+        references: [systems.id],
+        relationName: "targetSystem"
+    }),
+}));
 
 export const projectViewsRelations = relations(projectViews, ({ one }) => ({
     project: one(projects, {

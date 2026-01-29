@@ -3,12 +3,147 @@
 import { auth } from "./auth";
 
 import { db } from "./db";
-import { requests, projects, users, companies, workExperience, education, projectViews } from "./schema";
+import { requests, projects, users, companies, workExperience, education, projectViews, systems, assets, integrations, systemDocuments } from "./schema";
 import { eq, desc, or, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { mockUsers } from "./data";
 
-// --- Request Actions ---
+// ...
+
+export async function getSystems() {
+    try {
+        const allSystems = await db.query.systems.findMany({
+            with: {
+                assets: true,
+                documents: true,
+            }
+        });
+        // We need to fetch integrations separately or include? 
+        // Integrations link asset->system.
+        // Let's fetch integrations globally for now as they are lightweight.
+        return allSystems;
+    } catch (error) {
+        console.error("Failed to fetch systems:", error);
+        return [];
+    }
+}
+
+export async function getIntegrations() {
+    try {
+        return await db.select().from(integrations);
+    } catch (error) {
+        console.error("Failed to fetch integrations:", error);
+        return [];
+    }
+}
+
+export async function addSystem(data: any) {
+    try {
+        const [newSystem] = await db.insert(systems).values({
+            ...data,
+            createdAt: new Date(),
+        }).returning();
+        revalidatePath("/it-planner");
+        return newSystem;
+    } catch (error) {
+        console.error("Failed to add system:", error);
+        throw new Error("Failed to add system");
+    }
+}
+
+export async function updateSystem(id: string, updates: any) {
+    try {
+        await db.update(systems).set(updates).where(eq(systems.id, id));
+        revalidatePath("/it-planner");
+    } catch (error) {
+        console.error("Failed to update system:", error);
+        throw new Error("Failed to update system");
+    }
+}
+
+export async function updateSystemPosition(id: string, position: { x: number; y: number }) {
+    try {
+        await db.update(systems).set({ position }).where(eq(systems.id, id));
+        revalidatePath("/it-planner");
+    } catch (error) {
+        console.error("Failed to update system position:", error);
+    }
+}
+
+export async function deleteSystem(id: string) {
+    try {
+        await db.delete(systems).where(eq(systems.id, id));
+        revalidatePath("/it-planner");
+    } catch (error) {
+        console.error("Failed to delete system:", error);
+        throw new Error("Failed to delete system");
+    }
+}
+
+export async function addAsset(systemId: string, asset: any) {
+    try {
+        const [newAsset] = await db.insert(assets).values({
+            ...asset,
+            systemId,
+        }).returning();
+        revalidatePath("/it-planner");
+        return newAsset;
+    } catch (error) {
+        console.error("Failed to add asset:", error);
+        throw new Error("Failed to add asset");
+    }
+}
+
+export async function updateAsset(assetId: string, updates: any) {
+    try {
+        await db.update(assets).set(updates).where(eq(assets.id, assetId));
+        revalidatePath("/it-planner");
+    } catch (error) {
+        console.error("Failed to update asset:", error);
+        throw new Error("Failed to update asset");
+    }
+}
+
+export async function verifyAsset(assetId: string) {
+    try {
+        await db.update(assets).set({ verificationStatus: 'Verified' }).where(eq(assets.id, assetId));
+        revalidatePath("/it-planner");
+    } catch (error) {
+        console.error("Failed to verify asset:", error);
+        throw new Error("Failed to verify asset");
+    }
+}
+
+export async function addIntegration(data: any) {
+    try {
+        const [newIntegration] = await db.insert(integrations).values(data).returning();
+        revalidatePath("/it-planner");
+        return newIntegration;
+    } catch (error) {
+        console.error("Failed to add integration:", error);
+        throw new Error("Failed to add integration");
+    }
+}
+
+export async function updateIntegration(id: string, updates: any) {
+    try {
+        await db.update(integrations).set(updates).where(eq(integrations.id, id));
+        revalidatePath("/it-planner");
+    } catch (error) {
+        console.error("Failed to update integration:", error);
+        throw new Error("Failed to update integration");
+    }
+}
+
+export async function removeIntegration(id: string) {
+    try {
+        await db.delete(integrations).where(eq(integrations.id, id));
+        revalidatePath("/it-planner");
+    } catch (error) {
+        console.error("Failed to remove integration:", error);
+        throw new Error("Failed to remove integration");
+    }
+}
 
 export async function getRequests() {
     try {
@@ -77,9 +212,6 @@ export async function addRequest(data: any) {
     }
 }
 
-export async function getSystems() {
-    return [];
-}
 
 export async function inviteUser(email: string, name: string, companyId: string) {
     try {
