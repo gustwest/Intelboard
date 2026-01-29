@@ -127,6 +127,12 @@ interface AppState {
   // Selectors/Helpers
   getSystem: (id: string) => System | undefined;
   getAsset: (id: string) => Asset | undefined;
+
+  activeTool: 'flowchart' | 'lineage';
+  setActiveTool: (tool: 'flowchart' | 'lineage') => void;
+
+  activeViewId: string | null;
+  setActiveViewId: (id: string | null) => void;
 }
 
 // --- Store ---
@@ -403,6 +409,12 @@ export const useStore = create<WithLiveblocks<AppState>>()(
         }
         return undefined;
       },
+
+      activeTool: 'flowchart',
+      setActiveTool: (tool) => set({ activeTool: tool }),
+
+      activeViewId: null,
+      setActiveViewId: (id) => set({ activeViewId: id }),
     }),
     {
       client,

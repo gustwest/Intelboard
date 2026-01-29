@@ -132,7 +132,27 @@ export const education = pgTable("education", {
     endDate: timestamp("end_date"),
 });
 
+export const projectViews = pgTable("project_views", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    type: text("type").notNull(), // 'flowchart' | 'lineage'
+    data: jsonb("data").$type<any>().default({}).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // --- Relations ---
+
+export const projectViewsRelations = relations(projectViews, ({ one }) => ({
+    project: one(projects, {
+        fields: [projectViews.projectId],
+        references: [projects.id],
+    }),
+}));
+
+export const projectsRelations = relations(projects, ({ many }) => ({
+    views: many(projectViews),
+}));
 
 export const usersRelations = relations(users, ({ many, one }) => ({
     workExperience: many(workExperience),

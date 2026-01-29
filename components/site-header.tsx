@@ -55,7 +55,7 @@ export function SiteHeader() {
                                 pathname === "/it-planner" ? "text-foreground" : "text-foreground/60"
                             )}
                         >
-                            IT Planner tool
+                            Planning Tools
                         </Link>
                         <Link
                             href="/talent"

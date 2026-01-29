@@ -3,7 +3,7 @@
 import { auth } from "./auth";
 
 import { db } from "./db";
-import { requests, projects, users, companies, workExperience, education } from "./schema";
+import { requests, projects, users, companies, workExperience, education, projectViews } from "./schema";
 import { eq, desc, or, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { mockUsers } from "./data";
@@ -579,4 +579,53 @@ export async function scrapeLinkedInProfile(url: string) {
         success: false,
         error: "LinkedIn blocks automated access. Please enter details manually."
     };
+}
+
+// --- Project View Actions ---
+
+export async function getProjectViews(projectId: string) {
+    if (!projectId) return [];
+    try {
+        const views = await db.select().from(projectViews).where(eq(projectViews.projectId, projectId));
+        return views;
+    } catch (error) {
+        console.error("Failed to get project views:", error);
+        return [];
+    }
+}
+
+export async function createProjectView(projectId: string, name: string, type: 'flowchart' | 'lineage') {
+    try {
+        const [newView] = await db.insert(projectViews).values({
+            projectId,
+            name,
+            type,
+            data: type === 'flowchart' ? { nodes: [], edges: [] } : {},
+        }).returning();
+        revalidatePath("/it-planner");
+        return newView;
+    } catch (error) {
+        console.error("Failed to create project view:", error);
+        throw new Error("Failed to create view");
+    }
+}
+
+export async function deleteProjectView(viewId: string) {
+    try {
+        await db.delete(projectViews).where(eq(projectViews.id, viewId));
+        revalidatePath("/it-planner");
+    } catch (error) {
+        console.error("Failed to delete project view:", error);
+        throw new Error("Failed to delete view");
+    }
+}
+
+export async function updateProjectView(viewId: string, data: any) {
+    try {
+        await db.update(projectViews).set({ data }).where(eq(projectViews.id, viewId));
+        revalidatePath("/it-planner");
+    } catch (error) {
+        console.error("Failed to update project view:", error);
+        throw new Error("Failed to update view");
+    }
 }
