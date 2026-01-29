@@ -51,7 +51,7 @@ interface FreeformFlowProps {
 }
 
 import NoteNode from './flow/NoteNode';
-import { getProjectViews } from '@/lib/actions'; // Need a way to get specific view or just filter
+import { getProjectViews, updateProjectView } from '@/lib/actions'; // Need a way to get specific view or just filter
 
 /* ... nodeTypes ... */
 const nodeTypes: NodeTypes = {
@@ -142,26 +142,17 @@ function Flow({ projectId, viewId }: FreeformFlowProps) {
     }, [viewId, projectId, setNodes, setEdges]);
 
     // Auto-save logic specific to VIEW
-    // Overriding the old project.flowData save logic
     useEffect(() => {
         if (!viewId) return;
 
-        const saveTimeout = setTimeout(() => {
-            // We need a server action to update the view data. 
-            // Reuse updateProject? No, we need updateProjectView.
-            // I'll need to create updateProjectView in actions.ts first.
-            // For now, I will just log or TODO, but actually this breaks persistence.
-
-            // To fix this properly I need `updateProjectView` action.
-            // Assuming I will add it.
-            import("@/lib/actions").then(actions => {
-                // @ts-ignore
-                if (actions.updateProjectView) {
-                    // @ts-ignore
-                    actions.updateProjectView(viewId, { nodes, edges });
-                }
-            });
-
+        const saveTimeout = setTimeout(async () => {
+            try {
+                // Ensure we only save if there's actual data or if we just want to sync empty state
+                // Note: imported updateProjectView from actions
+                await updateProjectView(viewId, { nodes, edges });
+            } catch (error) {
+                console.error("Failed to auto-save view:", error);
+            }
         }, 1000);
 
         return () => clearTimeout(saveTimeout);

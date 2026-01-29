@@ -167,6 +167,18 @@ export const useStore = create<WithLiveblocks<AppState>>()(
 
       addSystem: (system) => set((state) => {
         const newSystemId = system.id || uuidv4();
+        const newSystem = {
+          ...system,
+          id: newSystemId,
+          assets: system.assets || [],
+          documents: system.documents || [],
+          ownerId: state.currentUser?.id || 'unknown',
+          sharedWith: []
+        };
+
+        // Persist to DB
+        import("@/lib/actions").then(actions => actions.addSystem(newSystem));
+
         // If there is an active project, auto-add the new system to it
         const newProjects = state.activeProjectId
           ? state.projects.map(p => p.id === state.activeProjectId ? { ...p, systemIds: [...p.systemIds, newSystemId] } : p)
@@ -175,14 +187,7 @@ export const useStore = create<WithLiveblocks<AppState>>()(
         return {
           systems: [
             ...state.systems,
-            {
-              ...system,
-              id: newSystemId,
-              assets: system.assets || [],
-              documents: system.documents || [],
-              ownerId: state.currentUser?.id || 'unknown', // Capture owner
-              sharedWith: []
-            }
+            newSystem
           ],
           projects: newProjects
         };
