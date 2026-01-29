@@ -7,17 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { GraduationCap, Plus, X, Calendar } from "lucide-react";
 
-// Helper to safely format dates
-const formatDate = (date: string | Date | undefined) => {
-    if (!date) return "";
-    try {
-        if (typeof date === 'string') return date;
-        return date.toLocaleDateString();
-    } catch (e) {
-        return "";
-    }
-};
-
 interface Education {
     id: string;
     school: string;
@@ -33,11 +22,41 @@ interface EducationSectionProps {
     isEditing: boolean;
 }
 
+// Helper to safely format dates
+const formatDate = (date: string | Date | undefined) => {
+    if (!date) return "";
+    try {
+        if (typeof date === 'string') return date;
+        return date.toLocaleDateString();
+    } catch (e) {
+        return "";
+    }
+};
+
 export function EducationSection({ education, onChange, isEditing }: EducationSectionProps) {
     const [isAdding, setIsAdding] = useState(false);
-    // ... existing ...
+    const [newEdu, setNewEdu] = useState<Partial<Education>>({});
 
-    // ... existing ...
+    const handleAdd = () => {
+        if (!newEdu.school || !newEdu.degree) return;
+        onChange([
+            ...education,
+            {
+                id: crypto.randomUUID(),
+                school: newEdu.school,
+                degree: newEdu.degree,
+                fieldOfStudy: newEdu.fieldOfStudy,
+                startDate: newEdu.startDate || new Date().toISOString().split('T')[0],
+                endDate: newEdu.endDate || undefined
+            }
+        ]);
+        setNewEdu({});
+        setIsAdding(false);
+    };
+
+    const handleRemove = (id: string) => {
+        onChange(education.filter(e => e.id !== id));
+    };
 
     return (
         <div className="space-y-4">
@@ -119,7 +138,7 @@ export function EducationSection({ education, onChange, isEditing }: EducationSe
                                     <Label>Start Date</Label>
                                     <Input
                                         type="date"
-                                        value={newEdu.startDate || ""}
+                                        value={typeof newEdu.startDate === 'string' ? newEdu.startDate : ""}
                                         onChange={(e) => setNewEdu({ ...newEdu, startDate: e.target.value })}
                                     />
                                 </div>
@@ -127,7 +146,7 @@ export function EducationSection({ education, onChange, isEditing }: EducationSe
                                     <Label>End Date</Label>
                                     <Input
                                         type="date"
-                                        value={newEdu.endDate || ""}
+                                        value={typeof newEdu.endDate === 'string' ? newEdu.endDate : ""}
                                         onChange={(e) => setNewEdu({ ...newEdu, endDate: e.target.value })}
                                     />
                                 </div>
