@@ -114,9 +114,9 @@ export default function TalentSearchPage() {
 
                                             {user.skills && user.skills.length > 0 && (
                                                 <div className="flex flex-wrap gap-1.5 pt-2">
-                                                    {user.skills.slice(0, 3).map((skill: string, i: number) => (
+                                                    {user.skills.slice(0, 3).map((skill: any, i: number) => (
                                                         <Badge key={i} variant="secondary" className="px-1.5 py-0 text-[10px] bg-slate-100 text-slate-600 border border-slate-200">
-                                                            {skill}
+                                                            {typeof skill === 'object' ? skill.name : skill}
                                                         </Badge>
                                                     ))}
                                                     {user.skills.length > 3 && (
