@@ -1,4 +1,5 @@
 import { pgTable, text, timestamp, boolean, jsonb, primaryKey, integer } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 import { AdapterAccount } from "next-auth/adapters";
 
 export const companies = pgTable("companies", {
@@ -130,3 +131,29 @@ export const education = pgTable("education", {
     startDate: timestamp("start_date").notNull(),
     endDate: timestamp("end_date"),
 });
+
+// --- Relations ---
+
+export const usersRelations = relations(users, ({ many, one }) => ({
+    workExperience: many(workExperience),
+    education: many(education),
+    company: one(companies, {
+        fields: [users.companyId],
+        references: [companies.id],
+    }),
+}));
+
+export const workExperienceRelations = relations(workExperience, ({ one }) => ({
+    user: one(users, {
+        fields: [workExperience.userId],
+        references: [users.id],
+    }),
+}));
+
+export const educationRelations = relations(education, ({ one }) => ({
+    user: one(users, {
+        fields: [education.userId],
+        references: [users.id],
+    }),
+}));
+
