@@ -20,8 +20,13 @@ export function findMatches(request: Request, specialists: Specialist[]): Scored
             const requestText = `${request.title} ${request.description} ${request.tags ? request.tags.join(" ") : ""}`.toLowerCase();
 
             let skillMatches = 0;
-            specialist.skills.forEach((skill) => {
-                if (requestText.includes(skill.toLowerCase())) {
+            // Handle both string arrays (legacy) and object arrays (new)
+            const userSkills = specialist.skills.map((s: any) =>
+                typeof s === 'string' ? s : s.name
+            );
+
+            userSkills.forEach((skill) => {
+                if (skill && requestText.includes(skill.toLowerCase())) {
                     skillMatches++;
                     if (skillMatches <= 3) { // Cap skill points to avoid inflation
                         points += 5;

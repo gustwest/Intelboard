@@ -432,12 +432,18 @@ export async function searchUsers(query: string, filters?: { role?: string; skil
     try {
         const allUsers = await db.select().from(users);
         const filtered = allUsers.filter(u => {
-            const matchesQuery = !query ||
-                u.name?.toLowerCase().includes(query.toLowerCase()) ||
-                u.bio?.toLowerCase().includes(query.toLowerCase());
+            const q = query?.toLowerCase() || "";
+            const matchesQuery = !q ||
+                u.name?.toLowerCase().includes(q) ||
+                u.bio?.toLowerCase().includes(q) ||
+                u.jobTitle?.toLowerCase().includes(q) ||
+                (u.skills as { name: string }[] || []).some(s => s.name.toLowerCase().includes(q));
+
             const matchesRole = !filters?.role || u.role === filters.role;
+
             const matchesSkill = !filters?.skill ||
-                (u.skills as { name: string; category: string }[] || []).some(s => s.name.toLowerCase().includes(filters.skill!.toLowerCase()));
+                (u.skills as { name: string }[] || []).some(s => s.name.toLowerCase().includes(filters.skill!.toLowerCase()));
+
             return matchesQuery && matchesRole && matchesSkill;
         });
         return filtered;
