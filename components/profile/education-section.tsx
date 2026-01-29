@@ -7,13 +7,24 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { GraduationCap, Plus, X, Calendar } from "lucide-react";
 
+// Helper to safely format dates
+const formatDate = (date: string | Date | undefined) => {
+    if (!date) return "";
+    try {
+        if (typeof date === 'string') return date;
+        return date.toLocaleDateString();
+    } catch (e) {
+        return "";
+    }
+};
+
 interface Education {
     id: string;
     school: string;
     degree: string;
     fieldOfStudy?: string;
-    startDate: string;
-    endDate?: string;
+    startDate: string | Date;
+    endDate?: string | Date;
 }
 
 interface EducationSectionProps {
@@ -24,28 +35,9 @@ interface EducationSectionProps {
 
 export function EducationSection({ education, onChange, isEditing }: EducationSectionProps) {
     const [isAdding, setIsAdding] = useState(false);
-    const [newEdu, setNewEdu] = useState<Partial<Education>>({});
+    // ... existing ...
 
-    const handleAdd = () => {
-        if (!newEdu.school || !newEdu.degree) return;
-        onChange([
-            ...education,
-            {
-                id: crypto.randomUUID(),
-                school: newEdu.school,
-                degree: newEdu.degree,
-                fieldOfStudy: newEdu.fieldOfStudy,
-                startDate: newEdu.startDate || new Date().toISOString().split('T')[0],
-                endDate: newEdu.endDate || undefined
-            }
-        ]);
-        setNewEdu({});
-        setIsAdding(false);
-    };
-
-    const handleRemove = (id: string) => {
-        onChange(education.filter(e => e.id !== id));
-    };
+    // ... existing ...
 
     return (
         <div className="space-y-4">
@@ -75,7 +67,7 @@ export function EducationSection({ education, onChange, isEditing }: EducationSe
                             </div>
                             <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
                                 <Calendar className="h-3 w-3" />
-                                {edu.startDate} - {edu.endDate || "Present"}
+                                {formatDate(edu.startDate)} - {edu.endDate ? formatDate(edu.endDate) : "Present"}
                             </div>
                         </CardContent>
                     </Card>
