@@ -1,10 +1,17 @@
-import { Plus, Settings, Search, FolderPlus, Sparkles, UserCircle, Lightbulb } from 'lucide-react';
+"use client";
+
+import { Plus, Settings, Search, FolderPlus, Sparkles, UserCircle, Lightbulb, Check, X, Briefcase, LayoutGrid, Network, Trash2, FileText } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { getCompanyUsers, approveUserAccess, getProjectViews, createProjectView, deleteProjectView } from '@/lib/actions';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store/it-flora/useStore';
 import { generateBankFlora } from '@/lib/it-flora/simulation';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import Link from "next/link";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
 
 interface SidebarProps {
     onAddSystem: () => void;
@@ -13,189 +20,281 @@ interface SidebarProps {
     onManageSystems: () => void;
     onOpenCatalogue: () => void;
     onImportAI: () => void;
-    onOpenUserManagement: () => void;
 }
 
-export function Sidebar({ onAddSystem, onAddProject, onEditProject, onManageSystems, onOpenCatalogue, onImportAI, onOpenUserManagement }: SidebarProps) {
+export function Sidebar({ onAddSystem, onAddProject, onEditProject, onManageSystems, onOpenCatalogue, onImportAI }: SidebarProps) {
     const systems = useStore((state) => state.systems);
     const projects = useStore((state) => state.projects);
     const activeProjectId = useStore((state) => state.activeProjectId);
     const setActiveProject = useStore((state) => state.setActiveProject);
     const currentUser = useStore((state) => state.currentUser);
 
-    // Filter projects based on visibility
-    const visibleProjects = projects.filter(p => {
-        // Admins can see everything
-        if (currentUser?.role === 'Administrator' || currentUser?.role === 'Admin') return true;
+    // Global Tool & View State
+    const activeTool = useStore((state) => state.activeTool);
+    const setActiveTool = useStore((state) => state.setActiveTool);
+    const activeViewId = useStore((state) => state.activeViewId);
+    const setActiveViewId = useStore((state) => state.setActiveViewId);
 
-        // If we have a current user, check ownership or sharing
-        if (currentUser) {
-            return p.ownerId === currentUser.id || p.sharedWith?.includes(currentUser.id);
+    // Sidebar Tool Mode
+    // const [activeTool, setActiveTool] = useState<'flowchart' | 'lineage'>('flowchart'); // MOVED TO STORE
+
+    // Pending Approvals State
+    const [pendingUsers, setPendingUsers] = useState<any[]>([]);
+
+    // Project Views State
+    const [projectViews, setProjectViews] = useState<any[]>([]);
+    const [isCreatingView, setIsCreatingView] = useState(false);
+    const [newViewName, setNewViewName] = useState("");
+    // const [activeViewId, setActiveViewId] = useState<string | null>(null); // MOVED TO STORE
+
+    // Sync pending users
+    useEffect(() => {
+        if (currentUser?.companyId) {
+            getCompanyUsers(currentUser.companyId).then(users => {
+                setPendingUsers(users.filter((u: any) => u.approvalStatus === 'PENDING'));
+            });
         }
+    }, [currentUser?.companyId]);
 
-        // Default visibility for Guests/Unauthenticated on a new device
-        // They should be able to see "shared" or owner-less projects in the room
+    // Fetch views when active project changes
+    useEffect(() => {
+        if (activeProjectId) {
+            getProjectViews(activeProjectId).then(views => {
+                setProjectViews(views);
+                if (views.length > 0 && !activeViewId) {
+                    setActiveViewId(views[0].id);
+                }
+            });
+        } else {
+            setProjectViews([]);
+        }
+    }, [activeProjectId]);
+
+    const handleApprove = async (userId: string) => {
+        const result = await approveUserAccess(userId);
+        if (result.success) {
+            setPendingUsers(prev => prev.filter(u => u.id !== userId));
+            alert(`Approved ${result.user?.name}`);
+        }
+    };
+
+    const handleCreateView = async () => {
+        if (!activeProjectId || !newViewName.trim()) return;
+        try {
+            const newView = await createProjectView(activeProjectId, newViewName, activeTool);
+            setProjectViews([...projectViews, newView]);
+            setNewViewName("");
+            setIsCreatingView(false);
+            setActiveViewId(newView.id);
+        } catch (e) {
+            console.error("Failed to create view", e);
+        }
+    };
+
+    const handleDeleteView = async (viewId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!confirm("Are you sure you want to delete this tab?")) return;
+        try {
+            await deleteProjectView(viewId);
+            setProjectViews(projectViews.filter(v => v.id !== viewId));
+            if (activeViewId === viewId) setActiveViewId(null);
+        } catch (e) {
+            console.error("Failed to delete view", e);
+        }
+    };
+
+    const visibleProjects = projects.filter(p => {
+        if (currentUser?.role === 'Administrator' || currentUser?.role === 'Admin') return true;
+        if (currentUser) return p.ownerId === currentUser.id || p.sharedWith?.includes(currentUser.id);
         return !p.ownerId || p.ownerId === 'unknown' || p.sharedWith?.includes('guest');
     });
 
     const activeProject = visibleProjects.find(p => p.id === activeProjectId);
 
-    // Filter systems list based on active project OR ownership
-    const displayedSystems = activeProjectId
-        ? systems.filter(s => activeProject?.systemIds.includes(s.id))
-        : systems.filter(s => {
-            if (!currentUser) return false;
-            // Admins can see everything (optional, but good for demo/debug)
-            if (currentUser.role === 'Administrator') return true;
-
-            // Strict ownership or shared check
-            return s.ownerId === currentUser.id || s.sharedWith?.includes(currentUser.id);
-        });
-
     return (
-        <div className="w-64 border-r border-border bg-card p-4 flex flex-col h-full shadow-sm">
-            <div className="mb-6">
-                <h2 className="text-lg font-semibold tracking-tight">IT Planner</h2>
-                <p className="text-sm text-muted-foreground">Manage IT Landscape</p>
+        <div className="w-64 border-r border-border bg-card flex flex-col h-full shadow-sm">
+            {/* 1. Header & Tool Switcher */}
+            <div className="p-4 pb-2 border-b border-border">
+                <h2 className="text-lg font-semibold tracking-tight mb-4">Planning Tools</h2>
+                <div className="flex bg-muted p-1 rounded-lg grid grid-cols-2 gap-1">
+                    <button
+                        onClick={() => setActiveTool('flowchart')}
+                        className={cn(
+                            "flex items-center justify-center py-1.5 text-xs font-medium rounded-md transition-all",
+                            activeTool === 'flowchart'
+                                ? "bg-white text-primary shadow-sm"
+                                : "text-muted-foreground hover:text-foreground hover:bg-white/50"
+                        )}
+                    >
+                        <LayoutGrid className="w-3.5 h-3.5 mr-1.5" />
+                        Flowchart
+                    </button>
+                    <button
+                        onClick={() => setActiveTool('lineage')}
+                        className={cn(
+                            "flex items-center justify-center py-1.5 text-xs font-medium rounded-md transition-all",
+                            activeTool === 'lineage'
+                                ? "bg-white text-primary shadow-sm"
+                                : "text-muted-foreground hover:text-foreground hover:bg-white/50"
+                        )}
+                    >
+                        <Network className="w-3.5 h-3.5 mr-1.5" />
+                        Lineage
+                    </button>
+                </div>
             </div>
 
-            {/* Project Selector */}
-            <div className="mb-6 space-y-3">
-                <div className="flex items-center justify-between">
-                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Project
-                    </label>
-                    {activeProjectId && (
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={() => onEditProject(activeProjectId)}
-                            title="Edit Project"
+            <div className="flex-1 overflow-y-auto p-4">
+                {/* 2. Project Selection */}
+                <div className="space-y-4">
+                    <div>
+                        <div className="flex items-center justify-between mb-2">
+                            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                                Active Project
+                            </label>
+                            {activeProjectId && (
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-5 w-5"
+                                    onClick={() => onEditProject(activeProjectId)}
+                                    title="Project Settings"
+                                >
+                                    <Settings className="h-3 w-3" />
+                                </Button>
+                            )}
+                        </div>
+                        <Select
+                            value={activeProjectId || ""}
+                            onValueChange={(val) => setActiveProject(val === "master" ? null : val)}
                         >
-                            <Settings className="h-3 w-3" />
+                            <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select Project..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {visibleProjects.map((p) => (
+                                    <SelectItem key={p.id} value={p.id}>
+                                        {p.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Button onClick={onAddProject} variant="ghost" size="sm" className="w-full justify-start px-2 mt-1 text-primary hover:text-primary/80 h-7 text-xs">
+                            <FolderPlus className="mr-2 h-3 w-3" />
+                            Create New Project
                         </Button>
+                    </div>
+
+                    {/* 3. Project Tabs (Views) */}
+                    {activeProjectId && (
+                        <div>
+                            <div className="flex items-center justify-between mb-2 mt-6">
+                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center">
+                                    {activeTool === 'flowchart' ? 'Diagrams' : 'Lineage Views'}
+                                </label>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-5 w-5 hover:bg-primary/10 hover:text-primary"
+                                    onClick={() => setIsCreatingView(true)}
+                                >
+                                    <Plus className="h-3 w-3" />
+                                </Button>
+                            </div>
+
+                            <div className="space-y-1">
+                                {projectViews
+                                    .filter(v => v.type === activeTool)
+                                    .map(view => (
+                                        <div
+                                            key={view.id}
+                                            onClick={() => setActiveViewId(view.id)}
+                                            className={cn(
+                                                "group flex items-center justify-between px-2 py-1.5 rounded-md text-sm cursor-pointer transition-colors",
+                                                activeViewId === view.id
+                                                    ? "bg-primary/10 text-primary font-medium"
+                                                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                                            )}
+                                        >
+                                            <div className="flex items-center truncate">
+                                                <FileText className="w-3.5 h-3.5 mr-2 opacity-70" />
+                                                <span className="truncate">{view.name}</span>
+                                            </div>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-500"
+                                                onClick={(e) => handleDeleteView(view.id, e)}
+                                            >
+                                                <Trash2 className="h-3 w-3" />
+                                            </Button>
+                                        </div>
+                                    ))}
+
+                                {isCreatingView && (
+                                    <div className="flex items-center gap-1 mt-1 p-1">
+                                        <Input
+                                            autoFocus
+                                            value={newViewName}
+                                            onChange={e => setNewViewName(e.target.value)}
+                                            placeholder="View Name..."
+                                            className="h-7 text-xs"
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter') handleCreateView();
+                                                if (e.key === 'Escape') setIsCreatingView(false);
+                                            }}
+                                        />
+                                        <Button size="icon" className="h-7 w-7" onClick={handleCreateView}>
+                                            <Check className="h-3 w-3" />
+                                        </Button>
+                                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setIsCreatingView(false)}>
+                                            <X className="h-3 w-3" />
+                                        </Button>
+                                    </div>
+                                )}
+
+                                {projectViews.filter(v => v.type === activeTool).length === 0 && !isCreatingView && (
+                                    <div className="text-xs text-muted-foreground italic px-2 py-2 text-center bg-slate-50 rounded border border-dashed">
+                                        No views yet. Click + to add one.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     )}
                 </div>
 
-                <Select
-                    value={activeProjectId || "master"}
-                    onValueChange={(val) => setActiveProject(val === "master" ? null : val)}
-                >
-                    <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select Project" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectGroup>
-                            <SelectItem value="master">All Systems (Master)</SelectItem>
-                            {visibleProjects.map((p) => (
-                                <SelectItem key={p.id} value={p.id}>
-                                    {p.name}
-                                </SelectItem>
-                            ))}
-                        </SelectGroup>
-                    </SelectContent>
-                </Select>
-
-                <Button onClick={onAddProject} variant="ghost" size="sm" className="w-full justify-start px-2 text-primary hover:text-primary/80">
-                    <FolderPlus className="mr-2 h-4 w-4" />
-                    New Project
-                </Button>
-
-                <div className="space-y-2 pt-2 border-t border-border">
-                    {activeProjectId && (
-                        <Button
-                            onClick={() => onManageSystems()}
-                            variant="secondary"
-                            size="sm"
-                            className="w-full justify-start"
-                        >
-                            <Settings className="mr-2 h-4 w-4" />
-                            Manage Systems
-                        </Button>
-                    )}
-                    <Button
-                        onClick={onOpenCatalogue}
-                        variant="outline"
-                        size="sm"
-                        className="w-full justify-start"
-                    >
-                        <Search className="mr-2 h-4 w-4" />
+                {/* 4. Global Tools Bottom */}
+                <div className="mt-8 pt-4 border-t border-border space-y-2">
+                    <Button onClick={onAddSystem} variant="outline" size="sm" className="w-full justify-start">
+                        <Plus className="mr-2 h-3 w-3" />
+                        Add System
+                    </Button>
+                    <Button onClick={onManageSystems} variant="ghost" size="sm" className="w-full justify-start text-muted-foreground">
+                        <Settings className="mr-2 h-3 w-3" />
+                        Manage Systems
+                    </Button>
+                    <Button onClick={onOpenCatalogue} variant="ghost" size="sm" className="w-full justify-start text-muted-foreground">
+                        <Search className="mr-2 h-3 w-3" />
                         Data Catalogue
                     </Button>
-                    <Button
-                        onClick={() => window.location.href = '/architect'}
-                        variant="ghost"
-                        size="sm"
-                        className="w-full justify-start text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
-                    >
-                        <Lightbulb className="mr-2 h-4 w-4" />
-                        Architecture Advisor
-                    </Button>
                 </div>
             </div>
 
-            <div className="space-y-2 mb-6">
-                <Button onClick={onAddSystem} className="w-full">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add System
-                </Button>
-
-                <Button
-                    onClick={onImportAI}
-                    className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white border-0"
-                >
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    AI Import
-                </Button>
-
-                <Button onClick={generateBankFlora} variant="outline" className="w-full">
-                    Generate Demo Bank
-                </Button>
-            </div>
-
-            <div className="flex-1 overflow-auto -mx-2 px-2">
-                <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                    {activeProjectId ? `${activeProject?.name} Systems` : `All Systems`} ({displayedSystems.length})
-                </h3>
-                <div className="space-y-1">
-                    {displayedSystems.map((system) => (
-                        <div
-                            key={system.id}
-                            className="px-2 py-1.5 text-sm rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer text-foreground/80 truncate transition-colors"
-                            title={system.name}
-                        >
-                            {system.name}
-                        </div>
-                    ))}
-                    {displayedSystems.length === 0 && (
-                        <p className="text-sm text-muted-foreground italic px-2">No systems visible.</p>
-                    )}
-                </div>
-            </div>
-
-            {/* User Profile */}
-            <div className="mt-4 pt-4 border-t border-border">
-                <div
-                    className="flex items-center gap-3 p-2 rounded-md hover:bg-accent/50 cursor-pointer transition-colors"
-                    onClick={onOpenUserManagement}
-                >
-                    <Avatar className="h-9 w-9 border border-border">
+            {/* Footer Profile */}
+            <div className="border-t border-border p-3 mt-auto">
+                <Link href="/account" className="flex items-center gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors">
+                    <Avatar className="h-8 w-8 border border-border">
                         <AvatarImage src={currentUser?.avatar} alt={currentUser?.name || "User"} />
                         <AvatarFallback>
-                            {currentUser?.name ? currentUser.name[0] : <UserCircle className="w-5 h-5" />}
+                            {currentUser?.name ? currentUser.name[0] : <UserCircle className="w-4 h-4" />}
                         </AvatarFallback>
                     </Avatar>
-
                     <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium text-foreground truncate">
                             {currentUser?.name || 'Guest User'}
                         </div>
-                        <div className="text-xs text-muted-foreground truncate">
-                            {currentUser?.role || 'Viewer'}
-                        </div>
                     </div>
-                </div>
+                </Link>
             </div>
         </div>
     );

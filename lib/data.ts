@@ -60,28 +60,36 @@ export type User = {
     name: string;
     role: UserRole;
     company?: string; // For customers/agencies
+    companyId?: string; // Foreign key to Companies table
+    approvalStatus?: "PENDING" | "APPROVED" | "REJECTED";
     avatar?: string;
     email?: string;
     // Profile fields for Specialists
     linkedInUrl?: string;
     cvFile?: string; // specific file path or name
     personalLetterFile?: string;
-    experience?: string;
-    skills?: string; // comma separated string as used in form
+    experience?: string; // Legacy string field
+    jobTitle?: string;
     background?: string;
+    workExperience?: {
+        id: string;
+        company: string;
+        title: string;
+        startDate: string;
+        endDate?: string;
+        description?: string;
+    }[];
+    education?: {
+        id: string;
+        school: string;
+        degree: string;
+        startDate: string;
+        endDate?: string;
+    }[];
+    skills?: { name: string; category: string }[];
 };
 
 export const mockUsers: User[] = [
-    // Customers
-    { id: "c1", name: "Alice", company: "Acme Group", role: "Customer", email: "c1@client.com" },
-    { id: "c2", name: "Bob Martin", company: "Global Tech", role: "Customer", email: "c2@client.com" },
-    { id: "c3", name: "Charlie Logistics", company: "Logistics Inc", role: "Customer", email: "c3@client.com" },
-
-    // Agencies
-    { id: "a1", name: "Alpha Admin", company: "Alpha Consultants", role: "Customer", email: "a1@agency.com" },
-    { id: "a2", name: "Beta Lead", company: "Beta Solutions", role: "Customer", email: "a2@agency.com" },
-    { id: "a3", name: "Gamma Head", company: "Gamma Strategies", role: "Customer", email: "a3@agency.com" },
-
     // Specialists (mapped to specialists array)
     { id: "s1", name: "Alice Chen", role: "Specialist", email: "s1@specialist.com" },
     { id: "s2", name: "Bob Smith", role: "Specialist", email: "s2@specialist.com" },

@@ -14,11 +14,10 @@ import { ProjectModal } from '@/components/it-flora/modals/ProjectModal';
 import { ManageProjectSystemsModal } from '@/components/it-flora/modals/ManageProjectSystemsModal';
 import { DataCatalogueModal } from '@/components/it-flora/modals/DataCatalogueModal';
 import { AIImportModal } from '@/components/it-flora/modals/AIImportModal';
-import { UserManagementModal } from '@/components/it-flora/modals/UserManagementModal';
 import { SystemDetailsPanel } from '@/components/it-flora/SystemDetailsPanel';
 import FlowCanvas from '@/components/it-flora/flow/FlowCanvas';
 import { useStore } from "@/store/it-flora/useStore";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+// Tabs removed
 import { ProjectNotes } from "@/components/it-flora/ProjectNotes";
 import { FreeformFlow } from "@/components/it-flora/FreeformFlow";
 import { RoomProvider } from "@liveblocks/react/suspense";
@@ -26,6 +25,7 @@ import { LiveblocksProvider } from "@liveblocks/react";
 import { LiveCursor } from "@/components/LiveCursor";
 import { ClientSideSuspense } from "@liveblocks/react";
 import { client, API_KEY } from "@/liveblocks.config";
+import { LayoutGrid } from "lucide-react";
 
 function ITPlannerContent() {
   const router = useRouter();
@@ -35,6 +35,8 @@ function ITPlannerContent() {
   const setProjects = useStore((state) => state.setProjects);
   const setSystems = useStore((state) => state.setSystems);
   const activeProjectId = useStore((state) => state.activeProjectId);
+  const activeTool = useStore((state) => state.activeTool);
+  const activeViewId = useStore((state) => state.activeViewId);
 
   // Join the Liveblocks room for Zustand store sync dynamically
   useEffect(() => {
@@ -169,20 +171,16 @@ function ITPlannerContent() {
         onManageSystems={() => setIsManageSystemsModalOpen(true)}
         onOpenCatalogue={() => setIsCatalogueModalOpen(true)}
         onImportAI={() => setIsAIImportModalOpen(true)}
-        onOpenUserManagement={() => setIsUserManagementModalOpen(true)}
       />
 
       <div className="flex-1 relative bg-slate-50/50 flex flex-col overflow-hidden">
-        <Tabs defaultValue="flowchart" className="flex-1 flex flex-col">
-          <div className="px-4 pt-2 border-b bg-white flex justify-between items-center">
-            <TabsList>
-              <TabsTrigger value="flowchart" disabled={!activeProjectId}>Freeform Flowchart</TabsTrigger>
-              <TabsTrigger value="lineage">System Lineage</TabsTrigger>
-            </TabsList>
-            {!activeProjectId && <span className="text-xs text-muted-foreground mr-2">Select a project from the sidebar to start</span>}
-          </div>
+        {/* Main Content Area based on Active Tool */}
 
-          <TabsContent value="lineage" className="flex-1 relative m-0 p-0 h-full">
+        {activeTool === 'lineage' && (
+          <div className="flex-1 relative m-0 p-0 h-full">
+            <div className="absolute top-4 right-4 z-10 bg-white/80 backdrop-blur px-3 py-1 rounded-full border shadow-sm text-xs text-muted-foreground pointer-events-none">
+              System Lineage Mode
+            </div>
             <FlowCanvas
               onAddAsset={handleAddAsset}
               onEditAsset={handleEditAsset}
@@ -191,16 +189,23 @@ function ITPlannerContent() {
               onSystemClick={handleSystemClick}
               selectedAssetIdForLineage={selectedAssetIdForLineage}
             />
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="flowchart" className="flex-1 relative m-0 p-0 h-full overflow-hidden">
+        {activeTool === 'flowchart' && (
+          <div className="flex-1 relative m-0 p-0 h-full overflow-hidden">
             {activeProjectId ? (
-              <FreeformFlow projectId={activeProjectId} />
+              // Pass activeViewId to FreeformFlow so it can load the specific view data
+              // @ts-ignore
+              <FreeformFlow projectId={activeProjectId} viewId={activeViewId} />
             ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">Select a project to use the whiteboard</div>
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                <LayoutGrid className="w-12 h-12 mb-4 opacity-20" />
+                <p>Select a project to start flowcharing</p>
+              </div>
             )}
-          </TabsContent>
-        </Tabs>
+          </div>
+        )}
       </div>
 
       {/* Right Side Panel */}
@@ -258,11 +263,6 @@ function ITPlannerContent() {
       <AIImportModal
         isOpen={isAIImportModalOpen}
         onClose={() => setIsAIImportModalOpen(false)}
-      />
-
-      <UserManagementModal
-        isOpen={isUserManagementModalOpen}
-        onClose={() => setIsUserManagementModalOpen(false)}
       />
     </main>
   );

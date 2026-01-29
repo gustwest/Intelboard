@@ -22,6 +22,7 @@ export interface User {
   role: string;
   avatar?: string;
   company?: string;
+  companyId?: string; // Links to DB company
   color?: string; // Visually distinguish users
 }
 
@@ -126,6 +127,12 @@ interface AppState {
   // Selectors/Helpers
   getSystem: (id: string) => System | undefined;
   getAsset: (id: string) => Asset | undefined;
+
+  activeTool: 'flowchart' | 'lineage';
+  setActiveTool: (tool: 'flowchart' | 'lineage') => void;
+
+  activeViewId: string | null;
+  setActiveViewId: (id: string | null) => void;
 }
 
 // --- Store ---
@@ -160,6 +167,18 @@ export const useStore = create<WithLiveblocks<AppState>>()(
 
       addSystem: (system) => set((state) => {
         const newSystemId = system.id || uuidv4();
+        const newSystem = {
+          ...system,
+          id: newSystemId,
+          assets: system.assets || [],
+          documents: system.documents || [],
+          ownerId: state.currentUser?.id || 'unknown',
+          sharedWith: []
+        };
+
+        // Persist to DB
+        import("@/lib/actions").then(actions => actions.addSystem(newSystem));
+
         // If there is an active project, auto-add the new system to it
         const newProjects = state.activeProjectId
           ? state.projects.map(p => p.id === state.activeProjectId ? { ...p, systemIds: [...p.systemIds, newSystemId] } : p)
@@ -168,98 +187,115 @@ export const useStore = create<WithLiveblocks<AppState>>()(
         return {
           systems: [
             ...state.systems,
-            {
-              ...system,
-              id: newSystemId,
-              assets: system.assets || [],
-              documents: system.documents || [],
-              ownerId: state.currentUser?.id || 'unknown', // Capture owner
-              sharedWith: []
-            }
+            newSystem
           ],
           projects: newProjects
         };
       }),
 
-      updateSystem: (id, updates) => set((state) => ({
-        systems: state.systems.map((s) =>
-          s.id === id ? { ...s, ...updates } : s
-        )
-      })),
+      updateSystem: (id, updates) => {
+        import("@/lib/actions").then(actions => actions.updateSystem(id, updates));
+        set((state) => ({
+          systems: state.systems.map((s) =>
+            s.id === id ? { ...s, ...updates } : s
+          )
+        }));
+      },
 
-      deleteSystem: (id) => set((state) => ({
-        systems: state.systems.filter((s) => s.id !== id),
-        // Cascade delete integrations where this system is target OR source (via its assets)
-        integrations: state.integrations.filter((i) => {
-          const isTarget = i.targetSystemId === id;
-          const sourceSystem = state.systems.find(s => s.assets.some(a => a.id === i.sourceAssetId));
-          const isSource = sourceSystem?.id === id;
-          return !isTarget && !isSource;
-        }),
-        // Remove from projects
-        projects: state.projects.map(p => ({
-          ...p,
-          systemIds: p.systemIds.filter(sid => sid !== id)
-        }))
-      })),
+      deleteSystem: (id) => {
+        import("@/lib/actions").then(actions => actions.deleteSystem(id));
+        set((state) => ({
+          systems: state.systems.filter((s) => s.id !== id),
+          // Cascade delete integrations where this system is target OR source (via its assets)
+          integrations: state.integrations.filter((i) => {
+            const isTarget = i.targetSystemId === id;
+            const sourceSystem = state.systems.find(s => s.assets.some(a => a.id === i.sourceAssetId));
+            const isSource = sourceSystem?.id === id;
+            return !isTarget && !isSource;
+          }),
+          // Remove from projects
+          projects: state.projects.map(p => ({
+            ...p,
+            systemIds: p.systemIds.filter(sid => sid !== id)
+          }))
+        }));
+      },
 
-      updateSystemPosition: (id, position) => set((state) => ({
-        systems: state.systems.map((s) =>
-          s.id === id ? { ...s, position } : s
-        )
-      })),
+      updateSystemPosition: (id, position) => {
+        import("@/lib/actions").then(actions => actions.updateSystemPosition(id, position));
+        set((state) => ({
+          systems: state.systems.map((s) =>
+            s.id === id ? { ...s, position } : s
+          )
+        }));
+      },
 
-      addAsset: (systemId, asset) => set((state) => ({
-        systems: state.systems.map((s) =>
-          s.id === systemId
-            ? { ...s, assets: [...s.assets, { ...asset, id: asset.id || uuidv4(), systemId }] }
-            : s
-        )
-      })),
+      addAsset: (systemId, asset) => {
+        const newAsset = { ...asset, id: asset.id || uuidv4(), systemId };
+        import("@/lib/actions").then(actions => actions.addAsset(systemId, newAsset));
+        set((state) => ({
+          systems: state.systems.map((s) =>
+            s.id === systemId
+              ? { ...s, assets: [...s.assets, newAsset] }
+              : s
+          )
+        }));
+      },
 
-      updateAsset: (systemId, assetId, updates) => set((state) => ({
-        systems: state.systems.map((s) =>
-          s.id === systemId
-            ? {
-              ...s,
-              assets: s.assets.map((a) =>
-                a.id === assetId ? { ...a, ...updates } : a
-              )
-            }
-            : s
-        )
-      })),
+      updateAsset: (systemId, assetId, updates) => {
+        import("@/lib/actions").then(actions => actions.updateAsset(assetId, updates));
+        set((state) => ({
+          systems: state.systems.map((s) =>
+            s.id === systemId
+              ? {
+                ...s,
+                assets: s.assets.map((a) =>
+                  a.id === assetId ? { ...a, ...updates } : a
+                )
+              }
+              : s
+          )
+        }));
+      },
 
-      bulkUpdateAssets: (systemId, assetIds, updates) => set((state) => ({
-        systems: state.systems.map((s) =>
-          s.id === systemId
-            ? {
-              ...s,
-              assets: s.assets.map((a) =>
-                assetIds.includes(a.id) ? { ...a, ...updates } : a
-              )
-            }
-            : s
-        )
-      })),
+      bulkUpdateAssets: (systemId, assetIds, updates) => {
+        // TODO: Add bulk server action if needed, for now iterate? Or simpler, rely on verification
+        // For now, let's skip bulk pending action creation or loop
+        assetIds.forEach(id => {
+          import("@/lib/actions").then(actions => actions.updateAsset(id, updates));
+        });
+        set((state) => ({
+          systems: state.systems.map((s) =>
+            s.id === systemId
+              ? {
+                ...s,
+                assets: s.assets.map((a) =>
+                  assetIds.includes(a.id) ? { ...a, ...updates } : a
+                )
+              }
+              : s
+          )
+        }));
+      },
 
-      verifyAsset: (systemId, assetId) => set((state) => ({
-        systems: state.systems.map((s) =>
-          s.id === systemId
-            ? {
-              ...s,
-              assets: s.assets.map((a) =>
-                a.id === assetId ? { ...a, verificationStatus: 'Verified' } : a
-              )
-            }
-            : s
-        )
-      })),
+      verifyAsset: (systemId, assetId) => {
+        import("@/lib/actions").then(actions => actions.verifyAsset(assetId));
+        set((state) => ({
+          systems: state.systems.map((s) =>
+            s.id === systemId
+              ? {
+                ...s,
+                assets: s.assets.map((a) =>
+                  a.id === assetId ? { ...a, verificationStatus: 'Verified' } : a
+                )
+              }
+              : s
+          )
+        }));
+      },
 
       importSystems: (newSystems) => set((state) => {
         const newSystemIds = newSystems.map(s => s.id);
-
-        // If there is an active project, add the new systems to it
         const newProjects = state.activeProjectId
           ? state.projects.map(p =>
             p.id === state.activeProjectId
@@ -268,18 +304,25 @@ export const useStore = create<WithLiveblocks<AppState>>()(
           )
           : state.projects;
 
+        // Note: Import usually happens via server action directly in UI component? 
+        // If not, we should probably persist here too. 
+        // But for now, assuming Import Modal handles persistence.
         return {
           systems: [...state.systems, ...newSystems],
           projects: newProjects
         };
       }),
 
-      addIntegration: (integration) => set((state) => ({
-        integrations: [
-          ...state.integrations,
-          { ...integration, id: integration.id || uuidv4() }
-        ]
-      })),
+      addIntegration: (integration) => {
+        const newIntegration = { ...integration, id: integration.id || uuidv4() };
+        import("@/lib/actions").then(actions => actions.addIntegration(newIntegration));
+        set((state) => ({
+          integrations: [
+            ...state.integrations,
+            newIntegration
+          ]
+        }));
+      },
 
       updateIntegration: (id, updates) => set((state) => ({
         integrations: state.integrations.map((i) =>
@@ -402,6 +445,12 @@ export const useStore = create<WithLiveblocks<AppState>>()(
         }
         return undefined;
       },
+
+      activeTool: 'flowchart',
+      setActiveTool: (tool) => set({ activeTool: tool }),
+
+      activeViewId: null,
+      setActiveViewId: (id) => set({ activeViewId: id }),
     }),
     {
       client,

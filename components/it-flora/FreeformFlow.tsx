@@ -47,10 +47,13 @@ import { cn } from '@/lib/utils';
 
 interface FreeformFlowProps {
     projectId: string;
+    viewId: string | null;
 }
 
 import NoteNode from './flow/NoteNode';
+import { getProjectViews, updateProjectView } from '@/lib/actions'; // Need a way to get specific view or just filter
 
+/* ... nodeTypes ... */
 const nodeTypes: NodeTypes = {
     shape: ShapeNode,
     image: ImageNode,
@@ -63,14 +66,20 @@ const edgeTypes: EdgeTypes = {
 
 const initialNodes: Node[] = [];
 const initialEdges: Edge[] = [];
-
 // History limit
 const MAX_HISTORY = 50;
 
-function Flow({ projectId }: FreeformFlowProps) {
+function Flow({ projectId, viewId }: FreeformFlowProps) {
     const reactFlowWrapper = useRef<HTMLDivElement>(null);
     const { projects, updateProject } = useStore();
     const project = projects.find((p) => p.id === projectId);
+
+    // We need to manage local state for the view data if we escape the project.flowData model
+    // BUT to keep it simple, if no viewId is active, we might fallback to project.flowData?
+    // Actually, user wants multiple tabs. So we should probably ALWAYS require a viewId for the new mode.
+    // However, for migration, we might default to usage of project.flowData if viewId is null?
+    // Or just fetch the view.
+
     const { toast } = useToast();
     const { screenToFlowPosition, zoomIn, zoomOut, fitView } = useReactFlow();
 
@@ -112,38 +121,42 @@ function Flow({ projectId }: FreeformFlowProps) {
         });
     };
 
-    // Load saved flow data when project changes
+    // Load View Data
     useEffect(() => {
-        if (project?.flowData) {
-            // Only update if current state is different to avoid loops
-            // comparing JSON strings as a simple heuristic
-            if (JSON.stringify(project.flowData.nodes) !== JSON.stringify(nodes)) {
-                setNodes(project.flowData.nodes.length > 0 ? project.flowData.nodes : initialNodes);
-            }
-            if (JSON.stringify(project.flowData.edges) !== JSON.stringify(edges)) {
-                setEdges(project.flowData.edges.length > 0 ? project.flowData.edges : initialEdges);
-            }
+        if (viewId && projectId) {
+            getProjectViews(projectId).then(views => {
+                const view = views.find(v => v.id === viewId);
+                if (view && view.data) {
+                    // @ts-ignore
+                    const loadedNodes = view.data.nodes || [];
+                    // @ts-ignore
+                    const loadedEdges = view.data.edges || [];
+                    setNodes(loadedNodes);
+                    setEdges(loadedEdges);
+                } else {
+                    setNodes([]);
+                    setEdges([]);
+                }
+            });
         }
-    }, [project?.id]); // Only on project switch
+    }, [viewId, projectId, setNodes, setEdges]);
 
-    // Auto-save logic
+    // Auto-save logic specific to VIEW
     useEffect(() => {
-        if (!project) return;
+        if (!viewId) return;
 
-        const saveTimeout = setTimeout(() => {
-            // Check if data actually changed from what's in store
-            const hasNodesChanged = JSON.stringify(nodes) !== JSON.stringify(project.flowData?.nodes);
-            const hasEdgesChanged = JSON.stringify(edges) !== JSON.stringify(project.flowData?.edges);
-
-            if (hasNodesChanged || hasEdgesChanged) {
-                updateProject(project.id, {
-                    flowData: { nodes, edges }
-                });
+        const saveTimeout = setTimeout(async () => {
+            try {
+                // Ensure we only save if there's actual data or if we just want to sync empty state
+                // Note: imported updateProjectView from actions
+                await updateProjectView(viewId, { nodes, edges });
+            } catch (error) {
+                console.error("Failed to auto-save view:", error);
             }
-        }, 1000); // 1s debounce
+        }, 1000);
 
         return () => clearTimeout(saveTimeout);
-    }, [nodes, edges, project?.id, updateProject]);
+    }, [nodes, edges, viewId]);
 
     // Handle Notes Sidebar Resizing
     const handleNotesResize = useCallback((e: MouseEvent) => {

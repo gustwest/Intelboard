@@ -12,6 +12,7 @@ interface RoleContextType {
     currentUser: User | null;
     login: (userId: string, name?: string) => void;
     logout: () => void;
+    isLoading: boolean;
 }
 
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
@@ -21,8 +22,15 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     const [role, setRole] = useState<UserRole>("Guest");
     const [currentUser, setCurrentUser] = useState<User | null>(null);
 
+    const [isLoading, setIsLoading] = useState(true);
+
     // Sync with NextAuth session
     React.useEffect(() => {
+        if (status === "loading") {
+            setIsLoading(true);
+            return;
+        }
+
         if (session?.user) {
             const user = session.user as any;
             setCurrentUser({
@@ -31,12 +39,15 @@ export function RoleProvider({ children }: { children: ReactNode }) {
                 role: user.role || "Guest",
                 email: user.email,
                 avatar: user.image,
+                company: (user as any).companyId, // Map companyId to company prop for display/logic
+                companyId: (user as any).companyId // Ensure companyId is also set directly
             } as any);
             setRole((user.role as UserRole) || "Guest");
         } else if (status === "unauthenticated") {
             setCurrentUser(null);
             setRole("Guest");
         }
+        setIsLoading(false);
     }, [session, status]);
 
     const login = (userId: string, name?: string) => {
@@ -69,7 +80,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     };
 
     return (
-        <RoleContext.Provider value={{ role, setRole, currentUser, login, logout }}>
+        <RoleContext.Provider value={{ role, setRole, currentUser, login, logout, isLoading }}>
             {children}
         </RoleContext.Provider>
     );

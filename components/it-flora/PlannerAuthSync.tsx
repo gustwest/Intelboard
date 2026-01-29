@@ -5,10 +5,12 @@ import { useRole } from "@/components/role-provider";
 import { useStore } from "@/store/it-flora/useStore";
 
 export function PlannerAuthSync() {
-    const { currentUser } = useRole();
+    const { currentUser, isLoading } = useRole();
     const setCurrentUser = useStore((state) => state.setCurrentUser);
 
     useEffect(() => {
+        if (isLoading) return;
+
         if (currentUser) {
             // Map RoleProvider user to IT Planner store user format if needed
             // Currently they are compatible or we just sync basic details
@@ -17,12 +19,13 @@ export function PlannerAuthSync() {
                 name: currentUser.name,
                 role: currentUser.role,
                 avatar: currentUser.avatar,
-                company: currentUser.company
+                company: currentUser.company,
+                companyId: currentUser.companyId
             });
         } else {
             setCurrentUser(null);
         }
-    }, [currentUser, setCurrentUser]);
+    }, [currentUser, isLoading, setCurrentUser]);
 
     return null; // This component renders nothing, just handles logic
 }

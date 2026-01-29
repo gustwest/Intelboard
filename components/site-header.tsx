@@ -28,7 +28,7 @@ export function SiteHeader() {
                 <div className="mr-4 hidden md:flex">
                     <Link href="/" className="mr-6 flex items-center space-x-2">
                         <Image
-                            src="/intelboard_logo.png"
+                            src="/autoliv_new_logo.png"
                             alt="Intelboard"
                             width={40}
                             height={40}
@@ -55,7 +55,34 @@ export function SiteHeader() {
                                 pathname === "/it-planner" ? "text-foreground" : "text-foreground/60"
                             )}
                         >
-                            IT Planner tool
+                            Planning Tools
+                        </Link>
+                        <Link
+                            href="/talent"
+                            className={cn(
+                                "transition-colors hover:text-foreground/80",
+                                pathname === "/talent" ? "text-foreground" : "text-foreground/60"
+                            )}
+                        >
+                            Talent Directory
+                        </Link>
+                        <Link
+                            href="/team"
+                            className={cn(
+                                "transition-colors hover:text-foreground/80",
+                                pathname === "/team" ? "text-foreground" : "text-foreground/60"
+                            )}
+                        >
+                            Team
+                        </Link>
+                        <Link
+                            href="/profile"
+                            className={cn(
+                                "transition-colors hover:text-foreground/80",
+                                pathname === "/profile" ? "text-foreground" : "text-foreground/60"
+                            )}
+                        >
+                            My Profile
                         </Link>
                     </nav>
                 </div>

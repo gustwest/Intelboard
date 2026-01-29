@@ -2,64 +2,32 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
 
-const connectionString = process.env.DATABASE_URL;
+// Fix for Cloud SQL socket connection strings which might be 'postgres://user:pass@/db?host=...'
+// The missing host causes Invalid URL errors, so we patch it to 'postgres://user:pass@localhost/db?host=...'
+let connectionString = process.env.DATABASE_URL;
+// if (connectionString && connectionString.includes('@/') && connectionString.includes('?host=')) {
+//    connectionString = connectionString.replace('@/', '@localhost/');
+// }
 
-function getOptions() {
-    if (!connectionString) {
-        return { url: "postgres://localhost/placeholder", options: {} };
+if (!connectionString) {
+    if (process.env.NODE_ENV === 'production') {
+        console.warn('DATABASE_URL is not set. This might be expected during build time if not provided.');
     }
-
-    // 1. Detect Cloud SQL Unix socket
-    // Pattern: postgres://user:pass@/dbname?host=/cloudsql/INSTANCE_CONNECTION_NAME
-    if (connectionString.includes('?host=/cloudsql/')) {
-        console.log("[db] Cloud SQL Unix socket detected.");
-        const [base, query] = connectionString.split('?');
-        const params = new URLSearchParams(query);
-        const socketPath = params.get('host');
-
-        // Match user, password, and database from: postgres://user:pass@/dbname
-        const match = base.match(/postgres:\/\/([^:]+):([^@]+)@\/(.+)/);
-        if (match) {
-            const [, user, password, database] = match;
-            console.log(`[db] Using Unix socket: ${socketPath}`);
-            return {
-                url: "",
-                options: {
-                    host: socketPath as string,
-                    user,
-                    password,
-                    database,
-                    onnotice: (notice: any) => console.log('DB Notice:', notice),
-                    onparameter: (name: any, value: any) => console.log('DB Param:', name, value),
-                    connect_timeout: 10,
-                }
-            };
-        }
-    }
-
-    // 2. Standard URL (possibly with @/ for local)
-    let finalUrl = connectionString;
-    if (finalUrl.includes('@/') && !finalUrl.includes('localhost')) {
-        console.log("[db] Patching empty host for standard URL parser...");
-        finalUrl = finalUrl.replace('@/', '@localhost/');
-    }
-
-    const masked = finalUrl.replace(/:([^@]+)@/, ':****@');
-    console.log("[db] Connecting with URL:", masked);
-
-    return {
-        url: finalUrl,
-        options: {
-            onnotice: (notice: any) => console.log('DB Notice:', notice),
-            onparameter: (name: any, value: any) => console.log('DB Param:', name, value),
-            connect_timeout: 10,
-        }
-    };
 }
 
-const { url, options } = getOptions();
-const queryClient = url ? postgres(url, options) : postgres(options);
+// For queries - use a fallback if missing to avoid crashes on import
+console.log("Connecting to database with:", connectionString?.split('@')[1] || "no connection string");
 
+const dbOptions: any = {};
+if (process.env.DB_SOCKET_PATH) {
+    dbOptions.host = process.env.DB_SOCKET_PATH;
+}
+
+const queryClient = postgres(connectionString || "postgres://localhost/placeholder", {
+    ...dbOptions,
+    onnotice: (notice) => console.log('DB Notice:', notice),
+    onparameter: (name, value) => console.log('DB Param:', name, value),
+});
 export const db = drizzle(queryClient, { schema });
 
 // For migrations and one-off scripts, it's often better to have a separate pool or closing logic
