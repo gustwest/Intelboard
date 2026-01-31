@@ -1,8 +1,8 @@
 "use client";
 
-import { Plus, Settings, Search, FolderPlus, Sparkles, UserCircle, Lightbulb, Check, X, Briefcase, LayoutGrid, Network, Trash2, FileText } from 'lucide-react';
+import { Plus, Settings, Search, FolderPlus, Sparkles, UserCircle, Lightbulb, Briefcase, LayoutGrid, Network } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { getCompanyUsers, approveUserAccess, getProjectViews, createProjectView, deleteProjectView } from '@/lib/actions';
+import { getCompanyUsers, approveUserAccess } from '@/lib/actions';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store/it-flora/useStore';
 import { generateBankFlora } from '@/lib/it-flora/simulation';
@@ -10,8 +10,6 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Link from "next/link";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
 
 interface SidebarProps {
     onAddSystem: () => void;
@@ -41,10 +39,6 @@ export function Sidebar({ onAddSystem, onAddProject, onEditProject, onManageSyst
     // Pending Approvals State
     const [pendingUsers, setPendingUsers] = useState<any[]>([]);
 
-    // Project Views State
-    const [projectViews, setProjectViews] = useState<any[]>([]);
-    const [isCreatingView, setIsCreatingView] = useState(false);
-    const [newViewName, setNewViewName] = useState("");
     // const [activeViewId, setActiveViewId] = useState<string | null>(null); // MOVED TO STORE
 
     // Sync pending users
@@ -56,19 +50,6 @@ export function Sidebar({ onAddSystem, onAddProject, onEditProject, onManageSyst
         }
     }, [currentUser?.companyId]);
 
-    // Fetch views when active project changes
-    useEffect(() => {
-        if (activeProjectId) {
-            getProjectViews(activeProjectId).then(views => {
-                setProjectViews(views);
-                if (views.length > 0 && !activeViewId) {
-                    setActiveViewId(views[0].id);
-                }
-            });
-        } else {
-            setProjectViews([]);
-        }
-    }, [activeProjectId]);
 
     const handleApprove = async (userId: string) => {
         const result = await approveUserAccess(userId);
@@ -78,30 +59,6 @@ export function Sidebar({ onAddSystem, onAddProject, onEditProject, onManageSyst
         }
     };
 
-    const handleCreateView = async () => {
-        if (!activeProjectId || !newViewName.trim()) return;
-        try {
-            const newView = await createProjectView(activeProjectId, newViewName, activeTool);
-            setProjectViews([...projectViews, newView]);
-            setNewViewName("");
-            setIsCreatingView(false);
-            setActiveViewId(newView.id);
-        } catch (e) {
-            console.error("Failed to create view", e);
-        }
-    };
-
-    const handleDeleteView = async (viewId: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (!confirm("Are you sure you want to delete this tab?")) return;
-        try {
-            await deleteProjectView(viewId);
-            setProjectViews(projectViews.filter(v => v.id !== viewId));
-            if (activeViewId === viewId) setActiveViewId(null);
-        } catch (e) {
-            console.error("Failed to delete view", e);
-        }
-    };
 
     const visibleProjects = projects.filter(p => {
         if (currentUser?.role === 'Administrator' || currentUser?.role === 'Admin') return true;
@@ -185,82 +142,7 @@ export function Sidebar({ onAddSystem, onAddProject, onEditProject, onManageSyst
                         </Button>
                     </div>
 
-                    {/* 3. Project Tabs (Views) */}
-                    {activeProjectId && (
-                        <div>
-                            <div className="flex items-center justify-between mb-2 mt-6">
-                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center">
-                                    {activeTool === 'flowchart' ? 'Diagrams' : 'Lineage Views'}
-                                </label>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-5 w-5 hover:bg-primary/10 hover:text-primary"
-                                    onClick={() => setIsCreatingView(true)}
-                                >
-                                    <Plus className="h-3 w-3" />
-                                </Button>
-                            </div>
-
-                            <div className="space-y-1">
-                                {projectViews
-                                    .filter(v => v.type === activeTool)
-                                    .map(view => (
-                                        <div
-                                            key={view.id}
-                                            onClick={() => setActiveViewId(view.id)}
-                                            className={cn(
-                                                "group flex items-center justify-between px-2 py-1.5 rounded-md text-sm cursor-pointer transition-colors",
-                                                activeViewId === view.id
-                                                    ? "bg-primary/10 text-primary font-medium"
-                                                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                                            )}
-                                        >
-                                            <div className="flex items-center truncate">
-                                                <FileText className="w-3.5 h-3.5 mr-2 opacity-70" />
-                                                <span className="truncate">{view.name}</span>
-                                            </div>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-500"
-                                                onClick={(e) => handleDeleteView(view.id, e)}
-                                            >
-                                                <Trash2 className="h-3 w-3" />
-                                            </Button>
-                                        </div>
-                                    ))}
-
-                                {isCreatingView && (
-                                    <div className="flex items-center gap-1 mt-1 p-1">
-                                        <Input
-                                            autoFocus
-                                            value={newViewName}
-                                            onChange={e => setNewViewName(e.target.value)}
-                                            placeholder="View Name..."
-                                            className="h-7 text-xs"
-                                            onKeyDown={e => {
-                                                if (e.key === 'Enter') handleCreateView();
-                                                if (e.key === 'Escape') setIsCreatingView(false);
-                                            }}
-                                        />
-                                        <Button size="icon" className="h-7 w-7" onClick={handleCreateView}>
-                                            <Check className="h-3 w-3" />
-                                        </Button>
-                                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setIsCreatingView(false)}>
-                                            <X className="h-3 w-3" />
-                                        </Button>
-                                    </div>
-                                )}
-
-                                {projectViews.filter(v => v.type === activeTool).length === 0 && !isCreatingView && (
-                                    <div className="text-xs text-muted-foreground italic px-2 py-2 text-center bg-slate-50 rounded border border-dashed">
-                                        No views yet. Click + to add one.
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
+                    {/* 3. Project Tabs (Views) - REMOVED (Moved to Top Sheet Bar) */}
                 </div>
 
                 {/* 4. Global Tools Bottom */}

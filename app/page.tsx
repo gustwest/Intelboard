@@ -45,7 +45,7 @@ export default function Home() {
       </section>
 
       {/* Features Section */}
-      <section className="container space-y-6 bg-slate-50 dark:bg-slate-900/50 py-12 lg:py-24 rounded-3xl">
+      <section className="container space-y-6 bg-slate-900/50 py-12 lg:py-24 rounded-3xl">
         <div className="mx-auto flex max-w-[58rem] flex-col items-center space-y-4 text-center">
           <h2 className="font-heading text-3xl leading-[1.1] sm:text-3xl md:text-5xl font-bold">
             Why IntelBoard?

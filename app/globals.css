@@ -1,41 +1,42 @@
 @import "tailwindcss";
 
 :root {
-  /* Vibrant Theme - Light */
-  --background: #ffffff;
-  --foreground: #1e293b;
+  /* Vibrant Theme - Dark (Enforced as Default) */
+  --background: #0f172a;
+  /* Slate 900 */
+  --foreground: #f8fafc;
+  /* Slate 50 */
+
+  --card: #1e293b;
   /* Slate 800 */
+  --card-foreground: #f8fafc;
 
-  --card: #ffffff;
-  --card-foreground: #1e293b;
+  --popover: #1e293b;
+  --popover-foreground: #f8fafc;
 
-  --popover: #ffffff;
-  --popover-foreground: #1e293b;
-
-  --primary: #2962FF;
-  /* Vibrant Blue */
+  --primary: #5c8aff;
+  /* Lighter Blue */
   --primary-foreground: #ffffff;
 
-  --secondary: #F4D03F;
-  /* Mustard Yellow */
+  --secondary: #fade65;
+  /* Lighter Yellow */
   --secondary-foreground: #1e293b;
 
-  --muted: #f1f5f9;
-  /* Slate 100 */
-  --muted-foreground: #64748b;
-  /* Slate 500 */
+  --muted: #334155;
+  /* Slate 700 */
+  --muted-foreground: #94a3b8;
+  /* Slate 400 */
 
-  --accent: #E67E22;
-  /* Orange */
+  --accent: #f97316;
+  /* Lighter Orange */
   --accent-foreground: #ffffff;
 
-  --destructive: #ef4444;
+  --destructive: #f87171;
   --destructive-foreground: #ffffff;
 
-  --border: #e2e8f0;
-  /* Slate 200 */
-  --input: #e2e8f0;
-  --ring: #2962FF;
+  --border: #334155;
+  --input: #334155;
+  --ring: #5c8aff;
 
   --radius: 0.5rem;
 }
