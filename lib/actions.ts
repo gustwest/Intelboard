@@ -8,6 +8,7 @@ import { eq, desc, or, and, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { dbUserToSpecialist } from "./data";
 import type { Specialist } from "./data";
+import { log } from "./logger";
 
 // ...
 
@@ -24,7 +25,7 @@ export async function getSystems() {
         // Let's fetch integrations globally for now as they are lightweight.
         return allSystems;
     } catch (error) {
-        console.error("Failed to fetch systems:", error);
+        log.error("Failed to fetch systems", {}, error);
         return [];
     }
 }
@@ -33,7 +34,7 @@ export async function getIntegrations() {
     try {
         return await db.select().from(integrations);
     } catch (error) {
-        console.error("Failed to fetch integrations:", error);
+        log.error("Failed to fetch integrations", {}, error);
         return [];
     }
 }
@@ -47,7 +48,7 @@ export async function addSystem(data: any) {
         revalidatePath("/it-planner");
         return newSystem;
     } catch (error) {
-        console.error("Failed to add system:", error);
+        log.error("Failed to add system", {}, error);
         throw new Error("Failed to add system");
     }
 }
@@ -57,7 +58,7 @@ export async function updateSystem(id: string, updates: any) {
         await db.update(systems).set(updates).where(eq(systems.id, id));
         revalidatePath("/it-planner");
     } catch (error) {
-        console.error("Failed to update system:", error);
+        log.error("Failed to update system", {}, error);
         throw new Error("Failed to update system");
     }
 }
@@ -67,7 +68,7 @@ export async function updateSystemPosition(id: string, position: { x: number; y:
         await db.update(systems).set({ position }).where(eq(systems.id, id));
         revalidatePath("/it-planner");
     } catch (error) {
-        console.error("Failed to update system position:", error);
+        log.error("Failed to update system position", {}, error);
     }
 }
 
@@ -76,7 +77,7 @@ export async function deleteSystem(id: string) {
         await db.delete(systems).where(eq(systems.id, id));
         revalidatePath("/it-planner");
     } catch (error) {
-        console.error("Failed to delete system:", error);
+        log.error("Failed to delete system", {}, error);
         throw new Error("Failed to delete system");
     }
 }
@@ -90,7 +91,7 @@ export async function addAsset(systemId: string, asset: any) {
         revalidatePath("/it-planner");
         return newAsset;
     } catch (error) {
-        console.error("Failed to add asset:", error);
+        log.error("Failed to add asset", {}, error);
         throw new Error("Failed to add asset");
     }
 }
@@ -100,7 +101,7 @@ export async function updateAsset(assetId: string, updates: any) {
         await db.update(assets).set(updates).where(eq(assets.id, assetId));
         revalidatePath("/it-planner");
     } catch (error) {
-        console.error("Failed to update asset:", error);
+        log.error("Failed to update asset", {}, error);
         throw new Error("Failed to update asset");
     }
 }
@@ -110,7 +111,7 @@ export async function verifyAsset(assetId: string) {
         await db.update(assets).set({ verificationStatus: 'Verified' }).where(eq(assets.id, assetId));
         revalidatePath("/it-planner");
     } catch (error) {
-        console.error("Failed to verify asset:", error);
+        log.error("Failed to verify asset", {}, error);
         throw new Error("Failed to verify asset");
     }
 }
@@ -121,7 +122,7 @@ export async function addIntegration(data: any) {
         revalidatePath("/it-planner");
         return newIntegration;
     } catch (error) {
-        console.error("Failed to add integration:", error);
+        log.error("Failed to add integration", {}, error);
         throw new Error("Failed to add integration");
     }
 }
@@ -131,7 +132,7 @@ export async function updateIntegration(id: string, updates: any) {
         await db.update(integrations).set(updates).where(eq(integrations.id, id));
         revalidatePath("/it-planner");
     } catch (error) {
-        console.error("Failed to update integration:", error);
+        log.error("Failed to update integration", {}, error);
         throw new Error("Failed to update integration");
     }
 }
@@ -141,7 +142,7 @@ export async function removeIntegration(id: string) {
         await db.delete(integrations).where(eq(integrations.id, id));
         revalidatePath("/it-planner");
     } catch (error) {
-        console.error("Failed to remove integration:", error);
+        log.error("Failed to remove integration", {}, error);
         throw new Error("Failed to remove integration");
     }
 }
@@ -151,7 +152,7 @@ export async function getRequestById(id: string) {
         const [result] = await db.select().from(requests).where(eq(requests.id, id));
         return result || null;
     } catch (error) {
-        console.error("Failed to get request:", error);
+        log.error("Failed to get request", {}, error);
         return null;
     }
 }
@@ -203,7 +204,7 @@ export async function getRequests() {
         });
 
     } catch (error) {
-        console.error("Failed to fetch requests:", error);
+        log.error("Failed to fetch requests", {}, error);
         return [];
     }
 }
@@ -218,7 +219,7 @@ export async function addRequest(data: any) {
             });
 
             if (!existingUser) {
-                console.log(`Creator ${sanitizedData.creatorId} not found in DB. Creating placeholder...`);
+                log.info("Creator not found, creating placeholder", { action: "addRequest", userId: sanitizedData.creatorId });
                 await db.insert(users).values({
                     id: sanitizedData.creatorId,
                     name: "Guest User",
@@ -235,7 +236,7 @@ export async function addRequest(data: any) {
         revalidatePath("/requests");
         return newRequest;
     } catch (error) {
-        console.error("Failed to add request details:", error);
+        log.error("Failed to add request details", {}, error);
         throw new Error("Failed to add request");
     }
 }
@@ -271,7 +272,7 @@ export async function inviteUser(email: string, name: string, companyId: string)
         return { success: true, user: newUser };
 
     } catch (error) {
-        console.error("Failed to invite user:", error);
+        log.error("Failed to invite user", {}, error);
         return { error: "Failed to invite user." };
     }
 }
@@ -302,7 +303,7 @@ export async function requestCompanyAccess(email: string, name: string, companyI
         return { success: true, user: newUser };
 
     } catch (error) {
-        console.error("Failed to request access:", error);
+        log.error("Failed to request access", {}, error);
         return { error: "Failed to request access." };
     }
 }
@@ -317,7 +318,7 @@ export async function approveUserAccess(userId: string) {
         revalidatePath("/team");
         return { success: true, user: updated };
     } catch (error) {
-        console.error("Failed to approve user:", error);
+        log.error("Failed to approve user", {}, error);
         return { error: "Failed to approve user." };
     }
 }
@@ -329,7 +330,7 @@ export async function getCompanyUsers(companyId: string) {
             .where(eq(users.companyId, companyId))
             .orderBy(users.name);
     } catch (e) {
-        console.error("Failed to get company users:", e);
+        log.error("Failed to get company users", {}, e);
         return [];
     }
 }
@@ -344,7 +345,7 @@ export async function updateRequest(id: string, data: any) {
         revalidatePath("/requests");
         return updated;
     } catch (error) {
-        console.error("Failed to update request:", error);
+        log.error("Failed to update request", {}, error);
         throw new Error("Failed to update request");
     }
 }
@@ -356,7 +357,7 @@ export async function getUser(id: string) {
         const [user] = await db.select().from(users).where(eq(users.id, id));
         return user || null;
     } catch (error) {
-        console.error("Failed to get user:", error);
+        log.error("Failed to get user", {}, error);
         return null;
     }
 }
@@ -383,7 +384,7 @@ export async function getRequestCreator(creatorId: string) {
             role: "Guest"
         };
     } catch (error) {
-        console.error("Failed to get request creator:", error);
+        log.error("Failed to get request creator", {}, error);
         return null;
     }
 }
@@ -399,7 +400,7 @@ export async function getUserWithProfile(userId: string) {
         });
         return { success: true, user };
     } catch (error) {
-        console.error("Failed to fetch user with profile:", error);
+        log.error("Failed to fetch user with profile", {}, error);
         return { success: false, error: "Failed to fetch user" };
     }
 }
@@ -416,7 +417,7 @@ export async function updateUserProfile(userId: string, data: {
     workExperience?: any[];
     education?: any[];
 }) {
-    console.log(`[Profile Update] Starting update for user ${userId}`, JSON.stringify(data, null, 2));
+    log.info("Profile update started", { action: "updateUserProfile", userId });
 
     try {
         const { workExperience: workData, education: eduData, ...userData } = data;
@@ -426,7 +427,7 @@ export async function updateUserProfile(userId: string, data: {
         });
 
         if (!existingUser) {
-            console.log(`[Profile Update] User ${userId} not found in DB. Creating placeholder...`);
+            log.info("User not found, creating placeholder", { action: "updateUserProfile", userId });
             try {
                 await db.insert(users).values({
                     id: userId,
@@ -435,21 +436,21 @@ export async function updateUserProfile(userId: string, data: {
                     role: "Guest",
                 }).onConflictDoNothing();
             } catch (creationError) {
-                console.error(`[Profile Update] Failed to create placeholder user:`, creationError);
+                log.error("Failed to create placeholder user", { action: "updateUserProfile", userId }, creationError);
                 throw new Error("Failed to initialize user record.");
             }
         }
 
         await db.transaction(async (tx) => {
             if (Object.keys(userData).length > 0) {
-                console.log(`[Profile Update] Updating user ${userId} fields:`, Object.keys(userData));
+                log.info("Updating user fields", { action: "updateUserProfile", userId });
                 await tx.update(users)
                     .set(userData as any)
                     .where(eq(users.id, userId));
             }
 
             if (workData) {
-                console.log(`[Profile Update] Updating experience for ${userId}: ${workData.length} items`);
+                log.info("Updating work experience", { action: "updateUserProfile", userId });
                 await tx.delete(workExperience).where(eq(workExperience.userId, userId));
 
                 if (workData.length > 0) {
@@ -483,7 +484,7 @@ export async function updateUserProfile(userId: string, data: {
             }
 
             if (eduData) {
-                console.log(`[Profile Update] Updating education for ${userId}: ${eduData.length} items`);
+                log.info("Updating education", { action: "updateUserProfile", userId });
                 await tx.delete(education).where(eq(education.userId, userId));
 
                 if (eduData.length > 0) {
@@ -524,7 +525,7 @@ export async function updateUserProfile(userId: string, data: {
             }
         });
 
-        console.log(`[Profile Update] SUCCESS for ${userId}`);
+        log.info("Profile update completed", { action: "updateUserProfile", userId });
 
         revalidatePath("/account");
         revalidatePath(`/profile/${userId}`);
@@ -533,7 +534,7 @@ export async function updateUserProfile(userId: string, data: {
 
         return { success: true, user: updated };
     } catch (error: any) {
-        console.error(`[Profile Update] FAILED for ${userId}:`, error);
+        log.error("Profile update failed", { action: "updateUserProfile", userId }, error);
 
         // Detailed error for debugging
         let errorMessage = error.message || "Unknown error";
@@ -569,7 +570,7 @@ export async function updateUserRole(userId: string, newRole: string) {
         revalidatePath("/team");
         return { success: true, user: updated };
     } catch (error) {
-        console.error("Failed to update user role:", error);
+        log.error("Failed to update user role", {}, error);
         return { error: "Failed to update user role." };
     }
 }
@@ -594,7 +595,7 @@ export async function searchUsers(query: string, filters?: { role?: string; skil
         });
         return filtered;
     } catch (error) {
-        console.error("Failed to search users:", error);
+        log.error("Failed to search users", {}, error);
         return [];
     }
 }
@@ -610,7 +611,7 @@ export async function getSpecialists(): Promise<Specialist[]> {
             ));
         return specialistUsers.map(dbUserToSpecialist);
     } catch (error) {
-        console.error("Failed to fetch specialists:", error);
+        log.error("Failed to fetch specialists", {}, error);
         return [];
     }
 }
@@ -637,7 +638,7 @@ export async function getProjects() {
             orderBy: [desc(projects.createdAt)],
         });
     } catch (error) {
-        console.error("Failed to fetch projects:", error);
+        log.error("Failed to fetch projects", {}, error);
         return [];
     }
 }
@@ -652,7 +653,7 @@ export async function addProject(data: any) {
         revalidatePath("/it-planner");
         return newProject;
     } catch (error) {
-        console.error("Failed to add project:", error);
+        log.error("Failed to add project", {}, error);
         throw new Error("Failed to add project");
     }
 }
@@ -666,7 +667,7 @@ export async function updateProject(id: string, data: any) {
         revalidatePath("/it-planner");
         return updated;
     } catch (error) {
-        console.error("Failed to update project:", error);
+        log.error("Failed to update project", {}, error);
         throw new Error("Failed to update project");
     }
 }
@@ -676,7 +677,7 @@ export async function deleteProject(id: string) {
         await db.delete(projects).where(eq(projects.id, id));
         revalidatePath("/it-planner");
     } catch (error) {
-        console.error("Failed to delete project:", error);
+        log.error("Failed to delete project", {}, error);
         throw new Error("Failed to delete project");
     }
 }
@@ -688,7 +689,7 @@ export async function getCompanyByDomain(domain: string) {
         });
         return company;
     } catch (error) {
-        console.error("Failed to get company:", error);
+        log.error("Failed to get company", {}, error);
         return null;
     }
 }
@@ -751,7 +752,7 @@ export async function getProjectViews(projectId: string) {
         const views = await db.select().from(projectViews).where(eq(projectViews.projectId, projectId));
         return views;
     } catch (error) {
-        console.error("Failed to get project views:", error);
+        log.error("Failed to get project views", {}, error);
         return [];
     }
 }
@@ -767,7 +768,7 @@ export async function createProjectView(projectId: string, name: string, type: '
         revalidatePath("/it-planner");
         return newView;
     } catch (error) {
-        console.error("Failed to create project view:", error);
+        log.error("Failed to create project view", {}, error);
         throw new Error("Failed to create view");
     }
 }
@@ -777,7 +778,7 @@ export async function deleteProjectView(viewId: string) {
         await db.delete(projectViews).where(eq(projectViews.id, viewId));
         revalidatePath("/it-planner");
     } catch (error) {
-        console.error("Failed to delete project view:", error);
+        log.error("Failed to delete project view", {}, error);
         throw new Error("Failed to delete view");
     }
 }
@@ -787,7 +788,7 @@ export async function updateProjectView(viewId: string, data: any) {
         await db.update(projectViews).set({ data }).where(eq(projectViews.id, viewId));
         revalidatePath("/it-planner");
     } catch (error) {
-        console.error("Failed to update project view:", error);
+        log.error("Failed to update project view", {}, error);
         throw new Error("Failed to update view");
     }
 }
@@ -858,7 +859,7 @@ export async function getConversations(userId: string) {
             requestTitle: c.requestId ? requestMap[c.requestId] : undefined,
         }));
     } catch (error) {
-        console.error("Failed to get conversations:", error);
+        log.error("Failed to get conversations", {}, error);
         return [];
     }
 }
@@ -882,7 +883,7 @@ export async function getMessages(conversationId: string) {
             readBy: m.readBy || [],
         }));
     } catch (error) {
-        console.error("Failed to get messages:", error);
+        log.error("Failed to get messages", {}, error);
         return [];
     }
 }
@@ -928,7 +929,7 @@ export async function sendMessage(conversationId: string, senderId: string, text
             readBy: msg.readBy || [],
         };
     } catch (error) {
-        console.error("Failed to send message:", error);
+        log.error("Failed to send message", {}, error);
         throw new Error("Failed to send message");
     }
 }
@@ -970,7 +971,7 @@ export async function createConversation(
             updatedAt: convo.updatedAt.toISOString(),
         };
     } catch (error) {
-        console.error("Failed to create conversation:", error);
+        log.error("Failed to create conversation", {}, error);
         throw new Error("Failed to create conversation");
     }
 }
@@ -1002,7 +1003,7 @@ export async function addParticipantToConversation(conversationId: string, userI
         revalidatePath("/board");
         return { success: true, alreadyExists: false };
     } catch (error) {
-        console.error("Failed to add participant:", error);
+        log.error("Failed to add participant", {}, error);
         throw new Error("Failed to add participant");
     }
 }
@@ -1052,7 +1053,7 @@ export async function markMessagesRead(conversationId: string, userId: string) {
             }
         }
     } catch (error) {
-        console.error("Failed to mark messages as read:", error);
+        log.error("Failed to mark messages as read", {}, error);
     }
 }
 
@@ -1090,7 +1091,7 @@ export async function getOrCreateRequestConversation(requestId: string, particip
         // Create new
         return await createConversation("request", participantIds, undefined, requestId);
     } catch (error) {
-        console.error("Failed to get/create request conversation:", error);
+        log.error("Failed to get/create request conversation", {}, error);
         throw error;
     }
 }
@@ -1113,7 +1114,7 @@ export async function getNotifications(userId: string) {
             createdAt: n.createdAt.toISOString(),
         }));
     } catch (error) {
-        console.error("Failed to get notifications:", error);
+        log.error("Failed to get notifications", {}, error);
         return [];
     }
 }
@@ -1124,7 +1125,7 @@ export async function markNotificationRead(notificationId: string) {
             .set({ isRead: true })
             .where(eq(notifications.id, notificationId));
     } catch (error) {
-        console.error("Failed to mark notification as read:", error);
+        log.error("Failed to mark notification as read", {}, error);
     }
 }
 
@@ -1134,7 +1135,7 @@ export async function markAllNotificationsRead(userId: string) {
             .set({ isRead: true })
             .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
     } catch (error) {
-        console.error("Failed to mark all notifications as read:", error);
+        log.error("Failed to mark all notifications as read", {}, error);
     }
 }
 
@@ -1154,7 +1155,7 @@ export async function createNotification(
             relatedId: relatedId || null,
         });
     } catch (error) {
-        console.error("Failed to create notification:", error);
+        log.error("Failed to create notification", {}, error);
     }
 }
 
@@ -1169,7 +1170,7 @@ export async function getAllUsers() {
             avatar: u.avatar,
         }));
     } catch (error) {
-        console.error("Failed to get all users:", error);
+        log.error("Failed to get all users", {}, error);
         return [];
     }
 }

@@ -1,6 +1,7 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
+import { log } from './logger';
 
 // Fix for Cloud SQL socket connection strings which might be 'postgres://user:pass@/db?host=...'
 // The missing host causes Invalid URL errors, so we patch it to 'postgres://user:pass@localhost/db?host=...'
@@ -11,12 +12,12 @@ let connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
     if (process.env.NODE_ENV === 'production') {
-        console.warn('DATABASE_URL is not set. This might be expected during build time if not provided.');
+        log.warn('DATABASE_URL is not set — may be expected during build');
     }
 }
 
 // For queries - use a fallback if missing to avoid crashes on import
-console.log("Connecting to database with:", connectionString?.split('@')[1] || "no connection string");
+log.info("Database connection initialized", { host: connectionString?.split('@')[1]?.split('?')[0] || "no connection string" });
 
 const dbOptions: any = {};
 if (process.env.DB_SOCKET_PATH) {
@@ -25,8 +26,6 @@ if (process.env.DB_SOCKET_PATH) {
 
 const queryClient = postgres(connectionString || "postgres://localhost/placeholder", {
     ...dbOptions,
-    onnotice: (notice) => console.log('DB Notice:', notice),
-    onparameter: (name, value) => console.log('DB Param:', name, value),
 });
 export const db = drizzle(queryClient, { schema });
 
