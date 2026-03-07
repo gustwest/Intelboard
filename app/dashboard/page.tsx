@@ -416,21 +416,21 @@ export default function DashboardPage() {
                         )}
                     </DashboardCard>
 
-                    {/* Upcoming Events This Week */}
+                    {/* Upcoming Events */}
                     <DashboardCard
                         icon={<CalendarClock className="h-4 w-4 text-emerald-500" />}
-                        title="This Week"
+                        title="Upcoming Events"
                         linkHref="/calendar"
-                        linkText="Open Calendar"
+                        linkText="See all"
                     >
-                        {eventsThisWeek.length === 0 ? (
-                            <p className="text-xs text-muted-foreground text-center py-4">No events this week</p>
+                        {eventsThisWeek.length === 0 && eventsThisMonth.length === 0 ? (
+                            <p className="text-xs text-muted-foreground text-center py-4">No upcoming events</p>
                         ) : (
                             <div className="space-y-1">
-                                {eventsThisWeek.slice(0, 5).map(evt => (
+                                {[...eventsThisWeek, ...eventsThisMonth].slice(0, 6).map(evt => (
                                     <Link
                                         key={evt.id}
-                                        href={`/calendar`}
+                                        href="/calendar"
                                         className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-muted/50 transition-colors group"
                                     >
                                         <div className={cn(
@@ -455,74 +455,11 @@ export default function DashboardPage() {
                                         </div>
                                     </Link>
                                 ))}
-                            </div>
-                        )}
-                    </DashboardCard>
-
-                    {/* Later This Month */}
-                    <DashboardCard
-                        icon={<CalendarDays className="h-4 w-4 text-violet-500" />}
-                        title="Later This Month"
-                        linkHref="/calendar"
-                        linkText="View All"
-                    >
-                        {eventsThisMonth.length === 0 ? (
-                            <p className="text-xs text-muted-foreground text-center py-4">No upcoming events</p>
-                        ) : (
-                            <div className="space-y-1">
-                                {eventsThisMonth.slice(0, 4).map(evt => (
-                                    <Link
-                                        key={evt.id}
-                                        href={`/calendar`}
-                                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-muted/50 transition-colors group"
-                                    >
-                                        <div className={cn(
-                                            "h-9 w-9 rounded-lg flex flex-col items-center justify-center text-[9px] font-bold shrink-0 border",
-                                            evt.type === "meeting" ? "bg-blue-500/10 text-blue-600 border-blue-500/20" :
-                                                evt.type === "deadline" ? "bg-red-500/10 text-red-600 border-red-500/20" :
-                                                    "bg-violet-500/10 text-violet-600 border-violet-500/20"
-                                        )}>
-                                            <span>{new Date(evt.startTime).getDate()}</span>
-                                            <span className="text-[7px] uppercase opacity-70">{new Date(evt.startTime).toLocaleDateString(undefined, { month: "short" })}</span>
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-semibold text-foreground truncate group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">{evt.title}</p>
-                                            <p className="text-[10px] text-muted-foreground">
-                                                {formatEventDate(evt.startTime)} · {formatEventTime(evt.startTime)}
-                                            </p>
-                                        </div>
-                                    </Link>
-                                ))}
-                                {eventsThisMonth.length > 4 && (
+                                {(eventsThisWeek.length + eventsThisMonth.length) > 6 && (
                                     <Link href="/calendar" className="block text-xs text-muted-foreground text-center py-1 hover:text-foreground transition-colors">
-                                        +{eventsThisMonth.length - 4} more events
+                                        +{eventsThisWeek.length + eventsThisMonth.length - 6} more events
                                     </Link>
                                 )}
-                            </div>
-                        )}
-                    </DashboardCard>
-
-                    {/* By Type */}
-                    <DashboardCard icon={<ListChecks className="h-4 w-4 text-violet-500" />} title="By Type">
-                        {Object.keys(typeBreakdown).length === 0 ? (
-                            <p className="text-xs text-muted-foreground text-center py-4">No data</p>
-                        ) : (
-                            <div className="space-y-3">
-                                {Object.entries(typeBreakdown).map(([type, count]) => {
-                                    const config = REQUEST_TYPE_CONFIG[type as RequestType];
-                                    const pct = totalRequests > 0 ? (count / totalRequests) * 100 : 0;
-                                    return (
-                                        <div key={type}>
-                                            <div className="flex items-center justify-between mb-1">
-                                                <span className="text-xs font-medium text-foreground/80 flex items-center gap-1.5">{config ? <span>{config.icon}</span> : <Briefcase className="h-3 w-3" />}{config?.label || type}</span>
-                                                <span className="text-xs text-muted-foreground">{count}</span>
-                                            </div>
-                                            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                                                <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-500" style={{ width: `${pct}%` }} />
-                                            </div>
-                                        </div>
-                                    );
-                                })}
                             </div>
                         )}
                     </DashboardCard>
