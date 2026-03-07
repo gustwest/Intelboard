@@ -52,7 +52,7 @@ export function LoginDialog({ trigger, defaultOpen }: LoginDialogProps) {
                 toast({ title: "Login failed", description: result.error === "CredentialsSignin" ? "Invalid email or password." : result.error, variant: "destructive" });
             } else {
                 setOpen(false);
-                router.push("/board");
+                router.push("/dashboard");
                 router.refresh();
             }
         } catch (error) {
@@ -75,7 +75,7 @@ export function LoginDialog({ trigger, defaultOpen }: LoginDialogProps) {
                 toast({ title: "Quick login failed", description: `Could not log in as ${label}. Make sure the seed scripts have been run.`, variant: "destructive" });
             } else {
                 setOpen(false);
-                router.push("/board");
+                router.push("/dashboard");
                 router.refresh();
             }
         } catch (error) {
