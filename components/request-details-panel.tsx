@@ -45,6 +45,7 @@ export function RequestDetailsPanel({ request, onClose, onUpdate, isOwner, cente
     const [newComment, setNewComment] = useState("");
     const [isUploading, setIsUploading] = useState(false);
     const [creator, setCreator] = useState<any>(null);
+    const [specialist, setSpecialist] = useState<any>(null);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [chatMessages, setChatMessages] = useState<Message[]>([]);
     const [requestConvoId, setRequestConvoId] = useState<string | null>(null);
@@ -66,6 +67,17 @@ export function RequestDetailsPanel({ request, onClose, onUpdate, isOwner, cente
             }
         }
         fetchCreator();
+
+        // Load specialist info
+        async function fetchSpecialist() {
+            if (request.assignedSpecialistId) {
+                const s = await getRequestCreator(request.assignedSpecialistId);
+                setSpecialist(s);
+            } else {
+                setSpecialist(null);
+            }
+        }
+        fetchSpecialist();
 
         // Load/create request conversation
         async function initConversation() {
@@ -220,8 +232,9 @@ export function RequestDetailsPanel({ request, onClose, onUpdate, isOwner, cente
                                         <Label className="text-muted-foreground text-xs">Matched With</Label>
                                         <div className="font-medium mt-1 text-foreground">
                                             {request.assignedSpecialistId
-                                                ? request.assignedSpecialistId
+                                                ? specialist?.name || "Loading..."
                                                 : "No match yet"}
+                                            {specialist?.email && <span className="text-[10px] block text-muted-foreground opacity-70">({specialist.email})</span>}
                                         </div>
                                     </div>
                                 </div>

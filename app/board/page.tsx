@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { LayoutGrid, List, ArrowUpDown, Filter, X, Calendar, User2, Briefcase, Clock, ChevronDown, Info, Star, GripVertical, Layers } from "lucide-react";
+import { assignSpecialist, getAllUsers } from "@/lib/actions";
 import {
     Command,
     CommandEmpty,
@@ -110,6 +111,7 @@ function BoardContent() {
     const [viewMode, setViewMode] = useState<"board" | "backlog">("board");
     const [sortField, setSortField] = useState<string>("createdAt");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+    const [userNames, setUserNames] = useState<Record<string, string>>({});
 
     // Universal Filters
     const [typeFilter, setTypeFilter] = useState<string[]>([]);
@@ -128,6 +130,15 @@ function BoardContent() {
         return () => clearTimeout(timer);
     }, []);
 
+    // Load user names for display
+    useEffect(() => {
+        getAllUsers().then(users => {
+            const map: Record<string, string> = {};
+            users.forEach(u => { map[u.id] = u.name; });
+            setUserNames(map);
+        });
+    }, []);
+
     const handleStatusChange = (id: string, newStatus: RequestStatus) => {
         const request = requests.find(r => r.id === id);
         if (request) updateRequest({ ...request, status: newStatus });
@@ -136,9 +147,16 @@ function BoardContent() {
     const [matchingRequest, setMatchingRequest] = useState<Request | null>(null);
     const handleFindMatch = (request: Request) => setMatchingRequest(request);
 
-    const handleConfirmMatch = (specialistId: string) => {
+    const handleConfirmMatch = async (specialistId: string) => {
         if (matchingRequest) {
-            updateRequest({ ...matchingRequest, assignedSpecialistId: specialistId, status: "Submitted for Review" });
+            const result = await assignSpecialist(matchingRequest.id, specialistId);
+            if (result.error) {
+                toast({ title: "Failed to assign specialist", description: result.error, variant: "destructive" });
+            } else {
+                toast({ title: "Specialist Assigned", description: "The specialist has been notified of this opportunity." });
+                // Refresh the local state
+                updateRequest({ ...matchingRequest, assignedSpecialistId: specialistId, status: "Active Efforts" });
+            }
             setMatchingRequest(null);
         }
     };
@@ -253,7 +271,11 @@ function BoardContent() {
 
     const activeFilterCount = typeFilter.length + statusFilter.length + assigneeFilter.length + requestorFilter.length;
 
-    const formatUserId = (id: string) => id.includes("@") ? id.split("@")[0] : id.length > 12 ? id.substring(0, 8) + "…" : id;
+    const formatUserId = (id: string) => {
+        if (userNames[id]) return userNames[id];
+        if (id.includes("@")) return id.split("@")[0];
+        return id.length > 12 ? id.substring(0, 8) + "…" : id;
+    };
 
     return (
         <div className="container py-6 relative">
