@@ -55,7 +55,7 @@ export default function Home() {
           >
             <LoginDialog />
             <Button size="lg" variant="outline" asChild>
-              <Link href="/board">View Demo Board</Link>
+              <Link href="/signup">Create Account</Link>
             </Button>
           </motion.div>
         </div>
@@ -170,7 +170,9 @@ export default function Home() {
               </ul>
             </CardContent>
             <div className="p-6 pt-0 mt-auto">
-              <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">Sign Up as Customer</Button>
+              <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" asChild>
+                <Link href="/signup">Sign Up as Customer</Link>
+              </Button>
             </div>
           </Card>
 
@@ -202,7 +204,9 @@ export default function Home() {
               </ul>
             </CardContent>
             <div className="p-6 pt-0 mt-auto">
-              <Button className="w-full bg-accent hover:bg-accent/90 text-accent-foreground">Join as Partner Agency</Button>
+              <Button className="w-full bg-accent hover:bg-accent/90 text-accent-foreground" asChild>
+                <Link href="/signup">Join as Partner Agency</Link>
+              </Button>
             </div>
           </Card>
         </div>

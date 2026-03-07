@@ -58,7 +58,7 @@ export default function SignupPage() {
                         <div className="bg-green-100 dark:bg-green-900/30 p-4 rounded-md text-green-800 dark:text-green-200 text-center">
                             <p className="font-semibold">{message}</p>
                             <p className="mt-2 text-sm">
-                                <Link href="/api/auth/signin" className="underline">Go to Login</Link>
+                                <Link href="/" className="underline">Go to Login</Link>
                             </p>
                         </div>
                     ) : (
@@ -87,7 +87,7 @@ export default function SignupPage() {
                 <CardFooter className="flex justify-center">
                     <div className="text-sm text-muted-foreground">
                         Already have an account?{" "}
-                        <Link href="/api/auth/signin" className="underline hover:text-primary">
+                        <Link href="/" className="underline hover:text-primary">
                             Sign in
                         </Link>
                     </div>

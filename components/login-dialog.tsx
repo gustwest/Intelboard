@@ -17,8 +17,9 @@ import { useRole } from "@/components/role-provider";
 import { signIn } from "next-auth/react";
 import { useToast } from "@/components/ui/use-toast";
 import { quickLoginAccounts } from "@/lib/data";
-import { Building, User, KeyRound, Loader2, LogIn, ArrowRight } from "lucide-react";
+import { Building, User, KeyRound, Loader2, LogIn, ArrowRight, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 interface LoginDialogProps {
     trigger?: React.ReactNode;
@@ -237,9 +238,18 @@ export function LoginDialog({ trigger, defaultOpen }: LoginDialogProps) {
                                 "Sign In"
                             )}
                         </Button>
-                        <p className="text-xs text-muted-foreground text-center">
-                            Use your seeded account email and password to log in.
-                        </p>
+                        <div className="flex items-center justify-center gap-1 pt-2">
+                            <p className="text-xs text-muted-foreground">
+                                Don&apos;t have an account?
+                            </p>
+                            <Link
+                                href="/signup"
+                                onClick={() => setOpen(false)}
+                                className="text-xs font-medium text-primary hover:underline"
+                            >
+                                Create one here
+                            </Link>
+                        </div>
                     </TabsContent>
                 </Tabs>
             </DialogContent>
