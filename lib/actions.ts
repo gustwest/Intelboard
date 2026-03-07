@@ -184,15 +184,16 @@ export async function getRequests() {
             });
         }
 
-        // Specialist: see requests assigned to them
+        // Specialist: see requests assigned to them (check both legacy field and array)
         if (userRole === "Specialist" && userId) {
-            return await db.query.requests.findMany({
-                where: or(
-                    eq(requests.creatorId, userId),
-                    eq(requests.assignedSpecialistId, userId)
-                ),
+            const all = await db.query.requests.findMany({
                 orderBy: [desc(requests.createdAt)],
             });
+            return all.filter(r =>
+                r.creatorId === userId ||
+                r.assignedSpecialistId === userId ||
+                (r.assignedSpecialistIds && (r.assignedSpecialistIds as string[]).includes(userId))
+            );
         }
 
         if (!userId) return [];
@@ -1225,14 +1226,30 @@ export async function assignSpecialist(requestId: string, specialistId: string) 
         const [specialist] = await db.select().from(users).where(eq(users.id, specialistId));
         if (!specialist) throw new Error("Specialist not found");
 
-        // Update request
-        await db.update(requests).set({
-            assignedSpecialistId: specialistId,
-            status: "Active Efforts",
-        }).where(eq(requests.id, requestId));
-
-        // Get request for notification
+        // Get current request to check existing specialists
         const [request] = await db.select().from(requests).where(eq(requests.id, requestId));
+        if (!request) throw new Error("Request not found");
+
+        const currentIds: string[] = (request.assignedSpecialistIds as string[]) || [];
+
+        // Already assigned?
+        if (currentIds.includes(specialistId)) {
+            return { error: "Specialist is already assigned to this request" };
+        }
+
+        // Enforce max 3 specialists
+        if (currentIds.length >= 3) {
+            return { error: "Maximum 3 specialists can be assigned to a request" };
+        }
+
+        const updatedIds = [...currentIds, specialistId];
+
+        // Update request — set primary + array
+        await db.update(requests).set({
+            assignedSpecialistId: updatedIds[0], // primary is first
+            assignedSpecialistIds: updatedIds,
+            status: request.status === "New" || request.status === "Submitted for Review" ? "Active Efforts" : request.status,
+        }).where(eq(requests.id, requestId));
 
         // Notify specialist — new opportunity
         await db.insert(notifications).values({
@@ -1256,6 +1273,40 @@ export async function assignSpecialist(requestId: string, specialistId: string) 
     } catch (error) {
         log.error("Failed to assign specialist", { action: "assignSpecialist", requestId }, error);
         return { error: "Failed to assign specialist" };
+    }
+}
+
+export async function removeSpecialist(requestId: string, specialistId: string) {
+    try {
+        const session = await auth();
+        const adminName = session?.user?.name || "Admin";
+        const adminId = session?.user?.id || "system";
+
+        const [request] = await db.select().from(requests).where(eq(requests.id, requestId));
+        if (!request) throw new Error("Request not found");
+
+        const currentIds: string[] = (request.assignedSpecialistIds as string[]) || [];
+        const updatedIds = currentIds.filter(id => id !== specialistId);
+
+        await db.update(requests).set({
+            assignedSpecialistId: updatedIds[0] || null,
+            assignedSpecialistIds: updatedIds,
+        }).where(eq(requests.id, requestId));
+
+        // Get specialist name for log
+        const [specialist] = await db.select().from(users).where(eq(users.id, specialistId));
+
+        await logRequestActivity(requestId, adminId, adminName, "specialist_removed", {
+            specialistId,
+            specialistName: specialist?.name || "Unknown",
+        });
+
+        revalidatePath(`/requests/${requestId}`);
+        revalidatePath("/board");
+        return { success: true };
+    } catch (error) {
+        log.error("Failed to remove specialist", { action: "removeSpecialist", requestId }, error);
+        return { error: "Failed to remove specialist" };
     }
 }
 

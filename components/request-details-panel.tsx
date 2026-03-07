@@ -26,9 +26,9 @@ import {
 } from "@/components/ui/select";
 import { ProjectLinker } from "@/components/project-linker";
 import { ACEditor } from "@/components/ac-editor";
-import { updateRequest, getRequestCreator, getOrCreateRequestConversation, sendMessage as sendChatMessage, getMessages } from "@/lib/actions";
+import { updateRequest, getRequestCreator, getOrCreateRequestConversation, sendMessage as sendChatMessage, getMessages, removeSpecialist } from "@/lib/actions";
 import { Comment, Message } from "@/lib/data";
-import { Paperclip, MessageSquare, ImageIcon, Plus, Trash2, ExternalLink } from "lucide-react";
+import { Paperclip, MessageSquare, ImageIcon, Plus, Trash2, ExternalLink, X as XIcon } from "lucide-react";
 
 interface RequestDetailsPanelProps {
     request: Request;
@@ -45,7 +45,7 @@ export function RequestDetailsPanel({ request, onClose, onUpdate, isOwner, cente
     const [newComment, setNewComment] = useState("");
     const [isUploading, setIsUploading] = useState(false);
     const [creator, setCreator] = useState<any>(null);
-    const [specialist, setSpecialist] = useState<any>(null);
+    const [specialists, setSpecialists] = useState<any[]>([]);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [chatMessages, setChatMessages] = useState<Message[]>([]);
     const [requestConvoId, setRequestConvoId] = useState<string | null>(null);
@@ -68,16 +68,17 @@ export function RequestDetailsPanel({ request, onClose, onUpdate, isOwner, cente
         }
         fetchCreator();
 
-        // Load specialist info
-        async function fetchSpecialist() {
-            if (request.assignedSpecialistId) {
-                const s = await getRequestCreator(request.assignedSpecialistId);
-                setSpecialist(s);
+        // Load specialist info (multiple)
+        async function fetchSpecialists() {
+            const ids = request.assignedSpecialistIds || (request.assignedSpecialistId ? [request.assignedSpecialistId] : []);
+            if (ids.length > 0) {
+                const results = await Promise.all(ids.map(id => getRequestCreator(id)));
+                setSpecialists(results.filter(Boolean));
             } else {
-                setSpecialist(null);
+                setSpecialists([]);
             }
         }
-        fetchSpecialist();
+        fetchSpecialists();
 
         // Load/create request conversation
         async function initConversation() {
@@ -219,7 +220,12 @@ export function RequestDetailsPanel({ request, onClose, onUpdate, isOwner, cente
                         {/* Admin View: Matched Details */}
                         {role === "Admin" && (
                             <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-200 dark:border-slate-800">
-                                <h3 className="font-semibold mb-3 text-foreground">Admin Details</h3>
+                                <h3 className="font-semibold mb-3 text-foreground flex items-center gap-2">
+                                    Admin Details
+                                    {request.requestNumber && (
+                                        <Badge variant="outline" className="text-[10px] font-mono">REQ-{String(request.requestNumber).padStart(3, "0")}</Badge>
+                                    )}
+                                </h3>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <Label className="text-muted-foreground text-xs">Requested By</Label>
@@ -230,12 +236,34 @@ export function RequestDetailsPanel({ request, onClose, onUpdate, isOwner, cente
                                     </div>
                                     <div>
                                         <Label className="text-muted-foreground text-xs">Matched With</Label>
-                                        <div className="font-medium mt-1 text-foreground">
-                                            {request.assignedSpecialistId
-                                                ? specialist?.name || "Loading..."
-                                                : "No match yet"}
-                                            {specialist?.email && <span className="text-[10px] block text-muted-foreground opacity-70">({specialist.email})</span>}
-                                        </div>
+                                        {specialists.length === 0 ? (
+                                            <p className="text-sm text-muted-foreground mt-1">No match yet</p>
+                                        ) : (
+                                            <div className="mt-1 space-y-1.5">
+                                                {specialists.map((s: any) => (
+                                                    <div key={s.id} className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-background border">
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-medium text-foreground truncate">{s.name}</p>
+                                                            {s.email && <p className="text-[10px] text-muted-foreground truncate">{s.email}</p>}
+                                                        </div>
+                                                        <button
+                                                            onClick={async () => {
+                                                                await removeSpecialist(request.id, s.id);
+                                                                const updatedIds = (request.assignedSpecialistIds || []).filter((id: string) => id !== s.id);
+                                                                onUpdate({ ...request, assignedSpecialistId: updatedIds[0] || undefined, assignedSpecialistIds: updatedIds });
+                                                            }}
+                                                            className="shrink-0 h-5 w-5 rounded-full hover:bg-destructive/10 flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
+                                                            title="Remove specialist"
+                                                        >
+                                                            <XIcon className="h-3 w-3" />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {specialists.length < 3 && specialists.length > 0 && (
+                                            <p className="text-[9px] text-muted-foreground mt-1">{3 - specialists.length} more slot{specialists.length < 2 ? "s" : ""} available</p>
+                                        )}
                                     </div>
                                 </div>
                             </div>

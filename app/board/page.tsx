@@ -154,8 +154,14 @@ function BoardContent() {
                 toast({ title: "Failed to assign specialist", description: result.error, variant: "destructive" });
             } else {
                 toast({ title: "Specialist Assigned", description: "The specialist has been notified of this opportunity." });
-                // Refresh the local state
-                updateRequest({ ...matchingRequest, assignedSpecialistId: specialistId, status: "Active Efforts" });
+                const existingIds = matchingRequest.assignedSpecialistIds || [];
+                const updatedIds = [...existingIds, specialistId];
+                updateRequest({
+                    ...matchingRequest,
+                    assignedSpecialistId: updatedIds[0],
+                    assignedSpecialistIds: updatedIds,
+                    status: matchingRequest.status === "New" || matchingRequest.status === "Submitted for Review" ? "Active Efforts" : matchingRequest.status,
+                });
             }
             setMatchingRequest(null);
         }
@@ -188,7 +194,10 @@ function BoardContent() {
         if (!currentUser) return false;
         if (role === "Admin") return true;
         if (role === "Customer" || role === "Guest") return req.creatorId === currentUser.id;
-        if (role === "Specialist") return req.assignedSpecialistId === currentUser.id;
+        if (role === "Specialist") {
+            return req.assignedSpecialistId === currentUser.id ||
+                (req.assignedSpecialistIds || []).includes(currentUser.id);
+        }
         return false;
     });
 
@@ -196,7 +205,10 @@ function BoardContent() {
     const filteredRequests = roleFilteredRequests.filter((req) => {
         if (typeFilter.length > 0 && (!req.requestType || !typeFilter.includes(req.requestType))) return false;
         if (statusFilter.length > 0 && !statusFilter.includes(req.status)) return false;
-        if (assigneeFilter.length > 0 && (!req.assignedSpecialistId || !assigneeFilter.includes(req.assignedSpecialistId))) return false;
+        if (assigneeFilter.length > 0) {
+            const reqAssignees = req.assignedSpecialistIds || (req.assignedSpecialistId ? [req.assignedSpecialistId] : []);
+            if (!assigneeFilter.some(id => reqAssignees.includes(id))) return false;
+        }
         if (requestorFilter.length > 0 && (!req.creatorId || !requestorFilter.includes(req.creatorId))) return false;
         return true;
     });
@@ -233,7 +245,7 @@ function BoardContent() {
     // Derive unique values for filter options
     const uniqueTypes = [...new Set(roleFilteredRequests.map(r => r.requestType).filter(Boolean))] as string[];
     const uniqueStatuses = [...new Set(roleFilteredRequests.map(r => r.status).filter(Boolean))] as string[];
-    const uniqueAssignees = [...new Set(roleFilteredRequests.map(r => r.assignedSpecialistId).filter(Boolean))] as string[];
+    const uniqueAssignees = [...new Set(roleFilteredRequests.flatMap(r => r.assignedSpecialistIds || (r.assignedSpecialistId ? [r.assignedSpecialistId] : [])).filter(Boolean))] as string[];
     const uniqueRequestors = [...new Set(roleFilteredRequests.map(r => r.creatorId).filter(Boolean))] as string[];
 
     const getColumnTitle = (status: string) => {

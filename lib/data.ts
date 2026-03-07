@@ -120,6 +120,8 @@ export interface Request {
     createdAt: string;
     creatorId?: string;
     assignedSpecialistId?: string;
+    assignedSpecialistIds?: string[];
+    requestNumber?: number;
     actionNeeded?: boolean;
     specialistNote?: string;
     linkedProjectId?: string;

@@ -139,7 +139,10 @@ export default function DashboardPage() {
         if (!currentUser) return [];
         if (role === "Admin") return requests;
         if (role === "Customer" || role === "Guest") return requests.filter(r => r.creatorId === currentUser.id);
-        if (role === "Specialist") return requests.filter(r => r.assignedSpecialistId === currentUser.id);
+        if (role === "Specialist") return requests.filter(r =>
+            r.assignedSpecialistId === currentUser.id ||
+            (r.assignedSpecialistIds || []).includes(currentUser.id)
+        );
         return [];
     }, [requests, currentUser, role]);
 

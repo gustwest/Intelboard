@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, jsonb, primaryKey, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, jsonb, primaryKey, integer, serial } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { AdapterAccount } from "next-auth/adapters";
 
@@ -85,7 +85,9 @@ export const requests = pgTable("requests", {
     tags: jsonb("tags").$type<string[]>().default([]).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     creatorId: text("creator_id").references(() => users.id),
-    assignedSpecialistId: text("assigned_specialist_id"),
+    assignedSpecialistId: text("assigned_specialist_id"), // legacy / primary specialist
+    assignedSpecialistIds: jsonb("assigned_specialist_ids").$type<string[]>().default([]).notNull(),
+    requestNumber: serial("request_number").notNull(),
     actionNeeded: boolean("action_needed").default(false).notNull(),
     specialistNote: text("specialist_note"),
     linkedProjectId: text("linked_project_id"),
