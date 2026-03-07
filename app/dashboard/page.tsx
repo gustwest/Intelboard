@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { REQUEST_TYPE_CONFIG, RequestType, ConversationWithDetails, AppNotification } from "@/lib/data";
-import { getConversations, getNotifications } from "@/lib/actions";
+import { getConversations, getNotifications, getEvents, getAllUsers } from "@/lib/actions";
 import { useStore, Project } from "@/store/it-flora/useStore";
 import {
     ArrowRight,
@@ -31,6 +31,10 @@ import {
     RefreshCw,
     Wrench,
     StarOff,
+    CalendarDays,
+    CalendarClock,
+    Bell,
+    User2,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------
@@ -59,6 +63,22 @@ function timeAgo(date: string) {
     return `${days}d ago`;
 }
 
+function formatEventTime(date: string) {
+    const d = new Date(date);
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatEventDate(date: string) {
+    const d = new Date(date);
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    if (d.toDateString() === today.toDateString()) return "Today";
+    if (d.toDateString() === tomorrow.toDateString()) return "Tomorrow";
+    return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
 const NOTIFICATION_ICONS: Record<string, React.ReactNode> = {
     message: <MessageSquare className="h-3.5 w-3.5 text-blue-400" />,
     status_change: <RefreshCw className="h-3.5 w-3.5 text-amber-400" />,
@@ -75,9 +95,11 @@ export default function DashboardPage() {
     // IT Planner projects
     const projects = useStore(s => s.projects);
 
-    // Conversations + Notifications
+    // Conversations + Notifications + Events
     const [conversations, setConversations] = useState<ConversationWithDetails[]>([]);
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
+    const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
+    const [userNames, setUserNames] = useState<Record<string, string>>({});
 
     // Starred projects
     const [starredIds, setStarredIds] = useState<string[]>([]);
@@ -91,18 +113,26 @@ export default function DashboardPage() {
         });
     };
 
-    // Load conversations & notifications
+    // Load conversations, notifications, events & user names
     const load = useCallback(async () => {
         if (!currentUser) return;
-        const [convos, notifs] = await Promise.all([
+        const [convos, notifs, evts, users] = await Promise.all([
             getConversations(currentUser.id),
             getNotifications(currentUser.id),
+            getEvents(currentUser.id),
+            getAllUsers(),
         ]);
         setConversations(convos as ConversationWithDetails[]);
         setNotifications(notifs as AppNotification[]);
+        setUpcomingEvents(evts);
+        const map: Record<string, string> = {};
+        users.forEach(u => { map[u.id] = u.name; });
+        setUserNames(map);
     }, [currentUser]);
 
     useEffect(() => { load(); }, [load]);
+
+    const resolveUserName = (id: string) => userNames[id] || (id.includes("@") ? id.split("@")[0] : id.length > 12 ? id.substring(0, 8) + "…" : id);
 
     // Filter requests by role
     const myRequests = useMemo(() => {
@@ -118,9 +148,6 @@ export default function DashboardPage() {
     const activeRequests = myRequests.filter(r => !["Done"].includes(r.status)).length;
     const completedRequests = myRequests.filter(r => r.status === "Done").length;
     const actionNeeded = myRequests.filter(r => r.actionNeeded).length;
-    const newRequests = myRequests.filter(r => r.status === "New").length;
-    const inReview = myRequests.filter(r => r.status === "Submitted for Review").length;
-    const activeEfforts = myRequests.filter(r => r.status === "Active Efforts").length;
 
     // Recent requests (latest 5)
     const recentRequests = useMemo(() => {
@@ -129,16 +156,10 @@ export default function DashboardPage() {
             .slice(0, 5);
     }, [myRequests]);
 
-    // Type / urgency breakdowns
+    // Type breakdown
     const typeBreakdown = useMemo(() => {
         const counts: Record<string, number> = {};
         myRequests.forEach(r => { const t2 = r.requestType || "Unspecified"; counts[t2] = (counts[t2] || 0) + 1; });
-        return counts;
-    }, [myRequests]);
-
-    const urgencyBreakdown = useMemo(() => {
-        const counts: Record<string, number> = { Critical: 0, High: 0, Medium: 0, Low: 0 };
-        myRequests.forEach(r => { counts[r.urgency || "Medium"] += 1; });
         return counts;
     }, [myRequests]);
 
@@ -162,6 +183,28 @@ export default function DashboardPage() {
     }, [notifications]);
 
     const unreadNotifs = notifications.filter(n => !n.isRead).length;
+
+    // Upcoming events: this week and this month
+    const now = new Date();
+    const endOfWeek = new Date(now);
+    endOfWeek.setDate(endOfWeek.getDate() + (7 - endOfWeek.getDay()));
+    endOfWeek.setHours(23, 59, 59, 999);
+
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    const eventsThisWeek = useMemo(() => {
+        return upcomingEvents.filter(e => {
+            const d = new Date(e.startTime);
+            return d >= now && d <= endOfWeek;
+        }).sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+    }, [upcomingEvents, now, endOfWeek]);
+
+    const eventsThisMonth = useMemo(() => {
+        return upcomingEvents.filter(e => {
+            const d = new Date(e.startTime);
+            return d > endOfWeek && d <= endOfMonth;
+        }).sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+    }, [upcomingEvents, endOfWeek, endOfMonth]);
 
     if (!isLoaded) {
         return (
@@ -192,6 +235,15 @@ export default function DashboardPage() {
         "Done": "bg-slate-400",
     };
 
+    const statusLabels: Record<string, string> = {
+        "New": "New",
+        "Submitted for Review": "In Review",
+        "Scope Refinement Required": "Refinement",
+        "Scope Approved": "Approved",
+        "Active Efforts": "Active",
+        "Done": "Done",
+    };
+
     return (
         <div className="container py-6 space-y-6 max-w-7xl">
             {/* Header */}
@@ -209,6 +261,15 @@ export default function DashboardPage() {
                 )}
             </div>
 
+            {/* ── Quick Links (at top) ── */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <QuickLinkCard href="/board" icon={<LayoutGrid className="h-5 w-5" />} label="My Requests" color="text-blue-500" bgColor="bg-blue-500/10" />
+                <QuickLinkCard href="/calendar" icon={<CalendarDays className="h-5 w-5" />} label="Calendar" color="text-emerald-500" bgColor="bg-emerald-500/10" />
+                <QuickLinkCard href="/it-planner" icon={<Wrench className="h-5 w-5" />} label="Planning Tools" color="text-teal-500" bgColor="bg-teal-500/10" />
+                <QuickLinkCard href="/talent" icon={<Users className="h-5 w-5" />} label="Talent Directory" color="text-violet-500" bgColor="bg-violet-500/10" />
+                <QuickLinkCard href="/profile" icon={<Briefcase className="h-5 w-5" />} label="My Profile" color="text-amber-500" bgColor="bg-amber-500/10" />
+            </div>
+
             {/* ── Stat Cards ── */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <StatCard icon={<Briefcase className="h-5 w-5" />} label="Total Requests" value={totalRequests} color="text-blue-500" bgColor="bg-blue-500/10" />
@@ -221,29 +282,12 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* ===== LEFT COLUMN (2-wide) ===== */}
                 <div className="lg:col-span-2 space-y-6">
-                    {/* Pipeline */}
+                    {/* My Requests (latest 5) */}
                     <DashboardCard
-                        icon={<LayoutGrid className="h-4 w-4 text-indigo-500" />}
-                        title="Pipeline Overview"
+                        icon={<ListChecks className="h-4 w-4 text-blue-500" />}
+                        title="My Requests"
                         linkHref="/board"
-                        linkText="View Board"
-                    >
-                        <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
-                            <PipelineStep label="New" count={newRequests} color="bg-blue-500" />
-                            <PipelineStep label="In Review" count={inReview} color="bg-amber-500" />
-                            <PipelineStep label="Refinement" count={myRequests.filter(r => r.status === "Scope Refinement Required").length} color="bg-orange-500" />
-                            <PipelineStep label="Approved" count={myRequests.filter(r => r.status === "Scope Approved").length} color="bg-emerald-500" />
-                            <PipelineStep label="Active" count={activeEfforts} color="bg-violet-500" />
-                            <PipelineStep label="Done" count={completedRequests} color="bg-slate-400" />
-                        </div>
-                    </DashboardCard>
-
-                    {/* Recent Requests */}
-                    <DashboardCard
-                        icon={<Clock className="h-4 w-4 text-blue-500" />}
-                        title="Recent Requests"
-                        linkHref="/board"
-                        linkText="View All"
+                        linkText="See all ongoing requests"
                     >
                         {recentRequests.length === 0 ? (
                             <EmptyState icon={FolderOpen} label="No requests yet">
@@ -254,20 +298,36 @@ export default function DashboardPage() {
                                 )}
                             </EmptyState>
                         ) : (
-                            <div className="space-y-1">
+                            <div className="space-y-0.5">
                                 {recentRequests.map(request => (
-                                    <Link key={request.id} href={`/board?requestId=${request.id}`} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-muted/50 transition-colors group">
-                                        <div className={cn("h-2 w-2 rounded-full shrink-0", statusColors[request.status] || "bg-muted")} />
+                                    <Link key={request.id} href={`/board?requestId=${request.id}`} className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted/50 transition-colors group">
+                                        <div className={cn("h-2.5 w-2.5 rounded-full shrink-0", statusColors[request.status] || "bg-muted")} />
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2">
                                                 <span className="text-sm font-medium text-foreground truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{request.title}</span>
+                                                {request.actionNeeded && (
+                                                    <Badge variant="secondary" className="text-[9px] px-1.5 py-0 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 shrink-0">
+                                                        Action Required
+                                                    </Badge>
+                                                )}
                                                 {request.requestType && REQUEST_TYPE_CONFIG[request.requestType] && (
                                                     <Badge variant="outline" className={cn("text-[9px] px-1 py-0 shrink-0", REQUEST_TYPE_CONFIG[request.requestType].color, REQUEST_TYPE_CONFIG[request.requestType].border)}>
                                                         {REQUEST_TYPE_CONFIG[request.requestType].icon}
                                                     </Badge>
                                                 )}
                                             </div>
-                                            <p className="text-xs text-muted-foreground truncate mt-0.5">{request.description}</p>
+                                            <div className="flex items-center gap-3 mt-0.5">
+                                                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                                    <div className={cn("h-1.5 w-1.5 rounded-full", statusColors[request.status])} />
+                                                    {statusLabels[request.status] || request.status}
+                                                </span>
+                                                {request.assignedSpecialistId && (
+                                                    <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                                        <User2 className="h-2.5 w-2.5" />
+                                                        {resolveUserName(request.assignedSpecialistId)}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                         <span className="text-[10px] text-muted-foreground shrink-0">{new Date(request.createdAt).toLocaleDateString()}</span>
                                         <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/30 group-hover:text-foreground/50 transition-colors shrink-0" />
@@ -314,17 +374,17 @@ export default function DashboardPage() {
 
                 {/* ===== RIGHT COLUMN ===== */}
                 <div className="space-y-6">
-                    {/* Unread Messages */}
+                    {/* Messages */}
                     <DashboardCard
                         icon={<MessageSquare className="h-4 w-4 text-blue-500" />}
                         title="Messages"
-                        badge={unreadConvos.length > 0 ? `${unreadConvos.length} unread` : undefined}
+                        badge={unreadConvos.length > 0 ? `${unreadConvos.length} new` : undefined}
                     >
-                        {unreadConvos.length === 0 ? (
-                            <p className="text-xs text-muted-foreground text-center py-4">All caught up! 🎉</p>
+                        {conversations.length === 0 ? (
+                            <p className="text-xs text-muted-foreground text-center py-4">No messages yet</p>
                         ) : (
                             <div className="space-y-1">
-                                {unreadConvos.slice(0, 4).map(convo => (
+                                {conversations.slice(0, 4).map(convo => (
                                     <button
                                         key={convo.id}
                                         onClick={() => window.dispatchEvent(new CustomEvent("open-chat", { detail: { conversationId: convo.id } }))}
@@ -334,36 +394,110 @@ export default function DashboardPage() {
                                             {(convo.participants?.[0]?.name || "?").charAt(0).toUpperCase()}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-semibold text-foreground truncate">{convo.requestTitle || convo.participants?.map(p => p.name).join(", ") || "Chat"}</p>
+                                            <div className="flex items-center gap-1.5">
+                                                <p className="text-xs font-semibold text-foreground truncate">{convo.requestTitle || convo.participants?.map(p => p.name).join(", ") || "Chat"}</p>
+                                                {convo.unreadCount > 0 && (
+                                                    <Badge variant="secondary" className="text-[9px] bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0 px-1.5 py-0">{convo.unreadCount} new</Badge>
+                                                )}
+                                            </div>
                                             <p className="text-[10px] text-muted-foreground truncate">{convo.lastMessage?.text || "New conversation"}</p>
                                         </div>
-                                        <Badge variant="secondary" className="text-[9px] bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0">{convo.unreadCount}</Badge>
                                     </button>
+                                ))}
+                                {conversations.length > 4 && (
+                                    <button
+                                        onClick={() => window.dispatchEvent(new CustomEvent("open-chat", {}))}
+                                        className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors text-center py-2 flex items-center justify-center gap-1"
+                                    >
+                                        See all messages <ArrowRight className="h-3 w-3" />
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </DashboardCard>
+
+                    {/* Upcoming Events This Week */}
+                    <DashboardCard
+                        icon={<CalendarClock className="h-4 w-4 text-emerald-500" />}
+                        title="This Week"
+                        linkHref="/calendar"
+                        linkText="Open Calendar"
+                    >
+                        {eventsThisWeek.length === 0 ? (
+                            <p className="text-xs text-muted-foreground text-center py-4">No events this week</p>
+                        ) : (
+                            <div className="space-y-1">
+                                {eventsThisWeek.slice(0, 5).map(evt => (
+                                    <Link
+                                        key={evt.id}
+                                        href={`/calendar`}
+                                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-muted/50 transition-colors group"
+                                    >
+                                        <div className={cn(
+                                            "h-9 w-9 rounded-lg flex flex-col items-center justify-center text-[9px] font-bold shrink-0 border",
+                                            evt.type === "meeting" ? "bg-blue-500/10 text-blue-600 border-blue-500/20" :
+                                                evt.type === "deadline" ? "bg-red-500/10 text-red-600 border-red-500/20" :
+                                                    "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                        )}>
+                                            <span>{new Date(evt.startTime).getDate()}</span>
+                                            <span className="text-[7px] uppercase opacity-70">{new Date(evt.startTime).toLocaleDateString(undefined, { month: "short" })}</span>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-1.5">
+                                                <p className="text-xs font-semibold text-foreground truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{evt.title}</p>
+                                                {evt.type && (
+                                                    <Badge variant="outline" className="text-[8px] px-1 py-0 shrink-0">{evt.type}</Badge>
+                                                )}
+                                            </div>
+                                            <p className="text-[10px] text-muted-foreground">
+                                                {formatEventDate(evt.startTime)} · {formatEventTime(evt.startTime)}
+                                            </p>
+                                        </div>
+                                    </Link>
                                 ))}
                             </div>
                         )}
                     </DashboardCard>
 
-                    {/* News Feed */}
+                    {/* Later This Month */}
                     <DashboardCard
-                        icon={<Zap className="h-4 w-4 text-amber-500" />}
-                        title="Latest News"
-                        badge={unreadNotifs > 0 ? `${unreadNotifs} new` : undefined}
+                        icon={<CalendarDays className="h-4 w-4 text-violet-500" />}
+                        title="Later This Month"
+                        linkHref="/calendar"
+                        linkText="View All"
                     >
-                        {newsFeed.length === 0 ? (
-                            <p className="text-xs text-muted-foreground text-center py-4">No recent activity</p>
+                        {eventsThisMonth.length === 0 ? (
+                            <p className="text-xs text-muted-foreground text-center py-4">No upcoming events</p>
                         ) : (
-                            <div className="space-y-0.5">
-                                {newsFeed.map(n => (
-                                    <div key={n.id} className={cn("flex items-start gap-2.5 p-2 rounded-lg transition-colors text-left", !n.isRead ? "bg-primary/5" : "hover:bg-muted/30")}>
-                                        <div className="mt-0.5 shrink-0">{NOTIFICATION_ICONS[n.type] || <Activity className="h-3.5 w-3.5 text-muted-foreground" />}</div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className={cn("text-xs leading-snug", !n.isRead ? "font-medium text-foreground" : "text-foreground/70")}>{n.title}</p>
-                                            {n.body && <p className="text-[10px] text-muted-foreground truncate mt-0.5">{n.body}</p>}
+                            <div className="space-y-1">
+                                {eventsThisMonth.slice(0, 4).map(evt => (
+                                    <Link
+                                        key={evt.id}
+                                        href={`/calendar`}
+                                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-muted/50 transition-colors group"
+                                    >
+                                        <div className={cn(
+                                            "h-9 w-9 rounded-lg flex flex-col items-center justify-center text-[9px] font-bold shrink-0 border",
+                                            evt.type === "meeting" ? "bg-blue-500/10 text-blue-600 border-blue-500/20" :
+                                                evt.type === "deadline" ? "bg-red-500/10 text-red-600 border-red-500/20" :
+                                                    "bg-violet-500/10 text-violet-600 border-violet-500/20"
+                                        )}>
+                                            <span>{new Date(evt.startTime).getDate()}</span>
+                                            <span className="text-[7px] uppercase opacity-70">{new Date(evt.startTime).toLocaleDateString(undefined, { month: "short" })}</span>
                                         </div>
-                                        <span className="text-[9px] text-muted-foreground shrink-0 mt-0.5">{timeAgo(n.createdAt)}</span>
-                                    </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-semibold text-foreground truncate group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">{evt.title}</p>
+                                            <p className="text-[10px] text-muted-foreground">
+                                                {formatEventDate(evt.startTime)} · {formatEventTime(evt.startTime)}
+                                            </p>
+                                        </div>
+                                    </Link>
                                 ))}
+                                {eventsThisMonth.length > 4 && (
+                                    <Link href="/calendar" className="block text-xs text-muted-foreground text-center py-1 hover:text-foreground transition-colors">
+                                        +{eventsThisMonth.length - 4} more events
+                                    </Link>
+                                )}
                             </div>
                         )}
                     </DashboardCard>
@@ -393,41 +527,28 @@ export default function DashboardPage() {
                         )}
                     </DashboardCard>
 
-                    {/* By Urgency */}
-                    <DashboardCard icon={<Zap className="h-4 w-4 text-amber-500" />} title="By Urgency">
-                        <div className="space-y-2.5">
-                            {(["Critical", "High", "Medium", "Low"] as const).map(level => {
-                                const count = urgencyBreakdown[level] || 0;
-                                const colors: Record<string, { dot: string; bar: string }> = {
-                                    Critical: { dot: "bg-red-500", bar: "from-red-500 to-red-400" },
-                                    High: { dot: "bg-orange-500", bar: "from-orange-500 to-amber-400" },
-                                    Medium: { dot: "bg-amber-500", bar: "from-amber-500 to-yellow-400" },
-                                    Low: { dot: "bg-emerald-500", bar: "from-emerald-500 to-green-400" },
-                                };
-                                const pct = totalRequests > 0 ? (count / totalRequests) * 100 : 0;
-                                return (
-                                    <div key={level}>
-                                        <div className="flex items-center justify-between mb-1">
-                                            <span className="text-xs font-medium text-foreground/80 flex items-center gap-1.5"><div className={cn("h-2 w-2 rounded-full", colors[level].dot)} />{level}</span>
-                                            <span className="text-xs text-muted-foreground">{count}</span>
+                    {/* Latest News */}
+                    <DashboardCard
+                        icon={<Zap className="h-4 w-4 text-amber-500" />}
+                        title="Latest News"
+                        badge={unreadNotifs > 0 ? `${unreadNotifs} new` : undefined}
+                    >
+                        {newsFeed.length === 0 ? (
+                            <p className="text-xs text-muted-foreground text-center py-4">No recent activity</p>
+                        ) : (
+                            <div className="space-y-0.5">
+                                {newsFeed.map(n => (
+                                    <div key={n.id} className={cn("flex items-start gap-2.5 p-2 rounded-lg transition-colors text-left", !n.isRead ? "bg-primary/5" : "hover:bg-muted/30")}>
+                                        <div className="mt-0.5 shrink-0">{NOTIFICATION_ICONS[n.type] || <Activity className="h-3.5 w-3.5 text-muted-foreground" />}</div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className={cn("text-xs leading-snug", !n.isRead ? "font-medium text-foreground" : "text-foreground/70")}>{n.title}</p>
+                                            {n.body && <p className="text-[10px] text-muted-foreground truncate mt-0.5">{n.body}</p>}
                                         </div>
-                                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                                            <div className={cn("h-full rounded-full bg-gradient-to-r transition-all duration-500", colors[level].bar)} style={{ width: `${pct}%` }} />
-                                        </div>
+                                        <span className="text-[9px] text-muted-foreground shrink-0 mt-0.5">{timeAgo(n.createdAt)}</span>
                                     </div>
-                                );
-                            })}
-                        </div>
-                    </DashboardCard>
-
-                    {/* Quick Links */}
-                    <DashboardCard icon={<Star className="h-4 w-4 text-yellow-500" />} title="Quick Links">
-                        <div className="space-y-1.5">
-                            <QuickLink href="/board" icon={<LayoutGrid className="h-4 w-4" />} label="My Requests" />
-                            <QuickLink href="/it-planner" icon={<Wrench className="h-4 w-4" />} label="Planning Tools" />
-                            <QuickLink href="/talent" icon={<Users className="h-4 w-4" />} label="Talent Directory" />
-                            <QuickLink href="/profile" icon={<Briefcase className="h-4 w-4" />} label="My Profile" />
-                        </div>
+                                ))}
+                            </div>
+                        )}
                     </DashboardCard>
                 </div>
             </div>
@@ -479,14 +600,17 @@ function StatCard({ icon, label, value, color, bgColor, highlight }: {
     );
 }
 
-function PipelineStep({ label, count, color }: { label: string; count: number; color: string }) {
+function QuickLinkCard({ href, icon, label, color, bgColor }: { href: string; icon: React.ReactNode; label: string; color: string; bgColor: string }) {
     return (
-        <div className="text-center">
-            <div className="flex items-center justify-center mb-2">
-                <div className={cn("h-8 w-8 rounded-full flex items-center justify-center text-white text-xs font-bold", color)}>{count}</div>
+        <Link
+            href={href}
+            className="flex items-center gap-3 p-3.5 rounded-2xl border hover:bg-muted/40 hover:border-border/80 transition-all duration-200 group"
+        >
+            <div className={cn("h-9 w-9 rounded-xl flex items-center justify-center shrink-0", bgColor, color)}>
+                {icon}
             </div>
-            <p className="text-[10px] font-medium text-muted-foreground truncate">{label}</p>
-        </div>
+            <span className="text-sm font-medium text-foreground/80 group-hover:text-foreground transition-colors truncate">{label}</span>
+        </Link>
     );
 }
 
@@ -517,15 +641,5 @@ function EmptyState({ icon: Icon, label, children }: { icon: React.ComponentType
             <p className="text-sm text-muted-foreground">{label}</p>
             {children}
         </div>
-    );
-}
-
-function QuickLink({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
-    return (
-        <Link href={href} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/60 transition-colors group text-sm">
-            <span className="text-muted-foreground group-hover:text-foreground transition-colors">{icon}</span>
-            <span className="text-foreground/80 group-hover:text-foreground transition-colors">{label}</span>
-            <ArrowRight className="h-3 w-3 text-muted-foreground/30 group-hover:text-foreground/50 ml-auto transition-colors" />
-        </Link>
     );
 }
