@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, ReactNode } from "react";
-import { User, mockUsers } from "@/lib/data";
+import { User } from "@/lib/data";
 import { useSession, signIn, signOut } from "next-auth/react";
 
 export type UserRole = "Customer" | "Admin" | "Specialist" | "Guest";
@@ -39,8 +39,8 @@ export function RoleProvider({ children }: { children: ReactNode }) {
                 role: user.role || "Guest",
                 email: user.email,
                 avatar: user.image,
-                company: (user as any).companyId, // Map companyId to company prop for display/logic
-                companyId: (user as any).companyId // Ensure companyId is also set directly
+                company: (user as any).companyId,
+                companyId: (user as any).companyId
             } as any);
             setRole((user.role as UserRole) || "Guest");
         } else if (status === "unauthenticated") {
@@ -52,25 +52,11 @@ export function RoleProvider({ children }: { children: ReactNode }) {
 
     const login = (userId: string, name?: string) => {
         console.log("RoleProvider: Initiating login for userId:", userId);
-
-        // Find actual mock user to get their real name (fallback if name not provided)
-        const mockUser = mockUsers.find(u => u.id === userId);
-        const resolvedName = name || mockUser?.name || userId;
-
-        // Construct a pseudo-email for NextAuth to handle roles correctly
-        let email = `${userId}@intelboard.com`;
-
-        // Match roles for special cases
-        if (userId === "admin1") email = "admin@intelboard.com";
-        else if (userId.startsWith("s")) email = `${userId}@specialist.com`;
-        else if (userId.startsWith("c")) email = `${userId}@client.com`;
-        else if (userId === "guest1") email = "guest@intelboard.com";
-
-        console.log("RoleProvider: signIn with email:", email, "name:", resolvedName);
+        // With the new system, login is handled through NextAuth signIn directly
+        // This function is kept for backward compatibility with any remaining flows
         signIn("credentials", {
-            email,
-            password: "password",
-            name: resolvedName,
+            email: userId,
+            password: "password123",
             callbackUrl: "/board"
         });
     };

@@ -39,7 +39,7 @@ export function DataCatalogueModal({ isOpen, onClose, onSelectAsset }: DataCatal
             case 'View': return <Table className="h-4 w-4 text-green-500" />; // Differentiate if needed
             case 'File': return <FileText className="h-4 w-4 text-orange-500" />;
             case 'API': return <Code className="h-4 w-4 text-purple-500" />;
-            default: return <Database className="h-4 w-4 text-slate-400" />;
+            default: return <Database className="h-4 w-4 text-muted-foreground" />;
         }
     };
 
@@ -47,7 +47,7 @@ export function DataCatalogueModal({ isOpen, onClose, onSelectAsset }: DataCatal
         <Modal isOpen={isOpen} onClose={onClose} title="Data Catalogue">
             <div className="space-y-4">
                 <div className="relative">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
                         placeholder="Search assets by name, system, or schema..."
                         value={searchQuery}
@@ -57,9 +57,9 @@ export function DataCatalogueModal({ isOpen, onClose, onSelectAsset }: DataCatal
                     />
                 </div>
 
-                <div className="max-h-[60vh] overflow-y-auto border border-slate-200 rounded-md">
+                <div className="max-h-[60vh] overflow-y-auto border border-border rounded-md">
                     <table className="w-full text-sm text-left">
-                        <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200 sticky top-0">
+                        <thead className="bg-muted text-muted-foreground font-medium border-b border-border sticky top-0">
                             <tr>
                                 <th className="px-4 py-2">Asset Name</th>
                                 <th className="px-4 py-2">Type</th>
@@ -82,14 +82,14 @@ export function DataCatalogueModal({ isOpen, onClose, onSelectAsset }: DataCatal
                                             {getIcon(asset.type)}
                                             {asset.name}
                                         </td>
-                                        <td className="px-4 py-2 text-slate-500">{asset.type}</td>
-                                        <td className="px-4 py-2 text-slate-500">{asset.schema || '-'}</td>
+                                        <td className="px-4 py-2 text-muted-foreground">{asset.type}</td>
+                                        <td className="px-4 py-2 text-muted-foreground">{asset.schema || '-'}</td>
                                         <td className="px-4 py-2 text-slate-600">{asset.systemName}</td>
                                     </tr>
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan={4} className="px-4 py-8 text-center text-slate-400 italic">
+                                    <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground italic">
                                         No assets found matching "{searchQuery}"
                                     </td>
                                 </tr>
@@ -98,7 +98,7 @@ export function DataCatalogueModal({ isOpen, onClose, onSelectAsset }: DataCatal
                     </table>
                 </div>
 
-                <div className="text-xs text-slate-400 text-right">
+                <div className="text-xs text-muted-foreground text-right">
                     Showing {filteredAssets.length} of {allAssets.length} assets
                 </div>
             </div>

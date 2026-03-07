@@ -1,15 +1,32 @@
 "use client";
 
-import { Plus, Settings, Search, FolderPlus, Sparkles, UserCircle, Lightbulb, Briefcase, LayoutGrid, Network } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Plus, Settings, Search, FolderPlus, Sparkles, UserCircle, Star, Share2, ChevronDown, ChevronRight, LayoutGrid, Network, Database, Server, LayoutTemplate, FileText, Users, CloudCog } from 'lucide-react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { getCompanyUsers, approveUserAccess } from '@/lib/actions';
 import { Button } from '@/components/ui/button';
-import { useStore } from '@/store/it-flora/useStore';
-import { generateBankFlora } from '@/lib/it-flora/simulation';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useStore, SystemType } from '@/store/it-flora/useStore';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Link from "next/link";
+
+// Category definitions for grouping systems
+const SYSTEM_CATEGORIES: { label: string; types: SystemType[]; icon: React.ElementType; color: string }[] = [
+    { label: 'Source Systems', types: ['Source System'], icon: Database, color: 'text-blue-400' },
+    { label: 'Data Warehousing', types: ['Data Warehouse', 'Data Vault'], icon: Server, color: 'text-violet-400' },
+    { label: 'Data Lakes', types: ['Data Lake'], icon: Database, color: 'text-cyan-400' },
+    { label: 'Analytics & Reporting', types: ['Data Mart', 'PBI Report'], icon: LayoutTemplate, color: 'text-amber-400' },
+    { label: 'Other Systems', types: ['Other'], icon: FileText, color: 'text-muted-foreground' },
+];
+
+// Quick-add system type definitions
+const QUICK_ADD_TYPES: { type: SystemType; label: string; icon: React.ElementType; color: string }[] = [
+    { type: 'Source System', label: 'Source System', icon: Database, color: 'text-blue-400' },
+    { type: 'Data Warehouse', label: 'Data Warehouse', icon: Server, color: 'text-violet-400' },
+    { type: 'Data Lake', label: 'Data Lake', icon: CloudCog, color: 'text-cyan-400' },
+    { type: 'Data Vault', label: 'Data Vault', icon: Server, color: 'text-emerald-400' },
+    { type: 'Data Mart', label: 'Data Mart', icon: LayoutTemplate, color: 'text-amber-400' },
+    { type: 'PBI Report', label: 'PBI Report', icon: FileText, color: 'text-orange-400' },
+];
 
 interface SidebarProps {
     onAddSystem: () => void;
@@ -18,28 +35,31 @@ interface SidebarProps {
     onManageSystems: () => void;
     onOpenCatalogue: () => void;
     onImportAI: () => void;
+    onFocusSystem?: (systemId: string) => void;
 }
 
-export function Sidebar({ onAddSystem, onAddProject, onEditProject, onManageSystems, onOpenCatalogue, onImportAI }: SidebarProps) {
+export function Sidebar({ onAddSystem, onAddProject, onEditProject, onManageSystems, onOpenCatalogue, onImportAI, onFocusSystem }: SidebarProps) {
     const systems = useStore((state) => state.systems);
+    const addSystem = useStore((state) => state.addSystem);
     const projects = useStore((state) => state.projects);
     const activeProjectId = useStore((state) => state.activeProjectId);
     const setActiveProject = useStore((state) => state.setActiveProject);
     const currentUser = useStore((state) => state.currentUser);
+    const starredProjectIds = useStore((state) => state.starredProjectIds);
+    const toggleStarProject = useStore((state) => state.toggleStarProject);
 
     // Global Tool & View State
     const activeTool = useStore((state) => state.activeTool);
     const setActiveTool = useStore((state) => state.setActiveTool);
-    const activeViewId = useStore((state) => state.activeViewId);
-    const setActiveViewId = useStore((state) => state.setActiveViewId);
 
-    // Sidebar Tool Mode
-    // const [activeTool, setActiveTool] = useState<'flowchart' | 'lineage'>('flowchart'); // MOVED TO STORE
+    // Category collapse state
+    const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+
+    // System search for lineage
+    const [systemSearch, setSystemSearch] = useState('');
 
     // Pending Approvals State
     const [pendingUsers, setPendingUsers] = useState<any[]>([]);
-
-    // const [activeViewId, setActiveViewId] = useState<string | null>(null); // MOVED TO STORE
 
     // Sync pending users
     useEffect(() => {
@@ -66,21 +86,46 @@ export function Sidebar({ onAddSystem, onAddProject, onEditProject, onManageSyst
         return !p.ownerId || p.ownerId === 'unknown' || p.sharedWith?.includes('guest');
     });
 
-    const activeProject = visibleProjects.find(p => p.id === activeProjectId);
+    // Sort: starred first, then alphabetically
+    const sortedProjects = useMemo(() => {
+        return [...visibleProjects].sort((a, b) => {
+            const aStarred = starredProjectIds.includes(a.id);
+            const bStarred = starredProjectIds.includes(b.id);
+            if (aStarred && !bStarred) return -1;
+            if (!aStarred && bStarred) return 1;
+            return a.name.localeCompare(b.name);
+        });
+    }, [visibleProjects, starredProjectIds]);
+
+    // Group systems by category for lineage view
+    const systemsByCategory = useMemo(() => {
+        const filtered = systemSearch
+            ? systems.filter(s => s.name.toLowerCase().includes(systemSearch.toLowerCase()))
+            : systems;
+
+        return SYSTEM_CATEGORIES.map(cat => ({
+            ...cat,
+            systems: filtered.filter(s => cat.types.includes(s.type))
+        })).filter(cat => cat.systems.length > 0);
+    }, [systems, systemSearch]);
+
+    const toggleCategory = (label: string) => {
+        setCollapsedCategories(prev => ({ ...prev, [label]: !prev[label] }));
+    };
 
     return (
-        <div className="w-64 border-r border-border bg-card flex flex-col h-full shadow-sm">
+        <div className="w-72 border-r border-border bg-card flex flex-col h-full shadow-sm">
             {/* 1. Header & Tool Switcher */}
-            <div className="p-4 pb-2 border-b border-border">
-                <h2 className="text-lg font-semibold tracking-tight mb-4">Planning Tools</h2>
+            <div className="p-4 pb-3 border-b border-border">
+                <h2 className="text-lg font-semibold tracking-tight mb-3 text-card-foreground">Planning Tools</h2>
                 <div className="flex bg-muted p-1 rounded-lg grid grid-cols-2 gap-1">
                     <button
                         onClick={() => setActiveTool('flowchart')}
                         className={cn(
                             "flex items-center justify-center py-1.5 text-xs font-medium rounded-md transition-all",
                             activeTool === 'flowchart'
-                                ? "bg-white text-primary shadow-sm"
-                                : "text-muted-foreground hover:text-foreground hover:bg-white/50"
+                                ? "bg-primary text-primary-foreground shadow-sm"
+                                : "text-muted-foreground hover:text-foreground hover:bg-muted/80"
                         )}
                     >
                         <LayoutGrid className="w-3.5 h-3.5 mr-1.5" />
@@ -91,8 +136,8 @@ export function Sidebar({ onAddSystem, onAddProject, onEditProject, onManageSyst
                         className={cn(
                             "flex items-center justify-center py-1.5 text-xs font-medium rounded-md transition-all",
                             activeTool === 'lineage'
-                                ? "bg-white text-primary shadow-sm"
-                                : "text-muted-foreground hover:text-foreground hover:bg-white/50"
+                                ? "bg-primary text-primary-foreground shadow-sm"
+                                : "text-muted-foreground hover:text-foreground hover:bg-muted/80"
                         )}
                     >
                         <Network className="w-3.5 h-3.5 mr-1.5" />
@@ -101,52 +146,207 @@ export function Sidebar({ onAddSystem, onAddProject, onEditProject, onManageSyst
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4">
-                {/* 2. Project Selection */}
-                <div className="space-y-4">
-                    <div>
-                        <div className="flex items-center justify-between mb-2">
-                            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                Active Project
-                            </label>
-                            {activeProjectId && (
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-5 w-5"
-                                    onClick={() => onEditProject(activeProjectId)}
-                                    title="Project Settings"
-                                >
-                                    <Settings className="h-3 w-3" />
-                                </Button>
-                            )}
-                        </div>
-                        <Select
-                            value={activeProjectId || ""}
-                            onValueChange={(val) => setActiveProject(val === "master" ? null : val)}
+            <div className="flex-1 overflow-y-auto p-3 space-y-4">
+                {/* 2. Project List */}
+                <div>
+                    <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            Projects
+                        </label>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-5 w-5 text-muted-foreground hover:text-primary"
+                            onClick={onAddProject}
+                            title="Create New Project"
                         >
-                            <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Select Project..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {visibleProjects.map((p) => (
-                                    <SelectItem key={p.id} value={p.id}>
-                                        {p.name}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <Button onClick={onAddProject} variant="ghost" size="sm" className="w-full justify-start px-2 mt-1 text-primary hover:text-primary/80 h-7 text-xs">
-                            <FolderPlus className="mr-2 h-3 w-3" />
-                            Create New Project
+                            <Plus className="h-3.5 w-3.5" />
                         </Button>
                     </div>
 
-                    {/* 3. Project Tabs (Views) - REMOVED (Moved to Top Sheet Bar) */}
+                    <div className="space-y-0.5">
+                        {sortedProjects.length === 0 && (
+                            <div className="px-2 py-4 text-center text-xs text-muted-foreground border border-dashed border-border rounded-md">
+                                No projects yet
+                            </div>
+                        )}
+                        {sortedProjects.map((p) => {
+                            const isActive = p.id === activeProjectId;
+                            const isStarred = starredProjectIds.includes(p.id);
+                            const isShared = p.sharedWith && p.sharedWith.length > 0;
+
+                            return (
+                                <div
+                                    key={p.id}
+                                    className={cn(
+                                        "group flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer transition-all text-sm",
+                                        isActive
+                                            ? "bg-primary/15 text-primary border border-primary/20"
+                                            : "text-foreground hover:bg-accent border border-transparent"
+                                    )}
+                                    onClick={() => setActiveProject(p.id)}
+                                >
+                                    {/* Star Button */}
+                                    <button
+                                        className={cn(
+                                            "shrink-0 transition-colors",
+                                            isStarred
+                                                ? "text-secondary"
+                                                : "text-muted-foreground/40 hover:text-secondary opacity-0 group-hover:opacity-100"
+                                        )}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleStarProject(p.id);
+                                        }}
+                                        title={isStarred ? "Unstar project" : "Star project"}
+                                    >
+                                        <Star className={cn("h-3.5 w-3.5", isStarred && "fill-current")} />
+                                    </button>
+
+                                    <span className="flex-1 truncate font-medium">{p.name}</span>
+
+                                    {/* Shared indicator */}
+                                    {isShared && (
+                                        <span className="shrink-0 text-muted-foreground" title={`Shared with ${p.sharedWith.length} user(s)`}>
+                                            <Users className="h-3 w-3" />
+                                        </span>
+                                    )}
+
+                                    {/* Settings button */}
+                                    <button
+                                        className="shrink-0 text-muted-foreground/40 hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onEditProject(p.id);
+                                        }}
+                                        title="Project Settings & Sharing"
+                                    >
+                                        <Settings className="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
 
+                {/* 3. Lineage Mode: Categorized System Catalog */}
+                {activeTool === 'lineage' && (
+                    <div className="pt-2 border-t border-border">
+                        <div className="flex items-center justify-between mb-2">
+                            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                System Catalog
+                            </label>
+                            <span className="text-[10px] text-muted-foreground/70 tabular-nums">{systems.length} total</span>
+                        </div>
+
+                        {/* Search */}
+                        <div className="relative mb-3">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/60" />
+                            <input
+                                value={systemSearch}
+                                onChange={(e) => setSystemSearch(e.target.value)}
+                                placeholder="Search systems..."
+                                className="w-full h-8 pl-8 pr-3 text-xs rounded-md border border-border bg-muted/30 text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring"
+                            />
+                        </div>
+
+                        {/* Quick Add Buttons */}
+                        <div className="mb-3">
+                            <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">
+                                Quick Add
+                            </label>
+                            <div className="grid grid-cols-2 gap-1.5">
+                                {QUICK_ADD_TYPES.map((item) => {
+                                    const ItemIcon = item.icon;
+                                    return (
+                                        <button
+                                            key={item.type}
+                                            className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg border border-border bg-card hover:bg-accent/30 hover:border-primary/30 transition-all text-xs text-card-foreground group cursor-grab active:cursor-grabbing"
+                                            draggable
+                                            onDragStart={(e) => {
+                                                e.dataTransfer.setData('application/it-flora-system-type', item.type);
+                                                e.dataTransfer.setData('application/it-flora-system-label', item.label);
+                                                e.dataTransfer.effectAllowed = 'move';
+                                            }}
+                                            onClick={() => {
+                                                const name = prompt(`Enter ${item.label} name:`);
+                                                if (name?.trim()) {
+                                                    addSystem({
+                                                        name: name.trim(),
+                                                        type: item.type,
+                                                        description: '',
+                                                        position: { x: Math.random() * 500 + 100, y: Math.random() * 300 + 100 },
+                                                    });
+                                                }
+                                            }}
+                                            title={`Drag onto canvas or click to add ${item.label}`}
+                                        >
+                                            <ItemIcon className={cn("h-3.5 w-3.5 shrink-0", item.color)} />
+                                            <span className="truncate">{item.label}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Category Groups */}
+                        <div className="space-y-1">
+                            {systemsByCategory.length === 0 && (
+                                <div className="px-2 py-3 text-center text-xs text-muted-foreground border border-dashed border-border rounded-md">
+                                    {systemSearch ? 'No systems match your search' : 'No systems defined yet — use Quick Add above'}
+                                </div>
+                            )}
+                            {systemsByCategory.map((cat) => {
+                                const isCollapsed = collapsedCategories[cat.label];
+                                const CatIcon = cat.icon;
+
+                                return (
+                                    <div key={cat.label} className="rounded-lg border border-border overflow-hidden bg-card">
+                                        {/* Category Header */}
+                                        <button
+                                            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold hover:bg-accent/50 transition-colors"
+                                            onClick={() => toggleCategory(cat.label)}
+                                        >
+                                            {isCollapsed
+                                                ? <ChevronRight className="h-3 w-3 text-muted-foreground/60 shrink-0" />
+                                                : <ChevronDown className="h-3 w-3 text-muted-foreground/60 shrink-0" />
+                                            }
+                                            <CatIcon className={cn("h-3.5 w-3.5 shrink-0", cat.color)} />
+                                            <span className="text-card-foreground flex-1 text-left">{cat.label}</span>
+                                            <span className="text-[10px] text-muted-foreground tabular-nums bg-muted px-1.5 py-0.5 rounded-full">
+                                                {cat.systems.length}
+                                            </span>
+                                        </button>
+
+                                        {/* System Items */}
+                                        {!isCollapsed && (
+                                            <div className="border-t border-border">
+                                                {cat.systems.map((system) => (
+                                                    <button
+                                                        key={system.id}
+                                                        className="w-full flex items-center gap-2 px-3 pl-8 py-1.5 text-xs text-card-foreground hover:bg-accent/50 hover:text-primary transition-colors"
+                                                        onClick={() => onFocusSystem?.(system.id)}
+                                                        title={system.description || system.name}
+                                                    >
+                                                        <span className="truncate flex-1 text-left">{system.name}</span>
+                                                        {system.assets.length > 0 && (
+                                                            <span className="text-[10px] text-muted-foreground tabular-nums">
+                                                                {system.assets.length} asset{system.assets.length !== 1 ? 's' : ''}
+                                                            </span>
+                                                        )}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
                 {/* 4. Global Tools Bottom */}
-                <div className="mt-8 pt-4 border-t border-border space-y-2">
+                <div className="pt-3 border-t border-border space-y-1">
                     <Button onClick={onAddSystem} variant="outline" size="sm" className="w-full justify-start">
                         <Plus className="mr-2 h-3 w-3" />
                         Add System

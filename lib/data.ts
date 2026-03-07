@@ -5,7 +5,7 @@ export type Specialist = {
     id: string;
     name: string;
     role: string;
-    skills: string[];
+    skills: string[] | { name: string; category: string }[];
     industry: string[];
     bio: string;
     availability: "Available" | "Busy" | "Away";
@@ -20,7 +20,84 @@ export type RequestStatus =
     | "Active Efforts"
     | "Done";
 
+export type RequestType = "Insights" | "Short-term" | "Consultant" | "Hire";
+
+export const REQUEST_TYPE_CONFIG: Record<RequestType, { label: string; icon: string; color: string; bg: string; border: string; description: string }> = {
+    "Insights": {
+        label: "Get Insights",
+        icon: "🔍",
+        color: "text-violet-600 dark:text-violet-400",
+        bg: "bg-violet-500/10",
+        border: "border-violet-300 dark:border-violet-700",
+        description: "Need guidance, analysis, or expert input on a topic",
+    },
+    "Short-term": {
+        label: "Short-term Resource",
+        icon: "⏱️",
+        color: "text-cyan-600 dark:text-cyan-400",
+        bg: "bg-cyan-500/10",
+        border: "border-cyan-300 dark:border-cyan-700",
+        description: "Limited engagement for a specific deliverable or sprint",
+    },
+    "Consultant": {
+        label: "Regular Consultant",
+        icon: "👤",
+        color: "text-amber-600 dark:text-amber-400",
+        bg: "bg-amber-500/10",
+        border: "border-amber-300 dark:border-amber-700",
+        description: "Ongoing consultant for a role or project",
+    },
+    "Hire": {
+        label: "Hire",
+        icon: "🤝",
+        color: "text-emerald-600 dark:text-emerald-400",
+        bg: "bg-emerald-500/10",
+        border: "border-emerald-300 dark:border-emerald-700",
+        description: "Permanent placement or long-term hire",
+    },
+};
+
 export type ACStatus = "Draft" | "Proposed" | "Agreed";
+
+export type ConversationType = "direct" | "group" | "request";
+export type NotificationType = "message" | "status_change" | "comment" | "assignment";
+
+export type Conversation = {
+    id: string;
+    type: ConversationType;
+    title: string | null;
+    requestId: string | null;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type Message = {
+    id: string;
+    conversationId: string;
+    senderId: string;
+    senderName?: string;
+    text: string;
+    createdAt: string;
+    readBy: string[];
+};
+
+export type AppNotification = {
+    id: string;
+    userId: string;
+    type: NotificationType;
+    title: string;
+    body: string | null;
+    relatedId: string | null;
+    isRead: boolean;
+    createdAt: string;
+};
+
+export type ConversationWithDetails = Conversation & {
+    participants: { id: string; name: string; avatar?: string }[];
+    lastMessage?: Message;
+    unreadCount: number;
+    requestTitle?: string;
+};
 
 export type Comment = {
     id: string;
@@ -36,23 +113,32 @@ export interface Request {
     title: string;
     description: string;
     status: RequestStatus;
+    requestType?: RequestType;
     industry: string;
     budget?: string;
     tags: string[];
     createdAt: string;
-    creatorId?: string; // ID of the user who created the request
-    assignedSpecialistId?: string; // ID of the specialist assigned
-    actionNeeded?: boolean; // If true, requires attention (e.g. from Customer)
-    specialistNote?: string; // Last note from specialist
-    linkedProjectId?: string; // ID of the linked IT Planner project
-    specialistNDASigned?: boolean; // Whether the specialist has signed the NDA
+    creatorId?: string;
+    assignedSpecialistId?: string;
+    actionNeeded?: boolean;
+    specialistNote?: string;
+    linkedProjectId?: string;
+    specialistNDASigned?: boolean;
     acceptanceCriteria?: string[];
     acStatus?: ACStatus;
     attachments?: string[];
     urgency?: "Low" | "Medium" | "High" | "Critical";
     category?: "IT" | "CRM" | "Architecture" | "Finance" | "Other";
-    attributes?: Record<string, string>; // Dynamic attributes for freeform categories
+    attributes?: Record<string, string>;
     comments?: Comment[];
+    startDate?: string;
+    endDate?: string;
+    hourlyRateMin?: string;
+    hourlyRateMax?: string;
+    salaryMin?: string;
+    salaryMax?: string;
+    consultantRole?: string;
+    requiredSkills?: { name: string; category: string }[];
 }
 
 export type User = {
@@ -89,67 +175,29 @@ export type User = {
     skills?: { name: string; category: string }[];
 };
 
-export const mockUsers: User[] = [
-    // Specialists (mapped to specialists array)
-    { id: "s1", name: "Alice Chen", role: "Specialist", email: "s1@specialist.com" },
-    { id: "s2", name: "Bob Smith", role: "Specialist", email: "s2@specialist.com" },
-    { id: "s3", name: "Carol Davis", role: "Specialist", email: "s3@specialist.com" },
-    { id: "s4", name: "David Wilson", role: "Specialist", email: "s4@specialist.com" },
-
-    // Admin
-    { id: "admin1", name: "IntelBoard Admin", role: "Admin", email: "admin@intelboard.com" },
-
-    // Guest
-    { id: "guest1", name: "Guest User", role: "Guest", email: "guest@intelboard.com" },
+// Quick-login account definitions (email + password for each quick-login button)
+export const quickLoginAccounts = [
+    { label: "Autoliv — Gustav Westergren", email: "gustav.westergren.external@autoliv.com", password: "password123", role: "Customer" as UserRole, icon: "🏢" },
+    { label: "Volvo Cars — Erik Lindgren", email: "erik.lindgren@volvocars.com", password: "password123", role: "Customer" as UserRole, icon: "🏢" },
+    { label: "Alice Chen — Specialist", email: "alice.chen@intelboard.io", password: "password123", role: "Specialist" as UserRole, icon: "👤" },
+    { label: "Bob Smith — Specialist", email: "bob.smith@intelboard.io", password: "password123", role: "Specialist" as UserRole, icon: "👤" },
+    { label: "IntelBoard Admin", email: "admin@intelboard.io", password: "admin123", role: "Admin" as UserRole, icon: "🔑" },
 ];
 
-// Helper to generate mock specialists
-const roles = [
-    "Digital Transformation Consultant", "Cloud Architect", "Data Scientist", "Agile Coach",
-    "Cybersecurity Analyst", "DevOps Engineer", "Project Manager", "UX/UI Designer",
-    "Systems Analyst", "Blockchain Developer", "AI/ML Engineer", "Business Analyst"
-];
-const skillsPool = [
-    "Supply Chain", "IoT", "Process Optimization", "Agile", "AWS", "Azure", "Migration", "DevOps",
-    "Machine Learning", "Python", "React", "Node.js", "Kubernetes", "Docker", "Scrum", "Kanban",
-    "Cybersecurity", "Network Security", "Compliance", "Figma", "User Research", "Prototyping",
-    "Blockchain", "Smart Contracts", "Solidity", "TensorFlow", "PyTorch", "NLP", "Big Data",
-    "SQL", "NoSQL", "Java", "C#", "Go", "Rust", "Project Management", "Risk Management"
-];
-const industries = ["Auto", "Manufacturing", "Finance", "Tech", "Retail", "Healthcare", "Energy", "Logistics"];
-const firstNames = ["Alice", "Bob", "Carol", "David", "Eve", "Frank", "Grace", "Hank", "Ivy", "Jack", "Kara", "Leo", "Mia", "Nina", "Oscar", "Paul", "Quinn", "Rita", "Sam", "Tina"];
-const lastNames = ["Chen", "Smith", "Davis", "Wilson", "Johnson", "Brown", "Taylor", "Miller", "Anderson", "Thomas", "Jackson", "White", "Harris", "Martin", "Thompson", "Garcia", "Martinez", "Robinson", "Clark", "Rodriguez"];
-
-function generateSpecialists(count: number): Specialist[] {
-    return Array.from({ length: count }, (_, i) => {
-        const role = roles[Math.floor(Math.random() * roles.length)];
-        // Pick 3-6 random skills
-        const numSkills = Math.floor(Math.random() * 4) + 3;
-        const shuffledSkills = [...skillsPool].sort(() => 0.5 - Math.random());
-        const mySkills = shuffledSkills.slice(0, numSkills);
-
-        // Pick 1-2 industries
-        const numInd = Math.floor(Math.random() * 2) + 1;
-        const shuffledInd = [...industries].sort(() => 0.5 - Math.random());
-        const myInd = shuffledInd.slice(0, numInd);
-
-        const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
-        const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
-
-        return {
-            id: `s${i + 1}`,
-            name: `${firstName} ${lastName}`,
-            role: role,
-            skills: mySkills,
-            industry: myInd,
-            bio: `Experienced ${role} specializing in ${myInd.join(" and ")} industries.`,
-            availability: Math.random() > 0.3 ? "Available" : "Busy",
-            rating: parseFloat((4 + Math.random()).toFixed(1)),
-        };
-    });
+// Convert a DB user row to the Specialist shape used by the matching engine
+export function dbUserToSpecialist(user: any): Specialist {
+    const skills = (user.skills || []) as { name: string; category: string }[];
+    return {
+        id: user.id,
+        name: user.name || "Unknown",
+        role: user.jobTitle || "Specialist",
+        skills,
+        industry: (user.industry || []) as string[],
+        bio: user.bio || "",
+        availability: (user.availability as any) || "Available",
+        rating: 4.5, // Default rating for DB-backed specialists
+    };
 }
-
-export const specialists: Specialist[] = generateSpecialists(50);
 
 export const initialRequests: Request[] = [
     {

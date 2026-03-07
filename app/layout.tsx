@@ -11,6 +11,8 @@ import { RequestProvider } from "@/components/request-provider";
 
 import { PlannerAuthSync } from "@/components/it-flora/PlannerAuthSync";
 import { FeedbackButton } from "@/components/FeedbackButton";
+import { ChatWidget } from "@/components/chat-widget";
+import { ThemeProvider } from "@/components/theme-provider";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -29,22 +31,26 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`} suppressHydrationWarning>
-        <AuthProvider>
-          <LanguageProvider>
-            <RoleProvider>
-              <RequestProvider>
-                <PlannerAuthSync />
-                <div className="relative flex min-h-screen flex-col">
-                  <SiteHeader />
-                  <div className="flex-1 px-4 md:px-6">{children}</div>
-                </div>
-                <Toaster />
-                <FeedbackButton />
-              </RequestProvider>
-            </RoleProvider>
-          </LanguageProvider>
-        </AuthProvider>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
+          <AuthProvider>
+            <LanguageProvider>
+              <RoleProvider>
+                <RequestProvider>
+                  <PlannerAuthSync />
+                  <div className="relative flex min-h-screen flex-col">
+                    <SiteHeader />
+                    <div className="flex-1 px-4 md:px-6">{children}</div>
+                  </div>
+                  <Toaster />
+                  <FeedbackButton />
+                  <ChatWidget />
+                </RequestProvider>
+              </RoleProvider>
+            </LanguageProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
 }
+

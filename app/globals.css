@@ -1,34 +1,65 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:is(.dark *));
+
+/* =============================================
+   Light Mode (Default)
+   ============================================= */
 :root {
-  /* Vibrant Theme - Dark (Enforced as Default) */
+  --background: #ffffff;
+  --foreground: #0f172a;
+
+  --card: #f8fafc;
+  --card-foreground: #0f172a;
+
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+
+  --primary: #3b6cf5;
+  --primary-foreground: #ffffff;
+
+  --secondary: #e8b708;
+  --secondary-foreground: #1e293b;
+
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+
+  --accent: #f97316;
+  --accent-foreground: #ffffff;
+
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #3b6cf5;
+
+  --radius: 0.5rem;
+}
+
+/* =============================================
+   Dark Mode
+   ============================================= */
+.dark {
   --background: #0f172a;
-  /* Slate 900 */
   --foreground: #f8fafc;
-  /* Slate 50 */
 
   --card: #1e293b;
-  /* Slate 800 */
   --card-foreground: #f8fafc;
 
   --popover: #1e293b;
   --popover-foreground: #f8fafc;
 
   --primary: #5c8aff;
-  /* Lighter Blue */
   --primary-foreground: #ffffff;
 
   --secondary: #fade65;
-  /* Lighter Yellow */
   --secondary-foreground: #1e293b;
 
   --muted: #334155;
-  /* Slate 700 */
   --muted-foreground: #94a3b8;
-  /* Slate 400 */
 
   --accent: #f97316;
-  /* Lighter Orange */
   --accent-foreground: #ffffff;
 
   --destructive: #f87171;
@@ -37,49 +68,6 @@
   --border: #334155;
   --input: #334155;
   --ring: #5c8aff;
-
-  --radius: 0.5rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Vibrant Theme - Dark */
-    --background: #0f172a;
-    /* Slate 900 */
-    --foreground: #f8fafc;
-    /* Slate 50 */
-
-    --card: #1e293b;
-    /* Slate 800 */
-    --card-foreground: #f8fafc;
-
-    --popover: #1e293b;
-    --popover-foreground: #f8fafc;
-
-    --primary: #5c8aff;
-    /* Lighter Blue for dark mode */
-    --primary-foreground: #ffffff;
-
-    --secondary: #fade65;
-    /* Lighter Yellow */
-    --secondary-foreground: #1e293b;
-
-    --muted: #334155;
-    /* Slate 700 */
-    --muted-foreground: #94a3b8;
-    /* Slate 400 */
-
-    --accent: #f97316;
-    /* Lighter Orange */
-    --accent-foreground: #ffffff;
-
-    --destructive: #f87171;
-    --destructive-foreground: #ffffff;
-
-    --border: #334155;
-    --input: #334155;
-    --ring: #5c8aff;
-  }
 }
 
 @theme inline {
@@ -123,4 +111,58 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* =============================================
+   React Flow Theme Overrides
+   ============================================= */
+
+/* Controls (zoom in/out/fit-view buttons) */
+.react-flow__controls {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+  overflow: hidden !important;
+}
+
+.react-flow__controls-button {
+  background: var(--card) !important;
+  border-bottom: 1px solid var(--border) !important;
+  fill: var(--foreground) !important;
+  color: var(--foreground) !important;
+  width: 28px !important;
+  height: 28px !important;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--muted) !important;
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none !important;
+}
+
+.react-flow__controls-button svg {
+  fill: var(--foreground) !important;
+  max-width: 14px !important;
+  max-height: 14px !important;
+}
+
+/* MiniMap */
+.react-flow__minimap {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Attribution (React Flow branding badge) */
+.react-flow__attribution {
+  display: none !important;
+}
+
+/* Background grid dots */
+.react-flow__background {
+  background-color: var(--background) !important;
 }

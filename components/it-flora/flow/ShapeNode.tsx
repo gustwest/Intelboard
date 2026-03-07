@@ -253,15 +253,15 @@ const ShapeNode = ({ id, data, selected }: ShapeNodeProps) => {
             <NodeToolbar
                 isVisible={selected}
                 position={Position.Top}
-                className="flex flex-col bg-white p-2 rounded-lg shadow-xl border border-slate-200 animate-in zoom-in-95 pointer-events-auto"
+                className="flex flex-col bg-card p-2 rounded-lg shadow-xl border border-border animate-in zoom-in-95 pointer-events-auto"
             >
                 {/* COLORS SECTION */}
-                <div className="text-[10px] font-bold text-slate-400 mb-1 px-1 text-left w-full">COLORS</div>
+                <div className="text-[10px] font-bold text-muted-foreground mb-1 px-1 text-left w-full">COLORS</div>
                 <div className="flex flex-wrap gap-1 mb-2 max-w-[160px]">
                     {colors.map((c) => (
                         <button
                             key={c}
-                            className="w-5 h-5 rounded-full border border-slate-200 hover:scale-110 transition-transform"
+                            className="w-5 h-5 rounded-full border border-border hover:scale-110 transition-transform"
                             style={{ backgroundColor: c }}
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -271,16 +271,16 @@ const ShapeNode = ({ id, data, selected }: ShapeNodeProps) => {
                     ))}
                 </div>
 
-                <div className="w-full h-px bg-slate-100 my-1" />
+                <div className="w-full h-px bg-muted my-1" />
 
                 {/* SHAPES SECTION */}
-                <div className="text-[10px] font-bold text-slate-400 mb-1 px-1 text-left w-full">CHANGE SHAPE</div>
+                <div className="text-[10px] font-bold text-muted-foreground mb-1 px-1 text-left w-full">CHANGE SHAPE</div>
                 <div className="grid grid-cols-6 gap-1">
                     {sidebarItems.map((item) => (
                         <button
                             key={item.type}
                             className={cn(
-                                "p-1 rounded hover:bg-slate-100 flex items-center justify-center transition-colors border",
+                                "p-1 rounded hover:bg-muted flex items-center justify-center transition-colors border",
                                 shape === item.type ? "border-primary bg-primary/5" : "border-transparent"
                             )}
                             onClick={(e) => {

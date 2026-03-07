@@ -190,7 +190,7 @@ export function AssetModal({ isOpen, onClose, systemId, assetId }: AssetModalPro
                             </div>
                         ))}
                         {columns.length === 0 && (
-                            <p className="text-xs text-slate-400 italic text-center py-2">No columns defined.</p>
+                            <p className="text-xs text-muted-foreground italic text-center py-2">No columns defined.</p>
                         )}
                     </div>
                 </div>

@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { Request } from "@/lib/data";
 import { getRequests, addRequest as addRequestAction, updateRequest as updateRequestAction } from "@/lib/actions";
+import { useSession } from "next-auth/react";
 
 const STORAGE_KEY = "intelboard_requests";
 
@@ -19,17 +20,24 @@ const RequestContext = createContext<RequestContextType | undefined>(undefined);
 export function RequestProvider({ children }: { children: ReactNode }) {
     const [requests, setRequests] = useState<Request[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
+    const { data: session, status } = useSession();
 
-    // Initial load from Postgres
+    // Reload requests from DB whenever session changes (login/logout)
     useEffect(() => {
+        if (status === "loading") return;
+
         async function load() {
-            const data = await getRequests();
-            // Handle potentially different data formats if needed
-            setRequests(data as any);
+            setIsLoaded(false);
+            if (status === "authenticated") {
+                const data = await getRequests();
+                setRequests(data as any);
+            } else {
+                setRequests([]);
+            }
             setIsLoaded(true);
         }
         load();
-    }, []);
+    }, [status, session?.user?.email]);
 
     const addRequest = async (newRequest: Request) => {
         try {

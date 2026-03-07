@@ -95,15 +95,15 @@ const LabelledEdge: FC<EdgeProps> = ({
                             onChange={(e) => setLabelText(e.target.value)}
                             onBlur={handleSave}
                             onKeyDown={onKeyDown}
-                            className="h-6 w-32 px-1 text-xs bg-white border border-slate-300 shadow-sm text-center"
+                            className="h-6 w-32 px-1 text-xs bg-card border border-border shadow-sm text-center"
                             placeholder="Label..."
                         />
                     ) : (
                         <div
                             onClick={onEdgeClick}
                             className={cn(
-                                "px-2 py-1 rounded bg-slate-50 border border-slate-200 shadow-sm text-xs font-medium text-slate-700 hover:border-slate-400 cursor-pointer transition-colors z-50",
-                                !labelText && "text-slate-400 bg-slate-100 hover:bg-white"
+                                "px-2 py-1 rounded bg-muted border border-border shadow-sm text-xs font-medium text-slate-700 hover:border-slate-400 cursor-pointer transition-colors z-50",
+                                !labelText && "text-muted-foreground bg-muted hover:bg-card"
                             )}
                         >
                             {labelText || "+"}

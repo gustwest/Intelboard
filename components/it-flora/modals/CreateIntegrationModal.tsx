@@ -78,14 +78,14 @@ export function CreateIntegrationModal({ isOpen, onClose, sourceAssetId, targetS
         <Modal isOpen={isOpen} onClose={onClose} title="Create Integration">
             <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Connection Summary */}
-                <div className="bg-slate-50 p-3 rounded-md border border-slate-200 text-sm">
+                <div className="bg-muted p-3 rounded-md border border-border text-sm">
                     <div className="flex items-center justify-between mb-2">
                         <span className="font-semibold text-slate-700">{sourceSystem.name}</span>
-                        <span className="text-slate-400">→</span>
+                        <span className="text-muted-foreground">→</span>
                         <span className="font-semibold text-slate-700">{targetSystem.name}</span>
                     </div>
-                    <div className="flex items-center text-xs text-slate-500">
-                        <span className="bg-white border border-slate-200 px-1.5 py-0.5 rounded mr-2">
+                    <div className="flex items-center text-xs text-muted-foreground">
+                        <span className="bg-card border border-border px-1.5 py-0.5 rounded mr-2">
                             {sourceAsset.type}
                         </span>
                         {sourceAsset.name}
@@ -129,11 +129,11 @@ export function CreateIntegrationModal({ isOpen, onClose, sourceAssetId, targetS
                             type="checkbox"
                             checked={propagateAsset}
                             onChange={(e) => setPropagateAsset(e.target.checked)}
-                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            className="rounded border-border text-blue-600 focus:ring-blue-500"
                         />
                         <span>Propagate Asset to Target System?</span>
                     </Label>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-muted-foreground">
                         If checked, a new asset (copy) will be created in {targetSystem.name}.
                     </p>
                 </div>

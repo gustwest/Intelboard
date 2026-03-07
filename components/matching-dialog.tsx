@@ -10,11 +10,12 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Request, specialists } from "@/lib/data";
+import { Request } from "@/lib/data";
 import { findMatches, ScoredSpecialist } from "@/lib/matching";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Check, Star, Info } from "lucide-react";
+import { Check, Star, Info, Loader2 } from "lucide-react";
+import { getSpecialists } from "@/lib/actions";
 
 interface MatchingDialogProps {
     request: Request | null;
@@ -26,13 +27,20 @@ interface MatchingDialogProps {
 export function MatchingDialog({ request, open, onOpenChange, onConfirm }: MatchingDialogProps) {
     const [matches, setMatches] = useState<ScoredSpecialist[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [allSpecialists, setAllSpecialists] = useState<any[]>([]);
+    const [isLoadingSpecialists, setIsLoadingSpecialists] = useState(false);
 
-    // Run matching when dialog opens
+    // Load specialists from DB when dialog opens
     useEffect(() => {
         if (open && request) {
-            const found = findMatches(request, specialists);
-            setMatches(found);
-            setSelectedId(null); // Reset selection
+            setIsLoadingSpecialists(true);
+            getSpecialists().then((specs) => {
+                setAllSpecialists(specs);
+                const found = findMatches(request, specs);
+                setMatches(found);
+                setSelectedId(null);
+                setIsLoadingSpecialists(false);
+            });
         }
     }, [open, request]);
 
@@ -54,12 +62,19 @@ export function MatchingDialog({ request, open, onOpenChange, onConfirm }: Match
                 <DialogHeader>
                     <DialogTitle>Find Specialist for "{request.title}"</DialogTitle>
                     <DialogDescription>
-                        AI-powered matching based on 50+ vetted specialists.
+                        AI-powered matching based on vetted specialists.
                     </DialogDescription>
                 </DialogHeader>
 
                 <div className="flex-1 overflow-y-auto pr-2">
-                    {matches.length === 0 && (
+                    {isLoadingSpecialists && (
+                        <div className="flex flex-col items-center justify-center py-12">
+                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mb-4" />
+                            <p className="text-sm text-muted-foreground">Loading specialists...</p>
+                        </div>
+                    )}
+
+                    {!isLoadingSpecialists && matches.length === 0 && (
                         <>
                             <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground border-b mb-6">
                                 <div className="rounded-full bg-muted p-4 mb-4">
@@ -74,13 +89,13 @@ export function MatchingDialog({ request, open, onOpenChange, onConfirm }: Match
                             <div>
                                 <h3 className="text-sm font-semibold text-muted-foreground mb-3">Other Available Candidates</h3>
                                 <div className="space-y-2">
-                                    {specialists
+                                    {allSpecialists
                                         .slice(0, 20)
                                         .sort((a, b) => b.rating - a.rating)
                                         .map((specialist) => (
                                             <div
                                                 key={specialist.id}
-                                                className={`flex items-center p-3 rounded-lg border cursor-pointer hover:bg-slate-50 transition-colors ${selectedId === specialist.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-slate-100"
+                                                className={`flex items-center p-3 rounded-lg border cursor-pointer hover:bg-muted transition-colors ${selectedId === specialist.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border"
                                                     }`}
                                                 onClick={() => setSelectedId(specialist.id)}
                                             >
@@ -95,9 +110,9 @@ export function MatchingDialog({ request, open, onOpenChange, onConfirm }: Match
                                                     </div>
 
                                                     <div className="col-span-6 flex flex-wrap gap-1">
-                                                        {specialist.skills.slice(0, 3).map((skill, i) => (
+                                                        {(specialist.skills || []).slice(0, 3).map((skill: any, i: number) => (
                                                             <Badge key={i} variant="outline" className="text-[10px] px-1 h-5 font-normal text-muted-foreground truncate max-w-[120px]">
-                                                                {skill}
+                                                                {typeof skill === 'object' ? skill.name : skill}
                                                             </Badge>
                                                         ))}
                                                     </div>
@@ -105,7 +120,7 @@ export function MatchingDialog({ request, open, onOpenChange, onConfirm }: Match
                                                     <div className="col-span-2 text-right">
                                                         <div className="flex items-center justify-end space-x-1">
                                                             <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
-                                                            <span className="text-sm font-medium text-slate-600">
+                                                            <span className="text-sm font-medium text-muted-foreground">
                                                                 {specialist.rating}
                                                             </span>
                                                         </div>
@@ -122,7 +137,7 @@ export function MatchingDialog({ request, open, onOpenChange, onConfirm }: Match
                         </>
                     )}
 
-                    {matches.length > 0 && (
+                    {!isLoadingSpecialists && matches.length > 0 && (
                         <div className="space-y-6">
                             {/* Top 3 Picks */}
                             <div>
@@ -134,7 +149,7 @@ export function MatchingDialog({ request, open, onOpenChange, onConfirm }: Match
                                     {topPicks.map((match) => (
                                         <div
                                             key={match.id}
-                                            className={`relative flex flex-col rounded-xl border-2 p-4 cursor-pointer transition-all hover:shadow-lg ${selectedId === match.id ? "border-primary bg-primary/5" : "border-slate-100 hover:border-slate-200"
+                                            className={`relative flex flex-col rounded-xl border-2 p-4 cursor-pointer transition-all hover:shadow-lg ${selectedId === match.id ? "border-primary bg-primary/5" : "border-border hover:border-border"
                                                 }`}
                                             onClick={() => setSelectedId(match.id)}
                                         >
@@ -164,13 +179,16 @@ export function MatchingDialog({ request, open, onOpenChange, onConfirm }: Match
                                             </p>
 
                                             <div className="flex flex-wrap gap-1 mt-auto">
-                                                {match.skills.slice(0, 3).map(skill => (
-                                                    <span key={skill} className="px-1.5 py-0.5 rounded-sm bg-slate-100 text-[10px] text-slate-600 font-medium">
-                                                        {skill}
-                                                    </span>
-                                                ))}
-                                                {match.skills.length > 3 && (
-                                                    <span className="px-1.5 py-0.5 rounded-sm bg-slate-100 text-[10px] text-slate-600">
+                                                {(match.skills || []).slice(0, 3).map((skill: any) => {
+                                                    const label = typeof skill === 'object' ? skill.name : skill;
+                                                    return (
+                                                        <span key={label} className="px-1.5 py-0.5 rounded-sm bg-muted text-[10px] text-muted-foreground font-medium">
+                                                            {label}
+                                                        </span>
+                                                    );
+                                                })}
+                                                {(match.skills || []).length > 3 && (
+                                                    <span className="px-1.5 py-0.5 rounded-sm bg-muted text-[10px] text-muted-foreground">
                                                         +{match.skills.length - 3}
                                                     </span>
                                                 )}
@@ -188,7 +206,7 @@ export function MatchingDialog({ request, open, onOpenChange, onConfirm }: Match
                                         {otherMatches.map((match) => (
                                             <div
                                                 key={match.id}
-                                                className={`flex items-center p-3 rounded-lg border cursor-pointer hover:bg-slate-50 transition-colors ${selectedId === match.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-slate-100"
+                                                className={`flex items-center p-3 rounded-lg border cursor-pointer hover:bg-muted transition-colors ${selectedId === match.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border"
                                                     }`}
                                                 onClick={() => setSelectedId(match.id)}
                                             >
@@ -211,7 +229,7 @@ export function MatchingDialog({ request, open, onOpenChange, onConfirm }: Match
                                                     </div>
 
                                                     <div className="col-span-2 text-right">
-                                                        <span className={`text-sm font-bold ${match.score > 80 ? 'text-green-600' : match.score > 50 ? 'text-blue-600' : 'text-slate-500'}`}>
+                                                        <span className={`text-sm font-bold ${match.score > 80 ? 'text-green-600' : match.score > 50 ? 'text-blue-600' : 'text-muted-foreground'}`}>
                                                             {match.score}%
                                                         </span>
                                                     </div>

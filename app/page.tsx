@@ -1,13 +1,30 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 import { ArrowRight, LayoutDashboard, PlusCircle, Users, Zap, ShieldCheck, BarChart3, Building2, Check } from "lucide-react";
 import { motion } from "framer-motion";
 import { LoginDialog } from "@/components/login-dialog";
+import { useRole } from "@/components/role-provider";
 
 export default function Home() {
+  const { currentUser, isLoading } = useRole();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isLoading && currentUser) {
+      router.replace("/dashboard");
+    }
+  }, [currentUser, isLoading, router]);
+
+  // Show nothing while checking auth to avoid flash of landing page
+  if (isLoading || currentUser) {
+    return null;
+  }
+
   return (
     <div className="flex flex-col gap-12 pb-16 max-w-5xl mx-auto px-4">
       {/* Hero Section */}

@@ -3,10 +3,11 @@
 import { auth } from "./auth";
 
 import { db } from "./db";
-import { requests, projects, users, companies, workExperience, education, projectViews, systems, assets, integrations, systemDocuments } from "./schema";
-import { eq, desc, or, and } from "drizzle-orm";
+import { requests, projects, users, companies, workExperience, education, projectViews, systems, assets, integrations, systemDocuments, conversations, conversationParticipants, messages, notifications } from "./schema";
+import { eq, desc, or, and, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { mockUsers } from "./data";
+import { dbUserToSpecialist } from "./data";
+import type { Specialist } from "./data";
 
 // ...
 
@@ -145,12 +146,31 @@ export async function removeIntegration(id: string) {
     }
 }
 
+export async function getRequestById(id: string) {
+    try {
+        const [result] = await db.select().from(requests).where(eq(requests.id, id));
+        return result || null;
+    } catch (error) {
+        console.error("Failed to get request:", error);
+        return null;
+    }
+}
+
 export async function getRequests() {
     try {
         const session = await auth();
+        const userRole = (session?.user as any)?.role;
         const companyId = (session?.user as any)?.companyId;
         const userId = session?.user?.id;
 
+        // Admin sees ALL requests
+        if (userRole === "Admin") {
+            return await db.query.requests.findMany({
+                orderBy: [desc(requests.createdAt)],
+            });
+        }
+
+        // Customer: see requests from their company team
         if (companyId) {
             const teamUsers = await db.select({ id: users.id }).from(users).where(eq(users.companyId, companyId));
             const teamUserIds = teamUsers.map(u => u.id);
@@ -163,8 +183,20 @@ export async function getRequests() {
             });
         }
 
+        // Specialist: see requests assigned to them
+        if (userRole === "Specialist" && userId) {
+            return await db.query.requests.findMany({
+                where: or(
+                    eq(requests.creatorId, userId),
+                    eq(requests.assignedSpecialistId, userId)
+                ),
+                orderBy: [desc(requests.createdAt)],
+            });
+        }
+
         if (!userId) return [];
 
+        // Default: own requests
         return await db.query.requests.findMany({
             where: eq(requests.creatorId, userId),
             orderBy: [desc(requests.createdAt)],
@@ -187,15 +219,11 @@ export async function addRequest(data: any) {
 
             if (!existingUser) {
                 console.log(`Creator ${sanitizedData.creatorId} not found in DB. Creating placeholder...`);
-                const mockDiff = mockUsers.find(u => u.id === sanitizedData.creatorId);
-
                 await db.insert(users).values({
                     id: sanitizedData.creatorId,
-                    name: mockDiff?.name || "Guest User",
-                    email: mockDiff?.email || `${sanitizedData.creatorId}@placeholder.com`,
-                    role: (mockDiff?.role as any) || "Guest",
-                    companyId: mockDiff?.company || null,
-                    image: mockDiff?.avatar || null,
+                    name: "Guest User",
+                    email: `${sanitizedData.creatorId}@placeholder.com`,
+                    role: "Guest",
                 }).onConflictDoNothing();
             }
         }
@@ -335,29 +363,18 @@ export async function getUser(id: string) {
 
 export async function getRequestCreator(creatorId: string) {
     if (!creatorId) return null;
-    const lowerId = creatorId.toLowerCase();
     try {
         const dbUser = await getUser(creatorId);
         if (dbUser) return dbUser;
 
-        const mockUser = mockUsers.find(u =>
-            u.id.toLowerCase() === lowerId ||
-            u.email?.toLowerCase() === lowerId
-        );
-        if (mockUser) return mockUser;
-
+        // Fallback: try lookup by email
         if (creatorId.includes("@")) {
+            const [userByEmail] = await db.select().from(users).where(eq(users.email, creatorId));
+            if (userByEmail) return userByEmail;
+
             const emailPrefix = creatorId.split('@')[0];
-            const lowerPrefix = emailPrefix.toLowerCase();
-            const mockByPrefix = mockUsers.find(u => u.id.toLowerCase() === lowerPrefix);
-            if (mockByPrefix) return mockByPrefix;
-
             let name = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
-            if (emailPrefix.startsWith('c')) name = "Customer " + emailPrefix.slice(1);
-            if (emailPrefix.startsWith('s')) name = "Specialist " + emailPrefix.slice(1);
-            if (emailPrefix.startsWith('a')) name = "Agency " + emailPrefix.slice(1);
-
-            return { id: creatorId, name: name, role: "Guest" };
+            return { id: creatorId, name, role: "Guest" };
         }
 
         return {
@@ -410,15 +427,12 @@ export async function updateUserProfile(userId: string, data: {
 
         if (!existingUser) {
             console.log(`[Profile Update] User ${userId} not found in DB. Creating placeholder...`);
-            const mockUser = mockUsers.find((u) => u.id === userId);
             try {
                 await db.insert(users).values({
                     id: userId,
-                    name: mockUser?.name || userData.name || "Guest User",
-                    email: mockUser?.email || `${userId}@placeholder.com`,
-                    role: (mockUser?.role as any) || "Guest",
-                    companyId: mockUser?.company || null,
-                    image: mockUser?.avatar || null,
+                    name: userData.name || "Guest User",
+                    email: `${userId}@placeholder.com`,
+                    role: "Guest",
                 }).onConflictDoNothing();
             } catch (creationError) {
                 console.error(`[Profile Update] Failed to create placeholder user:`, creationError);
@@ -581,6 +595,22 @@ export async function searchUsers(query: string, filters?: { role?: string; skil
         return filtered;
     } catch (error) {
         console.error("Failed to search users:", error);
+        return [];
+    }
+}
+
+// --- Specialist Actions ---
+
+export async function getSpecialists(): Promise<Specialist[]> {
+    try {
+        const specialistUsers = await db.select().from(users)
+            .where(and(
+                eq(users.role, "Specialist"),
+                eq(users.approvalStatus, "APPROVED")
+            ));
+        return specialistUsers.map(dbUserToSpecialist);
+    } catch (error) {
+        console.error("Failed to fetch specialists:", error);
         return [];
     }
 }
@@ -759,5 +789,387 @@ export async function updateProjectView(viewId: string, data: any) {
     } catch (error) {
         console.error("Failed to update project view:", error);
         throw new Error("Failed to update view");
+    }
+}
+
+// --- Chat & Notifications ---
+
+export async function getConversations(userId: string) {
+    try {
+        // Get conversation IDs where user is a participant
+        const participantRows = await db.query.conversationParticipants.findMany({
+            where: eq(conversationParticipants.userId, userId),
+        });
+        const conversationIds = participantRows.map(p => p.conversationId);
+        if (conversationIds.length === 0) return [];
+
+        // Get all conversations with participants and messages
+        const convos = await db.query.conversations.findMany({
+            where: inArray(conversations.id, conversationIds),
+            with: {
+                participants: {
+                    with: {
+                        user: true,
+                    },
+                },
+                messages: {
+                    orderBy: [desc(messages.createdAt)],
+                    limit: 1,
+                },
+            },
+            orderBy: [desc(conversations.updatedAt)],
+        });
+
+        // Look up request titles for request-type conversations
+        const requestIds = convos
+            .filter(c => c.type === "request" && c.requestId)
+            .map(c => c.requestId!);
+
+        let requestMap: Record<string, string> = {};
+        if (requestIds.length > 0) {
+            const reqs = await db.query.requests.findMany({
+                where: inArray(requests.id, requestIds),
+                columns: { id: true, title: true },
+            });
+            requestMap = Object.fromEntries(reqs.map(r => [r.id, r.title]));
+        }
+
+        return convos.map(c => ({
+            id: c.id,
+            type: c.type,
+            title: c.title,
+            requestId: c.requestId,
+            createdAt: c.createdAt.toISOString(),
+            updatedAt: c.updatedAt.toISOString(),
+            participants: c.participants.map(p => ({
+                id: p.user?.id || p.userId,
+                name: p.user?.name || "Unknown",
+                avatar: p.user?.avatar || undefined,
+            })),
+            lastMessage: c.messages[0] ? {
+                id: c.messages[0].id,
+                conversationId: c.messages[0].conversationId,
+                senderId: c.messages[0].senderId,
+                text: c.messages[0].text,
+                createdAt: c.messages[0].createdAt.toISOString(),
+                readBy: c.messages[0].readBy || [],
+            } : undefined,
+            unreadCount: c.messages[0] && !(c.messages[0].readBy || []).includes(userId) && c.messages[0].senderId !== userId ? 1 : 0,
+            requestTitle: c.requestId ? requestMap[c.requestId] : undefined,
+        }));
+    } catch (error) {
+        console.error("Failed to get conversations:", error);
+        return [];
+    }
+}
+
+export async function getMessages(conversationId: string) {
+    try {
+        const msgs = await db.query.messages.findMany({
+            where: eq(messages.conversationId, conversationId),
+            with: {
+                sender: true,
+            },
+            orderBy: [messages.createdAt],
+        });
+        return msgs.map(m => ({
+            id: m.id,
+            conversationId: m.conversationId,
+            senderId: m.senderId,
+            senderName: m.sender?.name || "Unknown",
+            text: m.text,
+            createdAt: m.createdAt.toISOString(),
+            readBy: m.readBy || [],
+        }));
+    } catch (error) {
+        console.error("Failed to get messages:", error);
+        return [];
+    }
+}
+
+export async function sendMessage(conversationId: string, senderId: string, text: string, senderName?: string) {
+    try {
+        const [msg] = await db.insert(messages).values({
+            conversationId,
+            senderId,
+            text,
+            readBy: [senderId],
+        }).returning();
+
+        // Update conversation timestamp
+        await db.update(conversations)
+            .set({ updatedAt: new Date() })
+            .where(eq(conversations.id, conversationId));
+
+        // Create notifications for other participants
+        const participantRows = await db.query.conversationParticipants.findMany({
+            where: eq(conversationParticipants.conversationId, conversationId),
+        });
+
+        const otherParticipants = participantRows.filter(p => p.userId !== senderId);
+        for (const p of otherParticipants) {
+            await db.insert(notifications).values({
+                userId: p.userId,
+                type: "message",
+                title: `New message from ${senderName || "someone"}`,
+                body: text.length > 80 ? text.substring(0, 80) + "..." : text,
+                relatedId: conversationId,
+            });
+        }
+
+        revalidatePath("/board");
+        return {
+            id: msg.id,
+            conversationId: msg.conversationId,
+            senderId: msg.senderId,
+            senderName: senderName || "Unknown",
+            text: msg.text,
+            createdAt: msg.createdAt.toISOString(),
+            readBy: msg.readBy || [],
+        };
+    } catch (error) {
+        console.error("Failed to send message:", error);
+        throw new Error("Failed to send message");
+    }
+}
+
+export async function createConversation(
+    type: "direct" | "group" | "request",
+    participantIds: string[],
+    title?: string,
+    requestId?: string
+) {
+    try {
+        // For direct conversations, check if one already exists between these two users
+        if (type === "direct" && participantIds.length === 2) {
+            const existing = await findExistingDirectConversation(participantIds[0], participantIds[1]);
+            if (existing) return existing;
+        }
+
+        const [convo] = await db.insert(conversations).values({
+            type,
+            title: title || null,
+            requestId: requestId || null,
+        }).returning();
+
+        // Add participants
+        for (const userId of participantIds) {
+            await db.insert(conversationParticipants).values({
+                conversationId: convo.id,
+                userId,
+            });
+        }
+
+        revalidatePath("/board");
+        return {
+            id: convo.id,
+            type: convo.type,
+            title: convo.title,
+            requestId: convo.requestId,
+            createdAt: convo.createdAt.toISOString(),
+            updatedAt: convo.updatedAt.toISOString(),
+        };
+    } catch (error) {
+        console.error("Failed to create conversation:", error);
+        throw new Error("Failed to create conversation");
+    }
+}
+
+export async function addParticipantToConversation(conversationId: string, userId: string) {
+    try {
+        // Check if already a participant
+        const existing = await db.query.conversationParticipants.findFirst({
+            where: (cp, { and, eq }) => and(
+                eq(cp.conversationId, conversationId),
+                eq(cp.userId, userId)
+            ),
+        });
+        if (existing) return { success: true, alreadyExists: true };
+
+        await db.insert(conversationParticipants).values({
+            conversationId,
+            userId,
+        });
+
+        // If the conversation was "direct", upgrade it to "group"
+        const [convo] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
+        if (convo && convo.type === "direct") {
+            await db.update(conversations)
+                .set({ type: "group" })
+                .where(eq(conversations.id, conversationId));
+        }
+
+        revalidatePath("/board");
+        return { success: true, alreadyExists: false };
+    } catch (error) {
+        console.error("Failed to add participant:", error);
+        throw new Error("Failed to add participant");
+    }
+}
+
+async function findExistingDirectConversation(userId1: string, userId2: string) {
+    const user1Convos = await db.query.conversationParticipants.findMany({
+        where: eq(conversationParticipants.userId, userId1),
+    });
+    const user2Convos = await db.query.conversationParticipants.findMany({
+        where: eq(conversationParticipants.userId, userId2),
+    });
+
+    const user1ConvoIds = new Set(user1Convos.map(p => p.conversationId));
+    const sharedConvoIds = user2Convos.filter(p => user1ConvoIds.has(p.conversationId)).map(p => p.conversationId);
+
+    if (sharedConvoIds.length === 0) return null;
+
+    for (const convoId of sharedConvoIds) {
+        const convo = await db.query.conversations.findFirst({
+            where: and(eq(conversations.id, convoId), eq(conversations.type, "direct")),
+        });
+        if (convo) {
+            return {
+                id: convo.id,
+                type: convo.type,
+                title: convo.title,
+                requestId: convo.requestId,
+                createdAt: convo.createdAt.toISOString(),
+                updatedAt: convo.updatedAt.toISOString(),
+            };
+        }
+    }
+    return null;
+}
+
+export async function markMessagesRead(conversationId: string, userId: string) {
+    try {
+        const unreadMsgs = await db.query.messages.findMany({
+            where: eq(messages.conversationId, conversationId),
+        });
+
+        for (const msg of unreadMsgs) {
+            if (!(msg.readBy || []).includes(userId)) {
+                await db.update(messages)
+                    .set({ readBy: [...(msg.readBy || []), userId] })
+                    .where(eq(messages.id, msg.id));
+            }
+        }
+    } catch (error) {
+        console.error("Failed to mark messages as read:", error);
+    }
+}
+
+export async function getOrCreateRequestConversation(requestId: string, participantIds: string[]) {
+    try {
+        // Check if a conversation already exists for this request
+        const existing = await db.query.conversations.findFirst({
+            where: and(eq(conversations.type, "request"), eq(conversations.requestId, requestId)),
+        });
+        if (existing) {
+            // Ensure all participants are added
+            for (const userId of participantIds) {
+                const existingParticipant = await db.query.conversationParticipants.findFirst({
+                    where: and(
+                        eq(conversationParticipants.conversationId, existing.id),
+                        eq(conversationParticipants.userId, userId)
+                    ),
+                });
+                if (!existingParticipant) {
+                    await db.insert(conversationParticipants).values({
+                        conversationId: existing.id,
+                        userId,
+                    });
+                }
+            }
+            return {
+                id: existing.id,
+                type: existing.type,
+                title: existing.title,
+                requestId: existing.requestId,
+                createdAt: existing.createdAt.toISOString(),
+                updatedAt: existing.updatedAt.toISOString(),
+            };
+        }
+        // Create new
+        return await createConversation("request", participantIds, undefined, requestId);
+    } catch (error) {
+        console.error("Failed to get/create request conversation:", error);
+        throw error;
+    }
+}
+
+export async function getNotifications(userId: string) {
+    try {
+        const notifs = await db.query.notifications.findMany({
+            where: eq(notifications.userId, userId),
+            orderBy: [desc(notifications.createdAt)],
+            limit: 50,
+        });
+        return notifs.map(n => ({
+            id: n.id,
+            userId: n.userId,
+            type: n.type,
+            title: n.title,
+            body: n.body,
+            relatedId: n.relatedId,
+            isRead: n.isRead,
+            createdAt: n.createdAt.toISOString(),
+        }));
+    } catch (error) {
+        console.error("Failed to get notifications:", error);
+        return [];
+    }
+}
+
+export async function markNotificationRead(notificationId: string) {
+    try {
+        await db.update(notifications)
+            .set({ isRead: true })
+            .where(eq(notifications.id, notificationId));
+    } catch (error) {
+        console.error("Failed to mark notification as read:", error);
+    }
+}
+
+export async function markAllNotificationsRead(userId: string) {
+    try {
+        await db.update(notifications)
+            .set({ isRead: true })
+            .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+    } catch (error) {
+        console.error("Failed to mark all notifications as read:", error);
+    }
+}
+
+export async function createNotification(
+    userId: string,
+    type: string,
+    title: string,
+    body?: string,
+    relatedId?: string
+) {
+    try {
+        await db.insert(notifications).values({
+            userId,
+            type,
+            title,
+            body: body || null,
+            relatedId: relatedId || null,
+        });
+    } catch (error) {
+        console.error("Failed to create notification:", error);
+    }
+}
+
+export async function getAllUsers() {
+    try {
+        const allUsers = await db.query.users.findMany();
+        return allUsers.map(u => ({
+            id: u.id,
+            name: u.name || "Unknown",
+            email: u.email,
+            role: u.role,
+            avatar: u.avatar,
+        }));
+    } catch (error) {
+        console.error("Failed to get all users:", error);
+        return [];
     }
 }

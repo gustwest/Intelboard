@@ -46,18 +46,18 @@ export function ArchitecturePreview({ architecture }: ArchitecturePreviewProps) 
                                     onClick={() => setSelectedLayer(isSelected ? null : layer.name)}
                                     className={`w-full text-left p-4 rounded-lg border-2 transition-all ${isSelected
                                             ? 'border-blue-500 bg-blue-50'
-                                            : 'border-slate-200 bg-white hover:border-blue-300'
+                                            : 'border-border bg-card hover:border-blue-300'
                                         }`}
                                 >
                                     <div className="flex items-center gap-3">
-                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isSelected ? 'bg-blue-600' : 'bg-slate-100'
+                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isSelected ? 'bg-blue-600' : 'bg-muted'
                                             }`}>
                                             <Icon className={`h-5 w-5 ${isSelected ? 'text-white' : 'text-slate-600'}`} />
                                         </div>
                                         <div className="flex-1">
                                             <div className="font-semibold text-slate-900">{layer.name}</div>
                                             <div className="text-sm text-slate-600 mt-1">{layer.description}</div>
-                                            <div className="text-xs text-slate-500 mt-2">
+                                            <div className="text-xs text-muted-foreground mt-2">
                                                 {layer.systems.length} system{layer.systems.length !== 1 ? 's' : ''}
                                             </div>
                                         </div>
@@ -65,7 +65,7 @@ export function ArchitecturePreview({ architecture }: ArchitecturePreviewProps) 
                                 </button>
 
                                 {isSelected && (
-                                    <div className="mt-2 ml-12 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                                    <div className="mt-2 ml-12 p-4 bg-muted rounded-lg border border-border">
                                         <div className="text-sm font-medium text-slate-700 mb-2">Systems in this layer:</div>
                                         <div className="space-y-1">
                                             {layer.systems.map((sysName, idx) => {
@@ -79,7 +79,7 @@ export function ArchitecturePreview({ architecture }: ArchitecturePreviewProps) 
                                                                 <div className="text-xs text-slate-600 mt-0.5">{system.description}</div>
                                                             )}
                                                             {system && system.assets.length > 0 && (
-                                                                <div className="text-xs text-slate-500 mt-1">
+                                                                <div className="text-xs text-muted-foreground mt-1">
                                                                     {system.assets.length} asset{system.assets.length !== 1 ? 's' : ''}
                                                                 </div>
                                                             )}
@@ -105,11 +105,11 @@ export function ArchitecturePreview({ architecture }: ArchitecturePreviewProps) 
                     {architecture.systems.map((system, index) => (
                         <div
                             key={index}
-                            className="p-4 bg-white rounded-lg border border-slate-200 hover:border-blue-300 transition-colors"
+                            className="p-4 bg-card rounded-lg border border-border hover:border-blue-300 transition-colors"
                         >
                             <div className="flex items-start justify-between mb-2">
                                 <div className="font-semibold text-slate-900">{system.name}</div>
-                                <div className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600">
+                                <div className="text-xs px-2 py-1 rounded bg-muted text-slate-600">
                                     {system.type}
                                 </div>
                             </div>
@@ -117,7 +117,7 @@ export function ArchitecturePreview({ architecture }: ArchitecturePreviewProps) 
                                 <p className="text-sm text-slate-600 mb-3">{system.description}</p>
                             )}
                             {system.assets.length > 0 && (
-                                <div className="text-xs text-slate-500">
+                                <div className="text-xs text-muted-foreground">
                                     {system.assets.length} asset{system.assets.length !== 1 ? 's' : ''}: {' '}
                                     {system.assets.slice(0, 3).map(a => a.name).join(', ')}
                                     {system.assets.length > 3 && ` +${system.assets.length - 3} more`}
@@ -138,12 +138,12 @@ export function ArchitecturePreview({ architecture }: ArchitecturePreviewProps) 
                         {architecture.integrations.map((integration, index) => (
                             <div
                                 key={index}
-                                className="p-3 bg-white rounded-lg border border-slate-200 flex items-center gap-3"
+                                className="p-3 bg-card rounded-lg border border-border flex items-center gap-3"
                             >
                                 <div className="text-sm font-medium text-slate-800">
                                     {integration.sourceSystemName}
                                 </div>
-                                <ArrowRight className="h-4 w-4 text-slate-400" />
+                                <ArrowRight className="h-4 w-4 text-muted-foreground" />
                                 <div className="text-sm font-medium text-slate-800">
                                     {integration.targetSystemName}
                                 </div>
@@ -166,14 +166,14 @@ export function ArchitecturePreview({ architecture }: ArchitecturePreviewProps) 
                         {architecture.techStack.map((stack, index) => (
                             <div
                                 key={index}
-                                className="p-4 bg-white rounded-lg border border-slate-200"
+                                className="p-4 bg-card rounded-lg border border-border"
                             >
                                 <div className="font-medium text-slate-800 mb-2">{stack.category}</div>
                                 <div className="flex flex-wrap gap-2">
                                     {stack.technologies.map((tech, idx) => (
                                         <span
                                             key={idx}
-                                            className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700"
+                                            className="text-xs px-2 py-1 rounded bg-muted text-slate-700"
                                         >
                                             {tech}
                                         </span>

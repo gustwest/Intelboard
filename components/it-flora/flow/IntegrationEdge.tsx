@@ -87,7 +87,7 @@ export default function IntegrationEdge({
                     className="nodrag nopan"
                 >
                     <button
-                        className="flex items-center justify-center w-8 h-8 bg-white rounded-full shadow-md border border-slate-200 hover:border-blue-400 hover:shadow-lg transition-all overflow-hidden"
+                        className="flex items-center justify-center w-8 h-8 bg-card rounded-full shadow-md border border-border hover:border-primary hover:shadow-lg transition-all overflow-hidden"
                         onClick={(event) => {
                             event.stopPropagation();
                             // Trigger the global onEdgeClick by simulating a click on the edge

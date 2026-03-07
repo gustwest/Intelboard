@@ -65,7 +65,7 @@ export function RequirementsForm({ onSubmit, isLoading }: RequirementsFormProps)
             </div>
 
             {/* Business Context */}
-            <div className="bg-white rounded-lg border border-slate-200 p-6 space-y-4">
+            <div className="bg-card rounded-lg border border-border p-6 space-y-4">
                 <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
                     <span className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 text-sm font-bold">
                         1
@@ -80,7 +80,7 @@ export function RequirementsForm({ onSubmit, isLoading }: RequirementsFormProps)
                         value={businessContext}
                         onChange={(e) => setBusinessContext(e.target.value)}
                         placeholder="e.g., Mid-size e-commerce company with 50 employees, currently processing 10k orders/month"
-                        className="w-full h-24 p-3 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full h-24 p-3 text-sm border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         required
                     />
                 </div>
@@ -98,7 +98,7 @@ export function RequirementsForm({ onSubmit, isLoading }: RequirementsFormProps)
             </div>
 
             {/* Project Description */}
-            <div className="bg-white rounded-lg border border-slate-200 p-6 space-y-4">
+            <div className="bg-card rounded-lg border border-border p-6 space-y-4">
                 <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
                     <span className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 text-sm font-bold">
                         2
@@ -113,14 +113,14 @@ export function RequirementsForm({ onSubmit, isLoading }: RequirementsFormProps)
                         value={projectDescription}
                         onChange={(e) => setProjectDescription(e.target.value)}
                         placeholder="e.g., Building a customer loyalty platform to increase repeat purchases and customer engagement. Need integration with existing e-commerce platform and CRM."
-                        className="w-full h-32 p-3 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full h-32 p-3 text-sm border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         required
                     />
                 </div>
             </div>
 
             {/* Functional Requirements */}
-            <div className="bg-white rounded-lg border border-slate-200 p-6 space-y-4">
+            <div className="bg-card rounded-lg border border-border p-6 space-y-4">
                 <div className="flex items-center justify-between">
                     <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
                         <span className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 text-sm font-bold">
@@ -154,7 +154,7 @@ export function RequirementsForm({ onSubmit, isLoading }: RequirementsFormProps)
                                     size="icon"
                                     variant="ghost"
                                     onClick={() => removeItem(setFunctionalReqs, index)}
-                                    className="text-slate-400 hover:text-red-600"
+                                    className="text-muted-foreground hover:text-red-600"
                                 >
                                     <X className="h-4 w-4" />
                                 </Button>
@@ -165,7 +165,7 @@ export function RequirementsForm({ onSubmit, isLoading }: RequirementsFormProps)
             </div>
 
             {/* Non-Functional Requirements */}
-            <div className="bg-white rounded-lg border border-slate-200 p-6 space-y-4">
+            <div className="bg-card rounded-lg border border-border p-6 space-y-4">
                 <div className="flex items-center justify-between">
                     <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
                         <span className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 text-sm font-bold">
@@ -185,7 +185,7 @@ export function RequirementsForm({ onSubmit, isLoading }: RequirementsFormProps)
                     </Button>
                 </div>
 
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-muted-foreground">
                     Performance, security, scalability, compliance, etc.
                 </p>
 
@@ -203,7 +203,7 @@ export function RequirementsForm({ onSubmit, isLoading }: RequirementsFormProps)
                                     size="icon"
                                     variant="ghost"
                                     onClick={() => removeItem(setNonFunctionalReqs, index)}
-                                    className="text-slate-400 hover:text-red-600"
+                                    className="text-muted-foreground hover:text-red-600"
                                 >
                                     <X className="h-4 w-4" />
                                 </Button>
@@ -214,7 +214,7 @@ export function RequirementsForm({ onSubmit, isLoading }: RequirementsFormProps)
             </div>
 
             {/* Acceptance Criteria */}
-            <div className="bg-white rounded-lg border border-slate-200 p-6 space-y-4">
+            <div className="bg-card rounded-lg border border-border p-6 space-y-4">
                 <div className="flex items-center justify-between">
                     <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
                         <span className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 text-sm font-bold">
@@ -234,7 +234,7 @@ export function RequirementsForm({ onSubmit, isLoading }: RequirementsFormProps)
                     </Button>
                 </div>
 
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-muted-foreground">
                     How will you measure success?
                 </p>
 
@@ -252,7 +252,7 @@ export function RequirementsForm({ onSubmit, isLoading }: RequirementsFormProps)
                                     size="icon"
                                     variant="ghost"
                                     onClick={() => removeItem(setAcceptanceCriteria, index)}
-                                    className="text-slate-400 hover:text-red-600"
+                                    className="text-muted-foreground hover:text-red-600"
                                 >
                                     <X className="h-4 w-4" />
                                 </Button>
@@ -263,7 +263,7 @@ export function RequirementsForm({ onSubmit, isLoading }: RequirementsFormProps)
             </div>
 
             {/* Technical Preferences */}
-            <div className="bg-white rounded-lg border border-slate-200 p-6 space-y-4">
+            <div className="bg-card rounded-lg border border-border p-6 space-y-4">
                 <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
                     <span className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 text-sm font-bold">
                         6
@@ -280,7 +280,7 @@ export function RequirementsForm({ onSubmit, isLoading }: RequirementsFormProps)
                         value={technicalPreferences}
                         onChange={(e) => setTechnicalPreferences(e.target.value)}
                         placeholder="e.g., Must use AWS, team has experience with Node.js and PostgreSQL, prefer serverless where possible"
-                        className="w-full h-24 p-3 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full h-24 p-3 text-sm border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                 </div>
             </div>

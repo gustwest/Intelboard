@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import {
     ReactFlow,
     Background,
@@ -15,6 +15,7 @@ import {
     OnNodeDrag,
     ReactFlowProvider,
     MarkerType,
+    useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useStore } from '@/store/it-flora/useStore';
@@ -38,12 +39,14 @@ interface FlowCanvasProps {
     onEditSystem: (systemId: string) => void;
     onSystemClick: (systemId: string) => void;
     selectedAssetIdForLineage?: string | null;
+    focusSystemId?: string | null;
 }
 
-function FlowCanvasContent({ onAddAsset, onEditAsset, onEdgeClick, onEditSystem, onSystemClick, selectedAssetIdForLineage }: FlowCanvasProps) {
+function FlowCanvasContent({ onAddAsset, onEditAsset, onEdgeClick, onEditSystem, onSystemClick, selectedAssetIdForLineage, focusSystemId }: FlowCanvasProps) {
     const systems = useStore((state) => state.systems);
     const integrations = useStore((state) => state.integrations);
     const updateSystemPosition = useStore((state) => state.updateSystemPosition);
+    const addSystem = useStore((state) => state.addSystem);
 
     // Project Filtering
     const activeProjectId = useStore((state) => state.activeProjectId);
@@ -62,6 +65,39 @@ function FlowCanvasContent({ onAddAsset, onEditAsset, onEdgeClick, onEditSystem,
     // Lineage State
     const [highlightedIds, setHighlightedIds] = useState<Set<string>>(new Set());
     const [highlightedSystemId, setHighlightedSystemId] = useState<string | null>(null);
+
+    // Focus system from sidebar
+    const { fitView, screenToFlowPosition } = useReactFlow();
+    const prevFocusId = useRef<string | null>(null);
+    useEffect(() => {
+        if (focusSystemId && focusSystemId !== prevFocusId.current) {
+            prevFocusId.current = focusSystemId;
+            // Trigger the node click logic to highlight lineage
+            onSystemClick(focusSystemId);
+
+            // Highlight lineage
+            const newHighlightedIds = new Set<string>();
+            newHighlightedIds.add(focusSystemId);
+            const outgoing = integrations.filter(i => {
+                const sourceSystem = systems.find(s => s.assets.some(a => a.id === i.sourceAssetId));
+                return sourceSystem?.id === focusSystemId;
+            });
+            const incoming = integrations.filter(i => i.targetSystemId === focusSystemId);
+            outgoing.forEach(i => { newHighlightedIds.add(i.id); newHighlightedIds.add(i.targetSystemId); });
+            incoming.forEach(i => {
+                newHighlightedIds.add(i.id);
+                const sourceSystem = systems.find(s => s.assets.some(a => a.id === i.sourceAssetId));
+                if (sourceSystem) newHighlightedIds.add(sourceSystem.id);
+            });
+            setHighlightedIds(newHighlightedIds);
+            setHighlightedSystemId(focusSystemId);
+
+            // Pan viewport to the system node
+            setTimeout(() => {
+                fitView({ nodes: [{ id: focusSystemId }], padding: 0.5, duration: 600 });
+            }, 100);
+        }
+    }, [focusSystemId, systems, integrations, fitView, onSystemClick]);
 
     // Transform store data to React Flow nodes
     const nodes: Node[] = useMemo(() => {
@@ -252,6 +288,35 @@ function FlowCanvasContent({ onAddAsset, onEditAsset, onEdgeClick, onEditSystem,
         setHighlightedSystemId(null);
     }, []);
 
+    // Drag & Drop from sidebar Quick Add
+    const onDragOver = useCallback((event: React.DragEvent) => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+    }, []);
+
+    const onDrop = useCallback((event: React.DragEvent) => {
+        event.preventDefault();
+        const systemType = event.dataTransfer.getData('application/it-flora-system-type');
+        if (!systemType) return;
+
+        const label = event.dataTransfer.getData('application/it-flora-system-label') || systemType;
+        const name = prompt(`Enter ${label} name:`);
+        if (!name?.trim()) return;
+
+        // Convert screen position to flow position
+        const position = screenToFlowPosition({
+            x: event.clientX,
+            y: event.clientY,
+        });
+
+        addSystem({
+            name: name.trim(),
+            type: systemType as any,
+            description: '',
+            position,
+        });
+    }, [screenToFlowPosition, addSystem]);
+
     return (
         <div className="h-full w-full">
             <ReactFlow
@@ -262,13 +327,19 @@ function FlowCanvasContent({ onAddAsset, onEditAsset, onEdgeClick, onEditSystem,
                 onEdgeClick={handleEdgeClick}
                 onNodeClick={onNodeClick}
                 onPaneClick={onPaneClick}
+                onDragOver={onDragOver}
+                onDrop={onDrop}
                 nodeTypes={nodeTypes}
                 edgeTypes={edgeTypes}
                 fitView
             >
                 <Background />
                 <Controls />
-                <MiniMap />
+                <MiniMap
+                    style={{ backgroundColor: 'var(--background)' }}
+                    maskColor="rgba(15, 23, 42, 0.7)"
+                    nodeColor="var(--primary)"
+                />
             </ReactFlow>
 
             <CreateIntegrationModal

@@ -71,7 +71,7 @@ export function ProjectNotes({ projectId }: ProjectNotesProps) {
     if (!project) return null;
 
     return (
-        <Card className="border-slate-200 shadow-xl bg-white/95 backdrop-blur-sm h-full flex flex-col">
+        <Card className="border-border shadow-xl bg-card/95 backdrop-blur-sm h-full flex flex-col">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-2 shrink-0">
                 <CardTitle className="text-lg font-bold flex items-center gap-2">
                     Project Notes & Media
@@ -91,27 +91,27 @@ export function ProjectNotes({ projectId }: ProjectNotesProps) {
             </CardHeader>
             <CardContent className="p-4 pt-0 flex-1 overflow-y-auto space-y-4">
                 <div className="space-y-2">
-                    <Label htmlFor="project-notes" className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Notes</Label>
+                    <Label htmlFor="project-notes" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Notes</Label>
                     <Textarea
                         id="project-notes"
                         placeholder="Type project documentation here..."
-                        className="min-h-[150px] resize-none border-slate-200 focus:ring-1 focus:ring-primary text-sm leading-relaxed bg-transparent"
+                        className="min-h-[150px] resize-none border-border focus:ring-1 focus:ring-primary text-sm leading-relaxed bg-transparent"
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
                     />
                 </div>
 
                 <div className="space-y-2">
-                    <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Photos & Attachments</Label>
+                    <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Photos & Attachments</Label>
 
                     {/* Image Grid */}
                     <div className="grid grid-cols-2 gap-2">
                         {images.map((img, idx) => (
-                            <div key={idx} className="group relative aspect-square rounded-md overflow-hidden border border-slate-200 bg-slate-50 shadow-sm">
+                            <div key={idx} className="group relative aspect-square rounded-md overflow-hidden border border-border bg-muted shadow-sm">
                                 <img src={img} alt={`Attachment ${idx}`} className="w-full h-full object-cover" />
                                 <button
                                     onClick={() => removeImage(idx)}
-                                    className="absolute top-1 right-1 p-1 bg-white/90 hover:bg-red-50 text-red-500 rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                                    className="absolute top-1 right-1 p-1 bg-card/90 hover:bg-red-50 text-red-500 rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
                                 >
                                     <X className="h-3 w-3" />
                                 </button>
@@ -122,8 +122,8 @@ export function ProjectNotes({ projectId }: ProjectNotesProps) {
                         <div
                             {...getRootProps()}
                             className={cn(
-                                "aspect-square rounded-md border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-primary hover:bg-slate-50 transition-all text-slate-400",
-                                isDragActive && "border-primary bg-slate-50 text-primary"
+                                "aspect-square rounded-md border-2 border-dashed border-border flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-primary hover:bg-muted transition-all text-muted-foreground",
+                                isDragActive && "border-primary bg-muted text-primary"
                             )}
                         >
                             <input {...getInputProps()} />

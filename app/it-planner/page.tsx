@@ -116,6 +116,7 @@ function ITPlannerContent() {
 
   // Lineage State
   const [selectedAssetIdForLineage, setSelectedAssetIdForLineage] = useState<string | null>(null);
+  const [focusSystemId, setFocusSystemId] = useState<string | null>(null);
 
   const handleAddAsset = (systemId: string) => {
     setSelectedSystemId(systemId);
@@ -158,11 +159,17 @@ function ITPlannerContent() {
 
   const handleAssetSelectFromCatalogue = (assetId: string, systemId: string) => {
     setSelectedAssetIdForLineage(assetId);
-    // The FlowCanvas will handle the highlighting and opening the details panel via the prop change
+  };
+
+  const handleFocusSystem = (systemId: string) => {
+    setFocusSystemId(systemId);
+    setDetailsSystemId(systemId);
+    // Reset so clicking the same system again still triggers
+    setTimeout(() => setFocusSystemId(null), 200);
   };
 
   return (
-    <main className="flex h-[calc(100vh-3.5rem)] w-full bg-white text-slate-900 overflow-hidden relative">
+    <main className="flex h-[calc(100vh-3.5rem)] w-full bg-background text-foreground overflow-hidden relative">
       {/* <LiveCursor /> */}
       <Sidebar
         onAddSystem={() => setIsSystemModalOpen(true)}
@@ -171,14 +178,15 @@ function ITPlannerContent() {
         onManageSystems={() => setIsManageSystemsModalOpen(true)}
         onOpenCatalogue={() => setIsCatalogueModalOpen(true)}
         onImportAI={() => setIsAIImportModalOpen(true)}
+        onFocusSystem={handleFocusSystem}
       />
 
-      <div className="flex-1 relative bg-slate-50/50 flex flex-col overflow-hidden">
+      <div className="flex-1 relative bg-muted/20 flex flex-col overflow-hidden">
         {/* Main Content Area based on Active Tool */}
 
         {activeTool === 'lineage' && (
           <div className="flex-1 relative m-0 p-0 h-full">
-            <div className="absolute top-4 right-4 z-10 bg-white/80 backdrop-blur px-3 py-1 rounded-full border shadow-sm text-xs text-muted-foreground pointer-events-none">
+            <div className="absolute top-4 right-4 z-10 bg-card/80 backdrop-blur px-3 py-1 rounded-full border border-border shadow-sm text-xs text-muted-foreground pointer-events-none">
               System Lineage Mode
             </div>
             <FlowCanvas
@@ -188,6 +196,7 @@ function ITPlannerContent() {
               onEditSystem={handleEditSystem}
               onSystemClick={handleSystemClick}
               selectedAssetIdForLineage={selectedAssetIdForLineage}
+              focusSystemId={focusSystemId}
             />
           </div>
         )}
@@ -201,7 +210,7 @@ function ITPlannerContent() {
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                 <LayoutGrid className="w-12 h-12 mb-4 opacity-20" />
-                <p>Select a project to start flowcharing</p>
+                <p>Select a project to start flowcharting</p>
               </div>
             )}
           </div>

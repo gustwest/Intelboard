@@ -91,11 +91,11 @@ export function ProjectModal({ isOpen, onClose, projectId, initialName, initialD
 
                 {/* Sharing Section */}
                 {canManageSharing && projectId && (
-                    <div className="space-y-2 pt-2 border-t border-slate-100">
+                    <div className="space-y-2 pt-2 border-t border-border">
                         <Label>Share with Users</Label>
-                        <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-md p-2 space-y-1">
+                        <div className="max-h-40 overflow-y-auto border border-border rounded-md p-2 space-y-1">
                             {users.filter(u => u.id !== currentUser?.id).map(user => (
-                                <label key={user.id} className="flex items-center space-x-2 p-1 hover:bg-slate-50 rounded cursor-pointer">
+                                <label key={user.id} className="flex items-center space-x-2 p-1 hover:bg-accent rounded cursor-pointer">
                                     <input
                                         type="checkbox"
                                         checked={sharedWith.includes(user.id)}
@@ -106,20 +106,20 @@ export function ProjectModal({ isOpen, onClose, projectId, initialName, initialD
                                                 setSharedWith(sharedWith.filter(id => id !== user.id));
                                             }
                                         }}
-                                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                        className="rounded border-border text-primary focus:ring-primary"
                                     />
-                                    <span className="text-sm text-slate-700">{user.name}</span>
-                                    <span className="text-xs text-slate-400">({user.role})</span>
+                                    <span className="text-sm text-foreground">{user.name}</span>
+                                    <span className="text-xs text-muted-foreground">({user.role})</span>
                                 </label>
                             ))}
                             {users.length <= 1 && (
-                                <div className="text-xs text-slate-400 italic text-center py-2">No other users to share with.</div>
+                                <div className="text-xs text-muted-foreground italic text-center py-2">No other users to share with.</div>
                             )}
                         </div>
                     </div>
                 )}
 
-                <div className="flex justify-between pt-4 border-t border-slate-100">
+                <div className="flex justify-between pt-4 border-t border-border">
                     {projectId && (
                         <Button type="button" variant="ghost" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={handleDelete}>
                             Delete Project

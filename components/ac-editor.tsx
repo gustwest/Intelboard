@@ -92,7 +92,7 @@ export function ACEditor({ request, onUpdate }: ACEditorProps) {
     return (
         <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-lg font-bold">Acceptance Criteria</CardTitle>
+                <CardTitle className="text-lg font-bold text-foreground">Acceptance Criteria</CardTitle>
                 <Badge variant={request.acStatus === "Agreed" ? "default" : "secondary"}>
                     {request.acStatus}
                 </Badge>
@@ -107,7 +107,7 @@ export function ACEditor({ request, onUpdate }: ACEditorProps) {
                     {(request.acceptanceCriteria || []).map((ac, index) => (
                         <div
                             key={index}
-                            className="flex items-center justify-between p-2 rounded-md border bg-slate-50 dark:bg-slate-900"
+                            className="flex items-center justify-between p-2 rounded-md border bg-muted border-border"
                         >
                             {editingIndex === index ? (
                                 <div className="flex items-center gap-2 w-full">
@@ -125,7 +125,7 @@ export function ACEditor({ request, onUpdate }: ACEditorProps) {
                                 </div>
                             ) : (
                                 <>
-                                    <span className="text-sm">{ac}</span>
+                                    <span className="text-sm text-foreground">{ac}</span>
                                     {canEdit && (
                                         <div className="flex items-center">
                                             <Button

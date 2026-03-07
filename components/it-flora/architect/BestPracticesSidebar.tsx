@@ -23,7 +23,7 @@ export function BestPracticesSidebar({ practices }: BestPracticesSidebarProps) {
             case 'low':
                 return 'border-blue-200 bg-blue-50';
             default:
-                return 'border-slate-200 bg-slate-50';
+                return 'border-border bg-muted';
         }
     };
 
@@ -36,7 +36,7 @@ export function BestPracticesSidebar({ practices }: BestPracticesSidebarProps) {
             case 'low':
                 return 'bg-blue-100 text-blue-700';
             default:
-                return 'bg-slate-100 text-slate-700';
+                return 'bg-muted text-slate-700';
         }
     };
 
@@ -46,8 +46,8 @@ export function BestPracticesSidebar({ practices }: BestPracticesSidebarProps) {
     });
 
     return (
-        <div className="h-full bg-white border-l border-slate-200 overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-slate-200 p-4 z-10">
+        <div className="h-full bg-card border-l border-border overflow-y-auto">
+            <div className="sticky top-0 bg-card border-b border-border p-4 z-10">
                 <div className="flex items-center gap-2">
                     <AlertCircle className="h-5 w-5 text-blue-600" />
                     <h2 className="font-semibold text-slate-900">Best Practices</h2>
@@ -59,7 +59,7 @@ export function BestPracticesSidebar({ practices }: BestPracticesSidebarProps) {
 
             <div className="p-4 space-y-4">
                 {sortedPractices.length === 0 ? (
-                    <div className="text-center text-slate-400 py-12">
+                    <div className="text-center text-muted-foreground py-12">
                         <AlertCircle className="h-12 w-12 mx-auto mb-3 opacity-50" />
                         <p className="text-sm">
                             Generate an architecture to see best practices
@@ -106,7 +106,7 @@ export function BestPracticesSidebar({ practices }: BestPracticesSidebarProps) {
 
                                 {/* References */}
                                 {practice.references && practice.references.length > 0 && (
-                                    <div className="mt-3 pt-3 border-t border-slate-200">
+                                    <div className="mt-3 pt-3 border-t border-border">
                                         <div className="text-xs font-medium text-slate-600 mb-2">Learn more:</div>
                                         <div className="space-y-1">
                                             {practice.references.map((ref, idx) => (
@@ -132,7 +132,7 @@ export function BestPracticesSidebar({ practices }: BestPracticesSidebarProps) {
 
             {/* Summary */}
             {sortedPractices.length > 0 && (
-                <div className="p-4 bg-slate-50 border-t border-slate-200">
+                <div className="p-4 bg-muted border-t border-border">
                     <div className="text-xs text-slate-600">
                         <div className="font-medium mb-2">Summary:</div>
                         <div className="space-y-1">

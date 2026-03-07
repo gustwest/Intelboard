@@ -73,7 +73,7 @@ export function ManageProjectSystemsModal({ isOpen, onClose }: ManageProjectSyst
         <Modal isOpen={isOpen} onClose={onClose} title={`Manage Systems: ${activeProject.name}`}>
             <div className="space-y-4">
                 <div className="relative">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
                         placeholder="Search systems..."
                         value={searchQuery}
@@ -88,9 +88,9 @@ export function ManageProjectSystemsModal({ isOpen, onClose }: ManageProjectSyst
                     <button onClick={handleDeselectAll} className="text-blue-600 hover:underline">Deselect All</button>
                 </div>
 
-                <div className="border border-slate-200 rounded-md max-h-60 overflow-y-auto">
+                <div className="border border-border rounded-md max-h-60 overflow-y-auto">
                     {filteredSystems.length === 0 ? (
-                        <div className="p-4 text-center text-sm text-slate-500 italic">
+                        <div className="p-4 text-center text-sm text-muted-foreground italic">
                             No systems found.
                         </div>
                     ) : (
@@ -98,17 +98,17 @@ export function ManageProjectSystemsModal({ isOpen, onClose }: ManageProjectSyst
                             {filteredSystems.map(system => (
                                 <label
                                     key={system.id}
-                                    className="flex items-center space-x-3 p-3 hover:bg-slate-50 cursor-pointer transition-colors"
+                                    className="flex items-center space-x-3 p-3 hover:bg-muted cursor-pointer transition-colors"
                                 >
                                     <input
                                         type="checkbox"
                                         checked={selectedSystemIds.has(system.id)}
                                         onChange={() => handleToggleSystem(system.id)}
-                                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                        className="h-4 w-4 rounded border-border text-blue-600 focus:ring-blue-500"
                                     />
                                     <div className="flex-1">
                                         <div className="text-sm font-medium text-slate-900">{system.name}</div>
-                                        <div className="text-xs text-slate-500">{system.type}</div>
+                                        <div className="text-xs text-muted-foreground">{system.type}</div>
                                     </div>
                                 </label>
                             ))}

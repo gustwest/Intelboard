@@ -93,10 +93,17 @@ export const requests = pgTable("requests", {
     acceptanceCriteria: jsonb("acceptance_criteria").$type<string[]>().default([]).notNull(),
     acStatus: text("ac_status"),
     urgency: text("urgency"),
+    requestType: text("request_type"),
     category: text("category"),
     attributes: jsonb("attributes").$type<Record<string, string>>().default({}).notNull(),
     attachments: jsonb("attachments").$type<string[]>().default([]).notNull(),
     comments: jsonb("comments").$type<any[]>().default([]).notNull(),
+    startDate: text("start_date"),
+    endDate: text("end_date"),
+    hourlyRateMin: text("hourly_rate_min"),
+    hourlyRateMax: text("hourly_rate_max"),
+    salaryMin: text("salary_min"),
+    salaryMax: text("salary_max"),
 });
 
 export const projects = pgTable("projects", {
@@ -248,3 +255,80 @@ export const educationRelations = relations(education, ({ one }) => ({
     }),
 }));
 
+// --- Chat & Notifications ---
+
+export const conversations = pgTable("conversations", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    type: text("type").notNull(), // 'direct' | 'group' | 'request'
+    title: text("title"),
+    requestId: text("request_id").references(() => requests.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const conversationParticipants = pgTable("conversation_participants", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    conversationId: text("conversation_id").references(() => conversations.id, { onDelete: "cascade" }).notNull(),
+    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    joinedAt: timestamp("joined_at").defaultNow().notNull(),
+});
+
+export const messages = pgTable("messages", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    conversationId: text("conversation_id").references(() => conversations.id, { onDelete: "cascade" }).notNull(),
+    senderId: text("sender_id").references(() => users.id).notNull(),
+    text: text("text").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    readBy: jsonb("read_by").$type<string[]>().default([]).notNull(),
+});
+
+export const notifications = pgTable("notifications", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    type: text("type").notNull(), // 'message' | 'status_change' | 'comment' | 'assignment'
+    title: text("title").notNull(),
+    body: text("body"),
+    relatedId: text("related_id"), // conversationId or requestId
+    isRead: boolean("is_read").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// --- Chat & Notification Relations ---
+
+export const conversationsRelations = relations(conversations, ({ many, one }) => ({
+    participants: many(conversationParticipants),
+    messages: many(messages),
+    request: one(requests, {
+        fields: [conversations.requestId],
+        references: [requests.id],
+    }),
+}));
+
+export const conversationParticipantsRelations = relations(conversationParticipants, ({ one }) => ({
+    conversation: one(conversations, {
+        fields: [conversationParticipants.conversationId],
+        references: [conversations.id],
+    }),
+    user: one(users, {
+        fields: [conversationParticipants.userId],
+        references: [users.id],
+    }),
+}));
+
+export const messagesRelations = relations(messages, ({ one }) => ({
+    conversation: one(conversations, {
+        fields: [messages.conversationId],
+        references: [conversations.id],
+    }),
+    sender: one(users, {
+        fields: [messages.senderId],
+        references: [users.id],
+    }),
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+    user: one(users, {
+        fields: [notifications.userId],
+        references: [users.id],
+    }),
+}));

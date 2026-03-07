@@ -3,7 +3,6 @@ import { liveblocks, WithLiveblocks } from '@liveblocks/zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { Edge, Node } from '@xyflow/react';
 import { client } from "@/lib/liveblocks";
-import { mockUsers } from "@/lib/data";
 
 // --- Types ---
 
@@ -88,6 +87,7 @@ interface AppState {
   integrations: Integration[];
   projects: Project[];
   activeProjectId: string | null;
+  starredProjectIds: string[];
 
   users: User[];
   currentUser: User | null;
@@ -116,6 +116,7 @@ interface AppState {
   toggleSystemInProject: (projectId: string, systemId: string) => void;
   setProjects: (projects: Project[]) => void;
   setSystems: (systems: System[]) => void;
+  toggleStarProject: (projectId: string) => void;
 
   // User & Document Actions
   addUser: (user: Omit<User, 'id'>) => void;
@@ -144,14 +145,24 @@ const getSavedUser = (): User | null => {
   return saved ? JSON.parse(saved) : null;
 };
 
+// Helper to safely read from localStorage
+const getSavedStars = (): string[] => {
+  if (typeof window === 'undefined') return [];
+  const user = getSavedUser();
+  const key = user ? `it-planner-starred-${user.id}` : 'it-planner-starred-guest';
+  const saved = localStorage.getItem(key);
+  return saved ? JSON.parse(saved) : [];
+};
+
 // Safe initialization
 const initialState = {
   systems: [],
   integrations: [],
   projects: [],
   activeProjectId: null,
-  users: mockUsers as User[],
-  currentUser: getSavedUser() || (mockUsers[0] as User)
+  starredProjectIds: getSavedStars(),
+  users: [] as User[],
+  currentUser: getSavedUser()
 };
 
 export const useStore = create<WithLiveblocks<AppState>>()(
@@ -397,6 +408,19 @@ export const useStore = create<WithLiveblocks<AppState>>()(
 
       setProjects: (projects) => set({ projects }),
       setSystems: (systems) => set({ systems }),
+
+      toggleStarProject: (projectId) => {
+        const state = get();
+        const isStarred = state.starredProjectIds.includes(projectId);
+        const newStarred = isStarred
+          ? state.starredProjectIds.filter(id => id !== projectId)
+          : [...state.starredProjectIds, projectId];
+        // Persist to localStorage
+        const user = state.currentUser;
+        const key = user ? `it-planner-starred-${user.id}` : 'it-planner-starred-guest';
+        localStorage.setItem(key, JSON.stringify(newStarred));
+        set({ starredProjectIds: newStarred });
+      },
 
       // User & Document Actions
       addUser: (user) => set((state) => ({

@@ -1,26 +1,80 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search, Filter, Briefcase, Building } from "lucide-react";
+import { Search, Briefcase, Clock, X, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { searchUsers } from "@/lib/actions"; // We'll assume searchUsers is server action, usually best called inside useEffect or useTransition
+import { searchUsers } from "@/lib/actions";
+import { useRole } from "@/components/role-provider";
+
+const SEARCH_HISTORY_KEY = "intelboard_search_history";
+const MAX_HISTORY = 20;
+
+function getSearchHistory(userId: string): string[] {
+    if (typeof window === "undefined") return [];
+    try {
+        const raw = localStorage.getItem(`${SEARCH_HISTORY_KEY}_${userId}`);
+        return raw ? JSON.parse(raw) : [];
+    } catch {
+        return [];
+    }
+}
+
+function saveSearchHistory(userId: string, history: string[]) {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(`${SEARCH_HISTORY_KEY}_${userId}`, JSON.stringify(history.slice(0, MAX_HISTORY)));
+}
 
 export default function TalentSearchPage() {
+    const { currentUser } = useRole();
     const [query, setQuery] = useState("");
     const [users, setUsers] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [roleFilter, setRoleFilter] = useState<string | null>(null);
+    const [searchHistory, setSearchHistoryState] = useState<string[]>([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const inputRef = useRef<HTMLInputElement>(null);
+    const suggestionsRef = useRef<HTMLDivElement>(null);
 
-    const handleSearch = async () => {
+    // Load search history on mount
+    useEffect(() => {
+        if (currentUser?.id) {
+            setSearchHistoryState(getSearchHistory(currentUser.id));
+        }
+    }, [currentUser?.id]);
+
+    // Close suggestions on outside click
+    useEffect(() => {
+        function handleClickOutside(e: MouseEvent) {
+            if (
+                suggestionsRef.current && !suggestionsRef.current.contains(e.target as Node) &&
+                inputRef.current && !inputRef.current.contains(e.target as Node)
+            ) {
+                setShowSuggestions(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const handleSearch = async (searchQuery?: string) => {
+        const q = searchQuery ?? query;
         setIsLoading(true);
+        setShowSuggestions(false);
         try {
-            const results = await searchUsers(query, { role: roleFilter || undefined });
+            const results = await searchUsers(q, { role: roleFilter || undefined });
             setUsers(results);
+
+            // Save to search history
+            if (q.trim() && currentUser?.id) {
+                const updated = [q.trim(), ...searchHistory.filter(h => h.toLowerCase() !== q.trim().toLowerCase())].slice(0, MAX_HISTORY);
+                setSearchHistoryState(updated);
+                saveSearchHistory(currentUser.id, updated);
+            }
         } catch (error) {
             console.error("Search failed", error);
         } finally {
@@ -28,9 +82,34 @@ export default function TalentSearchPage() {
         }
     };
 
+    const handleClearHistory = () => {
+        if (currentUser?.id) {
+            setSearchHistoryState([]);
+            saveSearchHistory(currentUser.id, []);
+        }
+    };
+
+    const handleRemoveHistoryItem = (item: string) => {
+        if (currentUser?.id) {
+            const updated = searchHistory.filter(h => h !== item);
+            setSearchHistoryState(updated);
+            saveSearchHistory(currentUser.id, updated);
+        }
+    };
+
+    const handleSelectSuggestion = (suggestion: string) => {
+        setQuery(suggestion);
+        setShowSuggestions(false);
+        handleSearch(suggestion);
+    };
+
     useEffect(() => {
         handleSearch();
-    }, [roleFilter]); // Auto search when filter changes, logic for query usually requires debounce or form submit
+    }, [roleFilter]);
+
+    const filteredSuggestions = searchHistory.filter(h =>
+        !query || h.toLowerCase().includes(query.toLowerCase())
+    ).slice(0, 8);
 
     return (
         <div className="min-h-screen bg-slate-50/50 p-8">
@@ -50,12 +129,57 @@ export default function TalentSearchPage() {
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                         <Input
+                            ref={inputRef}
                             placeholder="Search by name, skills, or bio..."
                             className="pl-10 h-10 bg-slate-50 border-slate-200"
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                            onFocus={() => setShowSuggestions(true)}
                         />
+
+                        {/* Search Suggestions Dropdown */}
+                        {showSuggestions && filteredSuggestions.length > 0 && (
+                            <div
+                                ref={suggestionsRef}
+                                className="absolute top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg z-50 overflow-hidden"
+                            >
+                                <div className="flex items-center justify-between px-3 py-2 border-b bg-slate-50">
+                                    <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                                        <Clock className="h-3 w-3" />
+                                        Recent Searches
+                                    </span>
+                                    <button
+                                        onClick={handleClearHistory}
+                                        className="text-[11px] text-muted-foreground hover:text-destructive flex items-center gap-1"
+                                    >
+                                        <Trash2 className="h-3 w-3" />
+                                        Clear
+                                    </button>
+                                </div>
+                                {filteredSuggestions.map((suggestion, i) => (
+                                    <div
+                                        key={i}
+                                        className="flex items-center justify-between px-3 py-2 hover:bg-slate-50 cursor-pointer group"
+                                        onClick={() => handleSelectSuggestion(suggestion)}
+                                    >
+                                        <span className="text-sm text-slate-700 flex items-center gap-2">
+                                            <Clock className="h-3 w-3 text-muted-foreground" />
+                                            {suggestion}
+                                        </span>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleRemoveHistoryItem(suggestion);
+                                            }}
+                                            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+                                        >
+                                            <X className="h-3 w-3" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                     <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
                         <Button
@@ -72,7 +196,7 @@ export default function TalentSearchPage() {
                         >
                             Admins
                         </Button>
-                        <Button onClick={handleSearch} className="bg-blue-600 hover:bg-blue-700">
+                        <Button onClick={() => handleSearch()} className="bg-blue-600 hover:bg-blue-700">
                             Search
                         </Button>
                     </div>
@@ -96,7 +220,7 @@ export default function TalentSearchPage() {
                                             <div className="flex items-center gap-3">
                                                 <Avatar className="h-12 w-12 border border-slate-100">
                                                     <AvatarImage src={user.image} />
-                                                    <AvatarFallback>{user.name[0]}</AvatarFallback>
+                                                    <AvatarFallback>{user.name?.[0]}</AvatarFallback>
                                                 </Avatar>
                                                 <div>
                                                     <h3 className="font-semibold text-lg group-hover:text-blue-700 transition-colors">{user.name}</h3>

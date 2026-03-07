@@ -193,7 +193,7 @@ export function FeedbackButton() {
     return (
         <div
             id="feedback-floating-container"
-            className="fixed bottom-6 right-6 z-[9999] flex flex-col items-end gap-3"
+            className="fixed bottom-6 left-6 z-[9999] flex flex-col items-start gap-3"
         >
             <AnimatePresence>
                 {isExpanded && (
@@ -201,7 +201,7 @@ export function FeedbackButton() {
                         initial={{ opacity: 0, scale: 0.9, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                        className="w-[720px] bg-white rounded-3xl shadow-[0_30px_70px_rgba(0,0,0,0.3)] border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]"
+                        className="w-[720px] bg-background rounded-3xl shadow-[0_30px_70px_rgba(0,0,0,0.3)] border border-border overflow-hidden flex flex-col max-h-[90vh]"
                     >
                         {/* Header */}
                         <div className="bg-primary p-4 text-primary-foreground flex items-center justify-between">
@@ -230,14 +230,14 @@ export function FeedbackButton() {
                                     placeholder="Tell us what we can improve..."
                                     value={message}
                                     onChange={(e) => setMessage(e.target.value)}
-                                    className="min-h-[150px] resize-none border-slate-200 focus-visible:ring-primary shadow-sm text-base p-4"
+                                    className="min-h-[150px] resize-none border-border focus-visible:ring-primary shadow-sm text-base p-4"
                                 />
                             </div>
 
                             {screenshot && (
                                 <div className="space-y-3">
                                     <div className="flex items-center justify-between">
-                                        <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                                             Screenshot
                                         </Label>
                                         <div className="flex gap-1">
@@ -272,7 +272,7 @@ export function FeedbackButton() {
                                         </div>
                                     </div>
 
-                                    <div className="relative border rounded-xl overflow-hidden bg-slate-100 flex justify-center group shadow-inner">
+                                    <div className="relative border rounded-xl overflow-hidden bg-muted flex justify-center group shadow-inner">
                                         <canvas
                                             ref={canvasRef}
                                             onMouseDown={startDrawing}
@@ -289,7 +289,7 @@ export function FeedbackButton() {
                                             )}
                                         />
                                     </div>
-                                    <p className="text-[10px] text-slate-400 font-medium">
+                                    <p className="text-[10px] text-muted-foreground font-medium">
                                         Context: {window.location.pathname}
                                     </p>
                                 </div>
@@ -297,7 +297,7 @@ export function FeedbackButton() {
                         </div>
 
                         {/* Footer */}
-                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-2">
+                        <div className="p-4 bg-muted border-t border-border flex gap-2">
                             <Button
                                 onClick={handleSubmit}
                                 disabled={isSubmitting}
@@ -321,7 +321,7 @@ export function FeedbackButton() {
                     disabled={isCapturing}
                     className={cn(
                         "h-14 w-14 rounded-full shadow-[0_10px_25px_rgba(0,0,0,0.2)] z-[10000] relative overflow-hidden transition-all duration-300",
-                        isExpanded ? "bg-slate-800 text-white hover:bg-slate-700" : "bg-primary text-primary-foreground"
+                        isExpanded ? "bg-muted text-foreground hover:bg-muted/80" : "bg-primary text-primary-foreground"
                     )}
                 >
                     {isCapturing ? (

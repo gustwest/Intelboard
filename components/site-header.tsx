@@ -9,7 +9,10 @@ import { UserMenu } from "@/components/user-menu";
 import { LoginDialog } from "@/components/login-dialog";
 import { useRole } from "@/components/role-provider";
 import { useLanguage } from "@/components/language-provider";
+import { NewRequestDialog } from "@/components/new-request-dialog";
+import { NotificationBell } from "@/components/notification-bell";
 import { Globe } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -26,7 +29,7 @@ export function SiteHeader() {
         <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
             <div className="container flex h-14 items-center px-4 md:px-6">
                 <div className="mr-4 hidden md:flex">
-                    <Link href="/" className="mr-6 flex items-center space-x-2">
+                    <Link href={currentUser ? "/dashboard" : "/"} className="mr-6 flex items-center space-x-2">
                         <Image
                             src="/autoliv_new_logo.png"
                             alt="Intelboard"
@@ -40,13 +43,22 @@ export function SiteHeader() {
                     </Link>
                     <nav className="flex items-center space-x-6 text-sm font-medium">
                         <Link
+                            href="/dashboard"
+                            className={cn(
+                                "transition-colors hover:text-foreground/80",
+                                pathname === "/dashboard" ? "text-foreground" : "text-foreground/60"
+                            )}
+                        >
+                            {t.common.dashboard}
+                        </Link>
+                        <Link
                             href="/board"
                             className={cn(
                                 "transition-colors hover:text-foreground/80",
                                 pathname === "/board" ? "text-foreground" : "text-foreground/60"
                             )}
                         >
-                            {t.common.dashboard}
+                            My Requests
                         </Link>
                         <Link
                             href="/it-planner"
@@ -91,6 +103,7 @@ export function SiteHeader() {
                         {/* Search could go here */}
                     </div>
                     <nav className="flex items-center gap-2">
+                        <ThemeToggle />
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -109,6 +122,10 @@ export function SiteHeader() {
                         </DropdownMenu>
 
                         {currentUser && (
+                            <NotificationBell />
+                        )}
+
+                        {currentUser && (
                             <div className="text-sm text-muted-foreground flex items-center gap-2 mr-2 hidden sm:flex">
                                 {t.common.viewingAs}:
                                 <span className="font-semibold text-primary">{currentUser.name}</span>
@@ -121,17 +138,12 @@ export function SiteHeader() {
                         ) : (
                             <>
                                 <UserMenu />
-                                <Link
-                                    href="/requests/new"
-                                    className={buttonVariants({ variant: "default", size: "sm" })}
-                                >
-                                    {t.common.newRequest}
-                                </Link>
+                                <NewRequestDialog />
                             </>
                         )}
                     </nav>
                 </div>
             </div>
-        </header>
+        </header >
     );
 }

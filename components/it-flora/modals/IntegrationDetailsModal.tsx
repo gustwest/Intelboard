@@ -64,15 +64,15 @@ export function IntegrationDetailsModal({ isOpen, onClose, integrationId }: Inte
             <div className="space-y-6">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                        <Label className="text-slate-500">Source System</Label>
+                        <Label className="text-muted-foreground">Source System</Label>
                         <div className="font-medium">{sourceSystem?.name}</div>
                     </div>
                     <div>
-                        <Label className="text-slate-500">Target System</Label>
+                        <Label className="text-muted-foreground">Target System</Label>
                         <div className="font-medium">{targetSystem?.name}</div>
                     </div>
                     <div className="col-span-2">
-                        <Label className="text-slate-500">Source Asset</Label>
+                        <Label className="text-muted-foreground">Source Asset</Label>
                         <div className="font-medium flex items-center">
                             <span className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded mr-2">
                                 {sourceAsset?.type}
@@ -117,18 +117,18 @@ export function IntegrationDetailsModal({ isOpen, onClose, integrationId }: Inte
                     <div className="space-y-4 border-t border-slate-100 pt-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <Label className="text-slate-500">Technology</Label>
+                                <Label className="text-muted-foreground">Technology</Label>
                                 <div className="font-medium">{integration.technology || '-'}</div>
                             </div>
                             <div>
-                                <Label className="text-slate-500">Mode</Label>
+                                <Label className="text-muted-foreground">Mode</Label>
                                 <div className="font-medium">{integration.mode || '-'}</div>
                             </div>
                         </div>
                         <div>
-                            <Label className="text-slate-500">Description</Label>
+                            <Label className="text-muted-foreground">Description</Label>
                             <p className="text-sm text-slate-700 mt-1">
-                                {integration.description || <span className="italic text-slate-400">No description provided.</span>}
+                                {integration.description || <span className="italic text-muted-foreground">No description provided.</span>}
                             </p>
                         </div>
 
