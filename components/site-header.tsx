@@ -61,6 +61,15 @@ export function SiteHeader() {
                             My Requests
                         </Link>
                         <Link
+                            href="/calendar"
+                            className={cn(
+                                "transition-colors hover:text-foreground/80",
+                                pathname === "/calendar" ? "text-foreground" : "text-foreground/60"
+                            )}
+                        >
+                            Calendar
+                        </Link>
+                        <Link
                             href="/it-planner"
                             className={cn(
                                 "transition-colors hover:text-foreground/80",

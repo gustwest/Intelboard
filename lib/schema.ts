@@ -104,6 +104,25 @@ export const requests = pgTable("requests", {
     hourlyRateMax: text("hourly_rate_max"),
     salaryMin: text("salary_min"),
     salaryMax: text("salary_max"),
+    // Phase 3: Payment & Terms
+    agreedRate: text("agreed_rate"),
+    agreedDuration: text("agreed_duration"),
+    paymentStatus: text("payment_status"), // 'pending' | 'terms_proposed' | 'agreed' | 'paid'
+    termsAcceptedByCustomer: boolean("terms_accepted_by_customer").default(false).notNull(),
+    termsAcceptedBySpecialist: boolean("terms_accepted_by_specialist").default(false).notNull(),
+    consultantRole: text("consultant_role"),
+    requiredSkills: jsonb("required_skills").$type<{ name: string; category: string }[]>().default([]).notNull(),
+});
+
+// Phase 1: Request Activity Log / Version History
+export const requestActivity = pgTable("request_activity", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    requestId: text("request_id").references(() => requests.id, { onDelete: "cascade" }).notNull(),
+    userId: text("user_id").references(() => users.id).notNull(),
+    userName: text("user_name").notNull(),
+    action: text("action").notNull(), // 'created' | 'status_changed' | 'criteria_proposed' | 'criteria_approved' | 'specialist_assigned' | 'comment_added' | 'terms_proposed' | 'terms_accepted' | 'meeting_scheduled'
+    details: jsonb("details").$type<Record<string, any>>().default({}).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const projects = pgTable("projects", {
@@ -285,11 +304,26 @@ export const messages = pgTable("messages", {
 export const notifications = pgTable("notifications", {
     id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
     userId: text("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
-    type: text("type").notNull(), // 'message' | 'status_change' | 'comment' | 'assignment'
+    type: text("type").notNull(), // 'message' | 'status_change' | 'comment' | 'assignment' | 'opportunity' | 'terms'
     title: text("title").notNull(),
     body: text("body"),
     relatedId: text("related_id"), // conversationId or requestId
     isRead: boolean("is_read").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Phase 4: Calendar / Events
+export const events = pgTable("events", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    title: text("title").notNull(),
+    description: text("description"),
+    startTime: timestamp("start_time").notNull(),
+    endTime: timestamp("end_time").notNull(),
+    requestId: text("request_id").references(() => requests.id),
+    createdBy: text("created_by").references(() => users.id).notNull(),
+    attendees: jsonb("attendees").$type<string[]>().default([]).notNull(),
+    location: text("location"),
+    type: text("type").notNull().default("meeting"), // 'meeting' | 'deadline' | 'milestone'
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -329,6 +363,28 @@ export const messagesRelations = relations(messages, ({ one }) => ({
 export const notificationsRelations = relations(notifications, ({ one }) => ({
     user: one(users, {
         fields: [notifications.userId],
+        references: [users.id],
+    }),
+}));
+
+export const requestActivityRelations = relations(requestActivity, ({ one }) => ({
+    request: one(requests, {
+        fields: [requestActivity.requestId],
+        references: [requests.id],
+    }),
+    user: one(users, {
+        fields: [requestActivity.userId],
+        references: [users.id],
+    }),
+}));
+
+export const eventsRelations = relations(events, ({ one }) => ({
+    request: one(requests, {
+        fields: [events.requestId],
+        references: [requests.id],
+    }),
+    creator: one(users, {
+        fields: [events.createdBy],
         references: [users.id],
     }),
 }));

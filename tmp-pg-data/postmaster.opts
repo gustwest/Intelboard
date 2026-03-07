@@ -1,0 +1,1 @@
+/Users/gustavwestergren/Documents/AntiGravityRepo/AntiGravityIntelboard/node_modules/@embedded-postgres/darwin-arm64/native/bin/postgres "-D" "./tmp-pg-data" "-p" "5432"

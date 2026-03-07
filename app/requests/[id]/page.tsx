@@ -14,7 +14,10 @@ import { AttachmentsList } from "@/components/attachments-list";
 import { ACEditor } from "@/components/ac-editor";
 import { RequestApproval } from "@/components/request-approval";
 import { NDAModal } from "@/components/nda-modal";
+import { RequestActivityTimeline } from "@/components/request-activity-timeline";
+import { RequestTermsPanel } from "@/components/request-terms-panel";
 import { Request } from "@/lib/data";
+import { getRequestActivity } from "@/lib/actions";
 
 export default function RequestDetailsPage() {
     const params = useParams();
@@ -24,6 +27,7 @@ export default function RequestDetailsPage() {
     const [request, setRequest] = useState<Request | undefined>(undefined);
     const [isNDAOpen, setIsNDAOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [activities, setActivities] = useState<any[]>([]);
 
     const id = params.id as string;
 
@@ -32,6 +36,8 @@ export default function RequestDetailsPage() {
             const foundRequest = getRequest(id);
             setRequest(foundRequest);
             setIsLoading(false);
+            // Load activity timeline
+            getRequestActivity(id).then(acts => setActivities(acts));
         }
     }, [id, getRequest]);
 
@@ -125,6 +131,28 @@ export default function RequestDetailsPage() {
                 </div>
 
                 <div className="space-y-6">
+                    {/* Terms Panel */}
+                    <div className="bg-card rounded-lg border p-6 shadow-sm">
+                        <RequestTermsPanel
+                            requestId={request.id}
+                            agreedRate={(request as any).agreedRate}
+                            agreedDuration={(request as any).agreedDuration}
+                            paymentStatus={(request as any).paymentStatus}
+                            termsAcceptedByCustomer={(request as any).termsAcceptedByCustomer}
+                            termsAcceptedBySpecialist={(request as any).termsAcceptedBySpecialist}
+                            onUpdate={() => {
+                                const updated = getRequest(request.id);
+                                if (updated) setRequest(updated);
+                            }}
+                        />
+                    </div>
+
+                    {/* Activity Timeline */}
+                    <div className="bg-card rounded-lg border p-6 shadow-sm">
+                        <h3 className="text-sm font-semibold mb-4">Activity History</h3>
+                        <RequestActivityTimeline activities={activities} />
+                    </div>
+
                     {/* Sidebar Details */}
                     <div className="bg-card rounded-lg border p-6 shadow-sm space-y-4">
                         <div>

@@ -3,7 +3,7 @@
 import { auth } from "./auth";
 
 import { db } from "./db";
-import { requests, projects, users, companies, workExperience, education, projectViews, systems, assets, integrations, systemDocuments, conversations, conversationParticipants, messages, notifications } from "./schema";
+import { requests, projects, users, companies, workExperience, education, projectViews, systems, assets, integrations, systemDocuments, conversations, conversationParticipants, messages, notifications, requestActivity, events } from "./schema";
 import { eq, desc, or, and, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { dbUserToSpecialist } from "./data";
@@ -1172,5 +1172,418 @@ export async function getAllUsers() {
     } catch (error) {
         log.error("Failed to get all users", {}, error);
         return [];
+    }
+}
+
+// ============================================================
+// Phase 1: Request Activity Log
+// ============================================================
+
+export async function logRequestActivity(
+    requestId: string,
+    userId: string,
+    userName: string,
+    action: string,
+    details: Record<string, any> = {}
+) {
+    try {
+        await db.insert(requestActivity).values({
+            requestId,
+            userId,
+            userName,
+            action,
+            details,
+        });
+    } catch (error) {
+        log.error("Failed to log request activity", { action: "logRequestActivity", requestId, userId }, error);
+    }
+}
+
+export async function getRequestActivity(requestId: string) {
+    try {
+        return await db.query.requestActivity.findMany({
+            where: eq(requestActivity.requestId, requestId),
+            orderBy: [desc(requestActivity.createdAt)],
+        });
+    } catch (error) {
+        log.error("Failed to get request activity", { action: "getRequestActivity", requestId }, error);
+        return [];
+    }
+}
+
+// ============================================================
+// Phase 2: Specialist Matching & Criteria Flow
+// ============================================================
+
+export async function assignSpecialist(requestId: string, specialistId: string) {
+    try {
+        const session = await auth();
+        const adminName = session?.user?.name || "Admin";
+        const adminId = session?.user?.id || "system";
+
+        // Get specialist info
+        const [specialist] = await db.select().from(users).where(eq(users.id, specialistId));
+        if (!specialist) throw new Error("Specialist not found");
+
+        // Update request
+        await db.update(requests).set({
+            assignedSpecialistId: specialistId,
+            status: "Active Efforts",
+        }).where(eq(requests.id, requestId));
+
+        // Get request for notification
+        const [request] = await db.select().from(requests).where(eq(requests.id, requestId));
+
+        // Notify specialist — new opportunity
+        await db.insert(notifications).values({
+            userId: specialistId,
+            type: "opportunity",
+            title: "New Opportunity Assigned",
+            body: `You've been matched to: "${request?.title || "a request"}". Review the details and acceptance criteria.`,
+            relatedId: requestId,
+        });
+
+        // Log activity
+        await logRequestActivity(requestId, adminId, adminName, "specialist_assigned", {
+            specialistId,
+            specialistName: specialist.name,
+        });
+
+        revalidatePath(`/requests/${requestId}`);
+        revalidatePath("/board");
+        revalidatePath("/dashboard");
+        return { success: true };
+    } catch (error) {
+        log.error("Failed to assign specialist", { action: "assignSpecialist", requestId }, error);
+        return { error: "Failed to assign specialist" };
+    }
+}
+
+export async function proposeAcceptanceCriteria(requestId: string, criteria: string[]) {
+    try {
+        const session = await auth();
+        const userName = session?.user?.name || "Unknown";
+        const userId = session?.user?.id || "system";
+
+        await db.update(requests).set({
+            acceptanceCriteria: criteria,
+            acStatus: "Proposed",
+            actionNeeded: true,
+        }).where(eq(requests.id, requestId));
+
+        // Get request creator to notify them
+        const [request] = await db.select().from(requests).where(eq(requests.id, requestId));
+        if (request?.creatorId) {
+            await db.insert(notifications).values({
+                userId: request.creatorId,
+                type: "status_change",
+                title: "Criteria Proposed for Review",
+                body: `Acceptance criteria have been proposed for "${request.title}". Please review and approve.`,
+                relatedId: requestId,
+            });
+        }
+
+        await logRequestActivity(requestId, userId, userName, "criteria_proposed", { criteria });
+        revalidatePath(`/requests/${requestId}`);
+        revalidatePath("/board");
+        return { success: true };
+    } catch (error) {
+        log.error("Failed to propose criteria", { action: "proposeAcceptanceCriteria", requestId }, error);
+        return { error: "Failed to propose criteria" };
+    }
+}
+
+export async function approveAcceptanceCriteria(requestId: string) {
+    try {
+        const session = await auth();
+        const userName = session?.user?.name || "Unknown";
+        const userId = session?.user?.id || "system";
+
+        await db.update(requests).set({
+            acStatus: "Agreed",
+            status: "Scope Approved",
+            actionNeeded: false,
+        }).where(eq(requests.id, requestId));
+
+        // Notify admin
+        const adminUsers = await db.select().from(users).where(eq(users.role, "Admin"));
+        for (const admin of adminUsers) {
+            await db.insert(notifications).values({
+                userId: admin.id,
+                type: "status_change",
+                title: "Criteria Approved",
+                body: `${userName} approved the acceptance criteria for request. Ready for specialist matching.`,
+                relatedId: requestId,
+            });
+        }
+
+        await logRequestActivity(requestId, userId, userName, "criteria_approved", {});
+        revalidatePath(`/requests/${requestId}`);
+        revalidatePath("/board");
+        return { success: true };
+    } catch (error) {
+        log.error("Failed to approve criteria", { action: "approveAcceptanceCriteria", requestId }, error);
+        return { error: "Failed to approve criteria" };
+    }
+}
+
+// Enhanced addRequest with activity logging
+export async function addRequestWithActivity(data: any) {
+    try {
+        const session = await auth();
+        const userName = session?.user?.name || "Unknown";
+        const userId = session?.user?.id || data.creatorId || "system";
+
+        // Use existing addRequest
+        const result = await addRequest(data);
+
+        if (result?.id) {
+            await logRequestActivity(result.id, userId, userName, "created", {
+                title: data.title,
+                requestType: data.requestType,
+            });
+
+            // Notify admins
+            const adminUsers = await db.select().from(users).where(eq(users.role, "Admin"));
+            for (const admin of adminUsers) {
+                await db.insert(notifications).values({
+                    userId: admin.id,
+                    type: "assignment",
+                    title: "New Request Created",
+                    body: `${userName} created: "${data.title}". Review and assign a specialist.`,
+                    relatedId: result.id,
+                });
+            }
+        }
+
+        return result;
+    } catch (error) {
+        log.error("Failed to add request with activity", {}, error);
+        throw error;
+    }
+}
+
+// Enhanced updateRequest with activity logging
+export async function updateRequestWithActivity(id: string, data: any, changeDescription?: string) {
+    try {
+        const session = await auth();
+        const userName = session?.user?.name || "Unknown";
+        const userId = session?.user?.id || "system";
+
+        // Get old state for diff
+        const [oldRequest] = await db.select().from(requests).where(eq(requests.id, id));
+
+        const result = await updateRequest(id, data);
+
+        if (result) {
+            const details: Record<string, any> = {};
+            if (data.status && oldRequest?.status !== data.status) {
+                details.oldStatus = oldRequest?.status;
+                details.newStatus = data.status;
+            }
+            if (changeDescription) details.description = changeDescription;
+
+            await logRequestActivity(id, userId, userName, data.status ? "status_changed" : "updated", details);
+
+            // Notify relevant parties on status change
+            if (data.status && oldRequest?.status !== data.status) {
+                const notifyIds = new Set<string>();
+                if (oldRequest?.creatorId) notifyIds.add(oldRequest.creatorId);
+                if (oldRequest?.assignedSpecialistId) notifyIds.add(oldRequest.assignedSpecialistId);
+                notifyIds.delete(userId); // Don't notify yourself
+
+                for (const nId of notifyIds) {
+                    await db.insert(notifications).values({
+                        userId: nId,
+                        type: "status_change",
+                        title: `Request Status Updated`,
+                        body: `"${oldRequest?.title}" moved from ${oldRequest?.status} to ${data.status}.`,
+                        relatedId: id,
+                    });
+                }
+            }
+        }
+
+        return result;
+    } catch (error) {
+        log.error("Failed to update request with activity", { requestId: id }, error);
+        throw error;
+    }
+}
+
+// ============================================================
+// Phase 3: Terms & Payment Agreement
+// ============================================================
+
+export async function proposeTerms(requestId: string, terms: { rate: string; duration: string }) {
+    try {
+        const session = await auth();
+        const userName = session?.user?.name || "Unknown";
+        const userId = session?.user?.id || "system";
+
+        await db.update(requests).set({
+            agreedRate: terms.rate,
+            agreedDuration: terms.duration,
+            paymentStatus: "terms_proposed",
+            termsAcceptedByCustomer: false,
+            termsAcceptedBySpecialist: false,
+        }).where(eq(requests.id, requestId));
+
+        // Get request to notify parties
+        const [request] = await db.select().from(requests).where(eq(requests.id, requestId));
+        const notifyIds = new Set<string>();
+        if (request?.creatorId) notifyIds.add(request.creatorId);
+        if (request?.assignedSpecialistId) notifyIds.add(request.assignedSpecialistId);
+        notifyIds.delete(userId);
+
+        for (const nId of notifyIds) {
+            await db.insert(notifications).values({
+                userId: nId,
+                type: "terms",
+                title: "Terms Proposed",
+                body: `Terms proposed for "${request?.title}": ${terms.rate}, ${terms.duration}. Please review and accept.`,
+                relatedId: requestId,
+            });
+        }
+
+        await logRequestActivity(requestId, userId, userName, "terms_proposed", terms);
+        revalidatePath(`/requests/${requestId}`);
+        return { success: true };
+    } catch (error) {
+        log.error("Failed to propose terms", { requestId }, error);
+        return { error: "Failed to propose terms" };
+    }
+}
+
+export async function acceptTerms(requestId: string, role: "customer" | "specialist") {
+    try {
+        const session = await auth();
+        const userName = session?.user?.name || "Unknown";
+        const userId = session?.user?.id || "system";
+
+        const field = role === "customer" ? "termsAcceptedByCustomer" : "termsAcceptedBySpecialist";
+        await db.update(requests).set({ [field]: true }).where(eq(requests.id, requestId));
+
+        // Check if both accepted
+        const [updated] = await db.select().from(requests).where(eq(requests.id, requestId));
+        if (updated?.termsAcceptedByCustomer && updated?.termsAcceptedBySpecialist) {
+            await db.update(requests).set({
+                paymentStatus: "agreed",
+                status: "Active Efforts",
+            }).where(eq(requests.id, requestId));
+
+            await logRequestActivity(requestId, userId, userName, "terms_accepted", {
+                bothAccepted: true,
+                rate: updated.agreedRate,
+                duration: updated.agreedDuration,
+            });
+        } else {
+            await logRequestActivity(requestId, userId, userName, "terms_accepted", { role });
+        }
+
+        revalidatePath(`/requests/${requestId}`);
+        return { success: true };
+    } catch (error) {
+        log.error("Failed to accept terms", { requestId }, error);
+        return { error: "Failed to accept terms" };
+    }
+}
+
+// ============================================================
+// Phase 4: Calendar / Events
+// ============================================================
+
+export async function createEvent(data: {
+    title: string;
+    description?: string;
+    startTime: string;
+    endTime: string;
+    requestId?: string;
+    attendees: string[];
+    location?: string;
+    type?: string;
+}) {
+    try {
+        const session = await auth();
+        const userId = session?.user?.id;
+        const userName = session?.user?.name || "Unknown";
+        if (!userId) throw new Error("Not authenticated");
+
+        const [newEvent] = await db.insert(events).values({
+            title: data.title,
+            description: data.description,
+            startTime: new Date(data.startTime),
+            endTime: new Date(data.endTime),
+            requestId: data.requestId,
+            createdBy: userId,
+            attendees: data.attendees,
+            location: data.location,
+            type: data.type || "meeting",
+        }).returning();
+
+        // Notify attendees
+        for (const attendeeId of data.attendees) {
+            if (attendeeId !== userId) {
+                await db.insert(notifications).values({
+                    userId: attendeeId,
+                    type: "assignment",
+                    title: "New Event Scheduled",
+                    body: `${userName} invited you to: "${data.title}" on ${new Date(data.startTime).toLocaleDateString()}.`,
+                    relatedId: newEvent.id,
+                });
+            }
+        }
+
+        // Log activity if linked to request
+        if (data.requestId) {
+            await logRequestActivity(data.requestId, userId, userName, "meeting_scheduled", {
+                eventId: newEvent.id,
+                title: data.title,
+                startTime: data.startTime,
+            });
+        }
+
+        revalidatePath("/calendar");
+        return newEvent;
+    } catch (error) {
+        log.error("Failed to create event", {}, error);
+        throw new Error("Failed to create event");
+    }
+}
+
+export async function getEvents(userId?: string) {
+    try {
+        const allEvents = await db.select().from(events).orderBy(desc(events.startTime));
+
+        if (userId) {
+            return allEvents.filter(e =>
+                e.createdBy === userId || e.attendees.includes(userId)
+            );
+        }
+        return allEvents;
+    } catch (error) {
+        log.error("Failed to get events", {}, error);
+        return [];
+    }
+}
+
+export async function updateEvent(id: string, data: any) {
+    try {
+        const [updated] = await db.update(events).set(data).where(eq(events.id, id)).returning();
+        revalidatePath("/calendar");
+        return updated;
+    } catch (error) {
+        log.error("Failed to update event", { eventId: id }, error);
+        throw new Error("Failed to update event");
+    }
+}
+
+export async function deleteEvent(id: string) {
+    try {
+        await db.delete(events).where(eq(events.id, id));
+        revalidatePath("/calendar");
+    } catch (error) {
+        log.error("Failed to delete event", { eventId: id }, error);
+        throw new Error("Failed to delete event");
     }
 }
