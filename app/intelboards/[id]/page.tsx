@@ -21,9 +21,10 @@ import {
     ArrowLeft, Plus, Loader2, Lock, Globe, MessageSquare, Users,
     Pin, CheckCircle2, Circle, Send, Video, Zap, Clock, ChevronRight,
     Sparkles, X, ExternalLink, ThumbsUp, ThumbsDown, HelpCircle,
-    CalendarClock, Radio, Check,
+    CalendarClock, Radio, Check, Share2,
 } from "lucide-react";
 import Link from "next/link";
+import { ShareInviteDialog } from "@/components/share-invite-dialog";
 
 type BoardData = Awaited<ReturnType<typeof getIntelboard>>;
 type ThreadData = Awaited<ReturnType<typeof getThread>>;
@@ -67,6 +68,7 @@ export default function IntelboardDetailPage() {
     const [showStartHub, setShowStartHub] = useState(false);
     const [hubTitle, setHubTitle] = useState("");
     const [isStartingHub, setIsStartingHub] = useState(false);
+    const [showShareDialog, setShowShareDialog] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -211,6 +213,9 @@ export default function IntelboardDetailPage() {
                                 load();
                             }}>Join</Button>
                         )}
+                        <Button size="sm" variant="outline" onClick={() => setShowShareDialog(true)} className="gap-1.5">
+                            <Share2 className="h-3.5 w-3.5" /> Share
+                        </Button>
                         <Button size="sm" variant="outline" onClick={() => setShowStartHub(true)} className="gap-1.5">
                             <Video className="h-3.5 w-3.5" /> Start Hub
                         </Button>
@@ -731,6 +736,15 @@ export default function IntelboardDetailPage() {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {/* Share / Invite Dialog */}
+            <ShareInviteDialog
+                open={showShareDialog}
+                onOpenChange={setShowShareDialog}
+                itemType="intelboard"
+                itemId={boardId}
+                itemTitle={board.title}
+            />
         </div>
     );
 }

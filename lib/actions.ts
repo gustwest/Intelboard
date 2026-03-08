@@ -2551,3 +2551,70 @@ export async function seedHubCategories() {
         throw new Error("Failed to seed hub categories");
     }
 }
+
+/* ──────────────────────────────────────────────────────────────────── */
+/*  Share / Invite (Events, Hubs, Intelboards)                        */
+/* ──────────────────────────────────────────────────────────────────── */
+
+export async function shareEventOrHub(data: {
+    itemType: "event" | "hub" | "intelboard";
+    itemId: string;
+    itemTitle: string;
+    sharedBy: string;
+    sharedByName: string;
+    memberIds: string[];
+    externalEmails: string[];
+    message?: string;
+}) {
+    try {
+        const note = data.message ? ` — "${data.message}"` : "";
+        const typeLabel = data.itemType === "event" ? "Event" : data.itemType === "hub" ? "Hub" : "Intelboard";
+
+        // Notify internal members
+        for (const memberId of data.memberIds) {
+            await db.insert(notifications).values({
+                userId: memberId,
+                type: "info",
+                title: `${typeLabel} Shared With You`,
+                body: `${data.sharedByName} shared "${data.itemTitle}" with you.${note}`,
+                relatedId: data.itemId,
+            });
+        }
+
+        // For events, also add members as attendees
+        if (data.itemType === "event" && data.memberIds.length > 0) {
+            const [event] = await db.select().from(events).where(eq(events.id, data.itemId));
+            if (event) {
+                const currentAttendees = event.attendees || [];
+                const newAttendees = [...new Set([...currentAttendees, ...data.memberIds])];
+                await db.update(events).set({ attendees: newAttendees }).where(eq(events.id, data.itemId));
+            }
+        }
+
+        // Log external email invitations (future: integrate SMTP/SendGrid)
+        if (data.externalEmails.length > 0) {
+            log.info("External share invitations", {
+                itemType: data.itemType,
+                itemId: data.itemId,
+                emails: data.externalEmails,
+                sharedBy: data.sharedBy,
+            });
+        }
+
+        log.info("Shared item", {
+            itemType: data.itemType,
+            itemId: data.itemId,
+            memberCount: data.memberIds.length,
+            emailCount: data.externalEmails.length,
+        });
+
+        if (data.itemType === "event") revalidatePath("/calendar");
+        if (data.itemType === "intelboard") revalidatePath("/intelboards");
+        if (data.itemType === "hub") revalidatePath("/intel-hub");
+
+        return { success: true };
+    } catch (error) {
+        log.error("Failed to share item", { itemType: data.itemType, itemId: data.itemId }, error);
+        throw new Error("Failed to share item");
+    }
+}

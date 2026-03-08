@@ -15,9 +15,10 @@ import { cn } from "@/lib/utils";
 import {
     ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon,
     Clock, MapPin, Users, Trash2, Loader2, Filter, Video, FileText, Sparkles,
-    Lock, Globe, UserCheck, Repeat, RefreshCw,
+    Lock, Globe, UserCheck, Repeat, RefreshCw, Share2,
 } from "lucide-react";
 import { MeetingNotesPanel } from "@/components/meeting-notes-panel";
+import { ShareInviteDialog } from "@/components/share-invite-dialog";
 
 type CalendarEvent = {
     id: string;
@@ -82,6 +83,7 @@ export default function CalendarPage() {
     const [filterType, setFilterType] = useState<string>("");
     const [loading, setLoading] = useState(true);
     const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+    const [shareEvent, setShareEvent] = useState<CalendarEvent | null>(null);
 
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -315,6 +317,12 @@ export default function CalendarPage() {
                                         >
                                             <FileText className="h-2.5 w-2.5" /> Notes
                                         </button>
+                                        <button
+                                            onClick={() => setShareEvent(event)}
+                                            className="inline-flex items-center gap-1 text-[10px] font-medium text-indigo-600 dark:text-indigo-400 hover:underline transition-colors"
+                                        >
+                                            <Share2 className="h-2.5 w-2.5" /> Share
+                                        </button>
                                     </div>
                                 </div>
                             );
@@ -346,6 +354,17 @@ export default function CalendarPage() {
                         });
                     }}
                     getUserName={getUserName}
+                />
+            )}
+
+            {/* Share / Invite Dialog */}
+            {shareEvent && (
+                <ShareInviteDialog
+                    open={!!shareEvent}
+                    onOpenChange={(v) => { if (!v) setShareEvent(null); }}
+                    itemType="event"
+                    itemId={shareEvent.id}
+                    itemTitle={shareEvent.title}
                 />
             )}
         </div>

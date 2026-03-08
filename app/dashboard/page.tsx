@@ -18,8 +18,6 @@ import {
     LayoutGrid,
     ListChecks,
     Clock,
-    CheckCircle2,
-    AlertTriangle,
     Plus,
     Briefcase,
     Users,
@@ -183,24 +181,11 @@ export default function DashboardPage() {
         return [];
     }, [requests, currentUser, role]);
 
-    // Stats
-    const totalRequests = myRequests.length;
-    const activeRequests = myRequests.filter(r => !["Done"].includes(r.status)).length;
-    const completedRequests = myRequests.filter(r => r.status === "Done").length;
-    const actionNeeded = myRequests.filter(r => r.actionNeeded).length;
-
     // Recent requests (latest 5)
     const recentRequests = useMemo(() => {
         return [...myRequests]
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
             .slice(0, 5);
-    }, [myRequests]);
-
-    // Type breakdown
-    const typeBreakdown = useMemo(() => {
-        const counts: Record<string, number> = {};
-        myRequests.forEach(r => { const t2 = r.requestType || "Unspecified"; counts[t2] = (counts[t2] || 0) + 1; });
-        return counts;
     }, [myRequests]);
 
     // My projects (owner or shared)
@@ -310,13 +295,7 @@ export default function DashboardPage() {
                 <QuickLinkCard href="/profile" icon={<Briefcase className="h-5 w-5" />} label="My Profile" color="text-amber-500" bgColor="bg-amber-500/10" />
             </div>
 
-            {/* ── Stat Cards ── */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard icon={<Briefcase className="h-5 w-5" />} label="Total Requests" value={totalRequests} color="text-blue-500" bgColor="bg-blue-500/10" />
-                <StatCard icon={<Activity className="h-5 w-5" />} label="Active" value={activeRequests} color="text-violet-500" bgColor="bg-violet-500/10" />
-                <StatCard icon={<CheckCircle2 className="h-5 w-5" />} label="Completed" value={completedRequests} color="text-emerald-500" bgColor="bg-emerald-500/10" />
-                <StatCard icon={<AlertTriangle className="h-5 w-5" />} label="Action Needed" value={actionNeeded} color={actionNeeded > 0 ? "text-amber-500" : "text-muted-foreground"} bgColor={actionNeeded > 0 ? "bg-amber-500/10" : "bg-muted/50"} highlight={actionNeeded > 0} />
-            </div>
+
 
             {/* ── Main 3-column grid ── */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -653,24 +632,7 @@ function DashboardCard({ icon, title, badge, linkHref, linkText, children }: {
     );
 }
 
-function StatCard({ icon, label, value, color, bgColor, highlight }: {
-    icon: React.ReactNode; label: string; value: number; color: string; bgColor: string; highlight?: boolean;
-}) {
-    return (
-        <div className={cn(
-            "rounded-xl border p-4 flex items-center gap-3 transition-all",
-            highlight ? "border-amber-500/30 bg-amber-500/5 shadow-sm shadow-amber-500/10" : "bg-card"
-        )}>
-            <div className={cn("h-10 w-10 rounded-lg flex items-center justify-center shrink-0", bgColor, color)}>
-                {icon}
-            </div>
-            <div>
-                <p className="text-2xl font-bold text-foreground">{value}</p>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</p>
-            </div>
-        </div>
-    );
-}
+
 
 function QuickLinkCard({ href, icon, label, color, bgColor }: { href: string; icon: React.ReactNode; label: string; color: string; bgColor: string }) {
     return (
