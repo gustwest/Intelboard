@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useRequests } from "@/hooks/use-requests";
 import { useRole } from "@/components/role-provider";
 import { useLanguage } from "@/components/language-provider";
@@ -88,7 +89,29 @@ const NOTIFICATION_ICONS: Record<string, React.ReactNode> = {
     status_change: <RefreshCw className="h-3.5 w-3.5 text-amber-400" />,
     comment: <FileText className="h-3.5 w-3.5 text-violet-400" />,
     assignment: <Users className="h-3.5 w-3.5 text-emerald-400" />,
+    opportunity: <Activity className="h-3.5 w-3.5 text-rose-400" />,
+    terms: <FileText className="h-3.5 w-3.5 text-cyan-400" />,
+    info: <Bell className="h-3.5 w-3.5 text-sky-400" />,
 };
+
+function getNewsFeedTarget(n: AppNotification): string | null {
+    if (!n.relatedId) return null;
+    const t = n.title.toLowerCase();
+    switch (n.type) {
+        case "message": return null; // chat handled separately
+        case "status_change": case "comment": case "opportunity": case "terms":
+            return `/requests/${n.relatedId}`;
+        case "assignment":
+            if (t.includes("event") || t.includes("meeting") || t.includes("scheduled") || t.includes("video")) return `/calendar`;
+            if (t.includes("intelboard") || t.includes("invited to")) return `/intelboards/${n.relatedId}`;
+            return `/requests/${n.relatedId}`;
+        case "info":
+            if (t.includes("event") || t.includes("open event")) return `/calendar`;
+            if (t.includes("thread") || t.includes("intelboard")) return `/intelboards`;
+            return null;
+        default: return `/requests/${n.relatedId}`;
+    }
+}
 
 const HUB_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
     scheduled: { label: "Scheduled", color: "text-blue-600", bg: "bg-blue-500/10 border-blue-500/20" },
@@ -101,6 +124,7 @@ export default function DashboardPage() {
     const { requests, isLoaded } = useRequests();
     const { role, currentUser } = useRole();
     const { t } = useLanguage();
+    const router = useRouter();
 
     // IT Planner projects
     const projects = useStore(s => s.projects);
@@ -569,16 +593,26 @@ export default function DashboardPage() {
                             <p className="text-xs text-muted-foreground text-center py-4">No recent activity</p>
                         ) : (
                             <div className="space-y-0.5">
-                                {newsFeed.map(n => (
-                                    <div key={n.id} className={cn("flex items-start gap-2.5 p-2 rounded-lg transition-colors text-left", !n.isRead ? "bg-primary/5" : "hover:bg-muted/30")}>
-                                        <div className="mt-0.5 shrink-0">{NOTIFICATION_ICONS[n.type] || <Activity className="h-3.5 w-3.5 text-muted-foreground" />}</div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className={cn("text-xs leading-snug", !n.isRead ? "font-medium text-foreground" : "text-foreground/70")}>{n.title}</p>
-                                            {n.body && <p className="text-[10px] text-muted-foreground truncate mt-0.5">{n.body}</p>}
-                                        </div>
-                                        <span className="text-[9px] text-muted-foreground shrink-0 mt-0.5">{timeAgo(n.createdAt)}</span>
-                                    </div>
-                                ))}
+                                {newsFeed.map(n => {
+                                    const target = getNewsFeedTarget(n);
+                                    return (
+                                        <button
+                                            key={n.id}
+                                            className={cn("w-full flex items-start gap-2.5 p-2 rounded-lg transition-colors text-left group cursor-pointer", !n.isRead ? "bg-primary/5" : "hover:bg-muted/30")}
+                                            onClick={() => { if (target) router.push(target); }}
+                                        >
+                                            <div className="mt-0.5 shrink-0">{NOTIFICATION_ICONS[n.type] || <Activity className="h-3.5 w-3.5 text-muted-foreground" />}</div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className={cn("text-xs leading-snug", !n.isRead ? "font-medium text-foreground" : "text-foreground/70")}>{n.title}</p>
+                                                {n.body && <p className="text-[10px] text-muted-foreground truncate mt-0.5">{n.body}</p>}
+                                            </div>
+                                            <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                                                <span className="text-[9px] text-muted-foreground">{timeAgo(n.createdAt)}</span>
+                                                {target && <ArrowRight className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />}
+                                            </div>
+                                        </button>
+                                    );
+                                })}
                             </div>
                         )}
                     </DashboardCard>

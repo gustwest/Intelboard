@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Bell, Check, CheckCheck, MessageSquare, ArrowRight, RefreshCw, Users, FileText } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Bell, Check, CheckCheck, MessageSquare, ArrowRight, RefreshCw, Users, FileText, Calendar, BookOpen, Megaphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
     DropdownMenu,
@@ -19,6 +20,9 @@ const NOTIFICATION_ICONS: Record<string, React.ReactNode> = {
     status_change: <RefreshCw className="h-4 w-4 text-amber-400" />,
     comment: <FileText className="h-4 w-4 text-violet-400" />,
     assignment: <Users className="h-4 w-4 text-emerald-400" />,
+    opportunity: <Megaphone className="h-4 w-4 text-rose-400" />,
+    terms: <FileText className="h-4 w-4 text-cyan-400" />,
+    info: <BookOpen className="h-4 w-4 text-sky-400" />,
 };
 
 function timeAgo(date: string) {
@@ -32,8 +36,70 @@ function timeAgo(date: string) {
     return `${days}d ago`;
 }
 
+/**
+ * Determine the navigation target for a notification based on its type and title.
+ * Returns a URL path to navigate to, or null if it should use custom events (chat).
+ */
+function getNotificationTarget(notification: AppNotification): string | null {
+    const { type, title, relatedId } = notification;
+    if (!relatedId) return null;
+    const t = title.toLowerCase();
+
+    switch (type) {
+        case "message":
+            // Chat messages — handled via custom event, not URL navigation
+            return null;
+
+        case "status_change":
+        case "comment":
+        case "opportunity":
+        case "terms":
+            // Always request-related
+            return `/requests/${relatedId}`;
+
+        case "assignment":
+            // Could be event, intelboard, or request
+            if (t.includes("event") || t.includes("meeting") || t.includes("scheduled") || t.includes("video")) {
+                return `/calendar`;
+            }
+            if (t.includes("intelboard") || t.includes("invited to")) {
+                return `/intelboards/${relatedId}`;
+            }
+            // Default: request assignment
+            return `/requests/${relatedId}`;
+
+        case "info":
+            // Could be open event or intelboard thread
+            if (t.includes("event") || t.includes("open event")) {
+                return `/calendar`;
+            }
+            if (t.includes("thread") || t.includes("intelboard")) {
+                return `/intelboards`;
+            }
+            return null;
+
+        default:
+            // Fallback — try to navigate to request
+            return `/requests/${relatedId}`;
+    }
+}
+
+/** Icon for the notification type, with fallback to an event calendar icon for event-like notifs */
+function getNotificationIcon(notification: AppNotification): React.ReactNode {
+    const { type, title } = notification;
+    const t = title.toLowerCase();
+
+    // Event-specific icon override
+    if ((type === "assignment" || type === "info") && (t.includes("event") || t.includes("meeting") || t.includes("scheduled") || t.includes("video"))) {
+        return <Calendar className="h-4 w-4 text-indigo-400" />;
+    }
+
+    return NOTIFICATION_ICONS[type] || <Bell className="h-4 w-4" />;
+}
+
 export function NotificationBell({ onOpenChat }: { onOpenChat?: (conversationId: string) => void }) {
     const { currentUser } = useRole();
+    const router = useRouter();
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
     const [isOpen, setIsOpen] = useState(false);
 
@@ -68,15 +134,19 @@ export function NotificationBell({ onOpenChat }: { onOpenChat?: (conversationId:
 
         if (!notification.relatedId) return;
 
+        // Check if this is a chat message (special handling via custom events)
         if (notification.type === "message") {
-            // Open the chat window for this conversation
             if (onOpenChat) {
                 onOpenChat(notification.relatedId);
             }
             window.dispatchEvent(new CustomEvent("open-chat", { detail: { conversationId: notification.relatedId } }));
-        } else {
-            // status_change, comment, assignment → open the request panel
-            window.dispatchEvent(new CustomEvent("open-request", { detail: { requestId: notification.relatedId } }));
+            return;
+        }
+
+        // For all other types, navigate to the relevant page
+        const target = getNotificationTarget(notification);
+        if (target) {
+            router.push(target);
         }
     };
 
@@ -117,32 +187,40 @@ export function NotificationBell({ onOpenChat }: { onOpenChat?: (conversationId:
                         </div>
                     ) : (
                         <div className="divide-y">
-                            {notifications.map(n => (
-                                <button
-                                    key={n.id}
-                                    className={cn(
-                                        "w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors flex items-start gap-3",
-                                        !n.isRead && "bg-primary/5"
-                                    )}
-                                    onClick={() => handleNotificationClick(n)}
-                                >
-                                    <div className="mt-0.5 shrink-0">
-                                        {NOTIFICATION_ICONS[n.type] || <Bell className="h-4 w-4" />}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className={cn("text-sm leading-tight", !n.isRead && "font-medium")}>
-                                            {n.title}
-                                        </p>
-                                        {n.body && (
-                                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.body}</p>
+                            {notifications.map(n => {
+                                const target = getNotificationTarget(n);
+                                return (
+                                    <button
+                                        key={n.id}
+                                        className={cn(
+                                            "w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors flex items-start gap-3 group",
+                                            !n.isRead && "bg-primary/5"
                                         )}
-                                        <p className="text-[10px] text-muted-foreground mt-1">{timeAgo(n.createdAt)}</p>
-                                    </div>
-                                    {!n.isRead && (
-                                        <div className="h-2 w-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
-                                    )}
-                                </button>
-                            ))}
+                                        onClick={() => handleNotificationClick(n)}
+                                    >
+                                        <div className="mt-0.5 shrink-0">
+                                            {getNotificationIcon(n)}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className={cn("text-sm leading-tight", !n.isRead && "font-medium")}>
+                                                {n.title}
+                                            </p>
+                                            {n.body && (
+                                                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.body}</p>
+                                            )}
+                                            <p className="text-[10px] text-muted-foreground mt-1">{timeAgo(n.createdAt)}</p>
+                                        </div>
+                                        <div className="flex items-center gap-1 mt-1.5 shrink-0">
+                                            {!n.isRead && (
+                                                <div className="h-2 w-2 rounded-full bg-blue-500" />
+                                            )}
+                                            {target && (
+                                                <ArrowRight className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                            )}
+                                        </div>
+                                    </button>
+                                );
+                            })}
                         </div>
                     )}
                 </ScrollArea>
@@ -150,3 +228,4 @@ export function NotificationBell({ onOpenChat }: { onOpenChat?: (conversationId:
         </DropdownMenu>
     );
 }
+

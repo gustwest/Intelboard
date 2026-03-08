@@ -60,7 +60,7 @@ export const REQUEST_TYPE_CONFIG: Record<RequestType, { label: string; icon: str
 export type ACStatus = "Draft" | "Proposed" | "Agreed";
 
 export type ConversationType = "direct" | "group" | "request";
-export type NotificationType = "message" | "status_change" | "comment" | "assignment";
+export type NotificationType = "message" | "status_change" | "comment" | "assignment" | "opportunity" | "terms" | "info";
 
 export type Conversation = {
     id: string;
