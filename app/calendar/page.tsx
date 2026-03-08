@@ -14,8 +14,9 @@ import {
 import { cn } from "@/lib/utils";
 import {
     ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon,
-    Clock, MapPin, Users, Trash2, Loader2, Filter
+    Clock, MapPin, Users, Trash2, Loader2, Filter, Video, FileText, Sparkles,
 } from "lucide-react";
+import { MeetingNotesPanel } from "@/components/meeting-notes-panel";
 
 type CalendarEvent = {
     id: string;
@@ -28,6 +29,15 @@ type CalendarEvent = {
     attendees: string[];
     location?: string | null;
     type: string;
+    meetingUrl?: string | null;
+    meetingId?: string | null;
+    meetingStatus?: string | null;
+    hasRecording?: boolean;
+    transcript?: string | null;
+    aiSummary?: string | null;
+    aiActionItems?: { text: string; assignee?: string; dueDate?: string; done?: boolean }[];
+    agenda?: string | null;
+    meetingNotes?: string | null;
 };
 
 type ViewUser = { id: string; name: string; email?: string | null; role?: string | null };
@@ -59,6 +69,7 @@ export default function CalendarPage() {
     const [filterMyEvents, setFilterMyEvents] = useState(false);
     const [filterType, setFilterType] = useState<string>("");
     const [loading, setLoading] = useState(true);
+    const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -191,7 +202,11 @@ export default function CalendarPage() {
                                         </span>
                                         <div className="mt-0.5 space-y-0.5">
                                             {dayEvents.slice(0, 3).map(e => (
-                                                <div key={e.id} className={cn("text-[9px] text-white px-1 py-0.5 rounded truncate leading-tight", EVENT_COLORS[e.type] || "bg-blue-500")}>
+                                                <div key={e.id} className={cn(
+                                                    "text-[9px] text-white px-1 py-0.5 rounded truncate leading-tight flex items-center gap-0.5",
+                                                    EVENT_COLORS[e.type] || "bg-blue-500"
+                                                )}>
+                                                    {e.meetingUrl && <Video className="h-2 w-2 shrink-0" />}
                                                     {e.title}
                                                 </div>
                                             ))}
@@ -232,10 +247,23 @@ export default function CalendarPage() {
                         {selectedDayEvents.map(event => (
                             <div key={event.id} className="border rounded-lg p-3 space-y-2 relative group">
                                 <div className="flex items-start justify-between">
-                                    <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setSelectedEvent(event)}
+                                        className="flex items-center gap-2 text-left hover:opacity-80 transition-opacity"
+                                    >
                                         <div className={cn("h-2.5 w-2.5 rounded-full shrink-0", EVENT_COLORS[event.type] || "bg-blue-500")} />
                                         <span className="text-sm font-medium">{event.title}</span>
-                                    </div>
+                                        {event.meetingUrl && (
+                                            <Badge variant="secondary" className="text-[8px] py-0 gap-0.5">
+                                                <Video className="h-2 w-2" /> Video
+                                            </Badge>
+                                        )}
+                                        {event.aiSummary && (
+                                            <Badge variant="secondary" className="text-[8px] py-0 gap-0.5 bg-violet-500/10 text-violet-600">
+                                                <Sparkles className="h-2 w-2" /> AI Notes
+                                            </Badge>
+                                        )}
+                                    </button>
                                     <Button
                                         variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
                                         onClick={async () => {
@@ -250,7 +278,7 @@ export default function CalendarPage() {
                                 {event.description && <p className="text-xs text-muted-foreground">{event.description}</p>}
                                 <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
                                     <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{new Date(event.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – {new Date(event.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                    {event.location && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{event.location}</span>}
+                                    {event.location && !event.meetingUrl && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{event.location}</span>}
                                 </div>
                                 {event.attendees.length > 0 && (
                                     <div className="flex items-center gap-1 flex-wrap">
@@ -260,6 +288,22 @@ export default function CalendarPage() {
                                         ))}
                                     </div>
                                 )}
+                                {/* Quick actions row */}
+                                <div className="flex gap-1.5">
+                                    {event.meetingUrl && event.meetingStatus !== "completed" && (
+                                        <a href={event.meetingUrl} target="_blank" rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 text-[10px] font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                                        >
+                                            <Video className="h-2.5 w-2.5" /> Join
+                                        </a>
+                                    )}
+                                    <button
+                                        onClick={() => setSelectedEvent(event)}
+                                        className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+                                    >
+                                        <FileText className="h-2.5 w-2.5" /> Notes
+                                    </button>
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -274,6 +318,23 @@ export default function CalendarPage() {
                 allUsers={allUsers}
                 onCreated={() => { loadData(); setShowCreateDialog(false); }}
             />
+
+            {/* Meeting Notes Panel */}
+            {selectedEvent && (
+                <MeetingNotesPanel
+                    event={selectedEvent}
+                    onClose={() => setSelectedEvent(null)}
+                    onUpdate={() => {
+                        loadData();
+                        // Refresh the selected event
+                        getEvents().then(evts => {
+                            const updated = evts.find((e: any) => e.id === selectedEvent.id);
+                            if (updated) setSelectedEvent(updated);
+                        });
+                    }}
+                    getUserName={getUserName}
+                />
+            )}
         </div>
     );
 }
@@ -290,6 +351,8 @@ function CreateEventDialog({ open, onOpenChange, defaultDate, allUsers, onCreate
     const [type, setType] = useState("meeting");
     const [selectedAttendees, setSelectedAttendees] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [videoMeeting, setVideoMeeting] = useState(true);
+    const [agenda, setAgenda] = useState("");
 
     useEffect(() => {
         if (open) {
@@ -302,6 +365,8 @@ function CreateEventDialog({ open, onOpenChange, defaultDate, allUsers, onCreate
             setLocation("");
             setType("meeting");
             setSelectedAttendees([]);
+            setVideoMeeting(true);
+            setAgenda("");
         }
     }, [open, defaultDate]);
 
@@ -313,9 +378,15 @@ function CreateEventDialog({ open, onOpenChange, defaultDate, allUsers, onCreate
         setIsSubmitting(true);
         try {
             await createEvent({
-                title, description, startTime, endTime, location, type, attendees: selectedAttendees,
+                title, description, startTime, endTime, location, type,
+                attendees: selectedAttendees,
+                videoMeeting: type === "meeting" ? videoMeeting : false,
+                agenda: agenda || undefined,
             });
-            toast({ title: "Event Created" });
+            toast({
+                title: "Event Created",
+                description: videoMeeting && type === "meeting" ? "Video meeting link generated." : undefined,
+            });
             onCreated();
         } catch {
             toast({ title: "Error", description: "Failed to create event", variant: "destructive" });
@@ -329,7 +400,7 @@ function CreateEventDialog({ open, onOpenChange, defaultDate, allUsers, onCreate
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[480px]">
+            <DialogContent className="sm:max-w-[520px]">
                 <DialogHeader>
                     <DialogTitle>Create Event</DialogTitle>
                     <DialogDescription>Schedule a meeting, deadline, or milestone.</DialogDescription>
@@ -354,10 +425,6 @@ function CreateEventDialog({ open, onOpenChange, defaultDate, allUsers, onCreate
                         </div>
                     </div>
                     <div>
-                        <Label className="text-xs">Location</Label>
-                        <Input value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Teams / Room 301" />
-                    </div>
-                    <div>
                         <Label className="text-xs">Type</Label>
                         <div className="flex gap-2 mt-1">
                             {(["meeting", "deadline", "milestone"] as const).map(t => (
@@ -368,6 +435,53 @@ function CreateEventDialog({ open, onOpenChange, defaultDate, allUsers, onCreate
                             ))}
                         </div>
                     </div>
+
+                    {/* Video Meeting Toggle */}
+                    {type === "meeting" && (
+                        <div className="flex items-center justify-between p-3 rounded-xl border bg-blue-500/5 border-blue-500/20">
+                            <div className="flex items-center gap-2">
+                                <Video className="h-4 w-4 text-blue-600" />
+                                <div>
+                                    <p className="text-xs font-semibold text-foreground">Video Meeting</p>
+                                    <p className="text-[10px] text-muted-foreground">A Teams meeting link will be generated</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setVideoMeeting(!videoMeeting)}
+                                className={cn(
+                                    "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+                                    videoMeeting ? "bg-blue-600" : "bg-muted"
+                                )}
+                            >
+                                <span className={cn(
+                                    "inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform shadow-sm",
+                                    videoMeeting ? "translate-x-4.5" : "translate-x-0.5"
+                                )} />
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Location (only when not video meeting) */}
+                    {(type !== "meeting" || !videoMeeting) && (
+                        <div>
+                            <Label className="text-xs">Location</Label>
+                            <Input value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Room 301" />
+                        </div>
+                    )}
+
+                    {/* Agenda */}
+                    {type === "meeting" && (
+                        <div>
+                            <Label className="text-xs">Agenda (optional)</Label>
+                            <textarea
+                                value={agenda}
+                                onChange={e => setAgenda(e.target.value)}
+                                placeholder="1. Review project status&#10;2. Discuss next milestones&#10;3. Q&A"
+                                className="w-full text-xs bg-muted/30 border rounded-lg p-2.5 min-h-[60px] resize-y focus:outline-none focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground/50 mt-1"
+                            />
+                        </div>
+                    )}
+
                     <div>
                         <Label className="text-xs">Attendees</Label>
                         <div className="max-h-32 overflow-y-auto border rounded-lg mt-1 p-1 space-y-0.5">
@@ -384,9 +498,9 @@ function CreateEventDialog({ open, onOpenChange, defaultDate, allUsers, onCreate
                             ))}
                         </div>
                     </div>
-                    <Button onClick={handleSubmit} disabled={isSubmitting} className="w-full">
-                        {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                        Create Event
+                    <Button onClick={handleSubmit} disabled={isSubmitting} className="w-full gap-2">
+                        {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : (videoMeeting && type === "meeting") ? <Video className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                        {(videoMeeting && type === "meeting") ? "Create Video Meeting" : "Create Event"}
                     </Button>
                 </div>
             </DialogContent>

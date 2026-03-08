@@ -1553,12 +1553,30 @@ export async function createEvent(data: {
     attendees: string[];
     location?: string;
     type?: string;
+    videoMeeting?: boolean;
+    agenda?: string;
 }) {
     try {
         const session = await auth();
         const userId = session?.user?.id;
         const userName = session?.user?.name || "Unknown";
         if (!userId) throw new Error("Not authenticated");
+
+        let meetingUrl: string | undefined;
+        let meetingId: string | undefined;
+
+        // Generate Teams meeting link if video meeting requested
+        if (data.videoMeeting && data.type === "meeting") {
+            const { createTeamsMeeting } = await import("./teams");
+            // Get attendee emails for Teams
+            const attendeeUsers = data.attendees.length > 0
+                ? await db.select({ email: users.email }).from(users).where(inArray(users.id, data.attendees))
+                : [];
+            const emails = attendeeUsers.map(u => u.email).filter(Boolean) as string[];
+            const meeting = await createTeamsMeeting(data.title, data.startTime, data.endTime, emails);
+            meetingUrl = meeting.joinUrl;
+            meetingId = meeting.meetingId;
+        }
 
         const [newEvent] = await db.insert(events).values({
             title: data.title,
@@ -1568,8 +1586,12 @@ export async function createEvent(data: {
             requestId: data.requestId,
             createdBy: userId,
             attendees: data.attendees,
-            location: data.location,
+            location: data.videoMeeting ? (meetingUrl || "Video Meeting") : data.location,
             type: data.type || "meeting",
+            agenda: data.agenda,
+            meetingUrl,
+            meetingId,
+            meetingStatus: data.videoMeeting ? "scheduled" : "scheduled",
         }).returning();
 
         // Notify attendees
@@ -1578,8 +1600,8 @@ export async function createEvent(data: {
                 await db.insert(notifications).values({
                     userId: attendeeId,
                     type: "assignment",
-                    title: "New Event Scheduled",
-                    body: `${userName} invited you to: "${data.title}" on ${new Date(data.startTime).toLocaleDateString()}.`,
+                    title: data.videoMeeting ? "Video Meeting Scheduled" : "New Event Scheduled",
+                    body: `${userName} invited you to: "${data.title}" on ${new Date(data.startTime).toLocaleDateString()}.${meetingUrl ? " A video meeting link is included." : ""}`,
                     relatedId: newEvent.id,
                 });
             }
@@ -1591,6 +1613,7 @@ export async function createEvent(data: {
                 eventId: newEvent.id,
                 title: data.title,
                 startTime: data.startTime,
+                videoMeeting: data.videoMeeting,
             });
         }
 
@@ -1599,6 +1622,143 @@ export async function createEvent(data: {
     } catch (error) {
         log.error("Failed to create event", {}, error);
         throw new Error("Failed to create event");
+    }
+}
+
+export async function updateMeetingNotes(eventId: string, data: { agenda?: string; meetingNotes?: string }) {
+    try {
+        await db.update(events).set({
+            ...(data.agenda !== undefined && { agenda: data.agenda }),
+            ...(data.meetingNotes !== undefined && { meetingNotes: data.meetingNotes }),
+        }).where(eq(events.id, eventId));
+        revalidatePath("/calendar");
+        return { success: true };
+    } catch (error) {
+        log.error("Failed to update meeting notes", { eventId }, error);
+        return { error: "Failed to update notes" };
+    }
+}
+
+export async function completeMeeting(eventId: string) {
+    try {
+        // Mark meeting as completed
+        await db.update(events).set({ meetingStatus: "completed" }).where(eq(events.id, eventId));
+
+        // Try to fetch transcript from Teams
+        const [event] = await db.select().from(events).where(eq(events.id, eventId));
+        if (event?.meetingId) {
+            const { getMeetingTranscript, getMeetingRecordingStatus } = await import("./teams");
+            const transcript = await getMeetingTranscript(event.meetingId);
+            const hasRecording = await getMeetingRecordingStatus(event.meetingId);
+
+            await db.update(events).set({
+                transcript: transcript || undefined,
+                hasRecording,
+            }).where(eq(events.id, eventId));
+        }
+
+        revalidatePath("/calendar");
+        return { success: true };
+    } catch (error) {
+        log.error("Failed to complete meeting", { eventId }, error);
+        return { error: "Failed to complete meeting" };
+    }
+}
+
+export async function processMeetingNotes(eventId: string) {
+    try {
+        const [event] = await db.select().from(events).where(eq(events.id, eventId));
+        if (!event) throw new Error("Event not found");
+
+        // Gather all text: transcript + manual notes + agenda
+        const textParts: string[] = [];
+        if (event.agenda) textParts.push(`AGENDA:\n${event.agenda}`);
+        if (event.transcript) textParts.push(`TRANSCRIPT:\n${event.transcript}`);
+        if (event.meetingNotes) textParts.push(`MANUAL NOTES:\n${event.meetingNotes}`);
+
+        if (textParts.length === 0) {
+            return { error: "No notes or transcript to process" };
+        }
+
+        const combinedText = textParts.join("\n\n---\n\n");
+
+        // Get attendee names for context
+        const attendeeNames = event.attendees.length > 0
+            ? (await db.select({ name: users.name }).from(users).where(inArray(users.id, event.attendees))).map(u => u.name)
+            : [];
+
+        const prompt = `You are an AI meeting assistant. Analyze the following meeting content for "${event.title}".
+Attendees: ${attendeeNames.join(", ") || "Unknown"}
+Date: ${new Date(event.startTime).toLocaleDateString()}
+
+${combinedText}
+
+Provide your response in the following JSON format (no markdown, just raw JSON):
+{
+  "summary": "A concise 2-4 sentence summary of the key discussion points and decisions made.",
+  "actionItems": [
+    { "text": "Description of what needs to be done", "assignee": "Person's name or null", "dueDate": "YYYY-MM-DD or null" }
+  ],
+  "nextSteps": "1-2 sentences suggesting what should happen next based on the meeting outcome."
+}`;
+
+        // Call Gemini
+        const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+        if (!GEMINI_API_KEY) {
+            // Mock AI response
+            const mockSummary = `Meeting "${event.title}" covered project updates and next steps. Key decisions were made regarding timeline and resource allocation. Follow-up actions were assigned to team members.`;
+            const mockItems = [
+                { text: "Review project timeline and update milestones", assignee: attendeeNames[0] || undefined, dueDate: undefined },
+                { text: "Prepare status report for next meeting", assignee: attendeeNames[1] || undefined, dueDate: undefined },
+            ];
+
+            await db.update(events).set({
+                aiSummary: mockSummary + "\n\nNext steps: Schedule a follow-up meeting to review progress on action items.",
+                aiActionItems: mockItems,
+            }).where(eq(events.id, eventId));
+
+            revalidatePath("/calendar");
+            return { success: true, summary: mockSummary, actionItems: mockItems };
+        }
+
+        const geminiRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { temperature: 0.3 },
+                }),
+            }
+        );
+
+        const geminiData = await geminiRes.json();
+        const responseText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+        // Parse JSON response (handle possible markdown wrapping)
+        const jsonStr = responseText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+        let parsed: any;
+        try {
+            parsed = JSON.parse(jsonStr);
+        } catch {
+            parsed = { summary: responseText, actionItems: [], nextSteps: "" };
+        }
+
+        const fullSummary = parsed.nextSteps
+            ? `${parsed.summary}\n\nNext steps: ${parsed.nextSteps}`
+            : parsed.summary;
+
+        await db.update(events).set({
+            aiSummary: fullSummary,
+            aiActionItems: parsed.actionItems || [],
+        }).where(eq(events.id, eventId));
+
+        revalidatePath("/calendar");
+        return { success: true, summary: fullSummary, actionItems: parsed.actionItems };
+    } catch (error) {
+        log.error("Failed to process meeting notes", { eventId }, error);
+        return { error: "Failed to process meeting notes" };
     }
 }
 

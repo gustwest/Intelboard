@@ -327,6 +327,16 @@ export const events = pgTable("events", {
     location: text("location"),
     type: text("type").notNull().default("meeting"), // 'meeting' | 'deadline' | 'milestone'
     createdAt: timestamp("created_at").defaultNow().notNull(),
+    // Meeting / Video fields
+    meetingUrl: text("meeting_url"),
+    meetingId: text("meeting_id"),
+    hasRecording: boolean("has_recording").default(false).notNull(),
+    transcript: text("transcript"),
+    aiSummary: text("ai_summary"),
+    aiActionItems: jsonb("ai_action_items").$type<{ text: string; assignee?: string; dueDate?: string; done?: boolean }[]>().default([]).notNull(),
+    agenda: text("agenda"),
+    meetingNotes: text("meeting_notes"),
+    meetingStatus: text("meeting_status").default("scheduled").notNull(), // 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
 });
 
 // --- Chat & Notification Relations ---
