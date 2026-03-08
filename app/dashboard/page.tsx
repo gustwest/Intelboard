@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { REQUEST_TYPE_CONFIG, RequestType, ConversationWithDetails, AppNotification } from "@/lib/data";
-import { getConversations, getNotifications, getEvents, getAllUsers } from "@/lib/actions";
+import { getConversations, getNotifications, getEvents, getAllUsers, getUpcomingHubs } from "@/lib/actions";
 import { useStore, Project } from "@/store/it-flora/useStore";
 import {
     ArrowRight,
@@ -35,6 +35,10 @@ import {
     CalendarClock,
     Bell,
     User2,
+    Video,
+    Globe,
+    Lock,
+    Repeat,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------
@@ -86,6 +90,12 @@ const NOTIFICATION_ICONS: Record<string, React.ReactNode> = {
     assignment: <Users className="h-3.5 w-3.5 text-emerald-400" />,
 };
 
+const HUB_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+    scheduled: { label: "Scheduled", color: "text-blue-600", bg: "bg-blue-500/10 border-blue-500/20" },
+    live: { label: "Live Now", color: "text-red-600", bg: "bg-red-500/10 border-red-500/20" },
+    completed: { label: "Completed", color: "text-emerald-600", bg: "bg-emerald-500/10 border-emerald-500/20" },
+};
+
 /* ================================================================== */
 export default function DashboardPage() {
     const { requests, isLoaded } = useRequests();
@@ -95,10 +105,11 @@ export default function DashboardPage() {
     // IT Planner projects
     const projects = useStore(s => s.projects);
 
-    // Conversations + Notifications + Events
+    // Conversations + Notifications + Events + Hubs
     const [conversations, setConversations] = useState<ConversationWithDetails[]>([]);
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
     const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
+    const [upcomingHubs, setUpcomingHubs] = useState<any[]>([]);
     const [userNames, setUserNames] = useState<Record<string, string>>({});
 
     // Starred projects
@@ -113,18 +124,20 @@ export default function DashboardPage() {
         });
     };
 
-    // Load conversations, notifications, events & user names
+    // Load conversations, notifications, events, hubs & user names
     const load = useCallback(async () => {
         if (!currentUser) return;
-        const [convos, notifs, evts, users] = await Promise.all([
+        const [convos, notifs, evts, users, hubs] = await Promise.all([
             getConversations(currentUser.id),
             getNotifications(currentUser.id),
             getEvents(currentUser.id),
             getAllUsers(),
+            getUpcomingHubs(),
         ]);
         setConversations(convos as ConversationWithDetails[]);
         setNotifications(notifs as AppNotification[]);
         setUpcomingEvents(evts);
+        setUpcomingHubs(hubs);
         const map: Record<string, string> = {};
         users.forEach(u => { map[u.id] = u.name; });
         setUserNames(map);
@@ -268,7 +281,7 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 <QuickLinkCard href="/board" icon={<LayoutGrid className="h-5 w-5" />} label="My Requests" color="text-blue-500" bgColor="bg-blue-500/10" />
                 <QuickLinkCard href="/calendar" icon={<CalendarDays className="h-5 w-5" />} label="Calendar" color="text-emerald-500" bgColor="bg-emerald-500/10" />
-                <QuickLinkCard href="/it-planner" icon={<Wrench className="h-5 w-5" />} label="Planning Tools" color="text-teal-500" bgColor="bg-teal-500/10" />
+                <QuickLinkCard href="/intelboards" icon={<Globe className="h-5 w-5" />} label="Intelboards" color="text-indigo-500" bgColor="bg-indigo-500/10" />
                 <QuickLinkCard href="/talent" icon={<Users className="h-5 w-5" />} label="Talent Directory" color="text-violet-500" bgColor="bg-violet-500/10" />
                 <QuickLinkCard href="/profile" icon={<Briefcase className="h-5 w-5" />} label="My Profile" color="text-amber-500" bgColor="bg-amber-500/10" />
             </div>
@@ -285,7 +298,134 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* ===== LEFT COLUMN (2-wide) ===== */}
                 <div className="lg:col-span-2 space-y-6">
-                    {/* My Requests (latest 5) */}
+
+                    {/* ── Calendar Events + Intelboard Hubs (combined section) ── */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Upcoming Calendar Events */}
+                        <DashboardCard
+                            icon={<CalendarClock className="h-4 w-4 text-emerald-500" />}
+                            title="Upcoming Events"
+                            linkHref="/calendar"
+                            linkText="Open Calendar"
+                        >
+                            {eventsThisWeek.length === 0 && eventsThisMonth.length === 0 ? (
+                                <EmptyState icon={CalendarDays} label="No upcoming events">
+                                    <Link href="/calendar">
+                                        <Button size="sm" variant="outline" className="mt-3 gap-1.5"><Plus className="h-3.5 w-3.5" /> Schedule Event</Button>
+                                    </Link>
+                                </EmptyState>
+                            ) : (
+                                <div className="space-y-1">
+                                    {[...eventsThisWeek, ...eventsThisMonth].slice(0, 5).map(evt => (
+                                        <Link
+                                            key={evt.id}
+                                            href="/calendar"
+                                            className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-muted/50 transition-colors group"
+                                        >
+                                            <div className={cn(
+                                                "h-10 w-10 rounded-lg flex flex-col items-center justify-center text-[9px] font-bold shrink-0 border",
+                                                evt.type === "meeting" ? "bg-blue-500/10 text-blue-600 border-blue-500/20" :
+                                                    evt.type === "deadline" ? "bg-red-500/10 text-red-600 border-red-500/20" :
+                                                        "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                            )}>
+                                                <span className="text-sm font-bold leading-none">{new Date(evt.startTime).getDate()}</span>
+                                                <span className="text-[7px] uppercase opacity-70">{new Date(evt.startTime).toLocaleDateString(undefined, { month: "short" })}</span>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-1.5">
+                                                    <p className="text-xs font-semibold text-foreground truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{evt.title}</p>
+                                                    {evt.meetingUrl && <Video className="h-2.5 w-2.5 text-blue-500 shrink-0" />}
+                                                </div>
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    <span className="text-[10px] text-muted-foreground">{formatEventDate(evt.startTime)} · {formatEventTime(evt.startTime)}</span>
+                                                    {evt.audience === "open" && <Globe className="h-2.5 w-2.5 text-emerald-500" />}
+                                                    {evt.recurring && evt.recurring !== "none" && <Repeat className="h-2.5 w-2.5 text-purple-500" />}
+                                                </div>
+                                                {evt.creatorName && (
+                                                    <span className="text-[9px] text-muted-foreground/70">by {evt.creatorName}</span>
+                                                )}
+                                            </div>
+                                        </Link>
+                                    ))}
+                                    {(eventsThisWeek.length + eventsThisMonth.length) > 5 && (
+                                        <Link href="/calendar" className="block text-xs text-muted-foreground text-center py-1 hover:text-foreground transition-colors">
+                                            +{eventsThisWeek.length + eventsThisMonth.length - 5} more events
+                                        </Link>
+                                    )}
+                                </div>
+                            )}
+                        </DashboardCard>
+
+                        {/* Intelboard Hubs */}
+                        <DashboardCard
+                            icon={<Video className="h-4 w-4 text-indigo-500" />}
+                            title="Intelboard Hubs"
+                            linkHref="/intelboards"
+                            linkText="All Intelboards"
+                        >
+                            {upcomingHubs.length === 0 ? (
+                                <EmptyState icon={Video} label="No active hubs">
+                                    <Link href="/intelboards">
+                                        <Button size="sm" variant="outline" className="mt-3 gap-1.5"><Plus className="h-3.5 w-3.5" /> Browse Boards</Button>
+                                    </Link>
+                                </EmptyState>
+                            ) : (
+                                <div className="space-y-1.5">
+                                    {upcomingHubs.slice(0, 5).map(hub => {
+                                        const conf = HUB_STATUS_CONFIG[hub.status] || HUB_STATUS_CONFIG.scheduled;
+                                        const rsvpCount = (hub.rsvps || []).length;
+                                        const acceptedCount = (hub.rsvps || []).filter((r: any) => r.status === "accepted").length;
+
+                                        return (
+                                            <Link
+                                                key={hub.id}
+                                                href={`/intelboards/${hub.intelboardId}`}
+                                                className="flex items-start gap-3 p-2.5 rounded-xl hover:bg-muted/50 transition-colors group"
+                                            >
+                                                <div className={cn("h-10 w-10 rounded-lg flex items-center justify-center shrink-0 border", conf.bg)}>
+                                                    <Video className={cn("h-4 w-4", conf.color)} />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <p className="text-xs font-semibold text-foreground truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{hub.title}</p>
+                                                        <Badge variant="outline" className={cn("text-[8px] px-1 py-0 shrink-0", conf.color)}>{conf.label}</Badge>
+                                                    </div>
+                                                    {hub.intelboardTitle && (
+                                                        <p className="text-[10px] text-muted-foreground truncate">{hub.intelboardTitle}</p>
+                                                    )}
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        {hub.startTime && (
+                                                            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                                                                <Clock className="h-2.5 w-2.5" /> {formatEventDate(hub.startTime)} · {formatEventTime(hub.startTime)}
+                                                            </span>
+                                                        )}
+                                                        {rsvpCount > 0 && (
+                                                            <span className="text-[10px] text-emerald-600 flex items-center gap-0.5">
+                                                                <Users className="h-2.5 w-2.5" /> {acceptedCount}/{rsvpCount}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {hub.creatorName && (
+                                                        <span className="text-[9px] text-muted-foreground/70">by {hub.creatorName}</span>
+                                                    )}
+                                                </div>
+                                                {hub.status === "live" && hub.meetingUrl && (
+                                                    <Badge className="bg-red-500 text-white text-[9px] shrink-0 animate-pulse">Join</Badge>
+                                                )}
+                                            </Link>
+                                        );
+                                    })}
+                                    {upcomingHubs.length > 5 && (
+                                        <Link href="/intelboards" className="block text-xs text-muted-foreground text-center py-1 hover:text-foreground transition-colors">
+                                            +{upcomingHubs.length - 5} more hubs
+                                        </Link>
+                                    )}
+                                </div>
+                            )}
+                        </DashboardCard>
+                    </div>
+
+                    {/* My Requests (moved here, was at top) */}
                     <DashboardCard
                         icon={<ListChecks className="h-4 w-4 text-blue-500" />}
                         title="My Requests"
@@ -339,8 +479,11 @@ export default function DashboardPage() {
                             </div>
                         )}
                     </DashboardCard>
+                </div>
 
-                    {/* My Projects (IT Planner) */}
+                {/* ===== RIGHT COLUMN ===== */}
+                <div className="space-y-6">
+                    {/* My Projects (IT Planner) — moved to right */}
                     <DashboardCard
                         icon={<Wrench className="h-4 w-4 text-teal-500" />}
                         title="My Projects"
@@ -373,10 +516,7 @@ export default function DashboardPage() {
                             </div>
                         )}
                     </DashboardCard>
-                </div>
 
-                {/* ===== RIGHT COLUMN ===== */}
-                <div className="space-y-6">
                     {/* Messages */}
                     <DashboardCard
                         icon={<MessageSquare className="h-4 w-4 text-blue-500" />}
@@ -414,54 +554,6 @@ export default function DashboardPage() {
                                     >
                                         See all messages <ArrowRight className="h-3 w-3" />
                                     </button>
-                                )}
-                            </div>
-                        )}
-                    </DashboardCard>
-
-                    {/* Upcoming Events */}
-                    <DashboardCard
-                        icon={<CalendarClock className="h-4 w-4 text-emerald-500" />}
-                        title="Upcoming Events"
-                        linkHref="/calendar"
-                        linkText="See all"
-                    >
-                        {eventsThisWeek.length === 0 && eventsThisMonth.length === 0 ? (
-                            <p className="text-xs text-muted-foreground text-center py-4">No upcoming events</p>
-                        ) : (
-                            <div className="space-y-1">
-                                {[...eventsThisWeek, ...eventsThisMonth].slice(0, 6).map(evt => (
-                                    <Link
-                                        key={evt.id}
-                                        href="/calendar"
-                                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-muted/50 transition-colors group"
-                                    >
-                                        <div className={cn(
-                                            "h-9 w-9 rounded-lg flex flex-col items-center justify-center text-[9px] font-bold shrink-0 border",
-                                            evt.type === "meeting" ? "bg-blue-500/10 text-blue-600 border-blue-500/20" :
-                                                evt.type === "deadline" ? "bg-red-500/10 text-red-600 border-red-500/20" :
-                                                    "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
-                                        )}>
-                                            <span>{new Date(evt.startTime).getDate()}</span>
-                                            <span className="text-[7px] uppercase opacity-70">{new Date(evt.startTime).toLocaleDateString(undefined, { month: "short" })}</span>
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-1.5">
-                                                <p className="text-xs font-semibold text-foreground truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{evt.title}</p>
-                                                {evt.type && (
-                                                    <Badge variant="outline" className="text-[8px] px-1 py-0 shrink-0">{evt.type}</Badge>
-                                                )}
-                                            </div>
-                                            <p className="text-[10px] text-muted-foreground">
-                                                {formatEventDate(evt.startTime)} · {formatEventTime(evt.startTime)}
-                                            </p>
-                                        </div>
-                                    </Link>
-                                ))}
-                                {(eventsThisWeek.length + eventsThisMonth.length) > 6 && (
-                                    <Link href="/calendar" className="block text-xs text-muted-foreground text-center py-1 hover:text-foreground transition-colors">
-                                        +{eventsThisWeek.length + eventsThisMonth.length - 6} more events
-                                    </Link>
                                 )}
                             </div>
                         )}
@@ -505,21 +597,24 @@ function DashboardCard({ icon, title, badge, linkHref, linkText, children }: {
     linkHref?: string; linkText?: string; children: React.ReactNode;
 }) {
     return (
-        <div className="bg-background border rounded-2xl p-5">
-            <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-sm text-foreground flex items-center gap-2">
-                    {icon}{title}
-                    {badge && <Badge variant="secondary" className="text-[9px] ml-1">{badge}</Badge>}
-                </h2>
-                {linkHref && (
-                    <Link href={linkHref}>
-                        <Button variant="ghost" size="sm" className="text-xs gap-1 text-muted-foreground hover:text-foreground">
-                            {linkText || "View"} <ArrowRight className="h-3 w-3" />
-                        </Button>
+        <div className="bg-card rounded-xl border shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/20">
+                <div className="flex items-center gap-2">
+                    {icon}
+                    <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+                    {badge && (
+                        <Badge variant="secondary" className="text-[9px] px-1.5 py-0 bg-primary/10 text-primary">
+                            {badge}
+                        </Badge>
+                    )}
+                </div>
+                {linkHref && linkText && (
+                    <Link href={linkHref} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-0.5">
+                        {linkText} <ArrowRight className="h-3 w-3" />
                     </Link>
                 )}
             </div>
-            {children}
+            <div className="p-3">{children}</div>
         </div>
     );
 }
@@ -528,13 +623,16 @@ function StatCard({ icon, label, value, color, bgColor, highlight }: {
     icon: React.ReactNode; label: string; value: number; color: string; bgColor: string; highlight?: boolean;
 }) {
     return (
-        <div className={cn("rounded-2xl border p-4 transition-all duration-200", highlight ? "border-amber-500/20 shadow-sm shadow-amber-500/5" : "border-border")}>
-            <div className="flex items-center gap-3">
-                <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center", bgColor, color)}>{icon}</div>
-                <div>
-                    <p className="text-2xl font-bold tracking-tight text-foreground">{value}</p>
-                    <p className="text-[11px] text-muted-foreground font-medium">{label}</p>
-                </div>
+        <div className={cn(
+            "rounded-xl border p-4 flex items-center gap-3 transition-all",
+            highlight ? "border-amber-500/30 bg-amber-500/5 shadow-sm shadow-amber-500/10" : "bg-card"
+        )}>
+            <div className={cn("h-10 w-10 rounded-lg flex items-center justify-center shrink-0", bgColor, color)}>
+                {icon}
+            </div>
+            <div>
+                <p className="text-2xl font-bold text-foreground">{value}</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</p>
             </div>
         </div>
     );
@@ -544,41 +642,37 @@ function QuickLinkCard({ href, icon, label, color, bgColor }: { href: string; ic
     return (
         <Link
             href={href}
-            className="flex items-center gap-3 p-3.5 rounded-2xl border hover:bg-muted/40 hover:border-border/80 transition-all duration-200 group"
+            className={cn(
+                "flex items-center gap-3 rounded-xl border p-3 transition-all hover:shadow-md hover:scale-[1.02] bg-card group"
+            )}
         >
-            <div className={cn("h-9 w-9 rounded-xl flex items-center justify-center shrink-0", bgColor, color)}>
+            <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center shrink-0", bgColor, color)}>
                 {icon}
             </div>
-            <span className="text-sm font-medium text-foreground/80 group-hover:text-foreground transition-colors truncate">{label}</span>
+            <span className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors">{label}</span>
         </Link>
     );
 }
 
 function ProjectRow({ project, isStarred, onToggleStar }: { project: Project; isStarred: boolean; onToggleStar: (id: string) => void }) {
     return (
-        <div className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-muted/50 transition-colors group">
-            <button onClick={(e) => { e.stopPropagation(); onToggleStar(project.id); }} className="shrink-0 text-muted-foreground hover:text-yellow-500 transition-colors">
-                {isStarred ? <Star className="h-3.5 w-3.5 fill-yellow-500 text-yellow-500" /> : <StarOff className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />}
+        <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50 transition-colors group">
+            <button onClick={() => onToggleStar(project.id)} className="shrink-0 text-muted-foreground hover:text-amber-500 transition-colors">
+                {isStarred ? <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" /> : <StarOff className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100" />}
             </button>
-            <Link href={`/it-planner?project=${project.id}`} className="flex-1 min-w-0 flex items-center gap-2">
-                <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-teal-500/20 to-emerald-500/20 flex items-center justify-center">
-                    <Wrench className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
-                </div>
-                <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">{project.name}</p>
-                    {project.description && <p className="text-[10px] text-muted-foreground truncate">{project.description}</p>}
-                </div>
+            <Link href={`/it-planner?project=${project.id}`} className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-foreground truncate group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">{project.name}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{project.description}</p>
             </Link>
-            <Badge variant="outline" className="text-[9px] shrink-0">{project.systemIds?.length || 0} systems</Badge>
         </div>
     );
 }
 
 function EmptyState({ icon: Icon, label, children }: { icon: React.ComponentType<{ className?: string }>; label: string; children?: React.ReactNode }) {
     return (
-        <div className="text-center py-8">
-            <Icon className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">{label}</p>
+        <div className="text-center py-6">
+            <Icon className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
+            <p className="text-xs text-muted-foreground">{label}</p>
             {children}
         </div>
     );

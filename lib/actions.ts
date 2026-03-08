@@ -2259,3 +2259,33 @@ export async function createHubComment(hubId: string, content: string) {
         throw new Error("Failed to create hub comment");
     }
 }
+
+// Get upcoming hubs (scheduled + live) for dashboard display
+export async function getUpcomingHubs() {
+    try {
+        const hubs = await db.select({
+            id: intelboardHubs.id,
+            title: intelboardHubs.title,
+            status: intelboardHubs.status,
+            startTime: intelboardHubs.startTime,
+            endTime: intelboardHubs.endTime,
+            meetingUrl: intelboardHubs.meetingUrl,
+            rsvps: intelboardHubs.rsvps,
+            createdBy: intelboardHubs.createdBy,
+            createdAt: intelboardHubs.createdAt,
+            intelboardId: intelboardHubs.intelboardId,
+            threadId: intelboardHubs.threadId,
+            creatorName: users.name,
+            intelboardTitle: intelboards.title,
+        }).from(intelboardHubs)
+            .leftJoin(users, eq(intelboardHubs.createdBy, users.id))
+            .leftJoin(intelboards, eq(intelboardHubs.intelboardId, intelboards.id))
+            .where(inArray(intelboardHubs.status, ["scheduled", "live"]))
+            .orderBy(desc(intelboardHubs.createdAt));
+
+        return hubs;
+    } catch (error) {
+        log.error("Failed to get upcoming hubs", {}, error);
+        return [];
+    }
+}
