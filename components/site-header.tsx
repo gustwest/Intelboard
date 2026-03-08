@@ -61,6 +61,15 @@ export function SiteHeader() {
                             My Requests
                         </Link>
                         <Link
+                            href="/intelboards"
+                            className={cn(
+                                "transition-colors hover:text-foreground/80",
+                                pathname === "/intelboards" || pathname?.startsWith("/intelboards/") ? "text-foreground" : "text-foreground/60"
+                            )}
+                        >
+                            Intelboards
+                        </Link>
+                        <Link
                             href="/calendar"
                             className={cn(
                                 "transition-colors hover:text-foreground/80",

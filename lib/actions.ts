@@ -3,7 +3,7 @@
 import { auth } from "./auth";
 
 import { db } from "./db";
-import { requests, projects, users, companies, workExperience, education, projectViews, systems, assets, integrations, systemDocuments, conversations, conversationParticipants, messages, notifications, requestActivity, events } from "./schema";
+import { requests, projects, users, companies, workExperience, education, projectViews, systems, assets, integrations, systemDocuments, conversations, conversationParticipants, messages, notifications, requestActivity, events, intelboards, intelboardThreads, intelboardPosts, intelboardHubs } from "./schema";
 import { eq, desc, or, and, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { dbUserToSpecialist } from "./data";
@@ -1796,5 +1796,296 @@ export async function deleteEvent(id: string) {
     } catch (error) {
         log.error("Failed to delete event", { eventId: id }, error);
         throw new Error("Failed to delete event");
+    }
+}
+
+// --- Intelboard Forums ---
+
+export async function createIntelboard(data: {
+    title: string;
+    description?: string;
+    category?: string;
+    visibility?: string;
+    invitedRoles?: string[];
+    memberIds?: string[];
+}) {
+    try {
+        const session = await auth();
+        const userId = session?.user?.id;
+        const userName = session?.user?.name || "Unknown";
+        if (!userId) throw new Error("Not authenticated");
+
+        const [board] = await db.insert(intelboards).values({
+            title: data.title,
+            description: data.description,
+            category: data.category,
+            visibility: data.visibility || "open",
+            invitedRoles: data.invitedRoles || [],
+            memberIds: [...new Set([...(data.memberIds || []), userId])],
+            createdBy: userId,
+        }).returning();
+
+        for (const memberId of (data.memberIds || [])) {
+            if (memberId !== userId) {
+                await db.insert(notifications).values({
+                    userId: memberId,
+                    type: "assignment",
+                    title: "Invited to Intelboard",
+                    body: `${userName} invited you to "${data.title}".`,
+                    relatedId: board.id,
+                });
+            }
+        }
+
+        revalidatePath("/intelboards");
+        return board;
+    } catch (error) {
+        log.error("Failed to create intelboard", {}, error);
+        throw new Error("Failed to create intelboard");
+    }
+}
+
+export async function getIntelboards() {
+    try {
+        const session = await auth();
+        const userId = session?.user?.id;
+        const userRole = session?.user?.role || "Guest";
+
+        const allBoards = await db.select().from(intelboards)
+            .where(eq(intelboards.status, "active"))
+            .orderBy(desc(intelboards.createdAt));
+
+        return allBoards.filter(b => {
+            if (b.visibility === "open") return true;
+            if (b.memberIds.includes(userId || "")) return true;
+            if (b.invitedRoles.includes(userRole)) return true;
+            if (b.createdBy === userId) return true;
+            return false;
+        });
+    } catch (error) {
+        log.error("Failed to get intelboards", {}, error);
+        return [];
+    }
+}
+
+export async function getIntelboard(id: string) {
+    try {
+        const [board] = await db.select().from(intelboards).where(eq(intelboards.id, id));
+        if (!board) return null;
+
+        const threads = await db.select().from(intelboardThreads)
+            .where(eq(intelboardThreads.intelboardId, id))
+            .orderBy(desc(intelboardThreads.lastActivityAt));
+
+        const threadIds = threads.map(t => t.id);
+        const posts = threadIds.length > 0
+            ? await db.select().from(intelboardPosts).where(inArray(intelboardPosts.threadId, threadIds))
+            : [];
+        const hubs = await db.select().from(intelboardHubs)
+            .where(eq(intelboardHubs.intelboardId, id))
+            .orderBy(desc(intelboardHubs.createdAt));
+
+        const memberUsers = board.memberIds.length > 0
+            ? await db.select({ id: users.id, name: users.name, avatar: users.avatar, role: users.role })
+                .from(users).where(inArray(users.id, board.memberIds))
+            : [];
+
+        const [creator] = await db.select({ id: users.id, name: users.name, avatar: users.avatar })
+            .from(users).where(eq(users.id, board.createdBy));
+
+        const threadsWithCounts = threads.map(t => ({
+            ...t,
+            postCount: posts.filter(p => p.threadId === t.id).length,
+            hubCount: hubs.filter(h => h.threadId === t.id).length,
+            lastPost: posts.filter(p => p.threadId === t.id).sort((a, b) =>
+                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            )[0] || null,
+        }));
+
+        return {
+            ...board,
+            threads: threadsWithCounts,
+            hubs,
+            members: memberUsers,
+            creator,
+            totalPosts: posts.length,
+        };
+    } catch (error) {
+        log.error("Failed to get intelboard", { id }, error);
+        return null;
+    }
+}
+
+export async function joinIntelboard(id: string) {
+    try {
+        const session = await auth();
+        const userId = session?.user?.id;
+        if (!userId) throw new Error("Not authenticated");
+
+        const [board] = await db.select().from(intelboards).where(eq(intelboards.id, id));
+        if (!board) throw new Error("Intelboard not found");
+        if (board.visibility !== "open") throw new Error("Cannot join invite-only board");
+
+        const updatedMembers = [...new Set([...board.memberIds, userId])];
+        await db.update(intelboards).set({ memberIds: updatedMembers }).where(eq(intelboards.id, id));
+
+        revalidatePath("/intelboards");
+        return { success: true };
+    } catch (error) {
+        log.error("Failed to join intelboard", { id }, error);
+        return { error: "Failed to join" };
+    }
+}
+
+export async function createThread(intelboardId: string, title: string, description?: string) {
+    try {
+        const session = await auth();
+        const userId = session?.user?.id;
+        const userName = session?.user?.name || "Unknown";
+        if (!userId) throw new Error("Not authenticated");
+
+        const [thread] = await db.insert(intelboardThreads).values({
+            intelboardId,
+            title,
+            description,
+            createdBy: userId,
+        }).returning();
+
+        const [board] = await db.select().from(intelboards).where(eq(intelboards.id, intelboardId));
+        if (board) {
+            for (const memberId of board.memberIds) {
+                if (memberId !== userId) {
+                    await db.insert(notifications).values({
+                        userId: memberId,
+                        type: "info",
+                        title: "New Thread",
+                        body: `${userName} started "${title}" in ${board.title}.`,
+                        relatedId: thread.id,
+                    });
+                }
+            }
+        }
+
+        revalidatePath("/intelboards");
+        return thread;
+    } catch (error) {
+        log.error("Failed to create thread", { intelboardId }, error);
+        throw new Error("Failed to create thread");
+    }
+}
+
+export async function getThread(id: string) {
+    try {
+        const [thread] = await db.select().from(intelboardThreads).where(eq(intelboardThreads.id, id));
+        if (!thread) return null;
+
+        const posts = await db.select().from(intelboardPosts)
+            .where(eq(intelboardPosts.threadId, id))
+            .orderBy(intelboardPosts.createdAt);
+
+        const authorIds = [...new Set(posts.map(p => p.authorId))];
+        const authors = authorIds.length > 0
+            ? await db.select({ id: users.id, name: users.name, avatar: users.avatar, role: users.role, jobTitle: users.jobTitle })
+                .from(users).where(inArray(users.id, authorIds))
+            : [];
+        const authorMap = Object.fromEntries(authors.map(a => [a.id, a]));
+
+        const hubs = await db.select().from(intelboardHubs)
+            .where(eq(intelboardHubs.threadId, id))
+            .orderBy(desc(intelboardHubs.createdAt));
+
+        const postsWithAuthors = posts.map(p => ({
+            ...p,
+            author: authorMap[p.authorId] || { id: p.authorId, name: "Unknown" },
+        }));
+
+        return { ...thread, posts: postsWithAuthors, hubs };
+    } catch (error) {
+        log.error("Failed to get thread", { id }, error);
+        return null;
+    }
+}
+
+export async function createPost(threadId: string, content: string, parentPostId?: string) {
+    try {
+        const session = await auth();
+        const userId = session?.user?.id;
+        if (!userId) throw new Error("Not authenticated");
+
+        const [post] = await db.insert(intelboardPosts).values({
+            threadId,
+            authorId: userId,
+            content,
+            parentPostId: parentPostId || null,
+        }).returning();
+
+        await db.update(intelboardThreads).set({
+            lastActivityAt: new Date(),
+        }).where(eq(intelboardThreads.id, threadId));
+
+        revalidatePath("/intelboards");
+        return post;
+    } catch (error) {
+        log.error("Failed to create post", { threadId }, error);
+        throw new Error("Failed to create post");
+    }
+}
+
+export async function startHub(data: {
+    threadId?: string;
+    intelboardId: string;
+    title: string;
+    instant?: boolean;
+    startTime?: string;
+}) {
+    try {
+        const session = await auth();
+        const userId = session?.user?.id;
+        const userName = session?.user?.name || "Unknown";
+        if (!userId) throw new Error("Not authenticated");
+
+        const { createTeamsMeeting } = await import("./teams");
+        const now = new Date();
+        const endTime = new Date(now.getTime() + 60 * 60 * 1000);
+        const meeting = await createTeamsMeeting(
+            data.title,
+            data.startTime || now.toISOString(),
+            endTime.toISOString(),
+            []
+        );
+
+        const [hub] = await db.insert(intelboardHubs).values({
+            threadId: data.threadId || null,
+            intelboardId: data.intelboardId,
+            title: data.title,
+            meetingUrl: meeting.joinUrl,
+            meetingId: meeting.meetingId,
+            status: data.instant ? "live" : "scheduled",
+            startTime: data.startTime ? new Date(data.startTime) : (data.instant ? now : null),
+            createdBy: userId,
+        }).returning();
+
+        const [board] = await db.select().from(intelboards).where(eq(intelboards.id, data.intelboardId));
+        if (board) {
+            for (const memberId of board.memberIds) {
+                if (memberId !== userId) {
+                    await db.insert(notifications).values({
+                        userId: memberId,
+                        type: "assignment",
+                        title: data.instant ? "🔴 Hub is Live!" : "Hub Scheduled",
+                        body: data.instant
+                            ? `${userName} started a live hub "${data.title}" in ${board.title}. Join now!`
+                            : `${userName} scheduled a hub "${data.title}" in ${board.title}.`,
+                        relatedId: hub.id,
+                    });
+                }
+            }
+        }
+
+        revalidatePath("/intelboards");
+        return hub;
+    } catch (error) {
+        log.error("Failed to start hub", {}, error);
+        throw new Error("Failed to start hub");
     }
 }

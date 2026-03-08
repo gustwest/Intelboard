@@ -400,3 +400,84 @@ export const eventsRelations = relations(events, ({ one }) => ({
         references: [users.id],
     }),
 }));
+
+// --- Intelboard Forums ---
+
+export const intelboards = pgTable("intelboards", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    title: text("title").notNull(),
+    description: text("description"),
+    category: text("category"), // topic area
+    visibility: text("visibility").default("open").notNull(), // 'open' | 'invite_only'
+    invitedRoles: jsonb("invited_roles").$type<string[]>().default([]).notNull(),
+    memberIds: jsonb("member_ids").$type<string[]>().default([]).notNull(),
+    createdBy: text("created_by").references(() => users.id).notNull(),
+    status: text("status").default("active").notNull(), // 'active' | 'archived'
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const intelboardThreads = pgTable("intelboard_threads", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    intelboardId: text("intelboard_id").references(() => intelboards.id).notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    createdBy: text("created_by").references(() => users.id).notNull(),
+    isPinned: boolean("is_pinned").default(false).notNull(),
+    status: text("status").default("open").notNull(), // 'open' | 'resolved' | 'closed'
+    lastActivityAt: timestamp("last_activity_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const intelboardPosts = pgTable("intelboard_posts", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    threadId: text("thread_id").references(() => intelboardThreads.id).notNull(),
+    authorId: text("author_id").references(() => users.id).notNull(),
+    content: text("content").notNull(),
+    parentPostId: text("parent_post_id"), // nullable, for nested replies
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const intelboardHubs = pgTable("intelboard_hubs", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    threadId: text("thread_id").references(() => intelboardThreads.id),
+    intelboardId: text("intelboard_id").references(() => intelboards.id).notNull(),
+    title: text("title").notNull(),
+    meetingUrl: text("meeting_url"),
+    meetingId: text("meeting_id"),
+    status: text("status").default("scheduled").notNull(), // 'scheduled' | 'live' | 'completed'
+    startTime: timestamp("start_time"),
+    endTime: timestamp("end_time"),
+    transcript: text("transcript"),
+    aiSummary: text("ai_summary"),
+    aiActionItems: jsonb("ai_action_items").$type<{ text: string; assignee?: string; dueDate?: string; done?: boolean }[]>().default([]).notNull(),
+    notes: text("notes"),
+    createdBy: text("created_by").references(() => users.id).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// --- Intelboard Relations ---
+
+export const intelboardsRelations = relations(intelboards, ({ one, many }) => ({
+    creator: one(users, { fields: [intelboards.createdBy], references: [users.id] }),
+    threads: many(intelboardThreads),
+    hubs: many(intelboardHubs),
+}));
+
+export const intelboardThreadsRelations = relations(intelboardThreads, ({ one, many }) => ({
+    intelboard: one(intelboards, { fields: [intelboardThreads.intelboardId], references: [intelboards.id] }),
+    creator: one(users, { fields: [intelboardThreads.createdBy], references: [users.id] }),
+    posts: many(intelboardPosts),
+    hubs: many(intelboardHubs),
+}));
+
+export const intelboardPostsRelations = relations(intelboardPosts, ({ one }) => ({
+    thread: one(intelboardThreads, { fields: [intelboardPosts.threadId], references: [intelboardThreads.id] }),
+    author: one(users, { fields: [intelboardPosts.authorId], references: [users.id] }),
+}));
+
+export const intelboardHubsRelations = relations(intelboardHubs, ({ one }) => ({
+    thread: one(intelboardThreads, { fields: [intelboardHubs.threadId], references: [intelboardThreads.id] }),
+    intelboard: one(intelboards, { fields: [intelboardHubs.intelboardId], references: [intelboards.id] }),
+    creator: one(users, { fields: [intelboardHubs.createdBy], references: [users.id] }),
+}));
