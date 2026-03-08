@@ -2089,3 +2089,119 @@ export async function startHub(data: {
         throw new Error("Failed to start hub");
     }
 }
+
+export async function rsvpToHub(hubId: string, status: 'accepted' | 'declined' | 'maybe') {
+    try {
+        const session = await auth();
+        const userId = session?.user?.id;
+        const userName = session?.user?.name || "Unknown";
+        if (!userId) throw new Error("Not authenticated");
+
+        const [hub] = await db.select().from(intelboardHubs).where(eq(intelboardHubs.id, hubId));
+        if (!hub) throw new Error("Hub not found");
+
+        // Update or add RSVP
+        const existingRsvps = (hub.rsvps || []) as { userId: string; status: 'accepted' | 'declined' | 'maybe'; respondedAt: string }[];
+        const filtered = existingRsvps.filter(r => r.userId !== userId);
+        const updatedRsvps = [...filtered, { userId, status, respondedAt: new Date().toISOString() }];
+
+        await db.update(intelboardHubs).set({ rsvps: updatedRsvps }).where(eq(intelboardHubs.id, hubId));
+
+        // Notify hub creator if someone accepts
+        if (status === 'accepted' && hub.createdBy !== userId) {
+            await db.insert(notifications).values({
+                userId: hub.createdBy,
+                type: "info",
+                title: "Hub RSVP",
+                body: `${userName} accepted the invite to "${hub.title}".`,
+                relatedId: hubId,
+            });
+        }
+
+        revalidatePath("/intelboards");
+        return { success: true };
+    } catch (error) {
+        log.error("Failed to RSVP", { hubId }, error);
+        return { error: "Failed to RSVP" };
+    }
+}
+
+export async function getHubWithDetails(hubId: string) {
+    try {
+        const [hub] = await db.select().from(intelboardHubs).where(eq(intelboardHubs.id, hubId));
+        if (!hub) return null;
+
+        // Get RSVP user details
+        const rsvpList = (hub.rsvps || []) as { userId: string; status: string; respondedAt: string }[];
+        const rsvpUserIds = rsvpList.map(r => r.userId);
+        const rsvpUsers = rsvpUserIds.length > 0
+            ? await db.select({ id: users.id, name: users.name, avatar: users.avatar, role: users.role })
+                .from(users).where(inArray(users.id, rsvpUserIds))
+            : [];
+        const userMap = Object.fromEntries(rsvpUsers.map(u => [u.id, u]));
+
+        const rsvpsWithUsers = rsvpList.map(r => ({
+            ...r,
+            user: userMap[r.userId] || { id: r.userId, name: "Unknown" },
+        }));
+
+        // Get hub comments (posts with hubId)
+        const comments = await db.select().from(intelboardPosts)
+            .where(eq(intelboardPosts.hubId, hubId))
+            .orderBy(intelboardPosts.createdAt);
+
+        const commentAuthorIds = [...new Set(comments.map(c => c.authorId))];
+        const commentAuthors = commentAuthorIds.length > 0
+            ? await db.select({ id: users.id, name: users.name, avatar: users.avatar, role: users.role })
+                .from(users).where(inArray(users.id, commentAuthorIds))
+            : [];
+        const authorMap = Object.fromEntries(commentAuthors.map(a => [a.id, a]));
+
+        const commentsWithAuthors = comments.map(c => ({
+            ...c,
+            author: authorMap[c.authorId] || { id: c.authorId, name: "Unknown" },
+        }));
+
+        // Get creator info
+        const [creator] = await db.select({ id: users.id, name: users.name, avatar: users.avatar })
+            .from(users).where(eq(users.id, hub.createdBy));
+
+        return {
+            ...hub,
+            rsvpsWithUsers,
+            comments: commentsWithAuthors,
+            creator,
+            accepted: rsvpList.filter(r => r.status === 'accepted').length,
+            declined: rsvpList.filter(r => r.status === 'declined').length,
+            maybe: rsvpList.filter(r => r.status === 'maybe').length,
+        };
+    } catch (error) {
+        log.error("Failed to get hub details", { hubId }, error);
+        return null;
+    }
+}
+
+export async function createHubComment(hubId: string, content: string) {
+    try {
+        const session = await auth();
+        const userId = session?.user?.id;
+        if (!userId) throw new Error("Not authenticated");
+
+        // Get the hub's thread ID for the post
+        const [hub] = await db.select().from(intelboardHubs).where(eq(intelboardHubs.id, hubId));
+        if (!hub) throw new Error("Hub not found");
+
+        const [post] = await db.insert(intelboardPosts).values({
+            threadId: hub.threadId || hub.intelboardId, // fallback if no thread
+            authorId: userId,
+            content,
+            hubId,
+        }).returning();
+
+        revalidatePath("/intelboards");
+        return post;
+    } catch (error) {
+        log.error("Failed to create hub comment", { hubId }, error);
+        throw new Error("Failed to create hub comment");
+    }
+}

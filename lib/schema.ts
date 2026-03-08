@@ -434,6 +434,7 @@ export const intelboardPosts = pgTable("intelboard_posts", {
     authorId: text("author_id").references(() => users.id).notNull(),
     content: text("content").notNull(),
     parentPostId: text("parent_post_id"), // nullable, for nested replies
+    hubId: text("hub_id"), // nullable, for hub-specific pre-meeting discussion
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -452,6 +453,7 @@ export const intelboardHubs = pgTable("intelboard_hubs", {
     aiSummary: text("ai_summary"),
     aiActionItems: jsonb("ai_action_items").$type<{ text: string; assignee?: string; dueDate?: string; done?: boolean }[]>().default([]).notNull(),
     notes: text("notes"),
+    rsvps: jsonb("rsvps").$type<{ userId: string; status: 'accepted' | 'declined' | 'maybe'; respondedAt: string }[]>().default([]).notNull(),
     createdBy: text("created_by").references(() => users.id).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });
