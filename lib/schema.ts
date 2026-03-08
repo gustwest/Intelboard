@@ -415,6 +415,7 @@ export const intelboards = pgTable("intelboards", {
     memberIds: jsonb("member_ids").$type<string[]>().default([]).notNull(),
     createdBy: text("created_by").references(() => users.id).notNull(),
     status: text("status").default("active").notNull(), // 'active' | 'archived'
+    categoryId: text("category_id"), // link to intel_hub_categories
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -484,4 +485,34 @@ export const intelboardHubsRelations = relations(intelboardHubs, ({ one }) => ({
     thread: one(intelboardThreads, { fields: [intelboardHubs.threadId], references: [intelboardThreads.id] }),
     intelboard: one(intelboards, { fields: [intelboardHubs.intelboardId], references: [intelboards.id] }),
     creator: one(users, { fields: [intelboardHubs.createdBy], references: [users.id] }),
+}));
+
+// --- Intel Hub: Hierarchical Knowledge Base ---
+
+export const intelHubCategories = pgTable("intel_hub_categories", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    title: text("title").notNull(),
+    slug: text("slug").unique().notNull(),
+    description: text("description"),
+    icon: text("icon"), // emoji or lucide icon name
+    color: text("color"), // hex or tailwind color
+    parentId: text("parent_id"), // self-referencing for hierarchy
+    depth: integer("depth").default(0).notNull(), // 0=root, 1=sub, 2=subsub
+    followerCount: integer("follower_count").default(0).notNull(),
+    createdBy: text("created_by").references(() => users.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const intelHubFollows = pgTable("intel_hub_follows", {
+    userId: text("user_id").references(() => users.id).notNull(),
+    categoryId: text("category_id").references(() => intelHubCategories.id).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+    pk: primaryKey({ columns: [table.userId, table.categoryId] }),
+}));
+
+export const intelHubCategoriesRelations = relations(intelHubCategories, ({ one, many }) => ({
+    parent: one(intelHubCategories, { fields: [intelHubCategories.parentId], references: [intelHubCategories.id], relationName: "parent_children" }),
+    children: many(intelHubCategories, { relationName: "parent_children" }),
+    creator: one(users, { fields: [intelHubCategories.createdBy], references: [users.id] }),
 }));

@@ -70,6 +70,15 @@ export function SiteHeader() {
                             Intelboards
                         </Link>
                         <Link
+                            href="/intel-hub"
+                            className={cn(
+                                "transition-colors hover:text-foreground/80",
+                                pathname === "/intel-hub" || pathname?.startsWith("/intel-hub/") ? "text-foreground" : "text-foreground/60"
+                            )}
+                        >
+                            Intel Hub
+                        </Link>
+                        <Link
                             href="/calendar"
                             className={cn(
                                 "transition-colors hover:text-foreground/80",

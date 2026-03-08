@@ -3,8 +3,8 @@
 import { auth } from "./auth";
 
 import { db } from "./db";
-import { requests, projects, users, companies, workExperience, education, projectViews, systems, assets, integrations, systemDocuments, conversations, conversationParticipants, messages, notifications, requestActivity, events, intelboards, intelboardThreads, intelboardPosts, intelboardHubs } from "./schema";
-import { eq, desc, or, and, inArray, sql } from "drizzle-orm";
+import { requests, projects, users, companies, workExperience, education, projectViews, systems, assets, integrations, systemDocuments, conversations, conversationParticipants, messages, notifications, requestActivity, events, intelboards, intelboardThreads, intelboardPosts, intelboardHubs, intelHubCategories, intelHubFollows } from "./schema";
+import { eq, desc, or, and, inArray, sql, like, ilike, asc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { dbUserToSpecialist } from "./data";
 import type { Specialist } from "./data";
@@ -2287,5 +2287,259 @@ export async function getUpcomingHubs() {
     } catch (error) {
         log.error("Failed to get upcoming hubs", {}, error);
         return [];
+    }
+}
+
+// ================================================================
+// Intel Hub — Hierarchical Knowledge Base
+// ================================================================
+
+export async function getHubCategories(userId?: string) {
+    try {
+        const cats = await db.select().from(intelHubCategories).orderBy(asc(intelHubCategories.depth), asc(intelHubCategories.title));
+
+        // If user provided, get their follows
+        let followedIds: string[] = [];
+        if (userId) {
+            const follows = await db.select({ categoryId: intelHubFollows.categoryId })
+                .from(intelHubFollows)
+                .where(eq(intelHubFollows.userId, userId));
+            followedIds = follows.map(f => f.categoryId);
+        }
+
+        return cats.map(c => ({ ...c, isFollowed: followedIds.includes(c.id) }));
+    } catch (error) {
+        log.error("Failed to get hub categories", {}, error);
+        return [];
+    }
+}
+
+export async function getHubCategory(slug: string, userId?: string) {
+    try {
+        const [category] = await db.select().from(intelHubCategories).where(eq(intelHubCategories.slug, slug));
+        if (!category) return null;
+
+        // Get children
+        const children = await db.select().from(intelHubCategories)
+            .where(eq(intelHubCategories.parentId, category.id))
+            .orderBy(asc(intelHubCategories.title));
+
+        // Get ancestors (breadcrumb path)
+        const ancestors: typeof category[] = [];
+        let current = category;
+        while (current.parentId) {
+            const [parent] = await db.select().from(intelHubCategories).where(eq(intelHubCategories.id, current.parentId));
+            if (!parent) break;
+            ancestors.unshift(parent);
+            current = parent;
+        }
+
+        // Get linked intelboards
+        const linkedBoards = await db.select().from(intelboards)
+            .where(eq(intelboards.categoryId, category.id));
+
+        // Check if user follows
+        let isFollowed = false;
+        if (userId) {
+            const [follow] = await db.select().from(intelHubFollows)
+                .where(and(eq(intelHubFollows.userId, userId), eq(intelHubFollows.categoryId, category.id)));
+            isFollowed = !!follow;
+        }
+
+        // Get follower count from children too
+        const childrenWithFollowState = userId ? await Promise.all(children.map(async c => {
+            const [follow] = await db.select().from(intelHubFollows)
+                .where(and(eq(intelHubFollows.userId, userId), eq(intelHubFollows.categoryId, c.id)));
+            return { ...c, isFollowed: !!follow };
+        })) : children.map(c => ({ ...c, isFollowed: false }));
+
+        return { ...category, isFollowed, children: childrenWithFollowState, ancestors, linkedBoards };
+    } catch (error) {
+        log.error("Failed to get hub category", { slug }, error);
+        return null;
+    }
+}
+
+export async function createHubCategory(data: {
+    title: string;
+    slug: string;
+    description?: string;
+    icon?: string;
+    color?: string;
+    parentId?: string;
+}) {
+    try {
+        const session = await auth();
+        const userId = session?.user?.id;
+        if (!userId) throw new Error("Not authenticated");
+
+        // Calculate depth from parent
+        let depth = 0;
+        if (data.parentId) {
+            const [parent] = await db.select().from(intelHubCategories).where(eq(intelHubCategories.id, data.parentId));
+            if (parent) depth = parent.depth + 1;
+        }
+
+        const [cat] = await db.insert(intelHubCategories).values({
+            title: data.title,
+            slug: data.slug,
+            description: data.description,
+            icon: data.icon,
+            color: data.color,
+            parentId: data.parentId || null,
+            depth,
+            createdBy: userId,
+        }).returning();
+
+        revalidatePath("/intel-hub");
+        return cat;
+    } catch (error) {
+        log.error("Failed to create hub category", { title: data.title }, error);
+        throw new Error("Failed to create hub category");
+    }
+}
+
+export async function followHubCategory(categoryId: string) {
+    try {
+        const session = await auth();
+        const userId = session?.user?.id;
+        if (!userId) throw new Error("Not authenticated");
+
+        // Check existing follow
+        const [existing] = await db.select().from(intelHubFollows)
+            .where(and(eq(intelHubFollows.userId, userId), eq(intelHubFollows.categoryId, categoryId)));
+
+        if (existing) {
+            // Unfollow
+            await db.delete(intelHubFollows)
+                .where(and(eq(intelHubFollows.userId, userId), eq(intelHubFollows.categoryId, categoryId)));
+            await db.update(intelHubCategories)
+                .set({ followerCount: sql`GREATEST(0, ${intelHubCategories.followerCount} - 1)` })
+                .where(eq(intelHubCategories.id, categoryId));
+            revalidatePath("/intel-hub");
+            return { followed: false };
+        } else {
+            // Follow
+            await db.insert(intelHubFollows).values({ userId, categoryId });
+            await db.update(intelHubCategories)
+                .set({ followerCount: sql`${intelHubCategories.followerCount} + 1` })
+                .where(eq(intelHubCategories.id, categoryId));
+
+            // Send notification
+            const [cat] = await db.select().from(intelHubCategories).where(eq(intelHubCategories.id, categoryId));
+            if (cat) {
+                const user = await db.select().from(users).where(eq(users.id, userId));
+                log.info("User followed hub category", { userId, categoryTitle: cat.title });
+            }
+
+            revalidatePath("/intel-hub");
+            return { followed: true };
+        }
+    } catch (error) {
+        log.error("Failed to follow hub category", { categoryId }, error);
+        throw new Error("Failed to follow hub category");
+    }
+}
+
+export async function searchHubCategories(query: string) {
+    try {
+        const results = await db.select().from(intelHubCategories)
+            .where(or(
+                ilike(intelHubCategories.title, `%${query}%`),
+                ilike(intelHubCategories.description, `%${query}%`)
+            ))
+            .orderBy(asc(intelHubCategories.depth), asc(intelHubCategories.title))
+            .limit(20);
+
+        return results;
+    } catch (error) {
+        log.error("Failed to search hub categories", { query }, error);
+        return [];
+    }
+}
+
+export async function seedHubCategories() {
+    try {
+        // Check if already seeded
+        const existing = await db.select().from(intelHubCategories).limit(1);
+        if (existing.length > 0) {
+            log.info("Hub categories already seeded, skipping");
+            return { seeded: false, message: "Already seeded" };
+        }
+
+        const session = await auth();
+        const userId = session?.user?.id || "system";
+
+        // Hierarchy: IT → 10 subs → sub-subs
+        const categories: { title: string; slug: string; description: string; icon: string; color: string; parentSlug?: string }[] = [
+            // L0: Root
+            { title: "IT & Technology", slug: "it-technology", description: "Information Technology, systems, and digital infrastructure", icon: "💻", color: "blue" },
+
+            // L1: 10 sub-categories under IT
+            { title: "Cloud Architecture", slug: "cloud-architecture", description: "Cloud platforms, migration strategies, and hybrid infrastructure", icon: "☁️", color: "sky", parentSlug: "it-technology" },
+            { title: "Data Engineering", slug: "data-engineering", description: "Data pipelines, storage, transformation, and data quality", icon: "🔄", color: "cyan", parentSlug: "it-technology" },
+            { title: "Cybersecurity", slug: "cybersecurity", description: "Security operations, threat management, and compliance", icon: "🛡️", color: "red", parentSlug: "it-technology" },
+            { title: "DevOps & CI/CD", slug: "devops-cicd", description: "Continuous integration, delivery, and infrastructure automation", icon: "⚙️", color: "orange", parentSlug: "it-technology" },
+            { title: "Software Development", slug: "software-development", description: "Application development, coding practices, and architecture patterns", icon: "🧑‍💻", color: "violet", parentSlug: "it-technology" },
+            { title: "AI & Machine Learning", slug: "ai-machine-learning", description: "Artificial intelligence, ML models, and data science", icon: "🤖", color: "purple", parentSlug: "it-technology" },
+            { title: "Business Intelligence", slug: "business-intelligence", description: "Reporting, analytics, dashboards, and data-driven decisions", icon: "📊", color: "amber", parentSlug: "it-technology" },
+            { title: "IT Governance", slug: "it-governance", description: "IT strategy, policies, compliance frameworks, and risk management", icon: "📋", color: "slate", parentSlug: "it-technology" },
+            { title: "Networking", slug: "networking", description: "Network architecture, protocols, SDN, and connectivity", icon: "🌐", color: "emerald", parentSlug: "it-technology" },
+            { title: "Infrastructure", slug: "infrastructure", description: "Servers, storage, on-premise systems, and capacity planning", icon: "🏗️", color: "stone", parentSlug: "it-technology" },
+
+            // L2: Sub-subs under Cloud Architecture
+            { title: "AWS", slug: "aws", description: "Amazon Web Services — EC2, S3, Lambda, RDS, and more", icon: "🔶", color: "orange", parentSlug: "cloud-architecture" },
+            { title: "Azure", slug: "azure", description: "Microsoft Azure — VMs, App Services, Functions, and governance", icon: "🔷", color: "blue", parentSlug: "cloud-architecture" },
+            { title: "GCP", slug: "gcp", description: "Google Cloud Platform — Compute Engine, BigQuery, Cloud Run", icon: "🟢", color: "green", parentSlug: "cloud-architecture" },
+
+            // L2: Sub-subs under Data Engineering
+            { title: "ETL Pipelines", slug: "etl-pipelines", description: "Extract, Transform, Load — Airflow, dbt, Fivetran, and orchestration", icon: "🔗", color: "teal", parentSlug: "data-engineering" },
+            { title: "Data Lakes", slug: "data-lakes", description: "Centralized data storage — Delta Lake, Iceberg, and data mesh", icon: "🏞️", color: "cyan", parentSlug: "data-engineering" },
+
+            // L2: Sub-subs under Software Development
+            { title: "Frontend", slug: "frontend", description: "UI development — React, Next.js, Vue, accessibility, and design systems", icon: "🎨", color: "pink", parentSlug: "software-development" },
+            { title: "Backend", slug: "backend", description: "Server-side — APIs, databases, microservices, and system design", icon: "🔧", color: "indigo", parentSlug: "software-development" },
+            { title: "Mobile", slug: "mobile", description: "iOS, Android, React Native, Flutter, and cross-platform development", icon: "📱", color: "lime", parentSlug: "software-development" },
+
+            // L2: Sub-subs under Cybersecurity
+            { title: "Threat Intelligence", slug: "threat-intelligence", description: "Threat monitoring, incident response, and vulnerability management", icon: "🕵️", color: "red", parentSlug: "cybersecurity" },
+            { title: "Identity & Access", slug: "identity-access", description: "IAM, SSO, MFA, and zero-trust architecture", icon: "🔑", color: "yellow", parentSlug: "cybersecurity" },
+
+            // L2: Sub-subs under AI & Machine Learning
+            { title: "LLMs & NLP", slug: "llms-nlp", description: "Large language models, natural language processing, and text AI", icon: "💬", color: "purple", parentSlug: "ai-machine-learning" },
+            { title: "Computer Vision", slug: "computer-vision", description: "Image recognition, object detection, and visual AI", icon: "👁️", color: "fuchsia", parentSlug: "ai-machine-learning" },
+        ];
+
+        // Resolve slugs to IDs in order
+        const slugToId: Record<string, string> = {};
+
+        for (const cat of categories) {
+            const parentId = cat.parentSlug ? slugToId[cat.parentSlug] : null;
+            let depth = 0;
+            if (parentId) {
+                const [parent] = await db.select().from(intelHubCategories).where(eq(intelHubCategories.id, parentId));
+                if (parent) depth = parent.depth + 1;
+            }
+
+            const [inserted] = await db.insert(intelHubCategories).values({
+                title: cat.title,
+                slug: cat.slug,
+                description: cat.description,
+                icon: cat.icon,
+                color: cat.color,
+                parentId,
+                depth,
+                createdBy: userId,
+            }).returning();
+
+            slugToId[cat.slug] = inserted.id;
+        }
+
+        log.info("Seeded hub categories", { count: categories.length });
+        revalidatePath("/intel-hub");
+        return { seeded: true, count: categories.length };
+    } catch (error) {
+        log.error("Failed to seed hub categories", {}, error);
+        throw new Error("Failed to seed hub categories");
     }
 }
