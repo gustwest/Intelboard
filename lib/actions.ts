@@ -2296,7 +2296,9 @@ export async function getUpcomingHubs() {
 
 export async function getHubCategories(userId?: string) {
     try {
+        log.info("Fetching hub categories", { userId: userId || "anonymous" });
         const cats = await db.select().from(intelHubCategories).orderBy(asc(intelHubCategories.depth), asc(intelHubCategories.title));
+        log.info("Hub categories fetched", { count: cats.length, userId: userId || "anonymous" });
 
         // If user provided, get their follows
         let followedIds: string[] = [];
@@ -2305,19 +2307,25 @@ export async function getHubCategories(userId?: string) {
                 .from(intelHubFollows)
                 .where(eq(intelHubFollows.userId, userId));
             followedIds = follows.map(f => f.categoryId);
+            log.info("User follows loaded", { userId, followCount: followedIds.length });
         }
 
         return cats.map(c => ({ ...c, isFollowed: followedIds.includes(c.id) }));
     } catch (error) {
-        log.error("Failed to get hub categories", {}, error);
+        log.error("Failed to get hub categories", { userId: userId || "anonymous" }, error);
         return [];
     }
 }
 
 export async function getHubCategory(slug: string, userId?: string) {
     try {
+        log.info("Fetching hub category", { slug, userId: userId || "anonymous" });
         const [category] = await db.select().from(intelHubCategories).where(eq(intelHubCategories.slug, slug));
-        if (!category) return null;
+        if (!category) {
+            log.warn("Hub category not found", { slug });
+            return null;
+        }
+        log.info("Hub category found", { slug, categoryId: category.id, depth: category.depth });
 
         // Get children
         const children = await db.select().from(intelHubCategories)
