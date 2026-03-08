@@ -1555,6 +1555,8 @@ export async function createEvent(data: {
     type?: string;
     videoMeeting?: boolean;
     agenda?: string;
+    audience?: string;
+    recurring?: string;
 }) {
     try {
         const session = await auth();
@@ -1578,6 +1580,9 @@ export async function createEvent(data: {
             meetingId = meeting.meetingId;
         }
 
+        const audience = data.audience || "private";
+        const recurring = data.recurring || "none";
+
         const [newEvent] = await db.insert(events).values({
             title: data.title,
             description: data.description,
@@ -1588,11 +1593,17 @@ export async function createEvent(data: {
             attendees: data.attendees,
             location: data.videoMeeting ? (meetingUrl || "Video Meeting") : data.location,
             type: data.type || "meeting",
+            audience,
+            recurring,
             agenda: data.agenda,
             meetingUrl,
             meetingId,
             meetingStatus: data.videoMeeting ? "scheduled" : "scheduled",
         }).returning();
+
+        // Build notification body
+        const recurringLabel = recurring !== "none" ? ` (Recurring: ${recurring})` : "";
+        const audienceLabel = audience === "open" ? " 🌍 Open to all" : audience === "team" ? " 👥 Team" : " 🔒 Private";
 
         // Notify attendees
         for (const attendeeId of data.attendees) {
@@ -1601,7 +1612,22 @@ export async function createEvent(data: {
                     userId: attendeeId,
                     type: "assignment",
                     title: data.videoMeeting ? "Video Meeting Scheduled" : "New Event Scheduled",
-                    body: `${userName} invited you to: "${data.title}" on ${new Date(data.startTime).toLocaleDateString()}.${meetingUrl ? " A video meeting link is included." : ""}`,
+                    body: `${userName} invited you to: "${data.title}" on ${new Date(data.startTime).toLocaleDateString()}.${audienceLabel}${recurringLabel}${meetingUrl ? " A video meeting link is included." : ""}`,
+                    relatedId: newEvent.id,
+                });
+            }
+        }
+
+        // If audience is open, notify all users who aren't already attendees
+        if (audience === "open") {
+            const allUsersList = await db.select({ id: users.id }).from(users);
+            const notifyIds = allUsersList.map(u => u.id).filter(id => id !== userId && !data.attendees.includes(id));
+            for (const uid of notifyIds) {
+                await db.insert(notifications).values({
+                    userId: uid,
+                    type: "info",
+                    title: "Open Event Available",
+                    body: `${userName} created an open event: "${data.title}" on ${new Date(data.startTime).toLocaleDateString()}.${recurringLabel} Anyone can join!`,
                     relatedId: newEvent.id,
                 });
             }
@@ -1764,11 +1790,39 @@ Provide your response in the following JSON format (no markdown, just raw JSON):
 
 export async function getEvents(userId?: string) {
     try {
-        const allEvents = await db.select().from(events).orderBy(desc(events.startTime));
+        const allEvents = await db.select({
+            id: events.id,
+            title: events.title,
+            description: events.description,
+            startTime: events.startTime,
+            endTime: events.endTime,
+            requestId: events.requestId,
+            createdBy: events.createdBy,
+            attendees: events.attendees,
+            location: events.location,
+            type: events.type,
+            audience: events.audience,
+            recurring: events.recurring,
+            createdAt: events.createdAt,
+            meetingUrl: events.meetingUrl,
+            meetingId: events.meetingId,
+            hasRecording: events.hasRecording,
+            transcript: events.transcript,
+            aiSummary: events.aiSummary,
+            aiActionItems: events.aiActionItems,
+            agenda: events.agenda,
+            meetingNotes: events.meetingNotes,
+            meetingStatus: events.meetingStatus,
+            creatorName: users.name,
+        }).from(events)
+            .leftJoin(users, eq(events.createdBy, users.id))
+            .orderBy(desc(events.startTime));
 
         if (userId) {
             return allEvents.filter(e =>
-                e.createdBy === userId || e.attendees.includes(userId)
+                e.createdBy === userId ||
+                e.attendees.includes(userId) ||
+                e.audience === "open"
             );
         }
         return allEvents;

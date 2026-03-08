@@ -326,6 +326,8 @@ export const events = pgTable("events", {
     attendees: jsonb("attendees").$type<string[]>().default([]).notNull(),
     location: text("location"),
     type: text("type").notNull().default("meeting"), // 'meeting' | 'deadline' | 'milestone'
+    audience: text("audience").notNull().default("private"), // 'private' | 'open' | 'team'
+    recurring: text("recurring").notNull().default("none"), // 'none' | 'daily' | 'weekly' | 'biweekly' | 'monthly'
     createdAt: timestamp("created_at").defaultNow().notNull(),
     // Meeting / Video fields
     meetingUrl: text("meeting_url"),
