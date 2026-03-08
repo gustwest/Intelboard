@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { MessageCircle, X, Minus, Maximize2, Plus, Search, Users, FileText, User2, ArrowLeft, ExternalLink, UserPlus, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,12 +66,15 @@ export function ChatWidget() {
         return () => clearInterval(interval);
     }, [loadConversations]);
 
+    // Use a ref so event listeners always call the latest openChatWindow
+    const openChatWindowRef = useRef<(id: string) => void>(() => { });
+
     // Listen for notification-triggered events
     useEffect(() => {
         const handleOpenChat = (e: Event) => {
             const detail = (e as CustomEvent).detail;
             if (detail?.conversationId) {
-                openChatWindow(detail.conversationId);
+                openChatWindowRef.current(detail.conversationId);
             }
         };
         const handleOpenRequest = async (e: Event) => {
@@ -91,25 +94,28 @@ export function ChatWidget() {
 
     const totalUnread = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
 
-    const openChatWindow = (conversationId: string) => {
-        // If already open, just expand it
-        const existing = openWindows.find(w => w.conversationId === conversationId);
-        if (existing) {
-            setOpenWindows(prev => prev.map(w =>
-                w.conversationId === conversationId ? { ...w, minimized: false } : w
-            ));
-            return;
-        }
-
-        // If at max, close the oldest
-        let updated = [...openWindows];
-        if (updated.length >= MAX_OPEN_WINDOWS) {
-            updated = updated.slice(1);
-        }
-        updated.push({ conversationId, minimized: false });
-        setOpenWindows(updated);
+    const openChatWindow = useCallback((conversationId: string) => {
+        setOpenWindows(prev => {
+            // If already open, just expand it
+            const existing = prev.find(w => w.conversationId === conversationId);
+            if (existing) {
+                return prev.map(w =>
+                    w.conversationId === conversationId ? { ...w, minimized: false } : w
+                );
+            }
+            // If at max, close the oldest
+            let updated = [...prev];
+            if (updated.length >= MAX_OPEN_WINDOWS) {
+                updated = updated.slice(1);
+            }
+            updated.push({ conversationId, minimized: false });
+            return updated;
+        });
         setShowContactList(false);
-    };
+    }, []);
+
+    // Keep ref in sync so event listeners always use the latest version
+    openChatWindowRef.current = openChatWindow;
 
     const closeWindow = (conversationId: string) => {
         setOpenWindows(prev => prev.filter(w => w.conversationId !== conversationId));
