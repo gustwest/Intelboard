@@ -3,7 +3,7 @@
 import { auth } from "./auth";
 
 import { db } from "./db";
-import { requests, projects, users, companies, workExperience, education, projectViews, systems, assets, integrations, systemDocuments, conversations, conversationParticipants, messages, notifications, requestActivity, events, intelboards, intelboardThreads, intelboardPosts, intelboardHubs, intelHubCategories, intelHubFollows, ratings, categorySkillRatings, categoryExperiences } from "./schema";
+import { requests, projects, users, companies, workExperience, education, projectViews, systems, assets, integrations, systemDocuments, conversations, conversationParticipants, messages, notifications, requestActivity, events, intelboards, intelboardThreads, intelboardPosts, intelboardHubs, intelHubCategories, intelHubFollows, ratings, categorySkillRatings, categoryExperiences, connections } from "./schema";
 import { eq, desc, or, and, inArray, sql, like, ilike, asc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { dbUserToSpecialist } from "./data";
@@ -3371,5 +3371,238 @@ export async function getPersonalizedFeed(): Promise<import("./data").Personaliz
     } catch (error) {
         log.error("Failed to get personalized feed", {}, error);
         return { feedItems: [], followedCategories: [], suggestedCategories: [] };
+    }
+}
+
+// ─── Connections ────────────────────────────────────────────────────────────
+
+export async function sendConnectionRequest(receiverId: string) {
+    const session = await auth();
+    if (!session?.user?.id) return { error: "Not authenticated" };
+    const requesterId = session.user.id;
+    if (requesterId === receiverId) return { error: "Cannot connect with yourself" };
+
+    try {
+        // Check if connection already exists in either direction
+        const existing = await db.query.connections.findFirst({
+            where: or(
+                and(eq(connections.requesterId, requesterId), eq(connections.receiverId, receiverId)),
+                and(eq(connections.requesterId, receiverId), eq(connections.receiverId, requesterId))
+            ),
+        });
+        if (existing) {
+            if (existing.status === "accepted") return { error: "Already connected" };
+            if (existing.status === "pending") return { error: "Request already pending" };
+            // If declined, allow resending by updating
+            await db.update(connections).set({ status: "pending", requesterId, receiverId, updatedAt: new Date() }).where(eq(connections.id, existing.id));
+        } else {
+            await db.insert(connections).values({ requesterId, receiverId });
+        }
+
+        // Send notification to receiver
+        const requesterUser = await db.query.users.findFirst({ where: eq(users.id, requesterId) });
+        await db.insert(notifications).values({
+            userId: receiverId,
+            type: "connection_request",
+            title: "New Connection Request",
+            body: `${requesterUser?.name || "Someone"} wants to connect with you`,
+            relatedId: requesterId,
+        });
+
+        revalidatePath("/talent");
+        revalidatePath(`/profile/${receiverId}`);
+        return { success: true };
+    } catch (error) {
+        log.error("Failed to send connection request", { receiverId }, error);
+        return { error: "Failed to send connection request" };
+    }
+}
+
+export async function respondToConnection(connectionId: string, accept: boolean) {
+    const session = await auth();
+    if (!session?.user?.id) return { error: "Not authenticated" };
+
+    try {
+        const conn = await db.query.connections.findFirst({ where: eq(connections.id, connectionId) });
+        if (!conn || conn.receiverId !== session.user.id) return { error: "Not authorized" };
+
+        const newStatus = accept ? "accepted" : "declined";
+        await db.update(connections).set({ status: newStatus, updatedAt: new Date() }).where(eq(connections.id, connectionId));
+
+        // Notify requester of result
+        const responder = await db.query.users.findFirst({ where: eq(users.id, session.user.id) });
+        await db.insert(notifications).values({
+            userId: conn.requesterId,
+            type: accept ? "connection_accepted" : "connection_declined",
+            title: accept ? "Connection Accepted" : "Connection Declined",
+            body: `${responder?.name || "Someone"} ${accept ? "accepted" : "declined"} your connection request`,
+            relatedId: session.user.id,
+        });
+
+        revalidatePath("/talent");
+        revalidatePath(`/profile/${conn.requesterId}`);
+        revalidatePath(`/profile/${conn.receiverId}`);
+        return { success: true };
+    } catch (error) {
+        log.error("Failed to respond to connection", { connectionId }, error);
+        return { error: "Failed to respond" };
+    }
+}
+
+export async function removeConnection(connectionId: string) {
+    const session = await auth();
+    if (!session?.user?.id) return { error: "Not authenticated" };
+
+    try {
+        const conn = await db.query.connections.findFirst({ where: eq(connections.id, connectionId) });
+        if (!conn) return { error: "Connection not found" };
+        if (conn.requesterId !== session.user.id && conn.receiverId !== session.user.id) return { error: "Not authorized" };
+
+        await db.delete(connections).where(eq(connections.id, connectionId));
+        revalidatePath("/talent");
+        return { success: true };
+    } catch (error) {
+        log.error("Failed to remove connection", { connectionId }, error);
+        return { error: "Failed to remove connection" };
+    }
+}
+
+export async function getMyConnections() {
+    const session = await auth();
+    if (!session?.user?.id) return { connections: [], pendingReceived: [], pendingSent: [] };
+    const userId = session.user.id;
+
+    try {
+        const allConns = await db.select().from(connections).where(
+            or(
+                eq(connections.requesterId, userId),
+                eq(connections.receiverId, userId)
+            )
+        );
+
+        const accepted = allConns.filter(c => c.status === "accepted");
+        const pendingReceived = allConns.filter(c => c.status === "pending" && c.receiverId === userId);
+        const pendingSent = allConns.filter(c => c.status === "pending" && c.requesterId === userId);
+
+        // Get user details for accepted connections
+        const connectedUserIds = accepted.map(c => c.requesterId === userId ? c.receiverId : c.requesterId);
+        const pendingReceivedIds = pendingReceived.map(c => c.requesterId);
+        const pendingSentIds = pendingSent.map(c => c.receiverId);
+        const allUserIds = [...new Set([...connectedUserIds, ...pendingReceivedIds, ...pendingSentIds])];
+
+        let userMap: Record<string, any> = {};
+        if (allUserIds.length > 0) {
+            const userRows = await db.select().from(users).where(inArray(users.id, allUserIds));
+            for (const u of userRows) {
+                userMap[u.id] = { id: u.id, name: u.name, email: u.email, image: u.image, role: u.role, bio: u.bio, jobTitle: u.jobTitle, skills: u.skills };
+            }
+        }
+
+        return {
+            connections: accepted.map(c => ({
+                ...c,
+                user: userMap[c.requesterId === userId ? c.receiverId : c.requesterId],
+            })),
+            pendingReceived: pendingReceived.map(c => ({
+                ...c,
+                user: userMap[c.requesterId],
+            })),
+            pendingSent: pendingSent.map(c => ({
+                ...c,
+                user: userMap[c.receiverId],
+            })),
+        };
+    } catch (error) {
+        log.error("Failed to get connections", {}, error);
+        return { connections: [], pendingReceived: [], pendingSent: [] };
+    }
+}
+
+export async function getConnectionStatus(otherUserId: string) {
+    const session = await auth();
+    if (!session?.user?.id) return { status: "none" as const, connectionId: null };
+    const userId = session.user.id;
+
+    try {
+        const conn = await db.query.connections.findFirst({
+            where: or(
+                and(eq(connections.requesterId, userId), eq(connections.receiverId, otherUserId)),
+                and(eq(connections.requesterId, otherUserId), eq(connections.receiverId, userId))
+            ),
+        });
+
+        if (!conn) return { status: "none" as const, connectionId: null };
+        return {
+            status: conn.status as "pending" | "accepted" | "declined",
+            connectionId: conn.id,
+            isRequester: conn.requesterId === userId,
+        };
+    } catch (error) {
+        log.error("Failed to get connection status", { otherUserId }, error);
+        return { status: "none" as const, connectionId: null };
+    }
+}
+
+export async function getMyInteractions() {
+    const session = await auth();
+    if (!session?.user?.id) return [];
+    const userId = session.user.id;
+
+    try {
+        // Find people who share categories, events, or threads with the current user
+        const interactedUserIds = new Set<string>();
+
+        // 1. Co-followers of same categories
+        const myFollows = await db.select({ categoryId: intelHubFollows.categoryId }).from(intelHubFollows).where(eq(intelHubFollows.userId, userId));
+        if (myFollows.length > 0) {
+            const myCatIds = myFollows.map(f => f.categoryId);
+            const coFollowers = await db.select({ userId: intelHubFollows.userId }).from(intelHubFollows).where(
+                and(inArray(intelHubFollows.categoryId, myCatIds), sql`${intelHubFollows.userId} != ${userId}`)
+            );
+            for (const f of coFollowers) interactedUserIds.add(f.userId);
+        }
+
+        // 2. Co-attendees at events
+        const allEvents = await db.select({ attendees: events.attendees, acceptedAttendees: events.acceptedAttendees, createdBy: events.createdBy }).from(events);
+        for (const evt of allEvents) {
+            const attendeesList = [...(evt.attendees || []), ...(evt.acceptedAttendees || []), evt.createdBy];
+            if (attendeesList.includes(userId)) {
+                for (const a of attendeesList) {
+                    if (a && a !== userId) interactedUserIds.add(a);
+                }
+            }
+        }
+
+        // 3. Co-posters in same threads
+        const myPosts = await db.select({ threadId: intelboardPosts.threadId }).from(intelboardPosts).where(eq(intelboardPosts.authorId, userId));
+        if (myPosts.length > 0) {
+            const myThreadIds = [...new Set(myPosts.map(p => p.threadId))];
+            const coPosters = await db.select({ authorId: intelboardPosts.authorId }).from(intelboardPosts).where(
+                and(inArray(intelboardPosts.threadId, myThreadIds), sql`${intelboardPosts.authorId} != ${userId}`)
+            );
+            for (const p of coPosters) interactedUserIds.add(p.authorId);
+        }
+
+        // Remove already-connected users
+        const myConns = await db.select().from(connections).where(
+            and(
+                or(eq(connections.requesterId, userId), eq(connections.receiverId, userId)),
+                or(eq(connections.status, "accepted"), eq(connections.status, "pending"))
+            )
+        );
+        const connectedIds = new Set(myConns.map(c => c.requesterId === userId ? c.receiverId : c.requesterId));
+        for (const id of connectedIds) interactedUserIds.delete(id);
+        interactedUserIds.delete(userId);
+
+        if (interactedUserIds.size === 0) return [];
+
+        const interactedUsers = await db.select().from(users).where(inArray(users.id, [...interactedUserIds]));
+        return interactedUsers.map(u => ({
+            id: u.id, name: u.name, email: u.email, image: u.image, role: u.role,
+            bio: u.bio, jobTitle: u.jobTitle, skills: u.skills, experience: u.experience,
+        }));
+    } catch (error) {
+        log.error("Failed to get interactions", {}, error);
+        return [];
     }
 }

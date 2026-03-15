@@ -4,26 +4,25 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Button, buttonVariants } from "@/components/ui/button";
 import { UserMenu } from "@/components/user-menu";
 import { LoginDialog } from "@/components/login-dialog";
 import { useRole } from "@/components/role-provider";
 import { useLanguage } from "@/components/language-provider";
 import { NewRequestDialog } from "@/components/new-request-dialog";
 import { NotificationBell } from "@/components/notification-bell";
-import { Globe } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 export function SiteHeader() {
     const pathname = usePathname();
-    const { currentUser, role } = useRole();
-    const { language, setLanguage, t } = useLanguage();
+    const { currentUser } = useRole();
+    const { t } = useLanguage();
+
+    const navItems = [
+        { href: "/dashboard", label: t.common.dashboard, match: (p: string) => p === "/dashboard" },
+        { href: "/intel-hub", label: "Explore", match: (p: string) => p === "/intel-hub" || p.startsWith("/intel-hub/") || p === "/intelboards" || p.startsWith("/intelboards/") },
+        { href: "/calendar", label: "Events", match: (p: string) => p === "/calendar" || p.startsWith("/events/") },
+        { href: "/talent", label: "Members", match: (p: string) => p === "/talent" },
+    ];
 
     return (
         <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -42,104 +41,27 @@ export function SiteHeader() {
                         </span>
                     </Link>
                     <nav className="flex items-center space-x-6 text-sm font-medium">
-                        <Link
-                            href="/dashboard"
-                            className={cn(
-                                "transition-colors hover:text-foreground/80",
-                                pathname === "/dashboard" ? "text-foreground" : "text-foreground/60"
-                            )}
-                        >
-                            {t.common.dashboard}
-                        </Link>
-                        <Link
-                            href="/intelboards"
-                            className={cn(
-                                "transition-colors hover:text-foreground/80",
-                                pathname === "/intelboards" || pathname?.startsWith("/intelboards/") ? "text-foreground" : "text-foreground/60"
-                            )}
-                        >
-                            Forums
-                        </Link>
-                        <Link
-                            href="/intel-hub"
-                            className={cn(
-                                "transition-colors hover:text-foreground/80",
-                                pathname === "/intel-hub" || pathname?.startsWith("/intel-hub/") ? "text-foreground" : "text-foreground/60"
-                            )}
-                        >
-                            Categories
-                        </Link>
-                        <Link
-                            href="/calendar"
-                            className={cn(
-                                "transition-colors hover:text-foreground/80",
-                                pathname === "/calendar" ? "text-foreground" : "text-foreground/60"
-                            )}
-                        >
-                            Events
-                        </Link>
-                        <Link
-                            href="/board"
-                            className={cn(
-                                "transition-colors hover:text-foreground/80",
-                                pathname === "/board" ? "text-foreground" : "text-foreground/60"
-                            )}
-                        >
-                            Open Requests
-                        </Link>
-                        <Link
-                            href="/talent"
-                            className={cn(
-                                "transition-colors hover:text-foreground/80",
-                                pathname === "/talent" ? "text-foreground" : "text-foreground/60"
-                            )}
-                        >
-                            Members
-                        </Link>
-                        <Link
-                            href="/profile"
-                            className={cn(
-                                "transition-colors hover:text-foreground/80",
-                                pathname === "/profile" ? "text-foreground" : "text-foreground/60"
-                            )}
-                        >
-                            My Profile
-                        </Link>
+                        {navItems.map((item) => (
+                            <Link
+                                key={item.href}
+                                href={item.href}
+                                className={cn(
+                                    "transition-colors hover:text-foreground/80",
+                                    item.match(pathname || "") ? "text-foreground" : "text-foreground/60"
+                                )}
+                            >
+                                {item.label}
+                            </Link>
+                        ))}
                     </nav>
                 </div>
                 <div className="flex flex-1 items-center justify-between space-x-2 md:justify-end">
-                    <div className="w-full flex-1 md:w-auto md:flex-none">
-                        {/* Search could go here */}
-                    </div>
+                    <div className="w-full flex-1 md:w-auto md:flex-none" />
                     <nav className="flex items-center gap-2">
                         <ThemeToggle />
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                    <Globe className="h-4 w-4" />
-                                    <span className="sr-only">Toggle language</span>
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => setLanguage("en")}>
-                                    English {language === "en" && "✓"}
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => setLanguage("sv")}>
-                                    Svenska {language === "sv" && "✓"}
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
 
                         {currentUser && (
                             <NotificationBell />
-                        )}
-
-                        {currentUser && (
-                            <div className="text-sm text-muted-foreground flex items-center gap-2 mr-2 hidden sm:flex">
-                                {t.common.viewingAs}:
-                                <span className="font-semibold text-primary">{currentUser.name}</span>
-                                {currentUser.company && <span className="text-xs bg-muted px-2 py-0.5 rounded">{currentUser.company}</span>}
-                            </div>
                         )}
 
                         {!currentUser ? (
@@ -153,6 +75,6 @@ export function SiteHeader() {
                     </nav>
                 </div>
             </div>
-        </header >
+        </header>
     );
 }

@@ -576,3 +576,19 @@ export const categoryExperiencesRelations = relations(categoryExperiences, ({ on
     user: one(users, { fields: [categoryExperiences.userId], references: [users.id] }),
     category: one(intelHubCategories, { fields: [categoryExperiences.categoryId], references: [intelHubCategories.id] }),
 }));
+
+// --- Connections (user networking) ---
+
+export const connections = pgTable("connections", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    requesterId: text("requester_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    receiverId: text("receiver_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    status: text("status").notNull().default("pending"), // 'pending' | 'accepted' | 'declined'
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const connectionsRelations = relations(connections, ({ one }) => ({
+    requester: one(users, { fields: [connections.requesterId], references: [users.id], relationName: "sentConnections" }),
+    receiver: one(users, { fields: [connections.receiverId], references: [users.id], relationName: "receivedConnections" }),
+}));

@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useRole } from "@/components/role-provider";
-import { getEvents, createEvent, deleteEvent, getAllUsers } from "@/lib/actions";
+import { getEvents, createEvent, deleteEvent, rsvpEvent, getAllUsers, getUpcomingHubs } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +17,9 @@ import { cn } from "@/lib/utils";
 import {
     ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon,
     Clock, MapPin, Users, Trash2, Loader2, Filter, Video, FileText, Sparkles,
-    Lock, Globe, UserCheck, Repeat, RefreshCw, Share2,
+    Lock, Globe, UserCheck, Repeat, Share2, ArrowRight,
+    CalendarDays, UserPlus, Radio, MessageSquare, ExternalLink, Eye, EyeOff,
+    CheckCircle2, ChevronDown,
 } from "lucide-react";
 import { MeetingNotesPanel } from "@/components/meeting-notes-panel";
 import { ShareInviteDialog } from "@/components/share-invite-dialog";
@@ -46,12 +50,34 @@ type CalendarEvent = {
     createdAt?: Date | string;
 };
 
+type HubEvent = {
+    id: string;
+    title: string;
+    status: string;
+    startTime: Date | string | null;
+    endTime: Date | string | null;
+    meetingUrl: string | null;
+    rsvps: { userId: string; status: string; respondedAt: string }[];
+    createdBy: string;
+    createdAt: Date | string;
+    intelboardId: string;
+    threadId: string | null;
+    creatorName: string | null;
+    intelboardTitle: string | null;
+};
+
 type ViewUser = { id: string; name: string; email?: string | null; role?: string | null };
 
 const EVENT_COLORS: Record<string, string> = {
     meeting: "bg-blue-500",
     deadline: "bg-red-500",
     milestone: "bg-emerald-500",
+};
+
+const EVENT_BORDER_COLORS: Record<string, string> = {
+    meeting: "border-l-blue-500",
+    deadline: "border-l-red-500",
+    milestone: "border-l-emerald-500",
 };
 
 const AUDIENCE_CONFIG: Record<string, { label: string; icon: typeof Lock; color: string }> = {
@@ -71,264 +97,341 @@ const RECURRING_LABELS: Record<string, string> = {
 function getDaysInMonth(y: number, m: number) { return new Date(y, m + 1, 0).getDate(); }
 function getFirstDayOfMonth(y: number, m: number) { return new Date(y, m, 1).getDay(); }
 
-export default function CalendarPage() {
+function formatRelativeDate(dateStr: Date | string) {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffMs = d.getTime() - now.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) {
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        if (diffHours <= 0) return "Now";
+        if (diffHours === 1) return "In 1 hour";
+        return `In ${diffHours} hours`;
+    }
+    if (diffDays === 1) return "Tomorrow";
+    if (diffDays > 1 && diffDays <= 7) return `In ${diffDays} days`;
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function isUpcoming(dateStr: Date | string) {
+    return new Date(dateStr).getTime() >= Date.now() - 60 * 60 * 1000; // include events that started up to 1h ago
+}
+
+// ══════════════════════════════════════════════════════════════
+// Main Page
+// ══════════════════════════════════════════════════════════════
+
+export default function EventsPage() {
+    const router = useRouter();
     const { currentUser } = useRole();
     const { toast } = useToast();
     const [allEvents, setAllEvents] = useState<CalendarEvent[]>([]);
+    const [hubs, setHubs] = useState<HubEvent[]>([]);
     const [allUsers, setAllUsers] = useState<ViewUser[]>([]);
-    const [currentDate, setCurrentDate] = useState(new Date());
-    const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-    const [showCreateDialog, setShowCreateDialog] = useState(false);
-    const [filterMyEvents, setFilterMyEvents] = useState(false);
-    const [filterType, setFilterType] = useState<string>("");
     const [loading, setLoading] = useState(true);
+    const [showCalendar, setShowCalendar] = useState(false);
+    const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
     const [shareEvent, setShareEvent] = useState<CalendarEvent | null>(null);
+    const [rsvpLoadingId, setRsvpLoadingId] = useState<string | null>(null);
 
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
+    // Calendar state
+    const [currentDate, setCurrentDate] = useState(new Date());
+    const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
     const loadData = useCallback(async () => {
         setLoading(true);
-        const [evts, usrs] = await Promise.all([getEvents(), getAllUsers()]);
-        setAllEvents(evts);
-        setAllUsers(usrs);
+        try {
+            const [evts, usrs, hbs] = await Promise.all([getEvents(), getAllUsers(), getUpcomingHubs()]);
+            setAllEvents(evts);
+            setAllUsers(usrs);
+            setHubs(hbs as HubEvent[]);
+        } catch (e) {
+            console.error("Failed to load events data:", e);
+        }
         setLoading(false);
     }, []);
 
     useEffect(() => { loadData(); }, [loadData]);
 
-    const filteredEvents = useMemo(() => {
-        let filtered = allEvents;
-        if (filterMyEvents && currentUser) {
-            filtered = filtered.filter(e => e.createdBy === currentUser.id || e.attendees.includes(currentUser.id));
-        }
-        if (filterType) {
-            filtered = filtered.filter(e => e.type === filterType);
-        }
-        return filtered;
-    }, [allEvents, filterMyEvents, filterType, currentUser]);
+    // ─── Derived data ────────────────────────────────────────
+    const myEvents = useMemo(() => {
+        if (!currentUser) return [];
+        return allEvents
+            .filter(e =>
+                (e.createdBy === currentUser.id || e.attendees.includes(currentUser.id)) &&
+                isUpcoming(e.startTime)
+            )
+            .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+    }, [allEvents, currentUser]);
 
-    const eventsForDay = useCallback((day: number) => {
-        return filteredEvents.filter(e => {
+    const suggestedEvents = useMemo(() => {
+        if (!currentUser) return allEvents.filter(e => e.audience === "open" && isUpcoming(e.startTime));
+        return allEvents
+            .filter(e =>
+                e.audience === "open" &&
+                e.createdBy !== currentUser.id &&
+                !e.attendees.includes(currentUser.id) &&
+                isUpcoming(e.startTime)
+            )
+            .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+    }, [allEvents, currentUser]);
+
+    const pastEvents = useMemo(() => {
+        if (!currentUser) return [];
+        return allEvents
+            .filter(e =>
+                (e.createdBy === currentUser.id || e.attendees.includes(currentUser.id)) &&
+                !isUpcoming(e.startTime)
+            )
+            .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
+            .slice(0, 5);
+    }, [allEvents, currentUser]);
+
+    // Open & ongoing events you can join right now (live or starting within 2h)
+    const happeningNow = useMemo(() => {
+        const twoHoursFromNow = Date.now() + 2 * 60 * 60 * 1000;
+        return allEvents
+            .filter(e => {
+                const isLiveOrSoon = e.meetingStatus === "in_progress" ||
+                    (e.meetingStatus === "scheduled" && new Date(e.startTime).getTime() <= twoHoursFromNow && new Date(e.endTime).getTime() >= Date.now());
+                const isOpen = e.audience === "open";
+                const isNotMine = !currentUser || (e.createdBy !== currentUser.id && !e.attendees.includes(currentUser.id));
+                return isLiveOrSoon && isOpen && isNotMine;
+            })
+            .sort((a, b) => {
+                // Live first, then by start time
+                if (a.meetingStatus === "in_progress" && b.meetingStatus !== "in_progress") return -1;
+                if (b.meetingStatus === "in_progress" && a.meetingStatus !== "in_progress") return 1;
+                return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
+            });
+    }, [allEvents, currentUser]);
+
+    // Also include open events user IS part of that are live now
+    const myLiveEvents = useMemo(() => {
+        if (!currentUser) return [];
+        return allEvents.filter(e =>
+            e.meetingStatus === "in_progress" &&
+            (e.createdBy === currentUser.id || e.attendees.includes(currentUser.id))
+        );
+    }, [allEvents, currentUser]);
+
+    const liveHubs = useMemo(() => hubs.filter(h => h.status === "live"), [hubs]);
+    const scheduledHubs = useMemo(() => hubs.filter(h => h.status === "scheduled"), [hubs]);
+
+    // Calendar-filtered events (when calendar is open and a day is selected)
+    const calendarFilteredEvents = useMemo(() => {
+        if (!selectedDate) return null; // null = no calendar filter active
+        return allEvents.filter(e => {
             const d = new Date(e.startTime);
-            return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day;
+            return d.getFullYear() === selectedDate.getFullYear() &&
+                d.getMonth() === selectedDate.getMonth() &&
+                d.getDate() === selectedDate.getDate();
         });
-    }, [filteredEvents, year, month]);
-
-    const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
-    const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
-    const goToday = () => setCurrentDate(new Date());
-
-    const daysInMonth = getDaysInMonth(year, month);
-    const firstDay = getFirstDayOfMonth(year, month);
-    const today = new Date();
-
-    const calendarDays: (number | null)[] = [];
-    for (let i = 0; i < firstDay; i++) calendarDays.push(null);
-    for (let d = 1; d <= daysInMonth; d++) calendarDays.push(d);
-
-    const selectedDayEvents = selectedDate
-        ? filteredEvents.filter(e => {
-            const d = new Date(e.startTime);
-            return d.getFullYear() === selectedDate.getFullYear() && d.getMonth() === selectedDate.getMonth() && d.getDate() === selectedDate.getDate();
-        })
-        : [];
+    }, [allEvents, selectedDate]);
 
     const getUserName = (id: string) => allUsers.find(u => u.id === id)?.name || "Unknown";
 
+    const handleQuickRsvp = async (eventId: string) => {
+        setRsvpLoadingId(eventId);
+        try {
+            const result = await rsvpEvent(eventId);
+            if ("error" in result) {
+                toast({ title: "Error", description: result.error, variant: "destructive" });
+            } else {
+                toast({ title: result.isAccepted ? "Signed up!" : "Left event" });
+                loadData();
+            }
+        } catch (e) {
+            console.error(e);
+        }
+        setRsvpLoadingId(null);
+    };
+
+    // ─── Render ──────────────────────────────────────────────
     return (
         <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
+            {/* ═══ Header ═══ */}
+            <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
-                    <h1 className="text-2xl font-bold">Calendar</h1>
-                    <p className="text-sm text-muted-foreground">Schedule meetings and track deadlines</p>
+                    <h1 className="text-2xl font-bold">Events & Meetings</h1>
+                    <p className="text-sm text-muted-foreground">Your upcoming events, meetings, and community discussions</p>
                 </div>
-                <Button className="gap-2" onClick={() => setShowCreateDialog(true)}>
-                    <Plus className="h-4 w-4" /> New Event
-                </Button>
-            </div>
-
-            {/* Filters */}
-            <div className="flex items-center gap-2 flex-wrap">
-                <Button variant={filterMyEvents ? "default" : "outline"} size="sm" onClick={() => setFilterMyEvents(!filterMyEvents)} className="gap-1.5">
-                    <Filter className="h-3 w-3" /> My Events
-                </Button>
-                {(["meeting", "deadline", "milestone"] as const).map(t => (
-                    <Button key={t} variant={filterType === t ? "default" : "outline"} size="sm" onClick={() => setFilterType(filterType === t ? "" : t)} className="gap-1.5">
-                        <div className={cn("h-2 w-2 rounded-full", EVENT_COLORS[t])} />
-                        {t.charAt(0).toUpperCase() + t.slice(1)}
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant={showCalendar ? "default" : "outline"}
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={() => { setShowCalendar(!showCalendar); if (showCalendar) setSelectedDate(null); }}
+                    >
+                        {showCalendar ? <EyeOff className="h-3.5 w-3.5" /> : <CalendarDays className="h-3.5 w-3.5" />}
+                        {showCalendar ? "Hide Calendar" : "Show Calendar"}
                     </Button>
-                ))}
+                    <Button className="gap-2" onClick={() => setShowCreateDialog(true)}>
+                        <Plus className="h-4 w-4" /> New Event
+                    </Button>
+                </div>
             </div>
 
-            {/* Calendar Grid + Side Panel */}
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
-                <div className="bg-card rounded-xl border shadow-sm">
-                    <div className="flex items-center justify-between p-4 border-b">
-                        <Button variant="ghost" size="icon" onClick={prevMonth}><ChevronLeft className="h-4 w-4" /></Button>
-                        <div className="flex items-center gap-2">
-                            <h2 className="text-lg font-semibold">{currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</h2>
-                            <Button variant="outline" size="sm" onClick={goToday}>Today</Button>
-                        </div>
-                        <Button variant="ghost" size="icon" onClick={nextMonth}><ChevronRight className="h-4 w-4" /></Button>
-                    </div>
+            {/* ═══ Main Layout ═══ */}
+            <div className={cn(
+                "grid gap-6",
+                showCalendar ? "grid-cols-1 lg:grid-cols-[1fr_380px]" : "grid-cols-1"
+            )}>
+                {/* ─── Left: Event Lists ────────────────────────────── */}
+                <div className="space-y-8">
                     {loading ? (
-                        <div className="flex items-center justify-center h-64"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+                        <div className="flex items-center justify-center h-40">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : calendarFilteredEvents !== null ? (
+                        /* Calendar day filter active */
+                        <CalendarDayView
+                            date={selectedDate!}
+                            events={calendarFilteredEvents}
+                            currentUser={currentUser}
+                            getUserName={getUserName}
+                            onClear={() => setSelectedDate(null)}
+                            onRsvp={handleQuickRsvp}
+                            rsvpLoadingId={rsvpLoadingId}
+                            onShare={setShareEvent}
+                            onNotes={setSelectedEvent}
+                        />
                     ) : (
-                        <div className="p-2">
-                            <div className="grid grid-cols-7 mb-1">
-                                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => (
-                                    <div key={d} className="text-center text-xs font-medium text-muted-foreground py-2">{d}</div>
-                                ))}
-                            </div>
-                            <div className="grid grid-cols-7 gap-px bg-border/50 rounded-lg overflow-hidden">
-                                {calendarDays.map((day, idx) => {
-                                    if (day === null) return <div key={`e-${idx}`} className="bg-card min-h-[80px]" />;
-                                    const dayEvents = eventsForDay(day);
-                                    const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
-                                    const isSelected = selectedDate && day === selectedDate.getDate() && month === selectedDate.getMonth() && year === selectedDate.getFullYear();
-                                    return (
-                                        <button key={day} onClick={() => setSelectedDate(new Date(year, month, day))}
-                                            className={cn("bg-card min-h-[80px] p-1.5 text-left transition-colors hover:bg-accent/50 relative",
-                                                isSelected && "ring-2 ring-primary ring-inset"
-                                            )}
-                                        >
-                                            <span className={cn("text-xs font-medium inline-flex items-center justify-center h-6 w-6 rounded-full",
-                                                isToday && "bg-primary text-primary-foreground"
-                                            )}>{day}</span>
-                                            <div className="space-y-0.5 mt-0.5">
-                                                {dayEvents.slice(0, 2).map(ev => (
-                                                    <div key={ev.id} className={cn("text-[9px] px-1 py-0.5 rounded truncate text-white", EVENT_COLORS[ev.type] || "bg-blue-500")}>
-                                                        {ev.meetingUrl && "📹 "}{ev.title}
-                                                    </div>
-                                                ))}
-                                                {dayEvents.length > 2 && <div className="text-[9px] text-muted-foreground px-1">+{dayEvents.length - 2} more</div>}
-                                            </div>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                {/* Side Panel: Selected Day Events */}
-                <div className="bg-card rounded-xl border shadow-sm p-4">
-                    <h3 className="font-semibold text-sm mb-3">
-                        {selectedDate
-                            ? selectedDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })
-                            : "Select a day"}
-                    </h3>
-
-                    {!selectedDate && (
-                        <p className="text-xs text-muted-foreground">Click a day on the calendar to view events.</p>
-                    )}
-
-                    {selectedDate && selectedDayEvents.length === 0 && (
-                        <div className="text-center py-8">
-                            <CalendarIcon className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
-                            <p className="text-xs text-muted-foreground">No events this day</p>
-                            <Button size="sm" variant="outline" className="mt-3" onClick={() => setShowCreateDialog(true)}>
-                                <Plus className="h-3 w-3 mr-1" /> Add Event
-                            </Button>
-                        </div>
-                    )}
-
-                    <div className="space-y-3">
-                        {selectedDayEvents.map(event => {
-                            const audienceConf = AUDIENCE_CONFIG[event.audience || "private"] || AUDIENCE_CONFIG.private;
-                            const AudienceIcon = audienceConf.icon;
-                            const recurringLabel = RECURRING_LABELS[event.recurring || "none"];
-
-                            return (
-                                <div key={event.id} className="border rounded-lg p-3 space-y-2 relative group">
-                                    <div className="flex items-start justify-between">
-                                        <button
-                                            onClick={() => setSelectedEvent(event)}
-                                            className="flex items-center gap-2 text-left hover:opacity-80 transition-opacity flex-wrap"
-                                        >
-                                            <div className={cn("h-2.5 w-2.5 rounded-full shrink-0", EVENT_COLORS[event.type] || "bg-blue-500")} />
-                                            <span className="text-sm font-medium">{event.title}</span>
-                                            {event.meetingUrl && (
-                                                <Badge variant="secondary" className="text-[8px] py-0 gap-0.5">
-                                                    <Video className="h-2 w-2" /> Video
-                                                </Badge>
-                                            )}
-                                            {event.aiSummary && (
-                                                <Badge variant="secondary" className="text-[8px] py-0 gap-0.5 bg-violet-500/10 text-violet-600">
-                                                    <Sparkles className="h-2 w-2" /> AI Notes
-                                                </Badge>
-                                            )}
-                                        </button>
-                                        <Button
-                                            variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
-                                            onClick={async () => {
-                                                await deleteEvent(event.id);
-                                                toast({ title: "Event deleted" });
-                                                loadData();
-                                            }}
-                                        >
-                                            <Trash2 className="h-3 w-3" />
-                                        </Button>
-                                    </div>
-
-                                    {/* Creator + Audience + Recurring info */}
-                                    <div className="flex items-center gap-2 flex-wrap text-[10px]">
-                                        <span className="text-muted-foreground">
-                                            Created by <span className="font-medium text-foreground">{event.creatorName || getUserName(event.createdBy)}</span>
-                                        </span>
-                                        <span className={cn("flex items-center gap-0.5", audienceConf.color)}>
-                                            <AudienceIcon className="h-2.5 w-2.5" /> {audienceConf.label}
-                                        </span>
-                                        {recurringLabel && (
-                                            <span className="flex items-center gap-0.5 text-purple-600">
-                                                <Repeat className="h-2.5 w-2.5" /> {recurringLabel}
-                                            </span>
-                                        )}
-                                    </div>
-
-                                    {event.description && <p className="text-xs text-muted-foreground">{event.description}</p>}
-                                    <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
-                                        <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{new Date(event.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – {new Date(event.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                        {event.location && !event.meetingUrl && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{event.location}</span>}
-                                    </div>
-                                    {event.attendees.length > 0 && (
-                                        <div className="flex items-center gap-1 flex-wrap">
-                                            <Users className="h-3 w-3 text-muted-foreground" />
-                                            {event.attendees.map(aId => (
-                                                <Badge key={aId} variant="secondary" className="text-[10px] py-0">{getUserName(aId)}</Badge>
-                                            ))}
-                                        </div>
-                                    )}
-                                    {/* Quick actions row */}
+                        <>
+                            {/* ═══ Happening Now & Open to Join ═══ */}
+                            {(happeningNow.length > 0 || myLiveEvents.length > 0) && (
+                                <div className="space-y-4">
                                     <div className="flex items-center gap-2">
-                                        {event.meetingUrl && event.meetingStatus !== "completed" && (
-                                            <a href={event.meetingUrl} target="_blank" rel="noopener noreferrer"
-                                                className="inline-flex items-center gap-1 text-[10px] font-medium text-blue-600 dark:text-blue-400 hover:underline"
-                                            >
-                                                <Video className="h-2.5 w-2.5" /> Join
-                                            </a>
-                                        )}
-                                        <button
-                                            onClick={() => setSelectedEvent(event)}
-                                            className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-                                        >
-                                            <FileText className="h-2.5 w-2.5" /> Notes
-                                        </button>
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); setShareEvent(event); }}
-                                            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-indigo-600 text-white hover:bg-indigo-500 transition-colors shadow-sm"
-                                        >
-                                            <Share2 className="h-3 w-3" /> Share & Invite
-                                        </button>
+                                        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-red-500 to-amber-500 flex items-center justify-center relative">
+                                            <Radio className="h-4 w-4 text-white" />
+                                            <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 bg-red-500 rounded-full animate-ping" />
+                                            <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 bg-red-500 rounded-full" />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-lg font-bold text-foreground">Happening Now</h2>
+                                            <p className="text-xs text-muted-foreground">Live events and meetings you can join right now</p>
+                                        </div>
+                                        <Badge variant="secondary" className="ml-auto text-xs gap-1">
+                                            <Radio className="h-2.5 w-2.5 text-red-500" />
+                                            {happeningNow.length + myLiveEvents.length} active
+                                        </Badge>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {myLiveEvents.map(event => (
+                                            <EventCard
+                                                key={event.id}
+                                                event={event}
+                                                currentUser={currentUser}
+                                                getUserName={getUserName}
+                                                onRsvp={handleQuickRsvp}
+                                                rsvpLoading={rsvpLoadingId === event.id}
+                                                onShare={setShareEvent}
+                                                onNotes={setSelectedEvent}
+                                                showRsvpStatus
+                                            />
+                                        ))}
+                                        {happeningNow.map(event => (
+                                            <EventCard
+                                                key={event.id}
+                                                event={event}
+                                                currentUser={currentUser}
+                                                getUserName={getUserName}
+                                                onRsvp={handleQuickRsvp}
+                                                rsvpLoading={rsvpLoadingId === event.id}
+                                                onShare={setShareEvent}
+                                                onNotes={setSelectedEvent}
+                                                showSignUpButton
+                                            />
+                                        ))}
                                     </div>
                                 </div>
-                            );
-                        })}
-                    </div>
+                            )}
+
+                            {/* ═══ Your Events ═══ */}
+                            <EventSection
+                                title="Your Events"
+                                subtitle="Events you've created or signed up for"
+                                icon={<CalendarIcon className="h-5 w-5 text-blue-500" />}
+                                emptyText="You haven't signed up for any upcoming events yet."
+                                emptyAction={
+                                    <Button size="sm" variant="outline" className="gap-1.5 mt-2" onClick={() => setShowCreateDialog(true)}>
+                                        <Plus className="h-3.5 w-3.5" /> Create Your First Event
+                                    </Button>
+                                }
+                                events={myEvents}
+                                currentUser={currentUser}
+                                getUserName={getUserName}
+                                onRsvp={handleQuickRsvp}
+                                rsvpLoadingId={rsvpLoadingId}
+                                onShare={setShareEvent}
+                                onNotes={setSelectedEvent}
+                                showRsvpStatus
+                            />
+
+                            {/* ═══ Suggested For You ═══ */}
+                            {suggestedEvents.length > 0 && (
+                                <EventSection
+                                    title="Suggested For You"
+                                    subtitle="Open events you might be interested in"
+                                    icon={<Sparkles className="h-5 w-5 text-violet-500" />}
+                                    events={suggestedEvents}
+                                    currentUser={currentUser}
+                                    getUserName={getUserName}
+                                    onRsvp={handleQuickRsvp}
+                                    rsvpLoadingId={rsvpLoadingId}
+                                    onShare={setShareEvent}
+                                    onNotes={setSelectedEvent}
+                                    showSignUpButton
+                                />
+                            )}
+
+                            {/* ═══ Active Forums & Live Meetings ═══ */}
+                            {(liveHubs.length > 0 || scheduledHubs.length > 0) && (
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-2">
+                                        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center">
+                                            <Radio className="h-4 w-4 text-white" />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-lg font-bold text-foreground">Active Forums & Live Meetings</h2>
+                                            <p className="text-xs text-muted-foreground">Ongoing discussions and meetings you can join</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        {liveHubs.map(hub => (
+                                            <HubCard key={hub.id} hub={hub} isLive />
+                                        ))}
+                                        {scheduledHubs.map(hub => (
+                                            <HubCard key={hub.id} hub={hub} />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ═══ Past Events ═══ */}
+                            {pastEvents.length > 0 && (
+                                <PastEventsSection
+                                    events={pastEvents}
+                                    getUserName={getUserName}
+                                />
+                            )}
+                        </>
+                    )}
                 </div>
+
+                {/* ─── Right: Calendar Panel ────────────────────────── */}
+                {showCalendar && (
+                    <CalendarPanel
+                        allEvents={allEvents}
+                        currentDate={currentDate}
+                        selectedDate={selectedDate}
+                        onDateChange={setCurrentDate}
+                        onSelectDate={setSelectedDate}
+                    />
+                )}
             </div>
 
             {/* Create Event Dialog */}
@@ -347,7 +450,6 @@ export default function CalendarPage() {
                     onClose={() => setSelectedEvent(null)}
                     onUpdate={() => {
                         loadData();
-                        // Refresh the selected event
                         getEvents().then(evts => {
                             const updated = evts.find((e: any) => e.id === selectedEvent.id);
                             if (updated) setSelectedEvent(updated);
@@ -370,6 +472,510 @@ export default function CalendarPage() {
         </div>
     );
 }
+
+// ══════════════════════════════════════════════════════════════
+// Event Section Component
+// ══════════════════════════════════════════════════════════════
+
+function EventSection({
+    title, subtitle, icon, emptyText, emptyAction, events, currentUser, getUserName,
+    onRsvp, rsvpLoadingId, onShare, onNotes, showRsvpStatus, showSignUpButton,
+}: {
+    title: string;
+    subtitle: string;
+    icon: React.ReactNode;
+    emptyText?: string;
+    emptyAction?: React.ReactNode;
+    events: CalendarEvent[];
+    currentUser: any;
+    getUserName: (id: string) => string;
+    onRsvp: (id: string) => void;
+    rsvpLoadingId: string | null;
+    onShare: (e: CalendarEvent) => void;
+    onNotes: (e: CalendarEvent) => void;
+    showRsvpStatus?: boolean;
+    showSignUpButton?: boolean;
+}) {
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-lg bg-card border flex items-center justify-center">
+                    {icon}
+                </div>
+                <div>
+                    <h2 className="text-lg font-bold text-foreground">{title}</h2>
+                    <p className="text-xs text-muted-foreground">{subtitle}</p>
+                </div>
+                {events.length > 0 && (
+                    <Badge variant="secondary" className="ml-auto text-xs">{events.length}</Badge>
+                )}
+            </div>
+
+            {events.length === 0 ? (
+                <div className="bg-card rounded-xl border border-dashed p-8 text-center">
+                    <CalendarIcon className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">{emptyText}</p>
+                    {emptyAction}
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    {events.map(event => (
+                        <EventCard
+                            key={event.id}
+                            event={event}
+                            currentUser={currentUser}
+                            getUserName={getUserName}
+                            onRsvp={onRsvp}
+                            rsvpLoading={rsvpLoadingId === event.id}
+                            onShare={onShare}
+                            onNotes={onNotes}
+                            showRsvpStatus={showRsvpStatus}
+                            showSignUpButton={showSignUpButton}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ══════════════════════════════════════════════════════════════
+// Event Card Component
+// ══════════════════════════════════════════════════════════════
+
+function EventCard({
+    event, currentUser, getUserName, onRsvp, rsvpLoading, onShare, onNotes,
+    showRsvpStatus, showSignUpButton,
+}: {
+    event: CalendarEvent;
+    currentUser: any;
+    getUserName: (id: string) => string;
+    onRsvp: (id: string) => void;
+    rsvpLoading: boolean;
+    onShare: (e: CalendarEvent) => void;
+    onNotes: (e: CalendarEvent) => void;
+    showRsvpStatus?: boolean;
+    showSignUpButton?: boolean;
+}) {
+    const isLive = event.meetingStatus === "in_progress";
+    const audienceConf = AUDIENCE_CONFIG[event.audience || "private"] || AUDIENCE_CONFIG.private;
+    const AudienceIcon = audienceConf.icon;
+    const recurringLabel = RECURRING_LABELS[event.recurring || "none"];
+    const relDate = formatRelativeDate(event.startTime);
+    const isCreator = currentUser && event.createdBy === currentUser.id;
+
+    return (
+        <div className={cn(
+            "bg-card rounded-xl border border-l-4 p-4 transition-all hover:shadow-md group",
+            EVENT_BORDER_COLORS[event.type] || "border-l-blue-500",
+            isLive && "border-l-red-500 ring-1 ring-red-500/20"
+        )}>
+            <div className="flex items-start gap-4">
+                {/* Date pill */}
+                <div className="hidden sm:flex flex-col items-center justify-center min-w-[52px] py-1">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase">
+                        {new Date(event.startTime).toLocaleDateString("en-US", { month: "short" })}
+                    </span>
+                    <span className="text-xl font-bold text-foreground leading-tight">
+                        {new Date(event.startTime).getDate()}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                        {new Date(event.startTime).toLocaleDateString("en-US", { weekday: "short" })}
+                    </span>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 min-w-0 space-y-2">
+                    {/* Top row: title + badges */}
+                    <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-1">
+                            <Link href={`/events/${event.id}`} className="hover:underline">
+                                <h3 className="text-sm font-semibold text-foreground leading-tight">{event.title}</h3>
+                            </Link>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                                {isLive && (
+                                    <Badge className="text-[9px] py-0 bg-red-500/10 text-red-600 border border-red-500/20 animate-pulse gap-0.5">
+                                        <Radio className="h-2 w-2" /> Live
+                                    </Badge>
+                                )}
+                                <Badge variant="outline" className="text-[9px] py-0 gap-0.5">
+                                    <div className={cn("h-1.5 w-1.5 rounded-full", EVENT_COLORS[event.type] || "bg-blue-500")} />
+                                    {event.type.charAt(0).toUpperCase() + event.type.slice(1)}
+                                </Badge>
+                                <span className={cn("flex items-center gap-0.5 text-[9px]", audienceConf.color)}>
+                                    <AudienceIcon className="h-2.5 w-2.5" /> {audienceConf.label}
+                                </span>
+                                {recurringLabel && (
+                                    <span className="flex items-center gap-0.5 text-[9px] text-purple-600">
+                                        <Repeat className="h-2.5 w-2.5" /> {recurringLabel}
+                                    </span>
+                                )}
+                                {showRsvpStatus && isCreator && (
+                                    <Badge className="text-[9px] py-0 bg-indigo-500/10 text-indigo-600 border border-indigo-500/20">Organizer</Badge>
+                                )}
+                                {showRsvpStatus && !isCreator && (
+                                    <Badge className="text-[9px] py-0 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 gap-0.5">
+                                        <CheckCircle2 className="h-2 w-2" /> Attending
+                                    </Badge>
+                                )}
+                            </div>
+                        </div>
+                        <span className={cn(
+                            "text-xs font-semibold whitespace-nowrap shrink-0 px-2 py-0.5 rounded-full",
+                            relDate === "Now" || relDate === "Tomorrow"
+                                ? "bg-amber-500/10 text-amber-600"
+                                : "text-muted-foreground"
+                        )}>
+                            {relDate}
+                        </span>
+                    </div>
+
+                    {/* Description */}
+                    {event.description && (
+                        <p className="text-xs text-muted-foreground line-clamp-1">{event.description}</p>
+                    )}
+
+                    {/* Meta row */}
+                    <div className="flex items-center gap-4 flex-wrap text-[11px] text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {new Date(event.startTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} – {new Date(event.endTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                        {event.location && !event.meetingUrl && (
+                            <span className="flex items-center gap-1">
+                                <MapPin className="h-3 w-3" /> {event.location}
+                            </span>
+                        )}
+                        {event.meetingUrl && (
+                            <span className="flex items-center gap-1 text-blue-600">
+                                <Video className="h-3 w-3" /> Video Meeting
+                            </span>
+                        )}
+                        {event.attendees.length > 0 && (
+                            <span className="flex items-center gap-1">
+                                <Users className="h-3 w-3" /> {event.attendees.length} attendee{event.attendees.length !== 1 ? "s" : ""}
+                            </span>
+                        )}
+                        {event.creatorName && (
+                            <span className="text-muted-foreground">
+                                by <span className="font-medium text-foreground/80">{event.creatorName}</span>
+                            </span>
+                        )}
+                    </div>
+
+                    {/* Action row */}
+                    <div className="flex items-center gap-2 pt-1">
+                        {event.meetingUrl && event.meetingStatus !== "completed" && (
+                            <a href={event.meetingUrl} target="_blank" rel="noopener noreferrer">
+                                <Button size="sm" variant={isLive ? "default" : "outline"}
+                                    className={cn("h-7 gap-1 text-[11px]", isLive && "bg-red-600 hover:bg-red-700 text-white")}
+                                >
+                                    <Video className="h-3 w-3" /> {isLive ? "Join Live" : "Join"}
+                                </Button>
+                            </a>
+                        )}
+                        {showSignUpButton && (
+                            <Button
+                                size="sm" className="h-7 gap-1 text-[11px]"
+                                onClick={() => onRsvp(event.id)}
+                                disabled={rsvpLoading}
+                            >
+                                {rsvpLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <UserPlus className="h-3 w-3" />}
+                                Sign Up
+                            </Button>
+                        )}
+                        <Link href={`/events/${event.id}`}>
+                            <Button variant="ghost" size="sm" className="h-7 gap-1 text-[11px]">
+                                <ArrowRight className="h-3 w-3" /> Details
+                            </Button>
+                        </Link>
+                        <button
+                            onClick={() => onNotes(event)}
+                            className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors ml-auto"
+                        >
+                            <FileText className="h-3 w-3" /> Notes
+                        </button>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onShare(event); }}
+                            className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                            <Share2 className="h-3 w-3" /> Share
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ══════════════════════════════════════════════════════════════
+// Hub Card Component (Forums / Live Meetings)
+// ══════════════════════════════════════════════════════════════
+
+function HubCard({ hub, isLive }: { hub: HubEvent; isLive?: boolean }) {
+    const acceptedCount = hub.rsvps.filter(r => r.status === "accepted").length;
+
+    return (
+        <div className={cn(
+            "bg-card rounded-xl border p-4 transition-all hover:shadow-md",
+            isLive && "border-red-500/30 ring-1 ring-red-500/10"
+        )}>
+            <div className="space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                            {isLive && (
+                                <Badge className="text-[9px] py-0 bg-red-500/10 text-red-600 border border-red-500/20 animate-pulse gap-0.5">
+                                    <Radio className="h-2 w-2" /> Live
+                                </Badge>
+                            )}
+                            <h4 className="text-sm font-semibold text-foreground">{hub.title}</h4>
+                        </div>
+                        {hub.intelboardTitle && (
+                            <Link href={`/intelboards/${hub.intelboardId}`}
+                                className="flex items-center gap-1 text-[10px] text-primary hover:underline"
+                            >
+                                <MessageSquare className="h-2.5 w-2.5" /> {hub.intelboardTitle}
+                            </Link>
+                        )}
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                    {hub.startTime && (
+                        <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {new Date(hub.startTime).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                            {" · "}
+                            {new Date(hub.startTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                    )}
+                    {acceptedCount > 0 && (
+                        <span className="flex items-center gap-1">
+                            <Users className="h-3 w-3" /> {acceptedCount}
+                        </span>
+                    )}
+                    {hub.creatorName && (
+                        <span>by {hub.creatorName}</span>
+                    )}
+                </div>
+
+                {hub.meetingUrl && (
+                    <a href={hub.meetingUrl} target="_blank" rel="noopener noreferrer">
+                        <Button size="sm" className={cn(
+                            "w-full gap-1.5 text-[11px]",
+                            isLive ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"
+                        )}>
+                            <Video className="h-3 w-3" /> {isLive ? "Join Live Session" : "Join Meeting"}
+                            <ExternalLink className="h-2.5 w-2.5 opacity-60" />
+                        </Button>
+                    </a>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ══════════════════════════════════════════════════════════════
+// Past Events (collapsed)
+// ══════════════════════════════════════════════════════════════
+
+function PastEventsSection({ events, getUserName }: { events: CalendarEvent[]; getUserName: (id: string) => string }) {
+    const [expanded, setExpanded] = useState(false);
+
+    return (
+        <div className="space-y-3">
+            <button
+                onClick={() => setExpanded(!expanded)}
+                className="flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
+            >
+                <ChevronDown className={cn("h-4 w-4 transition-transform", !expanded && "-rotate-90")} />
+                Past Events ({events.length})
+            </button>
+            {expanded && (
+                <div className="space-y-2 pl-6">
+                    {events.map(event => (
+                        <Link key={event.id} href={`/events/${event.id}`}
+                            className="flex items-center gap-3 p-2.5 rounded-lg border bg-card/50 hover:bg-card transition-colors"
+                        >
+                            <div className={cn("h-2 w-2 rounded-full shrink-0 opacity-50", EVENT_COLORS[event.type] || "bg-blue-500")} />
+                            <span className="text-xs font-medium text-foreground/70 truncate">{event.title}</span>
+                            <span className="text-[10px] text-muted-foreground ml-auto whitespace-nowrap">
+                                {new Date(event.startTime).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                            </span>
+                        </Link>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ══════════════════════════════════════════════════════════════
+// Calendar Day View (when a day is selected in calendar)
+// ══════════════════════════════════════════════════════════════
+
+function CalendarDayView({
+    date, events, currentUser, getUserName, onClear, onRsvp, rsvpLoadingId, onShare, onNotes,
+}: {
+    date: Date;
+    events: CalendarEvent[];
+    currentUser: any;
+    getUserName: (id: string) => string;
+    onClear: () => void;
+    onRsvp: (id: string) => void;
+    rsvpLoadingId: string | null;
+    onShare: (e: CalendarEvent) => void;
+    onNotes: (e: CalendarEvent) => void;
+}) {
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <CalendarIcon className="h-5 w-5 text-blue-500" />
+                    <h2 className="text-lg font-bold">
+                        {date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+                    </h2>
+                    <Badge variant="secondary" className="text-xs">{events.length} event{events.length !== 1 ? "s" : ""}</Badge>
+                </div>
+                <Button variant="ghost" size="sm" onClick={onClear} className="text-xs gap-1">
+                    ← All Events
+                </Button>
+            </div>
+
+            {events.length === 0 ? (
+                <div className="bg-card rounded-xl border border-dashed p-8 text-center">
+                    <CalendarIcon className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">No events on this day</p>
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    {events.map(event => {
+                        const isMyEvent = currentUser && (event.createdBy === currentUser.id || event.attendees.includes(currentUser.id));
+                        return (
+                            <EventCard
+                                key={event.id}
+                                event={event}
+                                currentUser={currentUser}
+                                getUserName={getUserName}
+                                onRsvp={onRsvp}
+                                rsvpLoading={rsvpLoadingId === event.id}
+                                onShare={onShare}
+                                onNotes={onNotes}
+                                showRsvpStatus={isMyEvent}
+                                showSignUpButton={!isMyEvent && event.audience === "open"}
+                            />
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ══════════════════════════════════════════════════════════════
+// Calendar Panel (right side)
+// ══════════════════════════════════════════════════════════════
+
+function CalendarPanel({
+    allEvents, currentDate, selectedDate, onDateChange, onSelectDate,
+}: {
+    allEvents: CalendarEvent[];
+    currentDate: Date;
+    selectedDate: Date | null;
+    onDateChange: (d: Date) => void;
+    onSelectDate: (d: Date | null) => void;
+}) {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysInMonth = getDaysInMonth(year, month);
+    const firstDay = getFirstDayOfMonth(year, month);
+    const today = new Date();
+
+    const calendarDays: (number | null)[] = [];
+    for (let i = 0; i < firstDay; i++) calendarDays.push(null);
+    for (let d = 1; d <= daysInMonth; d++) calendarDays.push(d);
+
+    const eventsForDay = (day: number) =>
+        allEvents.filter(e => {
+            const d = new Date(e.startTime);
+            return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day;
+        });
+
+    return (
+        <div className="bg-card rounded-xl border shadow-sm sticky top-20">
+            <div className="flex items-center justify-between p-3 border-b">
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onDateChange(new Date(year, month - 1, 1))}>
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold">{currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</h3>
+                    <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={() => onDateChange(new Date())}>Today</Button>
+                </div>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onDateChange(new Date(year, month + 1, 1))}>
+                    <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+            </div>
+            <div className="p-2">
+                <div className="grid grid-cols-7 mb-1">
+                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => (
+                        <div key={d} className="text-center text-[10px] font-medium text-muted-foreground py-1.5">{d}</div>
+                    ))}
+                </div>
+                <div className="grid grid-cols-7 gap-px">
+                    {calendarDays.map((day, idx) => {
+                        if (day === null) return <div key={`e-${idx}`} className="min-h-[40px]" />;
+                        const dayEvents = eventsForDay(day);
+                        const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+                        const isSelected = selectedDate && day === selectedDate.getDate() && month === selectedDate.getMonth() && year === selectedDate.getFullYear();
+                        return (
+                            <button
+                                key={day}
+                                onClick={() => {
+                                    if (isSelected) {
+                                        onSelectDate(null);
+                                    } else {
+                                        onSelectDate(new Date(year, month, day));
+                                    }
+                                }}
+                                className={cn(
+                                    "min-h-[40px] p-1 rounded-lg text-center transition-colors hover:bg-accent/50 relative",
+                                    isSelected && "ring-2 ring-primary bg-primary/5"
+                                )}
+                            >
+                                <span className={cn(
+                                    "text-xs font-medium inline-flex items-center justify-center h-6 w-6 rounded-full",
+                                    isToday && "bg-primary text-primary-foreground"
+                                )}>{day}</span>
+                                {dayEvents.length > 0 && (
+                                    <div className="flex justify-center gap-0.5 mt-0.5">
+                                        {dayEvents.slice(0, 3).map(ev => (
+                                            <div key={ev.id} className={cn("h-1 w-1 rounded-full", EVENT_COLORS[ev.type] || "bg-blue-500")} />
+                                        ))}
+                                    </div>
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* Calendar legend */}
+            <div className="p-3 border-t flex items-center gap-3 flex-wrap">
+                {Object.entries(EVENT_COLORS).map(([type, color]) => (
+                    <div key={type} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                        <div className={cn("h-2 w-2 rounded-full", color)} />
+                        {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// ══════════════════════════════════════════════════════════════
+// Create Event Dialog (preserved from original)
+// ══════════════════════════════════════════════════════════════
 
 function CreateEventDialog({ open, onOpenChange, defaultDate, allUsers, onCreated }: {
     open: boolean; onOpenChange: (v: boolean) => void; defaultDate: Date; allUsers: ViewUser[]; onCreated: () => void;

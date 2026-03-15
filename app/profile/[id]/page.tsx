@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ArrowLeft, Linkedin, Mail, Briefcase, MapPin, Building } from "lucide-react";
 import Link from "next/link";
+import { ProfileConnectButton } from "@/components/profile-connect-button";
 
 export default async function ProfilePage({ params }: { params: { id: string } }) {
     const { id } = await params;
@@ -32,9 +33,9 @@ export default async function ProfilePage({ params }: { params: { id: string } }
             <div className="max-w-3xl mx-auto space-y-8">
                 <div className="mb-8">
                     <Button variant="ghost" asChild className="-ml-4 mb-4">
-                        <Link href="/board" className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
+                        <Link href="/talent" className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
                             <ArrowLeft className="h-4 w-4" />
-                            Back to Board
+                            Back to Members
                         </Link>
                     </Button>
                 </div>
@@ -68,7 +69,8 @@ export default async function ProfilePage({ params }: { params: { id: string } }
                                                 )}
                                             </p>
                                         </div>
-                                        <div className="flex gap-2">
+                                        <div className="flex gap-2 items-center">
+                                            <ProfileConnectButton targetUserId={user.id} />
                                             {user.linkedin && (
                                                 <Button size="icon" variant="outline" asChild>
                                                     <a href={user.linkedin} target="_blank" rel="noopener noreferrer">
@@ -129,9 +131,9 @@ export default async function ProfilePage({ params }: { params: { id: string } }
                                 <CardContent>
                                     {user.skills && user.skills.length > 0 ? (
                                         <div className="flex flex-wrap gap-2">
-                                            {user.skills.map((skill: string, i: number) => (
+                                            {user.skills.map((skill: any, i: number) => (
                                                 <Badge key={i} variant="secondary" className="px-3 py-1">
-                                                    {skill}
+                                                    {typeof skill === 'object' ? skill.name : skill}
                                                 </Badge>
                                             ))}
                                         </div>

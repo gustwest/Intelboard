@@ -218,7 +218,7 @@ export default function EventDetailPage() {
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Link href="/dashboard" className="hover:text-foreground transition-colors">Dashboard</Link>
                 <span>/</span>
-                <Link href="/calendar" className="hover:text-foreground transition-colors">Calendar</Link>
+                <Link href="/calendar" className="hover:text-foreground transition-colors">Events</Link>
                 <span>/</span>
                 <span className="text-foreground font-medium truncate max-w-[300px]">{event.title}</span>
             </div>
