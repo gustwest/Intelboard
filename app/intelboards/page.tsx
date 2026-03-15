@@ -14,9 +14,10 @@ import {
 import { cn } from "@/lib/utils";
 import {
     Plus, Loader2, Lock, Globe, MessageSquare, Users, Zap,
-    Search, ArrowRight,
+    Search, ArrowRight, Share2,
 } from "lucide-react";
 import Link from "next/link";
+import { ShareInviteDialog } from "@/components/share-invite-dialog";
 
 type Board = {
     id: string;
@@ -49,6 +50,7 @@ export default function IntelboardsPage() {
     const [loading, setLoading] = useState(true);
     const [showCreate, setShowCreate] = useState(false);
     const [search, setSearch] = useState("");
+    const [shareBoard, setShareBoard] = useState<Board | null>(null);
     const [filter, setFilter] = useState<"all" | "my">("all");
 
     const load = useCallback(async () => {
@@ -164,22 +166,30 @@ export default function IntelboardsPage() {
                                         <span className="text-muted-foreground/40">•</span>
                                         <span>by {getUserName(board.createdBy)}</span>
                                     </div>
-                                    {isMember && (
-                                        <Badge variant="secondary" className="text-[9px] py-0">Member</Badge>
-                                    )}
-                                    {!isMember && board.visibility === "open" && (
+                                    <div className="flex items-center gap-2">
                                         <button
-                                            onClick={async (e) => {
-                                                e.preventDefault();
-                                                await joinIntelboard(board.id);
-                                                toast({ title: "Joined!" });
-                                                load();
-                                            }}
-                                            className="text-[10px] font-medium text-primary hover:underline"
+                                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShareBoard(board); }}
+                                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-indigo-600 text-white hover:bg-indigo-500 transition-colors shadow-sm"
                                         >
-                                            Join
+                                            <Share2 className="h-2.5 w-2.5" /> Share & Invite
                                         </button>
-                                    )}
+                                        {isMember && (
+                                            <Badge variant="secondary" className="text-[9px] py-0">Member</Badge>
+                                        )}
+                                        {!isMember && board.visibility === "open" && (
+                                            <button
+                                                onClick={async (e) => {
+                                                    e.preventDefault();
+                                                    await joinIntelboard(board.id);
+                                                    toast({ title: "Joined!" });
+                                                    load();
+                                                }}
+                                                className="text-[10px] font-medium text-primary hover:underline"
+                                            >
+                                                Join
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             </Link>
                         );
@@ -194,6 +204,17 @@ export default function IntelboardsPage() {
                 allUsers={allUsers}
                 onCreated={() => { load(); setShowCreate(false); }}
             />
+
+            {/* Share / Invite Dialog */}
+            {shareBoard && (
+                <ShareInviteDialog
+                    open={!!shareBoard}
+                    onOpenChange={(v) => { if (!v) setShareBoard(null); }}
+                    itemType="intelboard"
+                    itemId={shareBoard.id}
+                    itemTitle={shareBoard.title}
+                />
+            )}
         </div>
     );
 }

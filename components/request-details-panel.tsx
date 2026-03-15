@@ -353,8 +353,8 @@ export function RequestDetailsPanel({ request, onClose, onUpdate, isOwner, cente
                                 />
                             </div>
 
-                            {/* 4b. Compensation — Hourly Rate (for Short-term / Consultant) */}
-                            {(formData.requestType === "Short-term" || formData.requestType === "Consultant") && (
+                            {/* 4b. Compensation — Hourly Rate (for Short-term) */}
+                            {formData.requestType === "Short-term" && (
                                 <div className="space-y-2">
                                     <Label>Hourly Rate Range</Label>
                                     <div className="grid grid-cols-2 gap-3">
@@ -384,36 +384,7 @@ export function RequestDetailsPanel({ request, onClose, onUpdate, isOwner, cente
                                 </div>
                             )}
 
-                            {/* 4c. Compensation — Salary Range (for Hire) */}
-                            {formData.requestType === "Hire" && (
-                                <div className="space-y-2">
-                                    <Label>Salary Range</Label>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div className="space-y-1">
-                                            <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Min (SEK/month)</Label>
-                                            <Input
-                                                type="text"
-                                                value={formData.salaryMin || ""}
-                                                onChange={(e) => handleChange("salaryMin", e.target.value)}
-                                                disabled={!isOwner}
-                                                placeholder="e.g. 45,000"
-                                                className="text-sm"
-                                            />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Max (SEK/month)</Label>
-                                            <Input
-                                                type="text"
-                                                value={formData.salaryMax || ""}
-                                                onChange={(e) => handleChange("salaryMax", e.target.value)}
-                                                disabled={!isOwner}
-                                                placeholder="e.g. 65,000"
-                                                className="text-sm"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
+
 
                             {/* 5. Timeline */}
                             <div className="space-y-2">

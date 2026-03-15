@@ -3,12 +3,13 @@
 import { auth } from "./auth";
 
 import { db } from "./db";
-import { requests, projects, users, companies, workExperience, education, projectViews, systems, assets, integrations, systemDocuments, conversations, conversationParticipants, messages, notifications, requestActivity, events, intelboards, intelboardThreads, intelboardPosts, intelboardHubs, intelHubCategories, intelHubFollows } from "./schema";
+import { requests, projects, users, companies, workExperience, education, projectViews, systems, assets, integrations, systemDocuments, conversations, conversationParticipants, messages, notifications, requestActivity, events, intelboards, intelboardThreads, intelboardPosts, intelboardHubs, intelHubCategories, intelHubFollows, ratings, categorySkillRatings, categoryExperiences } from "./schema";
 import { eq, desc, or, and, inArray, sql, like, ilike, asc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { dbUserToSpecialist } from "./data";
 import type { Specialist } from "./data";
 import { log } from "./logger";
+import { fetchWikipediaFullArticle } from "@/lib/knowledge-sources";
 
 // ...
 
@@ -1853,6 +1854,129 @@ export async function deleteEvent(id: string) {
     }
 }
 
+export async function getEventById(eventId: string) {
+    try {
+        const session = await auth();
+        const userId = session?.user?.id;
+
+        const [event] = await db.select({
+            id: events.id,
+            title: events.title,
+            description: events.description,
+            startTime: events.startTime,
+            endTime: events.endTime,
+            requestId: events.requestId,
+            createdBy: events.createdBy,
+            attendees: events.attendees,
+            acceptedAttendees: events.acceptedAttendees,
+            location: events.location,
+            type: events.type,
+            audience: events.audience,
+            recurring: events.recurring,
+            createdAt: events.createdAt,
+            meetingUrl: events.meetingUrl,
+            meetingId: events.meetingId,
+            hasRecording: events.hasRecording,
+            transcript: events.transcript,
+            aiSummary: events.aiSummary,
+            aiActionItems: events.aiActionItems,
+            agenda: events.agenda,
+            meetingNotes: events.meetingNotes,
+            meetingStatus: events.meetingStatus,
+            creatorName: users.name,
+            creatorAvatar: users.avatar,
+        }).from(events)
+            .leftJoin(users, eq(events.createdBy, users.id))
+            .where(eq(events.id, eventId));
+
+        if (!event) return null;
+
+        // Resolve attendee names
+        const allAttendeeIds = [...new Set([...event.attendees, ...event.acceptedAttendees])];
+        const attendeeDetails = allAttendeeIds.length > 0
+            ? (await db.select({ id: users.id, name: users.name, avatar: users.avatar, role: users.role })
+                .from(users)
+                .where(inArray(users.id, allAttendeeIds))).map(a => ({
+                    ...a,
+                    accepted: event.acceptedAttendees.includes(a.id),
+                    isInvited: event.attendees.includes(a.id),
+                }))
+            : [];
+
+        const isInvited = userId ? event.attendees.includes(userId) : false;
+        const isAccepted = userId ? event.acceptedAttendees.includes(userId) : false;
+
+        return {
+            ...event,
+            startTime: event.startTime.toISOString(),
+            endTime: event.endTime.toISOString(),
+            createdAt: event.createdAt.toISOString(),
+            attendeeDetails,
+            isAttending: isInvited || isAccepted,
+            isAccepted,
+            isInvited,
+            isCreator: userId === event.createdBy,
+        };
+    } catch (error) {
+        log.error("Failed to get event by ID", { eventId }, error);
+        return null;
+    }
+}
+
+export async function rsvpEvent(eventId: string) {
+    try {
+        const session = await auth();
+        const userId = session?.user?.id;
+        if (!userId) throw new Error("Not authenticated");
+
+        const [event] = await db.select({
+            attendees: events.attendees,
+            acceptedAttendees: events.acceptedAttendees,
+            createdBy: events.createdBy,
+            title: events.title,
+        }).from(events).where(eq(events.id, eventId));
+        if (!event) throw new Error("Event not found");
+
+        const isAccepted = event.acceptedAttendees.includes(userId);
+        const isInvited = event.attendees.includes(userId);
+
+        if (isAccepted) {
+            // Leaving: remove from both lists
+            const newAttendees = event.attendees.filter((id: string) => id !== userId);
+            const newAccepted = event.acceptedAttendees.filter((id: string) => id !== userId);
+            await db.update(events).set({ attendees: newAttendees, acceptedAttendees: newAccepted }).where(eq(events.id, eventId));
+            revalidatePath("/calendar");
+            revalidatePath(`/events/${eventId}`);
+            return { isAttending: false, isAccepted: false, attendeeCount: newAttendees.length };
+        } else {
+            // Accepting/Joining: add to both lists
+            const newAttendees = isInvited ? event.attendees : [...event.attendees, userId];
+            const newAccepted = [...event.acceptedAttendees, userId];
+            await db.update(events).set({ attendees: newAttendees, acceptedAttendees: newAccepted }).where(eq(events.id, eventId));
+
+            // Notify the event creator
+            if (event.createdBy !== userId) {
+                const [user] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId));
+                const userName = user?.name || "Someone";
+                await createNotification(
+                    event.createdBy,
+                    "event_rsvp",
+                    `${userName} accepted your event invitation`,
+                    `${userName} is now attending "${event.title}"`,
+                    eventId
+                );
+            }
+
+            revalidatePath("/calendar");
+            revalidatePath(`/events/${eventId}`);
+            return { isAttending: true, isAccepted: true, attendeeCount: newAttendees.length };
+        }
+    } catch (error) {
+        log.error("Failed to RSVP event", { eventId }, error);
+        return { error: "Failed to update RSVP" };
+    }
+}
+
 // --- Intelboard Forums ---
 
 export async function createIntelboard(data: {
@@ -2449,6 +2573,47 @@ export async function followHubCategory(categoryId: string) {
     }
 }
 
+export async function fetchAndSaveWikiDefinition(categoryId: string) {
+    try {
+        const session = await auth();
+        if (!session?.user?.id) throw new Error("Not authenticated");
+
+        // Get the category
+        const [category] = await db.select().from(intelHubCategories).where(eq(intelHubCategories.id, categoryId));
+        if (!category) return { error: "Category not found" };
+
+        // Fetch from Wikipedia
+        const wiki = await fetchWikipediaFullArticle(category.title);
+        if (!wiki) return { error: "No Wikipedia article found for this topic" };
+
+        // Persist to DB
+        await db.update(intelHubCategories).set({
+            wikiTitle: wiki.title,
+            wikiSummary: wiki.summary,
+            wikiContent: wiki.fullContent,
+            wikiUrl: wiki.url,
+            wikiImageUrl: wiki.imageUrl || null,
+            wikiFetchedAt: new Date(),
+        }).where(eq(intelHubCategories.id, categoryId));
+
+        revalidatePath("/intel-hub");
+        revalidatePath(`/intel-hub/${category.slug}`);
+
+        return {
+            wikiTitle: wiki.title,
+            wikiSummary: wiki.summary,
+            wikiContent: wiki.fullContent,
+            wikiUrl: wiki.url,
+            wikiImageUrl: wiki.imageUrl,
+            wikiFetchedAt: new Date().toISOString(),
+            lastRevision: wiki.lastRevision,
+        };
+    } catch (error) {
+        log.error("Failed to fetch/save wiki definition", { categoryId }, error);
+        return { error: "Failed to fetch Wikipedia definition" };
+    }
+}
+
 export async function searchHubCategories(query: string) {
     try {
         const results = await db.select().from(intelHubCategories)
@@ -2463,6 +2628,44 @@ export async function searchHubCategories(query: string) {
     } catch (error) {
         log.error("Failed to search hub categories", { query }, error);
         return [];
+    }
+}
+
+/**
+ * Auto-create a forum (intelboard) for a category if one doesn't exist.
+ * Called automatically when a user visits a category page.
+ */
+export async function ensureCategoryForum(categoryId: string, categoryTitle: string): Promise<{ id: string; title: string; isNew: boolean }> {
+    try {
+        // Check if a forum already exists for this category
+        const existing = await db.query.intelboards.findFirst({
+            where: eq(intelboards.categoryId, categoryId),
+        });
+
+        if (existing) {
+            return { id: existing.id, title: existing.title, isNew: false };
+        }
+
+        // Auto-create the forum
+        const session = await auth();
+        const userId = session?.user?.id || "system";
+
+        const [forum] = await db.insert(intelboards).values({
+            title: `${categoryTitle} Forum`,
+            description: `Community discussions about ${categoryTitle}. Share knowledge, ask questions, and connect with professionals.`,
+            category: categoryTitle,
+            categoryId,
+            createdBy: userId,
+            visibility: "open",
+            status: "active",
+        }).returning();
+
+        log.info("Auto-created forum for category", { categoryId, forumId: forum.id, title: forum.title });
+        revalidatePath(`/intelboards`);
+        return { id: forum.id, title: forum.title, isNew: true };
+    } catch (error) {
+        log.error("Failed to ensure category forum", { categoryId }, error);
+        throw error;
     }
 }
 
@@ -2616,5 +2819,557 @@ export async function shareEventOrHub(data: {
     } catch (error) {
         log.error("Failed to share item", { itemType: data.itemType, itemId: data.itemId }, error);
         throw new Error("Failed to share item");
+    }
+}
+
+// ================================================================
+// Hot Topics – Promoted Categories
+// ================================================================
+
+export async function getHotTopics() {
+    try {
+        const session = await auth();
+        const userId = session?.user?.id;
+
+        const hotCategories = await db.select()
+            .from(intelHubCategories)
+            .where(eq(intelHubCategories.isHot, true))
+            .orderBy(intelHubCategories.hotRank)
+            .limit(10);
+
+        // Get follow status for current user
+        let followedIds = new Set<string>();
+        if (userId) {
+            const follows = await db.select().from(intelHubFollows)
+                .where(eq(intelHubFollows.userId, userId));
+            followedIds = new Set(follows.map(f => f.categoryId));
+        }
+
+        return hotCategories.map(cat => ({
+            id: cat.id,
+            title: cat.title,
+            slug: cat.slug,
+            description: cat.description,
+            icon: cat.icon,
+            color: cat.color,
+            hotLabel: cat.hotLabel,
+            hotRank: cat.hotRank,
+            followerCount: cat.followerCount,
+            isFollowed: followedIds.has(cat.id),
+        }));
+    } catch (error) {
+        log.error("Failed to get hot topics", {}, error);
+        return [];
+    }
+}
+
+/**
+ * Get recent forum threads for a category's forum (Community Insights).
+ */
+export async function getCategoryForumInsights(categoryId: string) {
+    try {
+        // Find the forum linked to this category
+        const forum = await db.query.intelboards.findFirst({
+            where: eq(intelboards.categoryId, categoryId),
+        });
+        if (!forum) return [];
+
+        // Get recent threads with post counts
+        const threads = await db.select().from(intelboardThreads)
+            .where(eq(intelboardThreads.intelboardId, forum.id))
+            .orderBy(desc(intelboardThreads.lastActivityAt))
+            .limit(5);
+
+        if (threads.length === 0) return [];
+
+        const threadIds = threads.map(t => t.id);
+        const posts = await db.select().from(intelboardPosts)
+            .where(inArray(intelboardPosts.threadId, threadIds));
+
+        // Get thread creators
+        const creatorIds = [...new Set(threads.map(t => t.createdBy))];
+        const creators = creatorIds.length > 0
+            ? await db.select({ id: users.id, name: users.name, avatar: users.avatar })
+                .from(users).where(inArray(users.id, creatorIds))
+            : [];
+        const creatorMap = Object.fromEntries(creators.map(c => [c.id, c]));
+
+        return threads.map(t => ({
+            id: t.id,
+            title: t.title,
+            description: t.description,
+            postCount: posts.filter(p => p.threadId === t.id).length,
+            createdAt: t.createdAt.toISOString(),
+            lastActivityAt: t.lastActivityAt?.toISOString() || t.createdAt.toISOString(),
+            authorName: creatorMap[t.createdBy]?.name || "Unknown",
+            authorAvatar: creatorMap[t.createdBy]?.avatar || null,
+            forumId: forum.id,
+        }));
+    } catch (error) {
+        log.error("Failed to get category forum insights", { categoryId }, error);
+        return [];
+    }
+}
+
+// ================================================================
+// Ratings — Generic content rating (events, threads, posts, users)
+// ================================================================
+
+export async function rateContent(targetId: string, targetType: string, score: number, comment?: string) {
+    try {
+        const session = await auth();
+        const userId = session?.user?.id;
+        if (!userId) throw new Error("Not authenticated");
+        if (score < 1 || score > 5) throw new Error("Score must be 1-5");
+
+        // Upsert: check if user already rated
+        const existing = await db.select().from(ratings)
+            .where(and(eq(ratings.userId, userId), eq(ratings.targetId, targetId), eq(ratings.targetType, targetType)));
+
+        if (existing.length > 0) {
+            await db.update(ratings)
+                .set({ score, comment, createdAt: new Date() })
+                .where(eq(ratings.id, existing[0].id));
+        } else {
+            await db.insert(ratings).values({ userId, targetId, targetType, score, comment });
+        }
+
+        return { success: true };
+    } catch (error) {
+        log.error("Failed to rate content", { targetId, targetType }, error);
+        return { error: "Failed to submit rating" };
+    }
+}
+
+export async function getContentRatings(targetId: string, targetType: string) {
+    try {
+        const session = await auth();
+        const userId = session?.user?.id;
+
+        const allRatings = await db.select().from(ratings)
+            .where(and(eq(ratings.targetId, targetId), eq(ratings.targetType, targetType)));
+
+        const avg = allRatings.length > 0
+            ? allRatings.reduce((sum, r) => sum + r.score, 0) / allRatings.length
+            : 0;
+
+        const userRating = userId
+            ? allRatings.find(r => r.userId === userId)?.score || 0
+            : 0;
+
+        return { avgScore: avg, count: allRatings.length, userScore: userRating };
+    } catch (error) {
+        log.error("Failed to get content ratings", { targetId, targetType }, error);
+        return { avgScore: 0, count: 0, userScore: 0 };
+    }
+}
+
+// ================================================================
+// Category Skill Self-Assessment
+// ================================================================
+
+export async function rateCategorySkill(categoryId: string, level: number) {
+    try {
+        const session = await auth();
+        const userId = session?.user?.id;
+        if (!userId) throw new Error("Not authenticated");
+        if (level < 1 || level > 5) throw new Error("Level must be 1-5");
+
+        // Upsert
+        const existing = await db.select().from(categorySkillRatings)
+            .where(and(eq(categorySkillRatings.userId, userId), eq(categorySkillRatings.categoryId, categoryId)));
+
+        if (existing.length > 0) {
+            await db.update(categorySkillRatings)
+                .set({ level, updatedAt: new Date() })
+                .where(and(eq(categorySkillRatings.userId, userId), eq(categorySkillRatings.categoryId, categoryId)));
+        } else {
+            await db.insert(categorySkillRatings).values({ userId, categoryId, level });
+        }
+
+        return { success: true, level };
+    } catch (error) {
+        log.error("Failed to rate category skill", { categoryId }, error);
+        return { error: "Failed to save skill rating" };
+    }
+}
+
+export async function getCategorySkillRating(categoryId: string) {
+    try {
+        const session = await auth();
+        const userId = session?.user?.id;
+        if (!userId) return { level: 0 };
+
+        const [existing] = await db.select().from(categorySkillRatings)
+            .where(and(eq(categorySkillRatings.userId, userId), eq(categorySkillRatings.categoryId, categoryId)));
+
+        return { level: existing?.level || 0 };
+    } catch (error) {
+        log.error("Failed to get category skill rating", { categoryId }, error);
+        return { level: 0 };
+    }
+}
+
+// ================================================================
+// Category Experiences (user-written involvement, persisted to profile)
+// ================================================================
+
+export async function addCategoryExperience(categoryId: string, title: string, content: string, tags?: string[]) {
+    try {
+        const session = await auth();
+        const userId = session?.user?.id;
+        if (!userId) throw new Error("Not authenticated");
+
+        const [entry] = await db.insert(categoryExperiences)
+            .values({ userId, categoryId, title, content, tags: tags || [] })
+            .returning();
+
+        return { success: true, experience: entry };
+    } catch (error) {
+        log.error("Failed to add category experience", { categoryId }, error);
+        return { error: "Failed to save experience" };
+    }
+}
+
+export async function getCategoryExperiences(categoryId: string) {
+    try {
+        const entries = await db.select({
+            id: categoryExperiences.id,
+            title: categoryExperiences.title,
+            content: categoryExperiences.content,
+            tags: categoryExperiences.tags,
+            createdAt: categoryExperiences.createdAt,
+            userId: categoryExperiences.userId,
+            userName: users.name,
+            userAvatar: users.avatar,
+        })
+            .from(categoryExperiences)
+            .innerJoin(users, eq(categoryExperiences.userId, users.id))
+            .where(eq(categoryExperiences.categoryId, categoryId))
+            .orderBy(desc(categoryExperiences.createdAt))
+            .limit(20);
+
+        return entries.map(e => ({
+            ...e,
+            createdAt: e.createdAt.toISOString(),
+        }));
+    } catch (error) {
+        log.error("Failed to get category experiences", { categoryId }, error);
+        return [];
+    }
+}
+
+export async function getUserCategoryExperiences(userId: string) {
+    try {
+        const entries = await db.select({
+            id: categoryExperiences.id,
+            title: categoryExperiences.title,
+            content: categoryExperiences.content,
+            tags: categoryExperiences.tags,
+            createdAt: categoryExperiences.createdAt,
+            categoryId: categoryExperiences.categoryId,
+            categoryTitle: intelHubCategories.title,
+            categorySlug: intelHubCategories.slug,
+            categoryIcon: intelHubCategories.icon,
+        })
+            .from(categoryExperiences)
+            .innerJoin(intelHubCategories, eq(categoryExperiences.categoryId, intelHubCategories.id))
+            .where(eq(categoryExperiences.userId, userId))
+            .orderBy(desc(categoryExperiences.createdAt));
+
+        // Also fetch skill ratings for this user
+        const skillRatings = await db.select({
+            categoryId: categorySkillRatings.categoryId,
+            level: categorySkillRatings.level,
+            categoryTitle: intelHubCategories.title,
+            categorySlug: intelHubCategories.slug,
+            categoryIcon: intelHubCategories.icon,
+        })
+            .from(categorySkillRatings)
+            .innerJoin(intelHubCategories, eq(categorySkillRatings.categoryId, intelHubCategories.id))
+            .where(eq(categorySkillRatings.userId, userId));
+
+        return {
+            experiences: entries.map(e => ({ ...e, createdAt: e.createdAt.toISOString() })),
+            skillRatings,
+        };
+    } catch (error) {
+        log.error("Failed to get user category experiences", { userId }, error);
+        return { experiences: [], skillRatings: [] };
+    }
+}
+
+// ================================================================
+// Personalized Community Feed
+// ================================================================
+
+export async function getPersonalizedFeed(): Promise<import("./data").PersonalizedFeedResult> {
+    try {
+        const session = await auth();
+        const userId = session?.user?.id;
+
+        // 1. Get followed category IDs
+        let followedCatIds: string[] = [];
+        let followedCategories: { id: string; title: string; slug: string; icon: string | null; color: string | null }[] = [];
+
+        if (userId) {
+            const follows = await db.select({ categoryId: intelHubFollows.categoryId })
+                .from(intelHubFollows)
+                .where(eq(intelHubFollows.userId, userId));
+            followedCatIds = follows.map(f => f.categoryId);
+
+            if (followedCatIds.length > 0) {
+                const cats = await db.select({
+                    id: intelHubCategories.id,
+                    title: intelHubCategories.title,
+                    slug: intelHubCategories.slug,
+                    icon: intelHubCategories.icon,
+                    color: intelHubCategories.color,
+                }).from(intelHubCategories).where(inArray(intelHubCategories.id, followedCatIds));
+                followedCategories = cats;
+            }
+        }
+
+        // 2. Get suggested categories (top by followers, not already followed)
+        const allCats = await db.select({
+            id: intelHubCategories.id,
+            title: intelHubCategories.title,
+            slug: intelHubCategories.slug,
+            icon: intelHubCategories.icon,
+            color: intelHubCategories.color,
+            followerCount: intelHubCategories.followerCount,
+            description: intelHubCategories.description,
+            depth: intelHubCategories.depth,
+        }).from(intelHubCategories)
+            .orderBy(desc(intelHubCategories.followerCount))
+            .limit(30);
+
+        const suggestedCategories = allCats
+            .filter(c => !followedCatIds.includes(c.id) && c.depth > 0)
+            .slice(0, 6)
+            .map(({ depth, ...rest }) => rest);
+
+        // 3. Get intelboards linked to followed categories
+        let boardsInFollowedCats: { id: string; title: string; categoryId: string | null }[] = [];
+        if (followedCatIds.length > 0) {
+            boardsInFollowedCats = await db.select({
+                id: intelboards.id,
+                title: intelboards.title,
+                categoryId: intelboards.categoryId,
+            }).from(intelboards)
+                .where(inArray(intelboards.categoryId, followedCatIds));
+        }
+
+        const boardIdToInfo = Object.fromEntries(boardsInFollowedCats.map(b => [b.id, b]));
+        const followedBoardIds = boardsInFollowedCats.map(b => b.id);
+
+        // Build category lookup
+        const catLookup = Object.fromEntries([...followedCategories, ...allCats].map(c => [c.id, c]));
+
+        const feedItems: import("./data").FeedItem[] = [];
+
+        // 4. Fetch recent threads from followed boards
+        if (followedBoardIds.length > 0) {
+            const recentThreads = await db.select({
+                id: intelboardThreads.id,
+                title: intelboardThreads.title,
+                description: intelboardThreads.description,
+                intelboardId: intelboardThreads.intelboardId,
+                createdBy: intelboardThreads.createdBy,
+                createdAt: intelboardThreads.createdAt,
+            }).from(intelboardThreads)
+                .where(inArray(intelboardThreads.intelboardId, followedBoardIds))
+                .orderBy(desc(intelboardThreads.lastActivityAt))
+                .limit(20);
+
+            // Get post counts per thread
+            const threadIds = recentThreads.map(t => t.id);
+            let postCounts: Record<string, number> = {};
+            if (threadIds.length > 0) {
+                const counts = await db.select({
+                    threadId: intelboardPosts.threadId,
+                    count: sql<number>`count(*)`.as("count"),
+                }).from(intelboardPosts)
+                    .where(inArray(intelboardPosts.threadId, threadIds))
+                    .groupBy(intelboardPosts.threadId);
+                postCounts = Object.fromEntries(counts.map(c => [c.threadId, Number(c.count)]));
+            }
+
+            // Get author names
+            const authorIds = [...new Set(recentThreads.map(t => t.createdBy))];
+            const authors = authorIds.length > 0
+                ? await db.select({ id: users.id, name: users.name, avatar: users.avatar })
+                    .from(users).where(inArray(users.id, authorIds))
+                : [];
+            const authorMap = Object.fromEntries(authors.map(a => [a.id, a]));
+
+            for (const thread of recentThreads) {
+                const board = boardIdToInfo[thread.intelboardId];
+                const cat = board?.categoryId ? catLookup[board.categoryId] : null;
+                const author = authorMap[thread.createdBy];
+
+                feedItems.push({
+                    type: "thread",
+                    id: thread.id,
+                    title: thread.title,
+                    description: thread.description,
+                    boardId: thread.intelboardId,
+                    boardTitle: board?.title || "Unknown Board",
+                    postCount: postCounts[thread.id] || 0,
+                    authorName: author?.name || "Unknown",
+                    authorAvatar: author?.avatar || null,
+                    categoryIcon: (cat as any)?.icon || "💬",
+                    categoryTitle: (cat as any)?.title || "General",
+                    categorySlug: (cat as any)?.slug || "",
+                    createdAt: thread.createdAt.toISOString(),
+                });
+            }
+
+            // 5. Fetch recent posts from followed boards (last 20)
+            const recentPosts = await db.select({
+                id: intelboardPosts.id,
+                content: intelboardPosts.content,
+                threadId: intelboardPosts.threadId,
+                authorId: intelboardPosts.authorId,
+                createdAt: intelboardPosts.createdAt,
+            }).from(intelboardPosts)
+                .where(inArray(intelboardPosts.threadId, threadIds.length > 0 ? threadIds : ["__none__"]))
+                .orderBy(desc(intelboardPosts.createdAt))
+                .limit(15);
+
+            // Get thread titles for posts
+            const postThreadIds = [...new Set(recentPosts.map(p => p.threadId))];
+            const postThreads = postThreadIds.length > 0
+                ? await db.select({ id: intelboardThreads.id, title: intelboardThreads.title, intelboardId: intelboardThreads.intelboardId })
+                    .from(intelboardThreads).where(inArray(intelboardThreads.id, postThreadIds))
+                : [];
+            const threadMap = Object.fromEntries(postThreads.map(t => [t.id, t]));
+
+            // Get post author names
+            const postAuthorIds = [...new Set(recentPosts.map(p => p.authorId))];
+            const postAuthors = postAuthorIds.length > 0
+                ? await db.select({ id: users.id, name: users.name, avatar: users.avatar, role: users.role })
+                    .from(users).where(inArray(users.id, postAuthorIds))
+                : [];
+            const postAuthorMap = Object.fromEntries(postAuthors.map(a => [a.id, a]));
+
+            for (const post of recentPosts) {
+                const thread = threadMap[post.threadId];
+                const board = thread ? boardIdToInfo[thread.intelboardId] : null;
+                const cat = board?.categoryId ? catLookup[board.categoryId] : null;
+                const author = postAuthorMap[post.authorId];
+
+                feedItems.push({
+                    type: "post",
+                    id: post.id,
+                    content: post.content.substring(0, 300),
+                    threadId: post.threadId,
+                    threadTitle: thread?.title || "Unknown Thread",
+                    boardId: board?.id || "",
+                    boardTitle: board?.title || "Unknown Board",
+                    authorName: author?.name || "Unknown",
+                    authorAvatar: author?.avatar || null,
+                    authorRole: author?.role || null,
+                    categoryIcon: (cat as any)?.icon || "💬",
+                    categoryTitle: (cat as any)?.title || "General",
+                    createdAt: post.createdAt.toISOString(),
+                });
+            }
+        }
+
+        // 6. Fetch open requests (micro-gigs) — show all, not just followed categories
+        const openRequests = await db.select({
+            id: requests.id,
+            title: requests.title,
+            description: requests.description,
+            requestType: requests.requestType,
+            urgency: requests.urgency,
+            budget: requests.budget,
+            industry: requests.industry,
+            creatorId: requests.creatorId,
+            createdAt: requests.createdAt,
+        }).from(requests)
+            .where(inArray(requests.status, ["New", "Submitted for Review"]))
+            .orderBy(desc(requests.createdAt))
+            .limit(10);
+
+        if (openRequests.length > 0) {
+            const reqCreatorIds = [...new Set(openRequests.map(r => r.creatorId).filter((id): id is string => id !== null))];
+            const reqCreators = reqCreatorIds.length > 0
+                ? await db.select({ id: users.id, name: users.name })
+                    .from(users).where(inArray(users.id, reqCreatorIds))
+                : [];
+            const reqCreatorMap = Object.fromEntries(reqCreators.map(u => [u.id, u]));
+
+            for (const req of openRequests) {
+                feedItems.push({
+                    type: "request",
+                    id: req.id,
+                    title: req.title,
+                    description: (req.description || "").substring(0, 200),
+                    requestType: req.requestType,
+                    urgency: req.urgency,
+                    budget: req.budget,
+                    industry: req.industry || "",
+                    creatorName: (req.creatorId ? reqCreatorMap[req.creatorId]?.name : null) || "Unknown",
+                    createdAt: req.createdAt?.toISOString() || new Date().toISOString(),
+                });
+            }
+        }
+
+        // 7. Fetch upcoming events (next 30 days)
+        const now = new Date();
+        const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+        const upcomingEvents = await db.select({
+            id: events.id,
+            title: events.title,
+            description: events.description,
+            startTime: events.startTime,
+            endTime: events.endTime,
+            location: events.location,
+            attendees: events.attendees,
+            createdBy: events.createdBy,
+            meetingStatus: events.meetingStatus,
+            createdAt: events.createdAt,
+        }).from(events)
+            .where(and(
+                events.startTime ? sql`${events.startTime} >= ${now.toISOString()}` : undefined,
+                events.startTime ? sql`${events.startTime} <= ${thirtyDaysFromNow.toISOString()}` : undefined,
+            ))
+            .orderBy(asc(events.startTime))
+            .limit(8);
+
+        if (upcomingEvents.length > 0) {
+            const evtCreatorIds = [...new Set(upcomingEvents.map(e => e.createdBy))];
+            const evtCreators = evtCreatorIds.length > 0
+                ? await db.select({ id: users.id, name: users.name })
+                    .from(users).where(inArray(users.id, evtCreatorIds))
+                : [];
+            const evtCreatorMap = Object.fromEntries(evtCreators.map(u => [u.id, u]));
+
+            for (const evt of upcomingEvents) {
+                feedItems.push({
+                    type: "event",
+                    id: evt.id,
+                    title: evt.title,
+                    description: evt.description,
+                    startTime: evt.startTime?.toISOString() || "",
+                    endTime: evt.endTime?.toISOString() || null,
+                    location: evt.location,
+                    attendeeCount: evt.attendees?.length || 0,
+                    creatorName: evtCreatorMap[evt.createdBy]?.name || "Unknown",
+                    meetingStatus: evt.meetingStatus || null,
+                    createdAt: evt.createdAt?.toISOString() || new Date().toISOString(),
+                });
+            }
+        }
+
+        // 8. Sort all feed items by createdAt descending
+        feedItems.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+        return { feedItems, followedCategories, suggestedCategories };
+    } catch (error) {
+        log.error("Failed to get personalized feed", {}, error);
+        return { feedItems: [], followedCategories: [], suggestedCategories: [] };
     }
 }

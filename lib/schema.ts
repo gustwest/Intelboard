@@ -324,6 +324,7 @@ export const events = pgTable("events", {
     requestId: text("request_id").references(() => requests.id),
     createdBy: text("created_by").references(() => users.id).notNull(),
     attendees: jsonb("attendees").$type<string[]>().default([]).notNull(),
+    acceptedAttendees: jsonb("accepted_attendees").$type<string[]>().default([]).notNull(),
     location: text("location"),
     type: text("type").notNull().default("meeting"), // 'meeting' | 'deadline' | 'milestone'
     audience: text("audience").notNull().default("private"), // 'private' | 'open' | 'team'
@@ -499,6 +500,16 @@ export const intelHubCategories = pgTable("intel_hub_categories", {
     parentId: text("parent_id"), // self-referencing for hierarchy
     depth: integer("depth").default(0).notNull(), // 0=root, 1=sub, 2=subsub
     followerCount: integer("follower_count").default(0).notNull(),
+    isHot: boolean("is_hot").default(false),
+    hotRank: integer("hot_rank").default(0),
+    hotLabel: text("hot_label"),              // e.g. "🔥 Hottest", "⚡ Rising"
+    // Wikipedia definition fields
+    wikiTitle: text("wiki_title"),
+    wikiSummary: text("wiki_summary"),
+    wikiContent: text("wiki_content"),        // full article plain-text
+    wikiUrl: text("wiki_url"),
+    wikiImageUrl: text("wiki_image_url"),
+    wikiFetchedAt: timestamp("wiki_fetched_at"),
     createdBy: text("created_by").references(() => users.id),
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -515,4 +526,53 @@ export const intelHubCategoriesRelations = relations(intelHubCategories, ({ one,
     parent: one(intelHubCategories, { fields: [intelHubCategories.parentId], references: [intelHubCategories.id], relationName: "parent_children" }),
     children: many(intelHubCategories, { relationName: "parent_children" }),
     creator: one(users, { fields: [intelHubCategories.createdBy], references: [users.id] }),
+}));
+
+// --- Ratings (generic, any content type) ---
+
+export const ratings = pgTable("ratings", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    targetId: text("target_id").notNull(),
+    targetType: text("target_type").notNull(), // 'event' | 'thread' | 'post' | 'user'
+    score: integer("score").notNull(), // 1-5
+    comment: text("comment"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const ratingsRelations = relations(ratings, ({ one }) => ({
+    user: one(users, { fields: [ratings.userId], references: [users.id] }),
+}));
+
+// --- Category Skill Self-Assessment ---
+
+export const categorySkillRatings = pgTable("category_skill_ratings", {
+    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    categoryId: text("category_id").references(() => intelHubCategories.id, { onDelete: "cascade" }).notNull(),
+    level: integer("level").notNull(), // 1=Beginner, 2=Elementary, 3=Intermediate, 4=Advanced, 5=Expert
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+    pk: primaryKey({ columns: [table.userId, table.categoryId] }),
+}));
+
+export const categorySkillRatingsRelations = relations(categorySkillRatings, ({ one }) => ({
+    user: one(users, { fields: [categorySkillRatings.userId], references: [users.id] }),
+    category: one(intelHubCategories, { fields: [categorySkillRatings.categoryId], references: [intelHubCategories.id] }),
+}));
+
+// --- Category Experiences (user-written involvement / challenges) ---
+
+export const categoryExperiences = pgTable("category_experiences", {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    categoryId: text("category_id").references(() => intelHubCategories.id, { onDelete: "cascade" }).notNull(),
+    title: text("title").notNull(),
+    content: text("content").notNull(),
+    tags: jsonb("tags").$type<string[]>().default([]).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const categoryExperiencesRelations = relations(categoryExperiences, ({ one }) => ({
+    user: one(users, { fields: [categoryExperiences.userId], references: [users.id] }),
+    category: one(intelHubCategories, { fields: [categoryExperiences.categoryId], references: [intelHubCategories.id] }),
 }));

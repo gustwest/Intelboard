@@ -20,7 +20,7 @@ export type RequestStatus =
     | "Active Efforts"
     | "Done";
 
-export type RequestType = "Insights" | "Short-term" | "Consultant" | "Hire";
+export type RequestType = "Insights" | "Short-term";
 
 export const REQUEST_TYPE_CONFIG: Record<RequestType, { label: string; icon: string; color: string; bg: string; border: string; description: string }> = {
     "Insights": {
@@ -39,22 +39,7 @@ export const REQUEST_TYPE_CONFIG: Record<RequestType, { label: string; icon: str
         border: "border-cyan-300 dark:border-cyan-700",
         description: "Limited engagement for a specific deliverable or sprint",
     },
-    "Consultant": {
-        label: "Regular Consultant",
-        icon: "👤",
-        color: "text-amber-600 dark:text-amber-400",
-        bg: "bg-amber-500/10",
-        border: "border-amber-300 dark:border-amber-700",
-        description: "Ongoing consultant for a role or project",
-    },
-    "Hire": {
-        label: "Hire",
-        icon: "🤝",
-        color: "text-emerald-600 dark:text-emerald-400",
-        bg: "bg-emerald-500/10",
-        border: "border-emerald-300 dark:border-emerald-700",
-        description: "Permanent placement or long-term hire",
-    },
+
 };
 
 export type ACStatus = "Draft" | "Proposed" | "Agreed";
@@ -181,6 +166,9 @@ export type User = {
 export const quickLoginAccounts = [
     { label: "Autoliv — Gustav Westergren", email: "gustav.westergren.external@autoliv.com", password: "password123", role: "Customer" as UserRole, icon: "🏢" },
     { label: "Volvo Cars — Erik Lindgren", email: "erik.lindgren@volvocars.com", password: "password123", role: "Customer" as UserRole, icon: "🏢" },
+    { label: "Micke Lidas", email: "micke.lidas@intelboard.io", password: "password123", role: "Customer" as UserRole, icon: "🏢" },
+    { label: "Freddie Tour", email: "freddie.tour@intelboard.io", password: "password123", role: "Customer" as UserRole, icon: "🏢" },
+    { label: "Peter Casadei", email: "peter.casadei@intelboard.io", password: "password123", role: "Customer" as UserRole, icon: "🏢" },
     { label: "Alice Chen — Specialist", email: "alice.chen@intelboard.io", password: "password123", role: "Specialist" as UserRole, icon: "👤" },
     { label: "Bob Smith — Specialist", email: "bob.smith@intelboard.io", password: "password123", role: "Specialist" as UserRole, icon: "👤" },
     { label: "IntelBoard Admin", email: "admin@intelboard.io", password: "admin123", role: "Admin" as UserRole, icon: "🔑" },
@@ -236,3 +224,72 @@ export const initialRequests: Request[] = [
         urgency: "High",
     },
 ];
+
+// --- Personalized Feed ---
+
+export type FeedItemThread = {
+    type: "thread";
+    id: string;
+    title: string;
+    description: string | null;
+    boardId: string;
+    boardTitle: string;
+    postCount: number;
+    authorName: string;
+    authorAvatar: string | null;
+    categoryIcon: string;
+    categoryTitle: string;
+    categorySlug: string;
+    createdAt: string;
+};
+
+export type FeedItemRequest = {
+    type: "request";
+    id: string;
+    title: string;
+    description: string;
+    requestType: string | null;
+    urgency: string | null;
+    budget: string | null;
+    industry: string;
+    creatorName: string;
+    createdAt: string;
+};
+
+export type FeedItemEvent = {
+    type: "event";
+    id: string;
+    title: string;
+    description: string | null;
+    startTime: string;
+    endTime: string | null;
+    location: string | null;
+    attendeeCount: number;
+    creatorName: string;
+    meetingStatus: string | null;
+    createdAt: string;
+};
+
+export type FeedItemPost = {
+    type: "post";
+    id: string;
+    content: string;
+    threadId: string;
+    threadTitle: string;
+    boardId: string;
+    boardTitle: string;
+    authorName: string;
+    authorAvatar: string | null;
+    authorRole: string | null;
+    categoryIcon: string;
+    categoryTitle: string;
+    createdAt: string;
+};
+
+export type FeedItem = FeedItemThread | FeedItemRequest | FeedItemEvent | FeedItemPost;
+
+export type PersonalizedFeedResult = {
+    feedItems: FeedItem[];
+    followedCategories: { id: string; title: string; slug: string; icon: string | null; color: string | null }[];
+    suggestedCategories: { id: string; title: string; slug: string; icon: string | null; color: string | null; followerCount: number; description: string | null }[];
+};

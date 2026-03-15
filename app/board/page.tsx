@@ -341,7 +341,7 @@ function BoardContent() {
                             <CommandList>
                                 <CommandEmpty>No types found.</CommandEmpty>
                                 <CommandGroup>
-                                    {(["Insights", "Short-term", "Consultant", "Hire"] as RequestType[]).map(type => (
+                                    {(["Insights", "Short-term"] as RequestType[]).map(type => (
                                         <CommandItem key={type} value={type} onSelect={() => setTypeFilter(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type])}>
                                             <Check className={cn("mr-2 h-3.5 w-3.5", typeFilter.includes(type) ? "opacity-100" : "opacity-0")} />
                                             <span className="mr-2">{REQUEST_TYPE_CONFIG[type].icon}</span>

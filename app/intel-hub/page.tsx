@@ -20,7 +20,9 @@ import {
     ArrowRight,
     Layers,
     Filter,
+    Share2,
 } from "lucide-react";
+import { ShareInviteDialog } from "@/components/share-invite-dialog";
 
 type Category = {
     id: string;
@@ -68,17 +70,28 @@ export default function IntelHubPage() {
     const [filter, setFilter] = useState<"all" | "following">("all");
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
     const [loading, setLoading] = useState(true);
+    const [shareItem, setShareItem] = useState<Category | null>(null);
 
     const load = useCallback(async () => {
         if (!currentUser) return;
-        const cats = await getHubCategories(currentUser.id);
-        if (cats.length === 0) {
-            // Auto-seed on first visit
-            await seedHubCategories();
-            const seeded = await getHubCategories(currentUser.id);
-            setCategories(seeded);
-        } else {
-            setCategories(cats);
+        try {
+            const cats = await getHubCategories(currentUser.id);
+            if (cats.length === 0) {
+                // Auto-seed on first visit
+                try {
+                    await seedHubCategories();
+                    const seeded = await getHubCategories(currentUser.id);
+                    setCategories(seeded);
+                } catch (seedErr) {
+                    console.error("Failed to seed categories:", seedErr);
+                    setCategories([]);
+                }
+            } else {
+                setCategories(cats);
+            }
+        } catch (err) {
+            console.error("Failed to load categories:", err);
+            setCategories([]);
         }
         setLoading(false);
     }, [currentUser]);
@@ -208,7 +221,7 @@ export default function IntelHubPage() {
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                             {displayList.map(cat => (
-                                <CategoryCardSmall key={cat.id} category={cat} onFollow={handleFollow} categories={categories} />
+                                <CategoryCardSmall key={cat.id} category={cat} onFollow={handleFollow} onShare={setShareItem} categories={categories} />
                             ))}
                         </div>
                     )}
@@ -273,6 +286,7 @@ export default function IntelHubPage() {
                                                     category={child}
                                                     childCount={grandchildren.length}
                                                     onFollow={handleFollow}
+                                                    onShare={setShareItem}
                                                     grandchildren={grandchildren}
                                                     allCategories={categories}
                                                     expandedIds={expandedIds}
@@ -298,6 +312,17 @@ export default function IntelHubPage() {
                     )}
                 </div>
             )}
+
+            {/* Share / Invite Dialog */}
+            {shareItem && (
+                <ShareInviteDialog
+                    open={!!shareItem}
+                    onOpenChange={(v) => { if (!v) setShareItem(null); }}
+                    itemType="hub"
+                    itemId={shareItem.id}
+                    itemTitle={shareItem.title}
+                />
+            )}
         </div>
     );
 }
@@ -305,9 +330,9 @@ export default function IntelHubPage() {
 /* Sub-components */
 
 function CategoryCard({
-    category, childCount, onFollow, grandchildren, allCategories, expandedIds, toggleExpand, getChildren
+    category, childCount, onFollow, onShare, grandchildren, allCategories, expandedIds, toggleExpand, getChildren
 }: {
-    category: Category; childCount: number; onFollow: (id: string) => void;
+    category: Category; childCount: number; onFollow: (id: string) => void; onShare: (cat: Category) => void;
     grandchildren: Category[]; allCategories: Category[];
     expandedIds: Set<string>; toggleExpand: (id: string) => void;
     getChildren: (id: string) => Category[];
@@ -317,8 +342,8 @@ function CategoryCard({
 
     return (
         <div className="space-y-2">
-            <Link href={`/intel-hub/${category.slug}`} className="block group">
-                <div className={cn("rounded-xl border p-4 transition-all hover:shadow-md hover:scale-[1.01] bg-card", color.border)}>
+            <div className={cn("rounded-xl border p-4 transition-all hover:shadow-md hover:scale-[1.01] bg-card group relative", color.border)}>
+                <Link href={`/intel-hub/${category.slug}`} className="block">
                     <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">
                             <span className="text-xl">{category.icon || "📂"}</span>
@@ -347,8 +372,14 @@ function CategoryCard({
                             {category.isFollowed ? "Following" : "Follow"}
                         </button>
                     </div>
-                </div>
-            </Link>
+                </Link>
+                <button
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); onShare(category); }}
+                    className="absolute top-4 right-4 inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-semibold bg-indigo-600 text-white hover:bg-indigo-500 transition-colors opacity-0 group-hover:opacity-100 shadow-sm"
+                >
+                    <Share2 className="h-3 w-3" /> Share
+                </button>
+            </div>
 
             {/* Render grandchildren if expanded */}
             {childCount > 0 && isExpanded && (
@@ -361,6 +392,7 @@ function CategoryCard({
                                 category={gc}
                                 childCount={gcChildren.length}
                                 onFollow={onFollow}
+                                onShare={onShare}
                                 grandchildren={gcChildren}
                                 allCategories={allCategories}
                                 expandedIds={expandedIds}
@@ -384,7 +416,7 @@ function CategoryCard({
     );
 }
 
-function CategoryCardSmall({ category, onFollow, categories }: { category: any; onFollow: (id: string) => void; categories: Category[] }) {
+function CategoryCardSmall({ category, onFollow, onShare, categories }: { category: any; onFollow: (id: string) => void; onShare: (cat: Category) => void; categories: Category[] }) {
     const color = getColor(category.color);
 
     // Build breadcrumb
@@ -398,8 +430,8 @@ function CategoryCardSmall({ category, onFollow, categories }: { category: any; 
     }
 
     return (
-        <Link href={`/intel-hub/${category.slug}`} className="block group">
-            <div className={cn("rounded-xl border p-4 transition-all hover:shadow-md bg-card", color.border)}>
+        <div className={cn("rounded-xl border p-4 transition-all hover:shadow-md bg-card group relative", color.border)}>
+            <Link href={`/intel-hub/${category.slug}`} className="block">
                 <div className="flex items-center gap-2">
                     <span className="text-lg">{category.icon || "📂"}</span>
                     <div className="min-w-0">
@@ -424,7 +456,13 @@ function CategoryCardSmall({ category, onFollow, categories }: { category: any; 
                         {category.isFollowed ? "Following" : "Follow"}
                     </button>
                 </div>
-            </div>
-        </Link>
+            </Link>
+            <button
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onShare(category); }}
+                className="absolute top-4 right-4 inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-semibold bg-indigo-600 text-white hover:bg-indigo-500 transition-colors opacity-0 group-hover:opacity-100 shadow-sm"
+            >
+                <Share2 className="h-3 w-3" /> Share
+            </button>
+        </div>
     );
 }

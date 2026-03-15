@@ -180,7 +180,139 @@ async function main() {
         console.log(`  ${volvoExtra.name} already exists.`);
     }
 
-    // ─── 3. Admin ────────────────────────────────────────────────
+    // ─── 3. Micke Lidas ─────────────────────────────────────────
+    console.log("\n📌 Micke Lidas...");
+    const mickeEmail = "micke.lidas@intelboard.io";
+    const existingMicke = await db.query.users.findFirst({ where: eq(users.email, mickeEmail) });
+    if (existingMicke) {
+        console.log(`  User Micke already exists. Updating...`);
+        await db.update(users).set({
+            name: "Micke Lidas",
+            role: "Customer",
+            approvalStatus: "APPROVED",
+            password: hashedPassword,
+            bio: "Technology enthusiast and IT professional with a passion for cloud infrastructure, DevOps, and modern software development practices.",
+            jobTitle: "IT Consultant",
+            skills: [
+                { name: "Cloud Infrastructure", category: "Technology" },
+                { name: "DevOps", category: "Technology" },
+                { name: "Solution Architecture", category: "Strategy" },
+            ],
+            industry: ["Tech", "Consulting"],
+            experience: "10+ years",
+            image: "https://api.dicebear.com/7.x/avataaars/svg?seed=Micke",
+        }).where(eq(users.id, existingMicke.id));
+    } else {
+        await db.insert(users).values({
+            id: "cu-micke-1",
+            name: "Micke Lidas",
+            email: mickeEmail,
+            role: "Customer",
+            approvalStatus: "APPROVED",
+            password: hashedPassword,
+            bio: "Technology enthusiast and IT professional with a passion for cloud infrastructure, DevOps, and modern software development practices.",
+            jobTitle: "IT Consultant",
+            skills: [
+                { name: "Cloud Infrastructure", category: "Technology" },
+                { name: "DevOps", category: "Technology" },
+                { name: "Solution Architecture", category: "Strategy" },
+            ],
+            industry: ["Tech", "Consulting"],
+            experience: "10+ years",
+            image: "https://api.dicebear.com/7.x/avataaars/svg?seed=Micke",
+        });
+        console.log(`  Created Micke Lidas`);
+    }
+
+    // ─── 4. Freddie Tour ────────────────────────────────────────
+    console.log("\n📌 Freddie Tour...");
+    const freddieEmail = "freddie.tour@intelboard.io";
+    const existingFreddie = await db.query.users.findFirst({ where: eq(users.email, freddieEmail) });
+    if (existingFreddie) {
+        console.log(`  User Freddie already exists. Updating...`);
+        await db.update(users).set({
+            name: "Freddie Tour",
+            role: "Customer",
+            approvalStatus: "APPROVED",
+            password: hashedPassword,
+            bio: "Digital transformation leader with deep expertise in enterprise architecture, AI integration, and cybersecurity governance.",
+            jobTitle: "Digital Transformation Manager",
+            skills: [
+                { name: "Enterprise Architecture", category: "Strategy" },
+                { name: "AI Integration", category: "Technology" },
+                { name: "Cybersecurity", category: "Security" },
+            ],
+            industry: ["Tech", "Finance"],
+            experience: "8+ years",
+            image: "https://api.dicebear.com/7.x/avataaars/svg?seed=Freddie",
+        }).where(eq(users.id, existingFreddie.id));
+    } else {
+        await db.insert(users).values({
+            id: "cu-freddie-1",
+            name: "Freddie Tour",
+            email: freddieEmail,
+            role: "Customer",
+            approvalStatus: "APPROVED",
+            password: hashedPassword,
+            bio: "Digital transformation leader with deep expertise in enterprise architecture, AI integration, and cybersecurity governance.",
+            jobTitle: "Digital Transformation Manager",
+            skills: [
+                { name: "Enterprise Architecture", category: "Strategy" },
+                { name: "AI Integration", category: "Technology" },
+                { name: "Cybersecurity", category: "Security" },
+            ],
+            industry: ["Tech", "Finance"],
+            experience: "8+ years",
+            image: "https://api.dicebear.com/7.x/avataaars/svg?seed=Freddie",
+        });
+        console.log(`  Created Freddie Tour`);
+    }
+
+    // ─── 5. Peter Casadei ───────────────────────────────────────
+    console.log("\n📌 Peter Casadei...");
+    const peterEmail = "peter.casadei@intelboard.io";
+    const existingPeter = await db.query.users.findFirst({ where: eq(users.email, peterEmail) });
+    if (existingPeter) {
+        console.log(`  User Peter already exists. Updating...`);
+        await db.update(users).set({
+            name: "Peter Casadei",
+            role: "Customer",
+            approvalStatus: "APPROVED",
+            password: hashedPassword,
+            bio: "Experienced IT strategist and program manager specializing in large-scale migrations, governance frameworks, and cross-functional technology leadership.",
+            jobTitle: "IT Program Manager",
+            skills: [
+                { name: "Program Management", category: "Management" },
+                { name: "IT Governance", category: "Strategy" },
+                { name: "Cloud Migration", category: "Technology" },
+            ],
+            industry: ["Tech", "Enterprise"],
+            experience: "15+ years",
+            image: "https://api.dicebear.com/7.x/avataaars/svg?seed=Peter",
+        }).where(eq(users.id, existingPeter.id));
+    } else {
+        await db.insert(users).values({
+            id: "cu-peter-1",
+            name: "Peter Casadei",
+            email: peterEmail,
+            role: "Customer",
+            approvalStatus: "APPROVED",
+            password: hashedPassword,
+            bio: "Experienced IT strategist and program manager specializing in large-scale migrations, governance frameworks, and cross-functional technology leadership.",
+            jobTitle: "IT Program Manager",
+            skills: [
+                { name: "Program Management", category: "Management" },
+                { name: "IT Governance", category: "Strategy" },
+                { name: "Cloud Migration", category: "Technology" },
+            ],
+            industry: ["Tech", "Enterprise"],
+            experience: "15+ years",
+            image: "https://api.dicebear.com/7.x/avataaars/svg?seed=Peter",
+        });
+        console.log(`  Created Peter Casadei`);
+    }
+
+    // ─── 6. Admin ────────────────────────────────────────────────
     console.log("\n📌 Admin...");
     const adminEmail = "admin@intelboard.io";
     const existingAdmin = await db.query.users.findFirst({ where: eq(users.email, adminEmail) });
@@ -214,6 +346,9 @@ async function main() {
     console.log("\n📋 Quick Login Credentials:");
     console.log("  Autoliv:     gustav.westergren.external@autoliv.com / password123");
     console.log("  Volvo Cars:  erik.lindgren@volvocars.com / password123");
+    console.log("  Micke:       micke.lidas@intelboard.io / password123");
+    console.log("  Freddie:     freddie.tour@intelboard.io / password123");
+    console.log("  Peter:       peter.casadei@intelboard.io / password123");
     console.log("  Specialist:  alice.chen@intelboard.io / password123");
     console.log("  Specialist:  bob.smith@intelboard.io / password123");
     console.log("  Admin:       admin@intelboard.io / admin123");

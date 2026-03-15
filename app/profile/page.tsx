@@ -8,13 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, Loader2, Download } from "lucide-react";
 import Link from "next/link";
-import { updateUserProfile, scrapeLinkedInProfile, getUserWithProfile } from "@/lib/actions";
+import { updateUserProfile, scrapeLinkedInProfile, getUserWithProfile, getUserCategoryExperiences } from "@/lib/actions";
 import { useToast } from "@/components/ui/use-toast";
 import { useRouter } from "next/navigation";
 import { ExperienceSection } from "@/components/profile/experience-section";
 import { EducationSection } from "@/components/profile/education-section";
 import { CategorizedSkillSelector } from "@/components/profile/skill-selector";
 import { SmartImport } from "@/components/profile/smart-import";
+import { RatingStars } from "@/components/rating-stars";
 
 export default function ProfilePage() {
     const { currentUser } = useRole();
@@ -34,6 +35,7 @@ export default function ProfilePage() {
     const [skills, setSkills] = useState<{ name: string; category: string }[]>([]);
     const [workExperience, setWorkExperience] = useState<any[]>([]);
     const [education, setEducation] = useState<any[]>([]);
+    const [categoryExpertise, setCategoryExpertise] = useState<{ experiences: any[]; skillRatings: any[] }>({ experiences: [], skillRatings: [] });
     useEffect(() => {
         const fetchUserData = async () => {
             if (currentUser?.id) {
@@ -56,6 +58,10 @@ export default function ProfilePage() {
                     setWorkExperience((user as any).workExperience || []);
                     setEducation((user as any).education || []);
                 }
+
+                // Load category expertise
+                const catEx = await getUserCategoryExperiences(currentUser.id);
+                setCategoryExpertise(catEx);
             }
         };
         fetchUserData();
@@ -320,6 +326,58 @@ export default function ProfilePage() {
                             onChange={setEducation}
                             isEditing={isEditing}
                         />
+
+                        {/* Category Expertise Section */}
+                        {(categoryExpertise.skillRatings.length > 0 || categoryExpertise.experiences.length > 0) && (
+                            <div className="space-y-4">
+                                <div>
+                                    <h3 className="text-base font-semibold">Category Expertise</h3>
+                                    <p className="text-sm text-muted-foreground">Your skill levels and experiences across professional categories</p>
+                                </div>
+
+                                {/* Skill Ratings */}
+                                {categoryExpertise.skillRatings.length > 0 && (
+                                    <div className="grid gap-2">
+                                        <label className="text-sm font-medium text-muted-foreground">Skill Levels</label>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            {categoryExpertise.skillRatings.map((sr: any) => (
+                                                <Link key={sr.categoryId} href={`/intel-hub/${sr.categorySlug}`} className="group">
+                                                    <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-slate-50 transition-colors">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-lg">{sr.categoryIcon || "📂"}</span>
+                                                            <span className="text-sm font-medium group-hover:text-purple-600 transition-colors">{sr.categoryTitle}</span>
+                                                        </div>
+                                                        <RatingStars value={sr.level} readonly size="sm" showLabel />
+                                                    </div>
+                                                </Link>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Written Experiences */}
+                                {categoryExpertise.experiences.length > 0 && (
+                                    <div className="grid gap-2">
+                                        <label className="text-sm font-medium text-muted-foreground">Written Experiences</label>
+                                        <div className="space-y-2">
+                                            {categoryExpertise.experiences.map((exp: any) => (
+                                                <div key={exp.id} className="p-3 rounded-lg border">
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className="text-sm">{exp.categoryIcon || "📂"}</span>
+                                                        <Link href={`/intel-hub/${exp.categorySlug}`} className="text-xs font-medium text-purple-600 hover:underline">
+                                                            {exp.categoryTitle}
+                                                        </Link>
+                                                        <span className="text-[10px] text-muted-foreground">{new Date(exp.createdAt).toLocaleDateString()}</span>
+                                                    </div>
+                                                    <h4 className="text-sm font-semibold">{exp.title}</h4>
+                                                    <p className="text-xs text-muted-foreground line-clamp-3 mt-0.5">{exp.content}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                     </CardContent>
                 </Card>

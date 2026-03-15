@@ -303,7 +303,7 @@ export default function CalendarPage() {
                                         </div>
                                     )}
                                     {/* Quick actions row */}
-                                    <div className="flex gap-1.5">
+                                    <div className="flex items-center gap-2">
                                         {event.meetingUrl && event.meetingStatus !== "completed" && (
                                             <a href={event.meetingUrl} target="_blank" rel="noopener noreferrer"
                                                 className="inline-flex items-center gap-1 text-[10px] font-medium text-blue-600 dark:text-blue-400 hover:underline"
@@ -318,10 +318,10 @@ export default function CalendarPage() {
                                             <FileText className="h-2.5 w-2.5" /> Notes
                                         </button>
                                         <button
-                                            onClick={() => setShareEvent(event)}
-                                            className="inline-flex items-center gap-1 text-[10px] font-medium text-indigo-600 dark:text-indigo-400 hover:underline transition-colors"
+                                            onClick={(e) => { e.stopPropagation(); setShareEvent(event); }}
+                                            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-indigo-600 text-white hover:bg-indigo-500 transition-colors shadow-sm"
                                         >
-                                            <Share2 className="h-2.5 w-2.5" /> Share
+                                            <Share2 className="h-3 w-3" /> Share & Invite
                                         </button>
                                     </div>
                                 </div>

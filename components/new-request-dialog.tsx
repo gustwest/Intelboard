@@ -47,16 +47,7 @@ export function NewRequestDialog({ trigger }: NewRequestDialogProps) {
     const [endDate, setEndDate] = useState("");
     const [acceptanceCriteria, setAcceptanceCriteria] = useState<string[]>([]);
     const [newCriterion, setNewCriterion] = useState("");
-    const [hourlyRateMin, setHourlyRateMin] = useState("");
-    const [hourlyRateMax, setHourlyRateMax] = useState("");
-    const [salaryMin, setSalaryMin] = useState("");
-    const [salaryMax, setSalaryMax] = useState("");
 
-    // Consultant-specific fields
-    const [consultantRole, setConsultantRole] = useState("");
-    const [requiredSkills, setRequiredSkills] = useState<{ name: string; category: string }[]>([]);
-    const [newSkillName, setNewSkillName] = useState("");
-    const [newSkillCategory, setNewSkillCategory] = useState("General");
 
     // Reset when dialog closes
     useEffect(() => {
@@ -67,10 +58,6 @@ export function NewRequestDialog({ trigger }: NewRequestDialogProps) {
             setFormData({ title: "", description: "", industry: "", urgency: "Medium" });
             setBudget(""); setStartDate(""); setEndDate("");
             setAcceptanceCriteria([]); setNewCriterion("");
-            setHourlyRateMin(""); setHourlyRateMax("");
-            setSalaryMin(""); setSalaryMax("");
-            setConsultantRole(""); setRequiredSkills([]);
-            setNewSkillName(""); setNewSkillCategory("General");
         }
     }, [open]);
 
@@ -86,12 +73,7 @@ export function NewRequestDialog({ trigger }: NewRequestDialogProps) {
         }
     };
 
-    const handleAddSkill = () => {
-        if (!newSkillName.trim()) return;
-        if (requiredSkills.some(s => s.name.toLowerCase() === newSkillName.toLowerCase())) return;
-        setRequiredSkills([...requiredSkills, { name: newSkillName.trim(), category: newSkillCategory }]);
-        setNewSkillName("");
-    };
+
 
     const handleSubmit = async () => {
         if (!currentUser || !selectedType || !formData.title.trim()) return;
@@ -116,12 +98,6 @@ export function NewRequestDialog({ trigger }: NewRequestDialogProps) {
                 attributes: {},
                 startDate: startDate || undefined,
                 endDate: endDate || undefined,
-                hourlyRateMin: hourlyRateMin || undefined,
-                hourlyRateMax: hourlyRateMax || undefined,
-                salaryMin: salaryMin || undefined,
-                salaryMax: salaryMax || undefined,
-                consultantRole: consultantRole || undefined,
-                requiredSkills: requiredSkills.length > 0 ? requiredSkills : undefined,
             };
 
             await addRequest(newRequest);
@@ -134,7 +110,6 @@ export function NewRequestDialog({ trigger }: NewRequestDialogProps) {
     };
 
     const typeConfig = selectedType ? REQUEST_TYPE_CONFIG[selectedType] : null;
-    const isConsultantOrHire = selectedType === "Consultant" || selectedType === "Hire";
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
@@ -237,101 +212,6 @@ export function NewRequestDialog({ trigger }: NewRequestDialogProps) {
                                     </div>
                                 </div>
 
-                                {/* === CONSULTANT / HIRE: ROLE & SKILLS === */}
-                                {isConsultantOrHire && (
-                                    <div className="space-y-4 pt-2">
-                                        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                                            <Briefcase className="h-4 w-4 text-violet-500" />
-                                            Role & Skills
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <Label className="text-foreground">Role Title</Label>
-                                            <Input
-                                                placeholder={selectedType === "Hire" ? "e.g. Senior Frontend Engineer" : "e.g. Cloud Architect"}
-                                                value={consultantRole}
-                                                onChange={(e) => setConsultantRole(e.target.value)}
-                                            />
-                                        </div>
-
-                                        {/* Skills Tags */}
-                                        <div className="space-y-2">
-                                            <Label className="text-foreground">Required Skills</Label>
-                                            {requiredSkills.length > 0 && (
-                                                <div className="flex flex-wrap gap-1.5 mb-2">
-                                                    {requiredSkills.map((skill) => (
-                                                        <Badge key={skill.name} variant="secondary" className="px-2 py-0.5 text-xs flex items-center gap-1">
-                                                            {skill.name}
-                                                            <span className="text-[9px] text-muted-foreground">({skill.category})</span>
-                                                            <button onClick={() => setRequiredSkills(requiredSkills.filter(s => s.name !== skill.name))} className="text-muted-foreground hover:text-red-500 ml-0.5">
-                                                                <X className="h-3 w-3" />
-                                                            </button>
-                                                        </Badge>
-                                                    ))}
-                                                </div>
-                                            )}
-                                            <div className="flex gap-2">
-                                                <Input
-                                                    placeholder="Add a skill..."
-                                                    value={newSkillName}
-                                                    onChange={(e) => setNewSkillName(e.target.value)}
-                                                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddSkill())}
-                                                    className="flex-1"
-                                                />
-                                                <Select value={newSkillCategory} onValueChange={setNewSkillCategory}>
-                                                    <SelectTrigger className="w-[140px]">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {SKILL_CATEGORIES.map(cat => (
-                                                            <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                                <Button size="sm" variant="secondary" onClick={handleAddSkill} className="shrink-0">
-                                                    <Plus className="h-3.5 w-3.5" />
-                                                </Button>
-                                            </div>
-                                        </div>
-
-                                        {/* Compensation */}
-                                        <div className="space-y-2">
-                                            <Label className="text-foreground flex items-center gap-1.5">
-                                                <DollarSign className="h-3.5 w-3.5 text-emerald-500" />
-                                                {selectedType === "Consultant" ? "Hourly Rate Range" : "Salary Range"}
-                                            </Label>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                {selectedType === "Consultant" ? (
-                                                    <>
-                                                        <Input
-                                                            placeholder="Min (e.g. $100)"
-                                                            value={hourlyRateMin}
-                                                            onChange={(e) => setHourlyRateMin(e.target.value)}
-                                                        />
-                                                        <Input
-                                                            placeholder="Max (e.g. $200)"
-                                                            value={hourlyRateMax}
-                                                            onChange={(e) => setHourlyRateMax(e.target.value)}
-                                                        />
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Input
-                                                            placeholder="Min (e.g. $80,000)"
-                                                            value={salaryMin}
-                                                            onChange={(e) => setSalaryMin(e.target.value)}
-                                                        />
-                                                        <Input
-                                                            placeholder="Max (e.g. $120,000)"
-                                                            value={salaryMax}
-                                                            onChange={(e) => setSalaryMax(e.target.value)}
-                                                        />
-                                                    </>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
 
                                 {/* === MORE DETAILS TOGGLE === */}
                                 <button
@@ -389,27 +269,7 @@ export function NewRequestDialog({ trigger }: NewRequestDialogProps) {
                                             </div>
                                         </div>
 
-                                        {/* Hourly Rate for non-consultant types */}
-                                        {!isConsultantOrHire && (
-                                            <div className="space-y-2">
-                                                <Label className="text-foreground flex items-center gap-1.5">
-                                                    <DollarSign className="h-3.5 w-3.5 text-emerald-500" />
-                                                    Hourly Rate Range (optional)
-                                                </Label>
-                                                <div className="grid grid-cols-2 gap-3">
-                                                    <Input
-                                                        placeholder="Min rate"
-                                                        value={hourlyRateMin}
-                                                        onChange={(e) => setHourlyRateMin(e.target.value)}
-                                                    />
-                                                    <Input
-                                                        placeholder="Max rate"
-                                                        value={hourlyRateMax}
-                                                        onChange={(e) => setHourlyRateMax(e.target.value)}
-                                                    />
-                                                </div>
-                                            </div>
-                                        )}
+
 
                                         {/* Acceptance Criteria */}
                                         <div className="space-y-2">

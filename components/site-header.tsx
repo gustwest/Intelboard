@@ -52,22 +52,13 @@ export function SiteHeader() {
                             {t.common.dashboard}
                         </Link>
                         <Link
-                            href="/board"
-                            className={cn(
-                                "transition-colors hover:text-foreground/80",
-                                pathname === "/board" ? "text-foreground" : "text-foreground/60"
-                            )}
-                        >
-                            My Requests
-                        </Link>
-                        <Link
                             href="/intelboards"
                             className={cn(
                                 "transition-colors hover:text-foreground/80",
                                 pathname === "/intelboards" || pathname?.startsWith("/intelboards/") ? "text-foreground" : "text-foreground/60"
                             )}
                         >
-                            Intelboards
+                            Forums
                         </Link>
                         <Link
                             href="/intel-hub"
@@ -76,7 +67,7 @@ export function SiteHeader() {
                                 pathname === "/intel-hub" || pathname?.startsWith("/intel-hub/") ? "text-foreground" : "text-foreground/60"
                             )}
                         >
-                            Intel Hub
+                            Categories
                         </Link>
                         <Link
                             href="/calendar"
@@ -85,16 +76,16 @@ export function SiteHeader() {
                                 pathname === "/calendar" ? "text-foreground" : "text-foreground/60"
                             )}
                         >
-                            Calendar
+                            Events
                         </Link>
                         <Link
-                            href="/it-planner"
+                            href="/board"
                             className={cn(
                                 "transition-colors hover:text-foreground/80",
-                                pathname === "/it-planner" ? "text-foreground" : "text-foreground/60"
+                                pathname === "/board" ? "text-foreground" : "text-foreground/60"
                             )}
                         >
-                            Planning Tools
+                            Open Requests
                         </Link>
                         <Link
                             href="/talent"
@@ -103,16 +94,7 @@ export function SiteHeader() {
                                 pathname === "/talent" ? "text-foreground" : "text-foreground/60"
                             )}
                         >
-                            Talent Directory
-                        </Link>
-                        <Link
-                            href="/team"
-                            className={cn(
-                                "transition-colors hover:text-foreground/80",
-                                pathname === "/team" ? "text-foreground" : "text-foreground/60"
-                            )}
-                        >
-                            Team
+                            Members
                         </Link>
                         <Link
                             href="/profile"
