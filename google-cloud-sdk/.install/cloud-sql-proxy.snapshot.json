@@ -1,0 +1,48 @@
+{
+  "components": [
+    {
+      "dependencies": [
+        "cloud-sql-proxy-darwin-arm",
+        "cloud-sql-proxy-darwin-x86_64",
+        "cloud-sql-proxy-linux-arm",
+        "cloud-sql-proxy-linux-x86",
+        "cloud-sql-proxy-linux-x86_64",
+        "cloud-sql-proxy-windows-x86",
+        "cloud-sql-proxy-windows-x86_64"
+      ],
+      "details": {
+        "description": "Provides cloud-sql-proxy executable. See https://github.com/GoogleCloudPlatform/cloud-sql-proxy",
+        "display_name": "Cloud SQL Proxy v2"
+      },
+      "gdu_only": false,
+      "id": "cloud-sql-proxy",
+      "is_configuration": false,
+      "is_hidden": false,
+      "is_required": false,
+      "platform": {
+        "architectures": [
+          "arm",
+          "x86",
+          "x86_64"
+        ],
+        "operating_systems": [
+          "LINUX",
+          "MACOSX",
+          "WINDOWS"
+        ]
+      },
+      "platform_required": false,
+      "version": {
+        "build_number": 0,
+        "version_string": "2.19.0"
+      }
+    }
+  ],
+  "revision": 20251205141901,
+  "schema_version": {
+    "no_update": false,
+    "url": "https://dl.google.com/dl/cloudsdk/channels/rapid/google-cloud-sdk.tar.gz",
+    "version": 3
+  },
+  "version": "549.0.0"
+}

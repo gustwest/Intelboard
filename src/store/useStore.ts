@@ -139,26 +139,40 @@ export const useStore = create<AppState>()(
       ],
       currentUser: { id: '1', name: 'Admin User', role: 'Administrator', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin' },
 
-      addSystem: (system) => set((state) => {
+      addSystem: (system) => {
         const newSystemId = system.id || uuidv4();
-        // If there is an active project, auto-add the new system to it
-        const newProjects = state.activeProjectId
-          ? state.projects.map(p => p.id === state.activeProjectId ? { ...p, systemIds: [...p.systemIds, newSystemId] } : p)
-          : state.projects;
+        // Optimistic update
+        set((state) => {
+          const newProjects = state.activeProjectId
+            ? state.projects.map(p => p.id === state.activeProjectId ? { ...p, systemIds: [...p.systemIds, newSystemId] } : p)
+            : state.projects;
 
-        return {
-          systems: [
-            ...state.systems,
-            {
-              ...system,
-              id: newSystemId,
-              assets: system.assets || [],
-              documents: system.documents || []
-            }
-          ],
-          projects: newProjects
-        };
-      }),
+          return {
+            systems: [
+              ...state.systems,
+              {
+                ...system,
+                id: newSystemId,
+                assets: system.assets || [],
+                documents: system.documents || []
+              }
+            ],
+            projects: newProjects
+          };
+        });
+
+        // Async DB call
+        // Note: In a real app we would handle loading states and errors.
+        // Importing dynamically to avoid SSR issues if any, or just direct import.
+        import('../actions/systems').then(({ createSystem }) => {
+          const state = get();
+          createSystem({
+            ...system,
+            id: newSystemId,
+            projectId: state.activeProjectId
+          }).catch(err => console.error("Failed to sync system to DB", err));
+        });
+      },
 
       updateSystem: (id, updates) => set((state) => ({
         systems: state.systems.map((s) =>
@@ -182,19 +196,34 @@ export const useStore = create<AppState>()(
         }))
       })),
 
-      updateSystemPosition: (id, position) => set((state) => ({
-        systems: state.systems.map((s) =>
-          s.id === id ? { ...s, position } : s
-        )
-      })),
+      updateSystemPosition: (id, position) => {
+        set((state) => ({
+          systems: state.systems.map((s) =>
+            s.id === id ? { ...s, position } : s
+          )
+        }));
 
-      addAsset: (systemId, asset) => set((state) => ({
-        systems: state.systems.map((s) =>
-          s.id === systemId
-            ? { ...s, assets: [...s.assets, { ...asset, id: asset.id || uuidv4(), systemId }] }
-            : s
-        )
-      })),
+        import('../actions/systems').then(({ updateSystemPosition }) => {
+          updateSystemPosition(id, position.x, position.y)
+            .catch(err => console.error("Failed to sync position", err));
+        });
+      },
+
+      addAsset: (systemId, asset) => {
+        const newAssetId = asset.id || uuidv4();
+        set((state) => ({
+          systems: state.systems.map((s) =>
+            s.id === systemId
+              ? { ...s, assets: [...s.assets, { ...asset, id: newAssetId, systemId }] }
+              : s
+          )
+        }));
+
+        import('../actions/systems').then(({ addAssetToSystem }) => {
+          addAssetToSystem(systemId, { ...asset, id: newAssetId })
+            .catch(err => console.error("Failed to sync asset to DB", err));
+        });
+      },
 
       updateAsset: (systemId, assetId, updates) => set((state) => ({
         systems: state.systems.map((s) =>

@@ -3,7 +3,7 @@ import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Plus, Database, FileText, Server, LayoutTemplate, Edit2, Upload } from 'lucide-react';
 import { System, Asset } from '@/store/useStore';
 import { useStore } from '@/store/useStore';
-import { Button } from '@/components/ui/Button';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 // Map system types to icons

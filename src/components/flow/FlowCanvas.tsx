@@ -265,6 +265,8 @@ function FlowCanvasContent({ onAddAsset, onEditAsset, onEdgeClick, onEditSystem,
                 nodeTypes={nodeTypes}
                 edgeTypes={edgeTypes}
                 fitView
+                minZoom={0.1}
+                maxZoom={4}
             >
                 <Background />
                 <Controls />

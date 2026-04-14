@@ -5,7 +5,7 @@ import { RequirementsForm } from '@/components/architect/RequirementsForm';
 import { AIConversation } from '@/components/architect/AIConversation';
 import { ArchitecturePreview } from '@/components/architect/ArchitecturePreview';
 import { BestPracticesSidebar } from '@/components/architect/BestPracticesSidebar';
-import { Button } from '@/components/ui/Button';
+import { Button } from '@/components/ui/button';
 import {
     ArchitectureRequirements,
     Message,

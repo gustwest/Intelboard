@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useStore } from '@/store/useStore';
-import { Modal } from '@/components/ui/Modal';
-import { Input } from '@/components/ui/Input';
+import { Modal } from '@/components/ui/modal';
+import { Input } from '@/components/ui/input';
 import { Search, Database, Table, FileText, Code } from 'lucide-react';
 
 interface DataCatalogueModalProps {

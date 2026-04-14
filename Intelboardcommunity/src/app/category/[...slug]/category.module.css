@@ -1,0 +1,368 @@
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) 0;
+  font-size: var(--text-sm);
+  animation: fadeIn 0.3s ease-out;
+}
+
+.crumb {
+  color: var(--text-tertiary) !important;
+  transition: color var(--transition-fast);
+}
+
+.crumb:hover {
+  color: var(--primary-400) !important;
+}
+
+.crumbSep {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+
+.crumbActive {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.categoryHeader {
+  display: flex;
+  gap: var(--space-6);
+  padding: var(--space-6) 0 var(--space-8);
+  animation: fadeIn 0.4s ease-out;
+  align-items: flex-start;
+}
+
+.followBtn {
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.followBtn:hover {
+  border-color: var(--primary-500);
+  color: var(--primary-400);
+  background: var(--bg-elevated);
+}
+
+.followBtnActive {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #10b981;
+}
+
+.followBtnActive:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+}
+
+.categoryIcon {
+  font-size: 3.5rem;
+  flex-shrink: 0;
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-subtle);
+}
+
+.categoryInfo {
+  flex: 1;
+}
+
+.categoryName {
+  font-size: var(--text-3xl);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: var(--leading-tight);
+  margin-bottom: var(--space-2);
+}
+
+.categoryDesc {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+  margin-bottom: var(--space-3);
+  max-width: 700px;
+}
+
+.categoryMeta {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* Overview Tab */
+.overviewTab {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.section {
+  margin-bottom: var(--space-10);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-5);
+}
+
+.sectionTitle {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.subGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-4);
+}
+
+.subCard {
+  display: flex;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  color: var(--text-primary) !important;
+}
+
+.subIcon {
+  font-size: 1.75rem;
+  flex-shrink: 0;
+}
+
+.subName {
+  font-size: var(--text-base);
+  font-weight: 600;
+  margin-bottom: var(--space-1);
+}
+
+.subDesc {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Wiki Content */
+.wikiSkeleton {
+  padding: var(--space-6);
+}
+
+.wikiContent {
+  display: flex;
+  gap: var(--space-6);
+  padding: var(--space-6);
+}
+
+.wikiImage {
+  flex-shrink: 0;
+  width: 200px;
+}
+
+.wikiImage img {
+  width: 100%;
+  border-radius: var(--radius-md);
+}
+
+.wikiText {
+  flex: 1;
+  min-width: 0;
+}
+
+.wikiTitle {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  margin-bottom: var(--space-2);
+}
+
+.wikiDescription {
+  font-size: var(--text-sm);
+  color: var(--primary-400);
+  font-style: italic;
+  margin-bottom: var(--space-4);
+}
+
+.wikiExtract {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+}
+
+.wikiExtract p {
+  margin-bottom: var(--space-3);
+}
+
+.wikiLink {
+  display: inline-block;
+  margin-top: var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--primary-400) !important;
+}
+
+.wikiLink:hover {
+  text-decoration: underline;
+}
+
+.fetchPrompt {
+  padding: var(--space-10);
+  text-align: center;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--border-default);
+}
+
+.fetchPrompt p {
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+
+.updateMessage {
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  font-size: var(--text-sm);
+  color: var(--primary-400);
+  animation: fadeIn 0.3s ease-out;
+}
+
+.wikiFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.fetchedAt {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.wikiExtract h2,
+.wikiExtract h3 {
+  font-size: var(--text-base);
+  margin: var(--space-4) 0 var(--space-2);
+  color: var(--text-primary);
+}
+
+.wikiExtract table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--space-3) 0;
+  font-size: var(--text-xs);
+}
+
+.wikiExtract table td,
+.wikiExtract table th {
+  padding: var(--space-2);
+  border: 1px solid var(--border-subtle);
+}
+
+.wikiExtract img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+}
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.searchBar {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.searchBar .input { flex: 1; }
+
+.searchResults {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.searchResultCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+}
+
+.searchResultInfo { flex: 1; min-width: 0; }
+
+.searchResultTitle {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin-bottom: var(--space-1);
+}
+
+.searchResultDesc {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+@media (max-width: 768px) {
+  .categoryHeader {
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  .categoryIcon {
+    width: 60px;
+    height: 60px;
+    font-size: 2rem;
+  }
+  .categoryName {
+    font-size: var(--text-2xl);
+  }
+  .subGrid {
+    grid-template-columns: 1fr;
+  }
+  .wikiContent {
+    flex-direction: column;
+  }
+  .wikiImage {
+    width: 100%;
+    max-width: 300px;
+  }
+}

@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Consultant {
+  id                String   @id @default(uuid())
+  firstName         String
+  lastName          String
+  email             String   @unique
+  phone             String?
+  title             String?
+  team              String?  // Steam, Accelerate, Drive, etc.
+  skills            String?  // JSON array stored as string for SQLite
+  status            String   @default("AVAILABLE") // AVAILABLE, ON_CONTRACT, ON_LEAVE
+  avatarUrl         String?
+  hourlyRate        Float?
+  bio               String?
+  education         String?  // JSON array
+  experience        String?  // JSON array (work history / uppdragshistorik)
+  interests         String?
+  developmentGoals  String?
+  linkedin          String?
+  cvUrl             String?
+  certifications    String?  // JSON array [{name, year}]
+  languages         String?  // JSON array [{language, level}] level: native/fluent/basic
+  employmentHistory String?  // JSON array [{company, period, role}]
+  industryExpertise String?  // JSON array of industry names
+  nationality       String?
+  address           String?
+  wantsNewAssignment Boolean @default(false)
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  contracts         Contract[]
+}
+
+model Client {
+  id            String   @id @default(uuid())
+  name          String
+  orgNumber     String?
+  contactPerson String?
+  contactEmail  String?
+  contactPhone  String?
+  address       String?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  contracts     Contract[]
+}
+
+model Contract {
+  id                String   @id @default(uuid())
+  title             String
+  description       String?
+  startDate         DateTime
+  endDate           DateTime
+  rate              Float?
+  rateType          String   @default("HOURLY") // HOURLY, MONTHLY, FIXED
+  estimatedHours    Int?
+  status            String   @default("ACTIVE") // DRAFT, ACTIVE, EXPIRING_SOON, EXPIRED, RENEWED, TERMINATED
+  renewalNoticeDays Int      @default(30)
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  consultantId String
+  consultant   Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+  clientId     String
+  client       Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  notifications Notification[]
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  type        String   @default("RENEWAL_WARNING") // RENEWAL_WARNING, EXPIRATION, CUSTOM
+  message     String
+  isRead      Boolean  @default(false)
+  emailSent   Boolean  @default(false)
+  triggerDate DateTime
+  createdAt   DateTime @default(now())
+
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+}

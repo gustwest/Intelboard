@@ -1,8 +1,9 @@
 import { Plus, LayoutGrid, Settings, Edit, Trash2, Search, FolderPlus, Sparkles, UserCircle, Lightbulb } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
+import { Button } from '@/components/ui/button';
 import { useStore } from '@/store/useStore';
 import { generateBankFlora } from '@/lib/simulation';
-import { Select } from '@/components/ui/Select';
+import { Select } from '@/components/ui/select';
+import { useSession, signOut } from "next-auth/react";
 
 interface SidebarProps {
     onAddSystem: () => void;
@@ -19,7 +20,13 @@ export function Sidebar({ onAddSystem, onAddProject, onEditProject, onManageSyst
     const projects = useStore((state) => state.projects);
     const activeProjectId = useStore((state) => state.activeProjectId);
     const setActiveProject = useStore((state) => state.setActiveProject);
-    const currentUser = useStore((state) => state.currentUser);
+    const { data } = useSession();
+
+    // currentUser removed from store, using session data
+    const currentUser = data?.user ? { ...data.user, id: data.user.id, role: 'user' } : null; // Mapping for compatibility or use logic directly
+    // Note: VisibleProjects logic relied on currentUser.role. 
+    // We should simplify visibility logic or fetch real permissions.
+    // For now, let's assume 'user' role.
 
     // Filter projects based on visibility
     const visibleProjects = projects.filter(p => {
@@ -108,6 +115,15 @@ export function Sidebar({ onAddSystem, onAddProject, onEditProject, onManageSyst
                         <Lightbulb className="mr-2 h-3 w-3" />
                         Architecture Advisor
                     </Button>
+                    <Button
+                        onClick={() => window.location.href = '/live-score'}
+                        variant="outline"
+                        size="sm"
+                        className="w-full text-xs justify-start border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 mt-4"
+                    >
+                        <span className="mr-2 text-base leading-none">🏐</span>
+                        Live Scoring (Beta)
+                    </Button>
                 </div>
             </div>
 
@@ -150,16 +166,17 @@ export function Sidebar({ onAddSystem, onAddProject, onEditProject, onManageSyst
                 </div>
             </div>
 
+
             {/* User Profile */}
             <div className="mt-4 pt-4 border-t border-slate-200">
                 <div
                     className="flex items-center gap-3 p-2 rounded-md hover:bg-slate-100 cursor-pointer transition-colors"
                     onClick={onOpenUserManagement}
                 >
-                    {currentUser ? (
+                    {data?.user?.image ? (
                         <img
-                            src={currentUser.avatar}
-                            alt={currentUser.name}
+                            src={data.user.image}
+                            alt={data.user.name || ''}
                             className="w-9 h-9 rounded-full bg-white border border-slate-200"
                         />
                     ) : (
@@ -169,12 +186,22 @@ export function Sidebar({ onAddSystem, onAddProject, onEditProject, onManageSyst
                     )}
                     <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium text-slate-900 truncate">
-                            {currentUser?.name || 'Guest User'}
+                            {data?.user?.name || 'Guest User'}
                         </div>
                         <div className="text-xs text-slate-500 truncate">
-                            {currentUser?.role || 'Viewer'}
+                            {data?.user?.email}
                         </div>
                     </div>
+                </div>
+                <div className="mt-2">
+                    <Button
+                        onClick={() => signOut()}
+                        variant="outline"
+                        size="sm"
+                        className="w-full text-xs"
+                    >
+                        Sign Out
+                    </Button>
                 </div>
             </div>
         </div>

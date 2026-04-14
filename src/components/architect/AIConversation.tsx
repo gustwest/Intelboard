@@ -1,8 +1,8 @@
 import { Message } from '@/lib/ai-architect';
 import { User, Bot, Loader2 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 interface AIConversationProps {
     messages: Message[];

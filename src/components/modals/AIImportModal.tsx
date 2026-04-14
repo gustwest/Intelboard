@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useStore } from '@/store/useStore';
-import { Modal } from '@/components/ui/Modal';
-import { Button } from '@/components/ui/Button';
+import { Modal } from '@/components/ui/modal';
+import { Button } from '@/components/ui/button';
 import { parseContractText, ParsedResult } from '@/lib/ai-parser';
 import { Asset } from '@/store/useStore';
 import { Sparkles, Upload, FileText, ArrowRight, CheckCircle } from 'lucide-react';

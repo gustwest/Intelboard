@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useStore } from '@/store/useStore';
-import { Modal } from '@/components/ui/Modal';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { Modal } from '@/components/ui/modal';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Search } from 'lucide-react';
 
 interface ManageProjectSystemsModalProps {

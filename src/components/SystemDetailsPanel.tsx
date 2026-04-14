@@ -1,8 +1,8 @@
 import { useStore } from '@/store/useStore';
 import { X, Database, Table, Columns, FileText, Code, Edit2, Check, Edit, ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 interface SystemDetailsPanelProps {
     systemId: string;
