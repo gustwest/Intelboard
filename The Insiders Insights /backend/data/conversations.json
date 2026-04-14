@@ -1,0 +1,85 @@
+[
+  {
+    "id": "8b610d0e-0e4d-4fb6-9dfa-42a91c178176",
+    "name": "Sales Strategy",
+    "members": [
+      "Gustav",
+      "Erik",
+      "Ben"
+    ],
+    "emoji": "\ud83d\udd25",
+    "messages": [
+      {
+        "id": "f9a1f1fa-b4f9-496f-ba4f-29549b57b2d4",
+        "body": "F",
+        "author": "Gustav",
+        "images": [],
+        "attachments": [],
+        "reactions": [],
+        "createdAt": "2026-04-14T13:06:05.033000"
+      },
+      {
+        "id": "f09408db-e636-40dd-8824-b1a958249e02",
+        "body": "Vilka leads ska vi k",
+        "author": "Gustav",
+        "images": [],
+        "attachments": [],
+        "reactions": [],
+        "createdAt": "2026-04-14T13:06:06.109729"
+      }
+    ],
+    "createdAt": "2026-04-14T13:05:57.011539",
+    "updatedAt": "2026-04-14T13:06:06.109738"
+  },
+  {
+    "id": "86b734ec-72a6-4cc4-a86e-b905144a1fdb",
+    "name": "Team Insiders",
+    "members": [
+      "Gustav",
+      "Erik",
+      "Ben",
+      "Jossan"
+    ],
+    "emoji": "\ud83d\ude80",
+    "messages": [
+      {
+        "id": "c6001600-4f9d-460f-b131-05df37df41bc",
+        "body": "Hej team! F",
+        "author": "Gustav",
+        "images": [],
+        "attachments": [],
+        "reactions": [],
+        "createdAt": "2026-04-14T13:00:02.556030"
+      },
+      {
+        "id": "256667af-d1b7-4bb2-9d4f-fe36afc6da24",
+        "body": "Den h",
+        "author": "Gustav",
+        "images": [],
+        "attachments": [],
+        "reactions": [],
+        "createdAt": "2026-04-14T13:00:02.850658"
+      },
+      {
+        "id": "06d8c9bf-f8b9-4dbd-b770-6fdf362e306a",
+        "body": "Hello team! This is a test.",
+        "author": "Gustav",
+        "images": [],
+        "attachments": [],
+        "reactions": [],
+        "createdAt": "2026-04-14T13:00:58.992153"
+      },
+      {
+        "id": "5e3b3baf-6df2-4cfb-b543-019ec7d9bc8a",
+        "body": "Hello",
+        "author": "Gustav",
+        "images": [],
+        "attachments": [],
+        "reactions": [],
+        "createdAt": "2026-04-14T13:01:11.825142"
+      }
+    ],
+    "createdAt": "2026-04-14T12:59:52.818120",
+    "updatedAt": "2026-04-14T13:01:11.825163"
+  }
+]

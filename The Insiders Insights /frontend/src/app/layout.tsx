@@ -4,6 +4,7 @@ import "./globals.css";
 import FeedbackBubble from "@/components/FeedbackBubble";
 import Navbar from "@/components/Navbar";
 import { UserProvider } from "@/components/UserProvider";
+import ChatWidget from "@/components/ChatWidget";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -34,8 +35,10 @@ export default function RootLayout({
           <Navbar />
           {children}
           <FeedbackBubble />
+          <ChatWidget />
         </UserProvider>
       </body>
     </html>
   );
 }
+

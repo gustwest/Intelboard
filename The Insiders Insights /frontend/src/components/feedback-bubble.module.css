@@ -1,7 +1,7 @@
 .root {
   position: fixed;
   bottom: 24px;
-  right: 24px;
+  left: 24px;
   z-index: 99999;
   font-family: 'Inter', system-ui, sans-serif;
 }
@@ -33,7 +33,7 @@
 .quickMenu {
   position: absolute;
   bottom: 64px;
-  right: 0;
+  left: 0;
   background: #1a1a24;
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 16px;
@@ -241,7 +241,7 @@
 .formPanel {
   position: absolute;
   bottom: 64px;
-  right: 0;
+  left: 0;
   width: 380px;
   background: #12121c;
   border: 1px solid rgba(255,255,255,0.08);

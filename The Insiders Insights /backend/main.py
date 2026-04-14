@@ -235,55 +235,140 @@ def delete_file(file_id: str):
 
 
 # ============================================================
-# CHAT
+# CHAT — Conversations, Messages, Reactions, WebSocket
 # ============================================================
+from fastapi import WebSocket, WebSocketDisconnect
 
-CHAT_FILE = os.path.join(DATA_DIR, "chat.json")
+CONVOS_FILE = os.path.join(DATA_DIR, "conversations.json")
 
-def load_messages() -> list:
-    if not os.path.exists(CHAT_FILE):
+# --- WebSocket manager ---
+class ConnectionManager:
+    def __init__(self):
+        self.active: Dict[str, list] = {}  # convo_id -> [ws, ...]
+
+    async def connect(self, ws: WebSocket, convo_id: str):
+        await ws.accept()
+        if convo_id not in self.active:
+            self.active[convo_id] = []
+        self.active[convo_id].append(ws)
+
+    def disconnect(self, ws: WebSocket, convo_id: str):
+        if convo_id in self.active:
+            self.active[convo_id] = [w for w in self.active[convo_id] if w != ws]
+
+    async def broadcast(self, convo_id: str, data: dict):
+        for ws in self.active.get(convo_id, []):
+            try:
+                await ws.send_json(data)
+            except:
+                pass
+
+manager = ConnectionManager()
+
+def load_convos() -> list:
+    if not os.path.exists(CONVOS_FILE):
         return []
-    with open(CHAT_FILE, "r") as f:
+    with open(CONVOS_FILE, "r") as f:
         return json.load(f)
 
-def save_messages(messages: list):
-    with open(CHAT_FILE, "w") as f:
-        json.dump(messages, f, indent=2, default=str)
+def save_convos(convos: list):
+    with open(CONVOS_FILE, "w") as f:
+        json.dump(convos, f, indent=2, default=str)
 
 
-class ChatMessage(BaseModel):
+class ConvoCreate(BaseModel):
+    name: str
+    members: List[str]
+    emoji: Optional[str] = "💬"
+
+class MsgSend(BaseModel):
     body: str
     author: str
-    images: Optional[List[str]] = None  # base64 data URLs
+    images: Optional[List[str]] = None
+
+class ReactionToggle(BaseModel):
+    emoji: str
+    user: str
 
 
-@app.get("/api/chat")
-def list_messages():
-    return load_messages()
+# --- Conversations ---
+@app.get("/api/conversations")
+def list_conversations():
+    return load_convos()
 
 
-@app.post("/api/chat")
-def send_message(msg: ChatMessage):
-    messages = load_messages()
+@app.post("/api/conversations")
+def create_conversation(req: ConvoCreate):
+    convos = load_convos()
+    convo = {
+        "id": str(uuid.uuid4()),
+        "name": req.name.strip(),
+        "members": req.members,
+        "emoji": req.emoji or "💬",
+        "messages": [],
+        "createdAt": datetime.utcnow().isoformat(),
+        "updatedAt": datetime.utcnow().isoformat(),
+    }
+    convos.insert(0, convo)
+    save_convos(convos)
+    return convo
+
+
+@app.delete("/api/conversations/{convo_id}")
+def delete_conversation(convo_id: str):
+    convos = load_convos()
+    convos = [c for c in convos if c["id"] != convo_id]
+    save_convos(convos)
+    return {"deleted": True}
+
+
+# --- Messages ---
+@app.get("/api/conversations/{convo_id}/messages")
+def get_messages(convo_id: str):
+    convos = load_convos()
+    convo = next((c for c in convos if c["id"] == convo_id), None)
+    if not convo:
+        return []
+    return convo.get("messages", [])
+
+
+@app.post("/api/conversations/{convo_id}/messages")
+async def send_msg(convo_id: str, req: MsgSend):
+    convos = load_convos()
+    convo = next((c for c in convos if c["id"] == convo_id), None)
+    if not convo:
+        return Response(status_code=404, content="Conversation not found")
+
     message = {
         "id": str(uuid.uuid4()),
-        "body": msg.body.strip(),
-        "author": msg.author.strip(),
-        "images": msg.images or [],
+        "body": req.body.strip(),
+        "author": req.author.strip(),
+        "images": req.images or [],
         "attachments": [],
+        "reactions": [],
         "createdAt": datetime.utcnow().isoformat(),
     }
-    messages.append(message)
-    save_messages(messages)
+    convo["messages"].append(message)
+    convo["updatedAt"] = datetime.utcnow().isoformat()
+    save_convos(convos)
+
+    # Broadcast to WebSocket listeners
+    await manager.broadcast(convo_id, {"type": "new_message", "message": message})
     return message
 
 
-@app.post("/api/chat/upload")
-async def chat_upload(
+@app.post("/api/conversations/{convo_id}/upload")
+async def convo_upload(
+    convo_id: str,
     file: UploadFile = File(...),
     author: str = Form(""),
     body: str = Form(""),
 ):
+    convos = load_convos()
+    convo = next((c for c in convos if c["id"] == convo_id), None)
+    if not convo:
+        return Response(status_code=404, content="Conversation not found")
+
     file_id = str(uuid.uuid4())
     ext = os.path.splitext(file.filename or "file")[1]
     stored_name = f"chat_{file_id}{ext}"
@@ -301,41 +386,75 @@ async def chat_upload(
         "contentType": file.content_type,
     }
 
-    messages = load_messages()
     message = {
         "id": str(uuid.uuid4()),
         "body": body.strip(),
         "author": author.strip() or "Okänd",
         "images": [],
         "attachments": [attachment],
+        "reactions": [],
         "createdAt": datetime.utcnow().isoformat(),
     }
-    messages.append(message)
-    save_messages(messages)
+    convo["messages"].append(message)
+    convo["updatedAt"] = datetime.utcnow().isoformat()
+    save_convos(convos)
+
+    await manager.broadcast(convo_id, {"type": "new_message", "message": message})
     return message
 
 
-@app.get("/api/chat/attachment/{file_id}")
+@app.get("/api/conversations/attachment/{file_id}")
 def download_chat_attachment(file_id: str):
-    messages = load_messages()
-    for msg in messages:
-        for att in msg.get("attachments", []):
-            if att["id"] == file_id:
-                filepath = os.path.join(UPLOADS_DIR, att["storedName"])
-                if not os.path.exists(filepath):
-                    return Response(status_code=404, content="File not found")
-                with open(filepath, "rb") as f:
-                    data = f.read()
-                return Response(
-                    content=data,
-                    media_type=att.get("contentType", "application/octet-stream"),
-                    headers={"Content-Disposition": f'attachment; filename="{att["name"]}"'},
-                )
+    convos = load_convos()
+    for convo in convos:
+        for msg in convo.get("messages", []):
+            for att in msg.get("attachments", []):
+                if att["id"] == file_id:
+                    filepath = os.path.join(UPLOADS_DIR, att["storedName"])
+                    if not os.path.exists(filepath):
+                        return Response(status_code=404, content="File not found")
+                    with open(filepath, "rb") as f:
+                        data = f.read()
+                    return Response(
+                        content=data,
+                        media_type=att.get("contentType", "application/octet-stream"),
+                        headers={"Content-Disposition": f'attachment; filename="{att["name"]}"'},
+                    )
     return Response(status_code=404, content="Attachment not found")
 
 
-@app.delete("/api/chat")
-def clear_chat():
-    save_messages([])
-    return {"cleared": True}
+# --- Reactions ---
+@app.post("/api/conversations/{convo_id}/messages/{msg_id}/react")
+async def toggle_reaction(convo_id: str, msg_id: str, req: ReactionToggle):
+    convos = load_convos()
+    convo = next((c for c in convos if c["id"] == convo_id), None)
+    if not convo:
+        return Response(status_code=404, content="Not found")
+
+    msg = next((m for m in convo.get("messages", []) if m["id"] == msg_id), None)
+    if not msg:
+        return Response(status_code=404, content="Message not found")
+
+    reactions = msg.get("reactions", [])
+    existing = next((r for r in reactions if r["emoji"] == req.emoji and r["user"] == req.user), None)
+    if existing:
+        reactions.remove(existing)
+    else:
+        reactions.append({"emoji": req.emoji, "user": req.user})
+    msg["reactions"] = reactions
+    save_convos(convos)
+
+    await manager.broadcast(convo_id, {"type": "reaction", "messageId": msg_id, "reactions": reactions})
+    return {"reactions": reactions}
+
+
+# --- WebSocket ---
+@app.websocket("/ws/chat/{convo_id}")
+async def ws_chat(ws: WebSocket, convo_id: str):
+    await manager.connect(ws, convo_id)
+    try:
+        while True:
+            await ws.receive_text()  # keep alive
+    except WebSocketDisconnect:
+        manager.disconnect(ws, convo_id)
 
