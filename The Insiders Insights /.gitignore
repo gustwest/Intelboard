@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Next.js
+.next/
+out/
+*.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads (tracked separately)
+backend/data/uploads/
+
+# IDE
+.vscode/
+.idea/

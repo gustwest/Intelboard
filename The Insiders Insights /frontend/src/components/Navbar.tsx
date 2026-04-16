@@ -23,6 +23,7 @@ export default function Navbar() {
 
   const navLinks = [
     { href: '/', label: 'Engine', emoji: '⚡' },
+    { href: '/analytics', label: 'Analytics', emoji: '📊' },
     { href: '/admin', label: 'Admin', emoji: '📋' },
   ];
 

@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 from engine.monte_carlo import run_multi_domain_simulation
+from engine.data_analyzer import analyze_all
 
 app = FastAPI(title="The Predictive Network Engine - API")
 
@@ -77,6 +78,70 @@ def simulate(req: SimulationRequest):
         iterations=10000
     )
     return {"status": "success", "data": result}
+
+
+# ============================================================
+# ANALYTICS
+# ============================================================
+
+ANALYSIS_FILE = os.path.join(DATA_DIR, "analysis_cache.json")
+INSIDERSKUNDER_DIR = os.path.join(os.path.dirname(__file__), "..", "Insiderskunder")
+
+import math
+import numpy as np
+
+class SafeJSONEncoder(json.JSONEncoder):
+    """Custom encoder that handles numpy types and NaN/Inf."""
+    def default(self, obj):
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            val = float(obj)
+            if math.isnan(val) or math.isinf(val):
+                return 0
+            return val
+        if isinstance(obj, (np.ndarray,)):
+            return obj.tolist()
+        if isinstance(obj, (np.bool_,)):
+            return bool(obj)
+        if hasattr(obj, 'isoformat'):
+            return obj.isoformat()
+        return super().default(obj)
+
+def safe_json_dumps(obj):
+    return json.dumps(obj, cls=SafeJSONEncoder, ensure_ascii=False)
+
+@app.get("/api/analytics")
+def get_analytics():
+    """Return cached analysis results (or run fresh if none exist)."""
+    if os.path.exists(ANALYSIS_FILE):
+        with open(ANALYSIS_FILE, "r", encoding="utf-8") as f:
+            content = f.read()
+        return Response(content=content, media_type="application/json")
+    
+    # Try auto-analyze if data directory exists
+    if os.path.exists(INSIDERSKUNDER_DIR):
+        return run_analysis_now()
+    
+    return {"error": "No analysis data found. Upload files or run analysis first."}
+
+
+@app.post("/api/analytics/run")
+def run_analysis_now():
+    """Run fresh analysis on Insiderskunder directory."""
+    if not os.path.exists(INSIDERSKUNDER_DIR):
+        return {"error": f"Data directory not found: {INSIDERSKUNDER_DIR}"}
+    
+    result = analyze_all(INSIDERSKUNDER_DIR)
+    
+    # Serialize with safe encoder
+    content = safe_json_dumps(result)
+    
+    # Cache it
+    with open(ANALYSIS_FILE, "w", encoding="utf-8") as f:
+        f.write(content)
+    
+    return Response(content=content, media_type="application/json")
 
 
 # ============================================================

@@ -124,13 +124,13 @@ export default function Dashboard() {
   const chartColor = activeTab === 'sales' ? '#a855f7' : activeTab === 'recruiting' ? '#22c55e' : '#ec4899';
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-slate-100 flex flex-col" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div className="h-[calc(100vh-56px)] bg-[#0a0a0f] text-slate-100 flex flex-col overflow-hidden" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
 
       {/* Header is now in the global Navbar */}
 
-      <main className="flex-1 flex overflow-hidden">
+      <main className="flex-1 flex overflow-hidden min-h-0">
         {/* LEFT SIDEBAR — INPUTS */}
-        <aside className="w-[420px] flex-shrink-0 border-r border-white/[0.06] flex flex-col bg-[#0d0d14]">
+        <aside className="w-[420px] flex-shrink-0 border-r border-white/[0.06] flex flex-col bg-[#0d0d14] max-h-full">
           <div className="flex-1 overflow-y-auto p-6 space-y-7">
 
             {/* LINKEDIN DATA HUB */}
