@@ -85,7 +85,10 @@ def simulate(req: SimulationRequest):
 # ============================================================
 
 ANALYSIS_FILE = os.path.join(DATA_DIR, "analysis_cache.json")
-INSIDERSKUNDER_DIR = os.path.join(os.path.dirname(__file__), "..", "Insiderskunder")
+# Check both parent dir (local dev) and same dir (Docker)
+_parent_insiders = os.path.join(os.path.dirname(__file__), "..", "Insiderskunder")
+_local_insiders = os.path.join(os.path.dirname(__file__), "Insiderskunder")
+INSIDERSKUNDER_DIR = _parent_insiders if os.path.exists(_parent_insiders) else _local_insiders
 
 import math
 import numpy as np
