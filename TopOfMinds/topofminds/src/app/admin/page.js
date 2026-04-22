@@ -234,7 +234,7 @@ export default function AdminPage() {
     if (diff < 60) return 'Just nu';
     if (diff < 3600) return `${Math.floor(diff / 60)} min sedan`;
     if (diff < 86400) return `${Math.floor(diff / 3600)} tim sedan`;
-    return d.toLocaleDateString('sv-SE');
+    return d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Stockholm' });
   }
 
   function elapsed(dateStr) {
