@@ -37,6 +37,8 @@ model Consultant {
   updatedAt         DateTime @updatedAt
   contracts         Contract[]
   user              User?
+  matches           AssignmentMatch[]
+  applications      Application[]
 }
 
 // ==================== AUTH ====================
@@ -197,6 +199,88 @@ model AgentLog {
 
   taskId    String
   task      AgentTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+// ==================== ASSIGNMENTS & MATCHING ====================
+
+model Assignment {
+  id                String   @id @default(uuid())
+  title             String
+  description       String   // full extracted description
+  clientName        String?  // end customer (e.g. "ICA Sverige")
+  brokerName        String?  // broker/agency who sent the request
+  brokerEmail       String?
+  location          String?  // on-site / remote / hybrid / city
+  startDate         DateTime?
+  endDate           DateTime?
+  applicationDeadline DateTime?
+  estimatedHours    Int?
+  rateMin           Float?
+  rateMax           Float?
+  rateType          String?  // HOURLY | MONTHLY | FIXED
+  requiredSkills    String?  // JSON array of strings
+  preferredSkills   String?  // JSON array of strings
+  languageRequirements String? // JSON array
+  industry          String?
+  seniority         String?  // JUNIOR | MID | SENIOR
+  status            String   @default("NEW") // NEW | MATCHED | SENT | CLOSED | ARCHIVED
+  sourceType        String   @default("EMAIL") // EMAIL | MANUAL | API
+  sourceRaw         String?  // original email body / raw input
+  sourceSubject     String?
+  extractionConfidence Float? // 0..1 from AI extraction
+  extractionNotes   String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  matches       AssignmentMatch[]
+  applications  Application[]
+
+  @@index([status, createdAt])
+  @@index([applicationDeadline])
+}
+
+model AssignmentMatch {
+  id              String   @id @default(uuid())
+  assignmentId    String
+  consultantId    String
+  score           Int      // 0-100
+  matchedSkills   String?  // JSON array
+  missingSkills   String?  // JSON array
+  summary         String?  // short human-readable match explanation
+  strengths       String?  // JSON array of bullet points
+  concerns        String?  // JSON array of bullet points
+  recommendation  String?  // STRONG_MATCH | GOOD_MATCH | POSSIBLE | POOR
+  modelId         String?  // which AI model produced this
+  jobId           String?  // links to AIUsageLog/AIShadowResult
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  assignment      Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  consultant      Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, consultantId])
+  @@index([assignmentId, score])
+  @@index([consultantId, score])
+}
+
+model Application {
+  id              String   @id @default(uuid())
+  assignmentId    String
+  consultantId    String
+  status          String   @default("INTERESTED") // INTERESTED | DRAFT_CV | APPLIED | REJECTED | WITHDRAWN | WON
+  tailoredCv      String?  // generated CV text
+  coverNote       String?
+  appliedAt       DateTime?
+  createdByUserId String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  assignment      Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  consultant      Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, consultantId])
+  @@index([consultantId, status])
 }
 
 // ==================== AI INFRASTRUCTURE ====================

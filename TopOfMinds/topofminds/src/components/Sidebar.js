@@ -7,6 +7,7 @@ import { ROLES, isAdmin } from '@/lib/auth/roles';
 
 const ADMIN_LINKS = [
   { href: '/', label: 'Dashboard', icon: '📊', section: 'Översikt' },
+  { href: '/assignments', label: 'Uppdrag', icon: '🎯', section: 'Översikt' },
   { href: '/consultants', label: 'Konsulter', icon: '👥', section: 'Översikt' },
   { href: '/contracts', label: 'Kontrakt', icon: '📄', section: 'Översikt' },
   { href: '/clients', label: 'Kunder', icon: '🏢', section: 'Översikt' },

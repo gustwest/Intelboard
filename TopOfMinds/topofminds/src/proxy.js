@@ -3,7 +3,7 @@ import { decryptSession, SESSION_COOKIE } from '@/lib/auth/jwt';
 import { isAdmin, ROLES } from '@/lib/auth/roles';
 
 const PUBLIC_ROUTES = ['/login', '/signup'];
-const ADMIN_ROUTES = ['/admin', '/consultants', '/contracts', '/clients', '/gantt', '/financials', '/notifications'];
+const ADMIN_ROUTES = ['/admin', '/assignments', '/consultants', '/contracts', '/clients', '/gantt', '/financials', '/notifications'];
 const CONSULTANT_ROUTES = ['/my'];
 
 function matches(pathname, routes) {
