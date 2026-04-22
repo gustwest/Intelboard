@@ -1,9 +1,13 @@
 const { PrismaClient } = require('@prisma/client');
-const { PrismaBetterSqlite3 } = require('@prisma/adapter-better-sqlite3');
-const path = require('path');
+const { PrismaPg } = require('@prisma/adapter-pg');
+const { seedModelRegistry, seedDefaultAISettings, seedInitialAdmin } = require('./seed-ai');
 
-const dbPath = path.join(__dirname, 'dev.db');
-const adapter = new PrismaBetterSqlite3({ url: `file:${dbPath}` });
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  console.error('❌ DATABASE_URL environment variable is required');
+  process.exit(1);
+}
+const adapter = new PrismaPg({ connectionString, max: 2 });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
@@ -14,25 +18,29 @@ async function main() {
   await prisma.consultant.deleteMany();
   await prisma.client.deleteMany();
 
-  // Create clients
-  const clients = await Promise.all([
-    prisma.client.create({ data: { name: 'ICA Sverige AB', orgNumber: '556021-0261', contactPerson: 'Maria Svensson', contactEmail: 'maria.svensson@ica.se', contactPhone: '+46 8 555 0101', address: 'Solna', notes: 'Långsiktigt samarbete inom Checkout och Customer Solutions.' } }),
-    prisma.client.create({ data: { name: 'Länsförsäkringar AB', orgNumber: '502010-9681', contactPerson: 'Karin Nilsson', contactEmail: 'karin.nilsson@lansforsakringar.se', contactPhone: '+46 8 555 0202', address: 'Stockholm', notes: 'Flera pågående uppdrag inom bank och försäkring.' } }),
-    prisma.client.create({ data: { name: 'Autoliv', orgNumber: '556547-4742', contactPerson: 'Erik Johansson', contactEmail: 'erik.johansson@autoliv.com', contactPhone: '+46 8 555 0303', address: 'Stockholm', notes: 'Globala IT-projekt inom Supply Chain Management och BI.' } }),
-    prisma.client.create({ data: { name: 'Vattenfall Eldistribution', orgNumber: '556417-0800', contactPerson: 'Anna Lindström', contactEmail: 'anna.lindstrom@vattenfall.com', contactPhone: '+46 8 555 0404', address: 'Stockholm', notes: 'Förändringsledning och organisationsutveckling.' } }),
-    prisma.client.create({ data: { name: 'IKEA AB', orgNumber: '556074-7569', contactPerson: 'Lisa Berg', contactEmail: 'lisa.berg@ikea.com', contactPhone: '+46 42 555 0505', address: 'Älmhult', notes: 'CRM-implementationer med MS Dynamics 365.' } }),
-    prisma.client.create({ data: { name: 'SJ AB', orgNumber: '556196-1599', contactPerson: 'Peter Holm', contactEmail: 'peter.holm@sj.se', contactPhone: '+46 10 555 0606', address: 'Stockholm' } }),
-    prisma.client.create({ data: { name: 'Region Stockholm', orgNumber: '232100-0016', contactPerson: 'Sara Ek', contactEmail: 'sara.ek@regionstockholm.se', contactPhone: '+46 8 555 0707', address: 'Stockholm' } }),
-    prisma.client.create({ data: { name: 'Telia Company / TV4 Media', orgNumber: '556103-4249', contactPerson: 'Magnus Eriksson', contactEmail: 'magnus.eriksson@telia.se', contactPhone: '+46 10 555 0808', address: 'Stockholm' } }),
-  ]);
+  // Create clients (sequential to avoid connection exhaustion on Cloud SQL micro)
+  const clientData = [
+    { name: 'ICA Sverige AB', orgNumber: '556021-0261', contactPerson: 'Maria Svensson', contactEmail: 'maria.svensson@ica.se', contactPhone: '+46 8 555 0101', address: 'Solna', notes: 'Långsiktigt samarbete inom Checkout och Customer Solutions.' },
+    { name: 'Länsförsäkringar AB', orgNumber: '502010-9681', contactPerson: 'Karin Nilsson', contactEmail: 'karin.nilsson@lansforsakringar.se', contactPhone: '+46 8 555 0202', address: 'Stockholm', notes: 'Flera pågående uppdrag inom bank och försäkring.' },
+    { name: 'Autoliv', orgNumber: '556547-4742', contactPerson: 'Erik Johansson', contactEmail: 'erik.johansson@autoliv.com', contactPhone: '+46 8 555 0303', address: 'Stockholm', notes: 'Globala IT-projekt inom Supply Chain Management och BI.' },
+    { name: 'Vattenfall Eldistribution', orgNumber: '556417-0800', contactPerson: 'Anna Lindström', contactEmail: 'anna.lindstrom@vattenfall.com', contactPhone: '+46 8 555 0404', address: 'Stockholm', notes: 'Förändringsledning och organisationsutveckling.' },
+    { name: 'IKEA AB', orgNumber: '556074-7569', contactPerson: 'Lisa Berg', contactEmail: 'lisa.berg@ikea.com', contactPhone: '+46 42 555 0505', address: 'Älmhult', notes: 'CRM-implementationer med MS Dynamics 365.' },
+    { name: 'SJ AB', orgNumber: '556196-1599', contactPerson: 'Peter Holm', contactEmail: 'peter.holm@sj.se', contactPhone: '+46 10 555 0606', address: 'Stockholm' },
+    { name: 'Region Stockholm', orgNumber: '232100-0016', contactPerson: 'Sara Ek', contactEmail: 'sara.ek@regionstockholm.se', contactPhone: '+46 8 555 0707', address: 'Stockholm' },
+    { name: 'Telia Company / TV4 Media', orgNumber: '556103-4249', contactPerson: 'Magnus Eriksson', contactEmail: 'magnus.eriksson@telia.se', contactPhone: '+46 10 555 0808', address: 'Stockholm' },
+  ];
+  const clients = [];
+  for (const d of clientData) {
+    clients.push(await prisma.client.create({ data: d }));
+  }
 
   // =============================================
   // REAL CONSULTANTS — Top of Minds
   // =============================================
 
-  const consultants = await Promise.all([
+  const consultantDataList = [
     // 0: Connie Nordahl — Team Accelerate
-    prisma.consultant.create({ data: {
+    {
       firstName: 'Connie', lastName: 'Nordahl',
       email: 'connie.nordahl@topofminds.se',
       phone: '+46 73 427 42 87',
@@ -74,10 +82,10 @@ async function main() {
       nationality: 'Svensk + Norsk',
       address: 'Biblioteksgatan 29, 114 35 Stockholm',
       linkedin: 'https://linkedin.com/in/connienordahl',
-    }}),
+    },
 
     // 1: Gustav Westergren — Team Drive
-    prisma.consultant.create({ data: {
+    {
       firstName: 'Gustav', lastName: 'Westergren',
       email: 'gustav.westergren@topofminds.se',
       phone: '+46 70 727 04 58',
@@ -122,10 +130,10 @@ async function main() {
       nationality: 'Svensk',
       address: 'Biblioteksgatan 29, 114 35 Stockholm',
       linkedin: 'https://linkedin.com/in/gustavwestergren',
-    }}),
+    },
 
     // 2: Jeff Råsten — Team Accelerate
-    prisma.consultant.create({ data: {
+    {
       firstName: 'Jeff', lastName: 'Råsten',
       email: 'jeff.rasten@topofminds.se',
       phone: '+46 70 880 06 79',
@@ -163,10 +171,10 @@ async function main() {
       nationality: 'Svensk',
       address: 'Biblioteksgatan 29, 114 35 Stockholm',
       linkedin: 'https://linkedin.com/in/jeffrasten',
-    }}),
+    },
 
     // 3: Johan Flink — Team Steam
-    prisma.consultant.create({ data: {
+    {
       firstName: 'Johan', lastName: 'Flink',
       email: 'johan.flink@topofminds.se',
       phone: '+46 70 921 81 33',
@@ -202,10 +210,10 @@ async function main() {
       nationality: 'Svensk',
       address: 'Biblioteksgatan 29, 114 35 Stockholm',
       linkedin: 'https://linkedin.com/in/johanflink',
-    }}),
+    },
 
     // 4: Jon Skärlina — Team Drive
-    prisma.consultant.create({ data: {
+    {
       firstName: 'Jon', lastName: 'Skärlina',
       email: 'jon.skarlina@topofminds.se',
       phone: '+46 70 252 23 27',
@@ -247,10 +255,10 @@ async function main() {
       nationality: 'Svensk',
       address: 'Biblioteksgatan 29, 114 35 Stockholm',
       linkedin: 'https://linkedin.com/in/jonskarlina',
-    }}),
+    },
 
     // 5: Linn Holm — Team Accelerate
-    prisma.consultant.create({ data: {
+    {
       firstName: 'Linn', lastName: 'Holm',
       email: 'linn.holm@topofminds.se',
       phone: '+46 76 101 57 92',
@@ -292,10 +300,10 @@ async function main() {
       nationality: 'Svensk',
       address: 'Biblioteksgatan 29, 114 35 Stockholm',
       linkedin: 'https://linkedin.com/in/linnholm',
-    }}),
+    },
 
     // 6: Linn St Cyr — Team Accelerate
-    prisma.consultant.create({ data: {
+    {
       firstName: 'Linn', lastName: 'St Cyr',
       email: 'linn.stcyr@topofminds.se',
       phone: '+46 73 051 36 13',
@@ -333,10 +341,10 @@ async function main() {
       nationality: 'Svensk',
       address: 'Biblioteksgatan 29, 114 35 Stockholm',
       linkedin: 'https://linkedin.com/in/linnstcyr',
-    }}),
+    },
 
     // 7: Malin Stross — Team Drive
-    prisma.consultant.create({ data: {
+    {
       firstName: 'Malin', lastName: 'Stross',
       email: 'malin.stross@topofminds.se',
       phone: '+46 70 466 96 81',
@@ -379,10 +387,10 @@ async function main() {
       nationality: 'Svensk',
       address: 'Biblioteksgatan 29, 114 35 Stockholm',
       linkedin: 'https://linkedin.com/in/malinstross',
-    }}),
+    },
 
     // 8: Stefan Tägt — Team Steam
-    prisma.consultant.create({ data: {
+    {
       firstName: 'Stefan', lastName: 'Tägt',
       email: 'stefan.tagt@topofminds.se',
       phone: '+46 76 444 48 63',
@@ -422,10 +430,10 @@ async function main() {
       nationality: 'Svensk',
       address: 'Biblioteksgatan 29, 114 35 Stockholm',
       linkedin: 'https://linkedin.com/in/stefantagt',
-    }}),
+    },
 
     // 9: Ulrik Lind — Team Drive
-    prisma.consultant.create({ data: {
+    {
       firstName: 'Ulrik', lastName: 'Lind',
       email: 'ulrik.lind@topofminds.se',
       phone: '+46 76 706 68 57',
@@ -470,89 +478,105 @@ async function main() {
       nationality: 'Svensk',
       address: 'Biblioteksgatan 29, 114 35 Stockholm',
       linkedin: 'https://linkedin.com/in/ulriklind',
-    }}),
-  ]);
+    },
+  ];
+  const consultants = [];
+  for (const cData of consultantDataList) {
+    consultants.push(await prisma.consultant.create({ data: cData }));
+  }
 
   // Create contracts with realistic mappings
   const now = new Date();
-  const contracts = await Promise.all([
+  const contractDataList = [
     // Connie @ ICA
-    prisma.contract.create({ data: {
+    {
       title: 'Projektledare & Förändringsledare – Checkout', description: 'Leder Checkout-teamets arbete med ny kassaplattform. Samordning, införande och kvalitet.',
       startDate: new Date(now.getFullYear(), now.getMonth() - 6, 1),
       endDate: new Date(now.getFullYear(), now.getMonth() + 2, 15),
       rate: 1300, rateType: 'HOURLY', status: 'ACTIVE', renewalNoticeDays: 30, estimatedHours: 1200,
       consultantId: consultants[0].id, clientId: clients[0].id,
-    }}),
+    },
     // Gustav @ Autoliv
-    prisma.contract.create({ data: {
+    {
       title: 'Development Lead – Data Management & BI', description: 'Leder arkitekturboard, BI-utveckling och Cloud migration till Snowflake. Data Mesh Architecture.',
       startDate: new Date(now.getFullYear() - 1, 0, 1),
       endDate: new Date(now.getFullYear(), now.getMonth() + 3, 1),
       rate: 1250, rateType: 'HOURLY', status: 'ACTIVE', renewalNoticeDays: 30, estimatedHours: 2000,
       consultantId: consultants[1].id, clientId: clients[2].id,
-    }}),
+    },
     // Jeff @ Länsförsäkringar
-    prisma.contract.create({ data: {
+    {
       title: 'Projektledare / Scrum Master – Försäkringsprodukter', description: 'Leder kundupplevelse och prestation av försäkringsprodukter i SAFe-organisation.',
       startDate: new Date(now.getFullYear(), now.getMonth() - 10, 1),
       endDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 20),
       rate: 1150, rateType: 'HOURLY', status: 'EXPIRING_SOON', renewalNoticeDays: 30, estimatedHours: 1600,
       consultantId: consultants[2].id, clientId: clients[1].id,
       notes: 'Diskussion om förlängning pågår.',
-    }}),
+    },
     // Jon @ Vattenfall
-    prisma.contract.create({ data: {
+    {
       title: 'Förändringsledning – Investeringsportfölj', description: 'Projektledare för förändringsledningsprojekt som synliggör genomförbarhetsförmågan.',
       startDate: new Date(now.getFullYear(), now.getMonth() - 8, 1),
       endDate: new Date(now.getFullYear(), now.getMonth() + 4, 1),
       rate: 1200, rateType: 'HOURLY', status: 'ACTIVE', renewalNoticeDays: 30, estimatedHours: 1400,
       consultantId: consultants[4].id, clientId: clients[3].id,
-    }}),
+    },
     // Linn StCyr @ Region Stockholm
-    prisma.contract.create({ data: {
+    {
       title: 'Krav- och projektledare – Dataplattform', description: 'Modernisering av dataplattform. Kravhantering genom intervjuer och workshops.',
       startDate: new Date(now.getFullYear(), now.getMonth() - 3, 1),
       endDate: new Date(now.getFullYear(), now.getMonth() + 6, 1),
       rate: 1250, rateType: 'HOURLY', status: 'ACTIVE', renewalNoticeDays: 30, estimatedHours: 1200,
       consultantId: consultants[6].id, clientId: clients[6].id,
-    }}),
+    },
     // Malin @ Vattenfall
-    prisma.contract.create({ data: {
+    {
       title: 'Förändringsledare – External Workforce', description: 'Definiering av framtida organisation och operativ målbild. Centre of Excellence-ramverk.',
       startDate: new Date(now.getFullYear(), now.getMonth() - 5, 1),
       endDate: new Date(now.getFullYear(), now.getMonth() + 1, 15),
       rate: 1350, rateType: 'HOURLY', status: 'EXPIRING_SOON', renewalNoticeDays: 30, estimatedHours: 960,
       consultantId: consultants[7].id, clientId: clients[3].id,
       notes: 'Vattenfall vill potentiellt förlänga.',
-    }}),
+    },
     // Stefan @ Länsförsäkringar
-    prisma.contract.create({ data: {
+    {
       title: 'RTE & Scrum Master – Analysplattform (IPA)', description: 'RTE för bankens analysplattform. SAFe-ceremonier, BankDW-migration, Oracle-uppgradering.',
       startDate: new Date(now.getFullYear() - 1, 3, 1),
       endDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 10),
       rate: 1200, rateType: 'HOURLY', status: 'EXPIRING_SOON', renewalNoticeDays: 30, estimatedHours: 1800,
       consultantId: consultants[8].id, clientId: clients[1].id,
       notes: 'Kontrakt löper ut snart. Diskussion om nytt uppdrag.',
-    }}),
+    },
     // Historical: Jeff @ IKEA
-    prisma.contract.create({ data: {
+    {
       title: 'MS Dynamics 365 Implementation', description: 'CRM-implementation för köksavdelningar, B2B och interna bokningssystem.',
       startDate: new Date(2019, 1, 1),
       endDate: new Date(2022, 3, 1),
       rate: 1100, rateType: 'HOURLY', status: 'EXPIRED', renewalNoticeDays: 30, estimatedHours: 4800,
       consultantId: consultants[2].id, clientId: clients[4].id,
       notes: 'Tre framgångsrika projekt levererade.',
-    }}),
-  ]);
+    },
+  ];
+  const contracts = [];
+  for (const cData of contractDataList) {
+    contracts.push(await prisma.contract.create({ data: cData }));
+  }
 
   // Notifications
-  await Promise.all([
-    prisma.notification.create({ data: { type: 'RENEWAL_WARNING', message: 'Jeffs kontrakt med Länsförsäkringar löper ut om 20 dagar. Förlängning diskuteras.', isRead: false, triggerDate: new Date(), contractId: contracts[2].id } }),
-    prisma.notification.create({ data: { type: 'RENEWAL_WARNING', message: 'Malins kontrakt med Vattenfall löper ut snart. Potentiell förlängning.', isRead: false, triggerDate: new Date(), contractId: contracts[5].id } }),
-    prisma.notification.create({ data: { type: 'RENEWAL_WARNING', message: 'Stefans RTE-kontrakt med Länsförsäkringar Bank löper ut om 10 dagar.', isRead: false, triggerDate: new Date(), contractId: contracts[6].id } }),
-    prisma.notification.create({ data: { type: 'EXPIRATION', message: 'Johan Flink och Linn Holm är tillgängliga och söker nya uppdrag.', isRead: true, triggerDate: new Date(now.getTime() - 3*24*60*60*1000), contractId: contracts[0].id } }),
-  ]);
+  const notifData = [
+    { type: 'RENEWAL_WARNING', message: 'Jeffs kontrakt med Länsförsäkringar löper ut om 20 dagar. Förlängning diskuteras.', isRead: false, triggerDate: new Date(), contractId: contracts[2].id },
+    { type: 'RENEWAL_WARNING', message: 'Malins kontrakt med Vattenfall löper ut snart. Potentiell förlängning.', isRead: false, triggerDate: new Date(), contractId: contracts[5].id },
+    { type: 'RENEWAL_WARNING', message: 'Stefans RTE-kontrakt med Länsförsäkringar Bank löper ut om 10 dagar.', isRead: false, triggerDate: new Date(), contractId: contracts[6].id },
+    { type: 'EXPIRATION', message: 'Johan Flink och Linn Holm är tillgängliga och söker nya uppdrag.', isRead: true, triggerDate: new Date(now.getTime() - 3*24*60*60*1000), contractId: contracts[0].id },
+  ];
+  for (const n of notifData) {
+    await prisma.notification.create({ data: n });
+  }
+
+  // AI infra + initial admin user (idempotent upserts)
+  await seedModelRegistry(prisma);
+  await seedDefaultAISettings(prisma);
+  await seedInitialAdmin(prisma);
 
   console.log('✅ Seeding complete!');
   console.log(`   ${clients.length} clients (ICA, LFAB, Autoliv, Vattenfall, IKEA, SJ, Region Sthlm, Telia)`);

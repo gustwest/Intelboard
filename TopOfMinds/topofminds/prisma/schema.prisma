@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 model Consultant {
@@ -36,6 +36,25 @@ model Consultant {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   contracts         Contract[]
+  user              User?
+}
+
+// ==================== AUTH ====================
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  name          String?
+  passwordHash  String
+  role          String   @default("CONSULTANT") // SUPERADMIN, ADMIN, CONSULTANT
+  isActive      Boolean  @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Optional link for CONSULTANT role → their consultant profile
+  consultantId  String?  @unique
+  consultant    Consultant? @relation(fields: [consultantId], references: [id], onDelete: SetNull)
 }
 
 model Client {
@@ -86,4 +105,189 @@ model Notification {
 
   contractId String
   contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+}
+
+// ==================== KANBAN ====================
+
+model KanbanIssue {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  status      String   @default("NY") // NY, PRIORITERAD, PAGAR_UTVECKLING, ANTIGRAVITY_VERIFIERAR, REDO_FOR_VERIFIERING, KLAR
+  order       Int      @default(0)
+  creatorName String   @default("Admin")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  images      KanbanImage[]
+  comments    KanbanComment[]
+  agentTasks  AgentTask[]
+}
+
+model KanbanComment {
+  id        String   @id @default(uuid())
+  body      String
+  authorName String  @default("Admin")
+  createdAt DateTime @default(now())
+
+  issueId   String
+  issue     KanbanIssue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  images    KanbanCommentImage[]
+}
+
+model KanbanImage {
+  id      String  @id @default(uuid())
+  url     String
+  caption String?
+  order   Int     @default(0)
+
+  issueId String
+  issue   KanbanIssue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+}
+
+model KanbanCommentImage {
+  id      String  @id @default(uuid())
+  url     String
+  caption String?
+  order   Int     @default(0)
+
+  commentId String
+  comment   KanbanComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+}
+
+// ==================== AGENT ====================
+
+model AgentSession {
+  id             String   @id @default(uuid())
+  title          String
+  claudeSessionId String?
+  pinned         Boolean  @default(false)
+  createdBy      String   @default("admin")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tasks          AgentTask[]
+}
+
+model AgentTask {
+  id        String   @id @default(uuid())
+  prompt    String
+  status    String   @default("PENDING") // PENDING, RUNNING, DONE, FAILED, STOPPED
+  model     String?
+  error     String?
+  response  String?
+  createdBy String   @default("admin")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessionId     String
+  session       AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  kanbanIssueId String?
+  kanbanIssue   KanbanIssue? @relation(fields: [kanbanIssueId], references: [id], onDelete: SetNull)
+
+  logs          AgentLog[]
+}
+
+model AgentLog {
+  id        String   @id @default(uuid())
+  message   String
+  createdAt DateTime @default(now())
+
+  taskId    String
+  task      AgentTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+// ==================== AI INFRASTRUCTURE ====================
+
+model ModelRegistry {
+  id                   String   @id @default(uuid())
+  modelId              String   @unique // e.g. "gemini-3-flash", "claude-sonnet-4-6"
+  provider             String   // GOOGLE | ANTHROPIC | DEEPSEEK | ...
+  displayName          String
+  category             String   @default("BALANCED") // FAST | BALANCED | FRONTIER
+  inputPricePerMTok    Float    // USD per million input tokens
+  outputPricePerMTok   Float    // USD per million output tokens
+  contextWindow        Int      @default(200000)
+  enabled              Boolean  @default(true)
+  capabilities         String?  // JSON: {vision, tools, thinking, ...}
+  notes                String?
+  discoveredAt         DateTime @default(now())
+  lastVerifiedAt       DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  championFor          AISetting[] @relation("ChampionModel")
+  challengerFor        AISetting[] @relation("ChallengerModel")
+  usageLogs            AIUsageLog[]
+}
+
+model AISetting {
+  id                  String   @id @default(uuid())
+  pipelineStep        String   @unique // EMAIL_EXTRACTION | MATCHING | CV_GENERATION | CV_PARSING
+  championModelId     String
+  challengerModelId   String?
+  shadowSampleRate    Int      @default(0)   // 0-100; pct of champion calls shadowed
+  temperature         Float?
+  maxTokens           Int?
+  systemPrompt        String?
+  updatedBy           String?  // userId
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  champion            ModelRegistry  @relation("ChampionModel", fields: [championModelId], references: [modelId], onDelete: Restrict)
+  challenger          ModelRegistry? @relation("ChallengerModel", fields: [challengerModelId], references: [modelId], onDelete: SetNull)
+}
+
+model AIUsageLog {
+  id                String   @id @default(uuid())
+  createdAt         DateTime @default(now())
+  pipelineStep      String
+  modelId           String
+  role              String   @default("CHAMPION") // CHAMPION | CHALLENGER
+  jobId             String?  // groups champion + challenger for same input
+  assignmentId      String?
+  consultantId      String?
+  inputTokens       Int      @default(0)
+  outputTokens      Int      @default(0)
+  estimatedCostUSD  Float    @default(0)
+  latencyMs         Int      @default(0)
+  status            String   @default("SUCCESS") // SUCCESS | ERROR
+  errorMessage      String?
+  userId            String?
+
+  model             ModelRegistry @relation(fields: [modelId], references: [modelId], onDelete: Restrict)
+
+  @@index([createdAt])
+  @@index([pipelineStep, createdAt])
+  @@index([jobId])
+}
+
+model AIShadowResult {
+  id              String   @id @default(uuid())
+  jobId           String
+  pipelineStep    String
+  modelId         String
+  role            String   // CHAMPION | CHALLENGER
+  output          String   // raw model output (JSON-encoded when structured)
+  inputTokens     Int      @default(0)
+  outputTokens    Int      @default(0)
+  latencyMs       Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  comparisons     AIComparison[]
+
+  @@index([jobId])
+}
+
+model AIComparison {
+  id              String   @id @default(uuid())
+  shadowResultId  String
+  reviewerId      String   // user id
+  preference      String   // A_BETTER | B_BETTER | TIE
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  shadowResult    AIShadowResult @relation(fields: [shadowResultId], references: [id], onDelete: Cascade)
 }

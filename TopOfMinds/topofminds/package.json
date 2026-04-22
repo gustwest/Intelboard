@@ -5,15 +5,20 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "agent": "node scripts/agent-poll.mjs"
   },
   "dependencies": {
-    "@prisma/adapter-better-sqlite3": "^7.7.0",
+    "@prisma/adapter-pg": "^7.7.0",
     "@prisma/client": "^7.7.0",
-    "better-sqlite3": "^12.8.0",
+    "bcryptjs": "^3.0.3",
+    "google-auth-library": "^10.6.2",
+    "jose": "^6.2.2",
     "next": "16.2.2",
+    "pg": "^8.20.0",
     "prisma": "^7.7.0",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "zod": "^4.3.6"
   }
 }
