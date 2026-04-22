@@ -151,7 +151,6 @@ export async function runMatchingForAssignment({ assignmentId, consultantIds, us
   const assignment = await prisma.assignment.findUnique({ where: { id: assignmentId } });
   if (!assignment) throw new Error(`Assignment not found: ${assignmentId}`);
 
-  const where = { AND: [{ user: null ? undefined : undefined }] };
   const consultants = await prisma.consultant.findMany({
     where: consultantIds?.length ? { id: { in: consultantIds } } : {},
     orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],

@@ -4,6 +4,7 @@ import { isAdmin, ROLES } from '@/lib/auth/roles';
 
 const PUBLIC_ROUTES = ['/login', '/signup'];
 const ADMIN_ROUTES = ['/admin', '/assignments', '/consultants', '/contracts', '/clients', '/gantt', '/financials', '/notifications'];
+// /admin/users and /admin/ai are covered by /admin prefix
 const CONSULTANT_ROUTES = ['/my'];
 
 function matches(pathname, routes) {

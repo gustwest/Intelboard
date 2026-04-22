@@ -83,6 +83,10 @@ export default async function AIAdminPage() {
           <div className="ai-nav-desc">Tillgängliga modeller, priser, aktivering.</div>
           <div className="ai-nav-meta">{modelsCount} aktiva</div>
         </Link>
+        <Link href="/admin/ai/shadow" className="ai-nav-card">
+          <div className="ai-nav-title">A/B-jämförelser</div>
+          <div className="ai-nav-desc">Champion vs challenger side-by-side, blind review.</div>
+        </Link>
       </div>
     </div>
   );

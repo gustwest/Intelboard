@@ -15,6 +15,7 @@ const ADMIN_LINKS = [
   { href: '/financials', label: 'Ekonomi', icon: '💰', section: 'Planering' },
   { href: '/notifications', label: 'Notifikationer', icon: '🔔', section: 'System', badgeKey: 'notifications' },
   { href: '/admin', label: 'Admin', icon: '⚙️', section: 'System' },
+  { href: '/admin/users', label: 'Användare', icon: '🔐', section: 'System' },
   { href: '/admin/ai', label: 'AI-inställningar', icon: '🤖', section: 'System' },
 ];
 

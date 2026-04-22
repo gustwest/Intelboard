@@ -27,6 +27,25 @@ function scoreColor(score) {
   return 'score-poor';
 }
 
+function downloadCv(cvText, assignment, consultant) {
+  const slug = `${consultant.firstName}-${consultant.lastName}-${assignment.title}`
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  const blob = new Blob([cvText], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${slug || 'cv'}.md`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export default function MatchesPanel({ assignment }) {
   const [threshold, setThreshold] = useState(50);
   const [sortBy, setSortBy] = useState('score');
@@ -213,9 +232,17 @@ function MatchRow({ match, assignment, expanded, onToggle }) {
               {isPending && !cvText ? 'Genererar…' : cvText ? 'Generera nytt CV' : 'Generera skräddarsytt CV'}
             </button>
             {cvText && (
-              <button onClick={() => setShowCv(!showCv)} className="ai-toggle-btn">
-                {showCv ? 'Dölj CV' : 'Visa CV'}
-              </button>
+              <>
+                <button onClick={() => setShowCv(!showCv)} className="ai-toggle-btn">
+                  {showCv ? 'Dölj CV' : 'Visa CV'}
+                </button>
+                <button onClick={() => downloadCv(cvText, assignment, match.consultant)} className="ai-toggle-btn">
+                  Ladda ner (.md)
+                </button>
+                <button onClick={() => navigator.clipboard.writeText(cvText)} className="ai-toggle-btn">
+                  Kopiera
+                </button>
+              </>
             )}
             {match.application && (
               <>
