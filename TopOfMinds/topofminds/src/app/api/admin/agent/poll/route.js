@@ -28,20 +28,37 @@ export async function GET(req) {
   globalThis.__agentHeartbeat.model = searchParams.get('model') || globalThis.__agentHeartbeat.model;
   globalThis.__agentHeartbeat.projectDir = searchParams.get('projectDir') || globalThis.__agentHeartbeat.projectDir;
 
-  // ── 0) Detect hung RUNNING tasks (no log activity for 10 min) ──
+  // ── 0) Detect completed-but-stuck + hung RUNNING tasks ──
   const runningTasks = await prisma.agentTask.findMany({
     where: { status: 'RUNNING' },
     include: {
       logs: {
         orderBy: { createdAt: 'desc' },
-        take: 1,
-        select: { createdAt: true },
+        take: 5,
+        select: { createdAt: true, message: true },
       },
     },
   });
 
   const staleThreshold = new Date(Date.now() - STALE_ACTIVITY_MS);
   for (const rt of runningTasks) {
+    const doneLog = rt.logs.find(l =>
+      l.message.startsWith('✅ Done') || l.message.startsWith('✅ Agent completed') || l.message.startsWith('✅ Task completed')
+    );
+    if (doneLog) {
+      await prisma.agentTask.update({
+        where: { id: rt.id },
+        data: { status: 'DONE' },
+      });
+      await prisma.agentTaskLog.create({
+        data: {
+          taskId: rt.id,
+          message: '🔄 Automatiskt markerad som DONE — agenten rapporterade klart men processen avslutades inte',
+        },
+      });
+      continue;
+    }
+
     const lastActivity = rt.logs[0]?.createdAt || rt.updatedAt;
     if (lastActivity < staleThreshold) {
       await prisma.agentTask.update({
