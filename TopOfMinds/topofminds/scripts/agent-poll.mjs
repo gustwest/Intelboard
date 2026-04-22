@@ -48,7 +48,7 @@ async function poll() {
   }
 }
 
-async function reportResult(taskId, status, response, error, claudeSessionId) {
+async function reportResult(taskId, status, response, error, claudeSessionId, logs) {
   try {
     await fetch(`${API_BASE}/api/admin/agent/poll`, {
       method: 'POST',
@@ -60,6 +60,7 @@ async function reportResult(taskId, status, response, error, claudeSessionId) {
         error,
         claudeSessionId,
         secret: POLL_SECRET,
+        ...(logs ? { logs } : {}),
       }),
     });
   } catch (e) {
@@ -102,6 +103,17 @@ function runClaude(task) {
     let stdout = '';
     let stderr = '';
     let claudeSessionId;
+    let pendingLogs = [];
+    let lastLogFlush = Date.now();
+
+    // Send accumulated logs to server
+    function sendLogs(taskId, logMessages) {
+      fetch(`${API_BASE}/api/admin/agent/poll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, logs: logMessages, secret: POLL_SECRET }),
+      }).catch(e => console.error('[LOGS] Send error:', e.message));
+    }
 
     proc.stdout.on('data', (chunk) => {
       const text = chunk.toString();
@@ -116,24 +128,38 @@ function runClaude(task) {
           if (json.session_id && !claudeSessionId) {
             claudeSessionId = json.session_id;
             console.log(`   🔌 Session: ${claudeSessionId}`);
+            pendingLogs.push(`🔌 Session: ${claudeSessionId}`);
           }
 
           // Log tool usage
           if (json.type === 'assistant' && json.message?.content) {
             for (const block of json.message.content) {
               if (block.type === 'tool_use') {
-                console.log(`   🔧 ${block.name}(${JSON.stringify(block.input).substring(0, 80)})`);
+                const toolMsg = `🔧 ${block.name}(${JSON.stringify(block.input).substring(0, 80)})`;
+                console.log(`   ${toolMsg}`);
+                pendingLogs.push(toolMsg);
               }
               if (block.type === 'text' && block.text) {
-                console.log(`   💬 ${block.text.substring(0, 200)}`);
+                const preview = block.text.substring(0, 200);
+                console.log(`   💬 ${preview}`);
+                pendingLogs.push(preview);
               }
             }
           }
 
           // Log result
           if (json.type === 'result') {
-            console.log(`   💰 Cost: $${json.cost_usd?.toFixed(4) || '?'} | Duration: ${json.duration_ms ? (json.duration_ms / 1000).toFixed(1) + 's' : '?'}`);
+            const costMsg = `💰 Cost: $${json.cost_usd?.toFixed(4) || '?'} | Duration: ${json.duration_ms ? (json.duration_ms / 1000).toFixed(1) + 's' : '?'}`;
+            const doneMsg = `✅ Done · ${json.duration_ms ? (json.duration_ms / 1000).toFixed(1) + 's' : '?'} · $${json.cost_usd?.toFixed(4) || '?'}`;
+            console.log(`   ${costMsg}`);
+            pendingLogs.push(doneMsg);
             if (json.session_id) claudeSessionId = json.session_id;
+
+            // Flush final logs before resolving
+            if (pendingLogs.length > 0) {
+              sendLogs(task.id, [...pendingLogs]);
+              pendingLogs = [];
+            }
 
             // Extract result text immediately
             const resultText = json.result || stdout;
@@ -150,6 +176,13 @@ function runClaude(task) {
           // Not JSON
           if (line.trim()) process.stdout.write(`   ${line}\n`);
         }
+      }
+
+      // Flush logs to server every 5 seconds
+      if (pendingLogs.length > 0 && Date.now() - lastLogFlush > 5000) {
+        sendLogs(task.id, [...pendingLogs]);
+        pendingLogs = [];
+        lastLogFlush = Date.now();
       }
     });
 
@@ -235,14 +268,23 @@ async function main() {
     console.log(`\n🎯 Task received: ${task.id}`);
     console.log(`   Session: ${task.sessionId || 'standalone'}`);
 
+    // Send start log
+    await reportResult(task.id, 'RUNNING', null, null, null, [
+      `🚀 Agent connected — starting task...`,
+      `📂 Working directory: ${PROJECT_DIR}`,
+      `💬 Prompt: ${task.prompt?.substring(0, 200)}`,
+    ]);
+
     const result = await runClaude(task);
 
+    // Send final status with completion log
     await reportResult(
       task.id,
       result.success ? 'DONE' : 'FAILED',
       result.output?.substring(0, 50000),
       result.error,
       result.claudeSessionId,
+      [result.success ? '✅ Agent completed successfully' : `❌ ${result.error || 'Task failed'}`],
     );
 
     console.log(`\n${result.success ? '✅' : '❌'} Task ${task.id} ${result.success ? 'DONE' : 'FAILED'}\n`);

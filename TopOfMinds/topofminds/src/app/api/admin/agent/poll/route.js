@@ -138,7 +138,7 @@ export async function GET(req) {
 
 export async function POST(req) {
   try {
-    const { taskId, status, response, error, claudeSessionId, secret } = await req.json();
+    const { taskId, status, response, error, claudeSessionId, secret, logs } = await req.json();
 
     if (process.env.AGENT_POLL_SECRET && secret !== process.env.AGENT_POLL_SECRET) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -151,15 +151,28 @@ export async function POST(req) {
     // Record heartbeat on result submission too
     globalThis.__agentHeartbeat.lastPoll = new Date().toISOString();
 
+    // Store streaming logs
+    if (Array.isArray(logs) && logs.length > 0) {
+      await prisma.agentTaskLog.createMany({
+        data: logs.map(msg => ({
+          taskId,
+          message: typeof msg === 'string' ? msg : msg.message || String(msg),
+        })),
+      });
+    }
+
+    // Update task status/response if provided
     const data = {};
     if (status) data.status = status;
     if (response) data.response = response;
     if (error) data.error = error;
 
-    await prisma.agentTask.update({
-      where: { id: taskId },
-      data,
-    });
+    if (Object.keys(data).length > 0) {
+      await prisma.agentTask.update({
+        where: { id: taskId },
+        data,
+      });
+    }
 
     // Update claudeSessionId on the session for continuity
     if (claudeSessionId) {
