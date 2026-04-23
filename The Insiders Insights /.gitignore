@@ -3,7 +3,13 @@ node_modules/
 __pycache__/
 *.pyc
 .venv/
+venv/
+backend/venv/
 .env
+
+# SQLite database (per-env, never commit)
+backend/data/insiders.db
+backend/data/insiders.db-journal
 
 # Next.js
 .next/

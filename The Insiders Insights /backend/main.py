@@ -1,17 +1,31 @@
-import os
+import io
 import json
+import math
+import os
+import re
 import uuid
 from datetime import datetime
-from typing import Dict, Any, Optional, List
-from fastapi import FastAPI, UploadFile, File, Form
+from typing import Any, Dict, List, Optional
+
+import numpy as np
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
-from engine.monte_carlo import run_multi_domain_simulation
-from engine.data_analyzer import analyze_all
-from engine.kpi_calculator import calculate_all_kpis
+from sqlalchemy.orm import Session
 
-app = FastAPI(title="The Predictive Network Engine - API")
+import models
+import schemas
+import sources as src_engine
+from db import SessionLocal, get_db, init_db
+from engine.monte_carlo import run_multi_domain_simulation
+from formula import FormulaError, aggregate, evaluate
+
+# ------------------------------------------------------------------
+# App setup
+# ------------------------------------------------------------------
+init_db()
+app = FastAPI(title="The Insiders Insights — API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -21,40 +35,66 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Data Paths ---
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 ISSUES_FILE = os.path.join(DATA_DIR, "issues.json")
 UPLOADS_DIR = os.path.join(DATA_DIR, "uploads")
+CONVOS_FILE = os.path.join(DATA_DIR, "conversations.json")
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
-def load_issues() -> list:
-    if not os.path.exists(ISSUES_FILE):
-        return []
-    with open(ISSUES_FILE, "r") as f:
-        return json.load(f)
 
-def save_issues(issues: list):
-    with open(ISSUES_FILE, "w") as f:
-        json.dump(issues, f, indent=2, default=str)
+# ------------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------------
+class SafeJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            val = float(obj)
+            if math.isnan(val) or math.isinf(val):
+                return 0
+            return val
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        if hasattr(obj, "isoformat"):
+            return obj.isoformat()
+        return super().default(obj)
 
-def load_files_metadata() -> list:
-    path = os.path.join(DATA_DIR, "files.json")
+
+def safe_json_dumps(obj):
+    return json.dumps(obj, cls=SafeJSONEncoder, ensure_ascii=False)
+
+
+def _slugify(name: str) -> str:
+    s = name.lower().strip()
+    s = s.replace("å", "a").replace("ä", "a").replace("ö", "o")
+    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+    return s or uuid.uuid4().hex[:8]
+
+
+def _file_json(path: str, default):
     if not os.path.exists(path):
-        return []
-    with open(path, "r") as f:
+        return default
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def save_files_metadata(files: list):
-    path = os.path.join(DATA_DIR, "files.json")
-    with open(path, "w") as f:
-        json.dump(files, f, indent=2, default=str)
+
+def _save_json(path: str, data):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False, default=str)
 
 
-# ============================================================
-# SIMULATION
-# ============================================================
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "insiders-api"}
 
+
+# ------------------------------------------------------------------
+# SIMULATION (unchanged)
+# ------------------------------------------------------------------
 class SimulationRequest(BaseModel):
     followers: int = 5000
     impressions_90d: int = 50000
@@ -63,9 +103,6 @@ class SimulationRequest(BaseModel):
     lurker_ratio: float = 0.8
     trust_multiplier: float = 1.0
 
-@app.get("/health")
-def health():
-    return {"status": "ok", "service": "insiders-api"}
 
 @app.post("/api/simulate")
 def simulate(req: SimulationRequest):
@@ -76,541 +113,803 @@ def simulate(req: SimulationRequest):
         network_density=req.network_density,
         lurker_ratio=req.lurker_ratio,
         trust_multiplier=req.trust_multiplier,
-        iterations=10000
+        iterations=10000,
     )
     return {"status": "success", "data": result}
 
 
-# ============================================================
-# ANALYTICS
-# ============================================================
-
-ANALYSIS_FILE = os.path.join(DATA_DIR, "analysis_cache.json")
-# Check both parent dir (local dev) and same dir (Docker)
-_parent_insiders = os.path.join(os.path.dirname(__file__), "..", "Insiderskunder")
-_local_insiders = os.path.join(os.path.dirname(__file__), "Insiderskunder")
-INSIDERSKUNDER_DIR = _parent_insiders if os.path.exists(_parent_insiders) else _local_insiders
-
-import math
-import numpy as np
-
-class SafeJSONEncoder(json.JSONEncoder):
-    """Custom encoder that handles numpy types and NaN/Inf."""
-    def default(self, obj):
-        if isinstance(obj, (np.integer,)):
-            return int(obj)
-        if isinstance(obj, (np.floating,)):
-            val = float(obj)
-            if math.isnan(val) or math.isinf(val):
-                return 0
-            return val
-        if isinstance(obj, (np.ndarray,)):
-            return obj.tolist()
-        if isinstance(obj, (np.bool_,)):
-            return bool(obj)
-        if hasattr(obj, 'isoformat'):
-            return obj.isoformat()
-        return super().default(obj)
-
-def safe_json_dumps(obj):
-    return json.dumps(obj, cls=SafeJSONEncoder, ensure_ascii=False)
-
-@app.get("/api/analytics")
-def get_analytics():
-    """Return cached analysis results (or run fresh if none exist)."""
-    if os.path.exists(ANALYSIS_FILE):
-        with open(ANALYSIS_FILE, "r", encoding="utf-8") as f:
-            content = f.read()
-        return Response(content=content, media_type="application/json")
-    
-    # Try auto-analyze if data directory exists
-    if os.path.exists(INSIDERSKUNDER_DIR):
-        return run_analysis_now()
-    
-    return {"error": "No analysis data found. Upload files or run analysis first."}
-
-
-@app.post("/api/analytics/run")
-def run_analysis_now():
-    """Run fresh analysis on Insiderskunder directory."""
-    if not os.path.exists(INSIDERSKUNDER_DIR):
-        return {"error": f"Data directory not found: {INSIDERSKUNDER_DIR}"}
-    
-    result = analyze_all(INSIDERSKUNDER_DIR)
-    
-    # Serialize with safe encoder
-    content = safe_json_dumps(result)
-    
-    # Cache it
-    with open(ANALYSIS_FILE, "w", encoding="utf-8") as f:
-        f.write(content)
-    
-    return Response(content=content, media_type="application/json")
-
-
-# ============================================================
-# SCORECARD (22 Strategic KPIs)
-# ============================================================
-
-@app.get("/api/scorecard")
-def get_scorecard(customer: str = "Malmö stad"):
-    """Calculate all 22 strategic KPIs from existing analytics data."""
-    # Load analytics data (cached or fresh)
-    analytics_data = None
-    if os.path.exists(ANALYSIS_FILE):
-        with open(ANALYSIS_FILE, "r", encoding="utf-8") as f:
-            analytics_data = json.loads(f.read())
-    elif os.path.exists(INSIDERSKUNDER_DIR):
-        analytics_data = analyze_all(INSIDERSKUNDER_DIR)
-        content = safe_json_dumps(analytics_data)
-        with open(ANALYSIS_FILE, "w", encoding="utf-8") as f:
-            f.write(content)
-    
-    if not analytics_data:
-        return {"error": "No analytics data available. Run analysis first."}
-    
-    scorecard = calculate_all_kpis(analytics_data, customer)
-    return Response(
-        content=safe_json_dumps(scorecard),
-        media_type="application/json"
-    )
-
-
-# ============================================================
+# ------------------------------------------------------------------
 # CUSTOMERS
-# ============================================================
-
-CUSTOMERS_FILE = os.path.join(DATA_DIR, "customers.json")
-MODULES_FILE = os.path.join(DATA_DIR, "modules.json")
-KUNDER_DIR = os.path.join(DATA_DIR, "kunder")
-os.makedirs(KUNDER_DIR, exist_ok=True)
-
-def load_customers() -> list:
-    if not os.path.exists(CUSTOMERS_FILE):
-        return []
-    with open(CUSTOMERS_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def save_customers(customers: list):
-    with open(CUSTOMERS_FILE, "w", encoding="utf-8") as f:
-        json.dump(customers, f, indent=2, ensure_ascii=False, default=str)
-
-def load_modules() -> list:
-    if not os.path.exists(MODULES_FILE):
-        return []
-    with open(MODULES_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def save_modules(modules: list):
-    with open(MODULES_FILE, "w", encoding="utf-8") as f:
-        json.dump(modules, f, indent=2, ensure_ascii=False, default=str)
-
-
-class CustomerCreate(BaseModel):
-    name: str
-    logo_emoji: str = "🏢"
-    tags: Optional[List[str]] = []
-    icp: Optional[Dict[str, Any]] = {}
-
-class CustomerUpdate(BaseModel):
-    name: Optional[str] = None
-    logo_emoji: Optional[str] = None
-    tags: Optional[List[str]] = None
-    icp: Optional[Dict[str, Any]] = None
-    active_modules: Optional[List[str]] = None
+# ------------------------------------------------------------------
+def _customer_to_out(c: models.Customer) -> Dict[str, Any]:
+    return {
+        "id": c.id,
+        "slug": c.slug,
+        "name": c.name,
+        "logo_emoji": c.logo_emoji or "🏢",
+        "tags": c.tags_json or [],
+        "icp": c.icp_json or {},
+        "dataset_count": len(c.datasets),
+        "module_count": len(c.modules),
+        "created_at": c.created_at.isoformat() if c.created_at else None,
+    }
 
 
 @app.get("/api/customers")
-def list_customers():
-    customers = load_customers()
-    # Enrich with file counts
-    for c in customers:
-        cdir = os.path.join(KUNDER_DIR, c["id"], "data")
-        if os.path.exists(cdir):
-            c["file_count"] = len([f for f in os.listdir(cdir) if os.path.isfile(os.path.join(cdir, f))])
-        else:
-            c["file_count"] = 0
-    return customers
+def list_customers(db: Session = Depends(get_db)):
+    return [_customer_to_out(c) for c in db.query(models.Customer).order_by(models.Customer.created_at.desc()).all()]
+
 
 @app.post("/api/customers")
-def create_customer(req: CustomerCreate):
-    customers = load_customers()
-    cid = req.name.lower().replace(" ", "-").replace("å", "a").replace("ä", "a").replace("ö", "o")
-    if any(c["id"] == cid for c in customers):
-        return {"error": f"Customer '{cid}' already exists"}
-    customer = {
-        "id": cid,
-        "name": req.name,
-        "logo_emoji": req.logo_emoji,
-        "created_at": datetime.now().isoformat(),
-        "icp": req.icp or {},
-        "tags": req.tags or [],
-        "active_modules": [m["id"] for m in load_modules() if m.get("is_default")],
-    }
-    customers.append(customer)
-    save_customers(customers)
-    os.makedirs(os.path.join(KUNDER_DIR, cid, "data"), exist_ok=True)
-    return customer
+def create_customer(req: schemas.CustomerCreate, db: Session = Depends(get_db)):
+    slug = _slugify(req.name)
+    if db.query(models.Customer).filter_by(slug=slug).first():
+        raise HTTPException(400, f"Customer with slug '{slug}' already exists")
+    c = models.Customer(
+        slug=slug,
+        name=req.name.strip(),
+        logo_emoji=req.logo_emoji or "🏢",
+        tags_json=req.tags or [],
+        icp_json=req.icp or {},
+    )
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    return _customer_to_out(c)
+
 
 @app.get("/api/customers/{customer_id}")
-def get_customer(customer_id: str):
-    customers = load_customers()
-    customer = next((c for c in customers if c["id"] == customer_id), None)
-    if not customer:
-        return {"error": "Customer not found"}
-    # Add file list
-    cdir = os.path.join(KUNDER_DIR, customer_id, "data")
-    customer["files"] = []
-    if os.path.exists(cdir):
-        for f in sorted(os.listdir(cdir)):
-            fp = os.path.join(cdir, f)
-            if os.path.isfile(fp):
-                from engine.data_analyzer import detect_file_type
-                customer["files"].append({
-                    "name": f,
-                    "size": os.path.getsize(fp),
-                    "type": detect_file_type(f),
-                })
-    return customer
+def get_customer(customer_id: str, db: Session = Depends(get_db)):
+    c = db.query(models.Customer).filter(
+        (models.Customer.id == customer_id) | (models.Customer.slug == customer_id)
+    ).first()
+    if not c:
+        raise HTTPException(404, "Customer not found")
+    out = _customer_to_out(c)
+    out["datasets"] = [
+        {
+            "id": d.id,
+            "source_id": d.source_id,
+            "source_key": d.source.key,
+            "source_name": d.source.name,
+            "source_version": d.source_version.version,
+            "original_filename": d.original_filename,
+            "row_count": d.row_count,
+            "uploaded_at": d.uploaded_at.isoformat(),
+        }
+        for d in sorted(c.datasets, key=lambda x: x.uploaded_at, reverse=True)
+    ]
+    return out
 
-@app.put("/api/customers/{customer_id}")
-def update_customer(customer_id: str, req: CustomerUpdate):
-    customers = load_customers()
-    idx = next((i for i, c in enumerate(customers) if c["id"] == customer_id), None)
-    if idx is None:
-        return {"error": "Customer not found"}
-    if req.name is not None: customers[idx]["name"] = req.name
-    if req.logo_emoji is not None: customers[idx]["logo_emoji"] = req.logo_emoji
-    if req.tags is not None: customers[idx]["tags"] = req.tags
-    if req.icp is not None: customers[idx]["icp"] = req.icp
-    if req.active_modules is not None: customers[idx]["active_modules"] = req.active_modules
-    save_customers(customers)
-    return customers[idx]
 
+@app.patch("/api/customers/{customer_id}")
+def update_customer(customer_id: str, req: schemas.CustomerUpdate, db: Session = Depends(get_db)):
+    c = db.query(models.Customer).filter(
+        (models.Customer.id == customer_id) | (models.Customer.slug == customer_id)
+    ).first()
+    if not c:
+        raise HTTPException(404, "Customer not found")
+    if req.name is not None:
+        c.name = req.name.strip()
+    if req.logo_emoji is not None:
+        c.logo_emoji = req.logo_emoji
+    if req.tags is not None:
+        c.tags_json = req.tags
+    if req.icp is not None:
+        c.icp_json = req.icp
+    db.commit()
+    db.refresh(c)
+    return _customer_to_out(c)
+
+
+@app.delete("/api/customers/{customer_id}")
+def delete_customer(customer_id: str, db: Session = Depends(get_db)):
+    c = db.query(models.Customer).filter(
+        (models.Customer.id == customer_id) | (models.Customer.slug == customer_id)
+    ).first()
+    if not c:
+        raise HTTPException(404, "Customer not found")
+    db.delete(c)
+    db.commit()
+    return {"deleted": True}
+
+
+# ------------------------------------------------------------------
+# SOURCES (report types)
+# ------------------------------------------------------------------
+def _source_to_out(s: models.Source) -> Dict[str, Any]:
+    return {
+        "id": s.id,
+        "key": s.key,
+        "name": s.name,
+        "description": s.description or "",
+        "detect_rules": s.detect_rules_json or {},
+        "fields": [
+            {
+                "id": f.id,
+                "key": f.key,
+                "display_name": f.display_name,
+                "data_type": f.data_type,
+                "unit": f.unit or "",
+                "description": f.description or "",
+                "is_active": f.is_active,
+            }
+            for f in s.fields
+        ],
+        "versions": [
+            {
+                "id": v.id,
+                "version": v.version,
+                "is_current": v.is_current,
+                "notes": v.notes or "",
+                "created_at": v.created_at.isoformat(),
+                "mappings": [{"source_field_id": m.source_field_id, "column_name": m.column_name} for m in v.mappings],
+            }
+            for v in sorted(s.versions, key=lambda x: x.version)
+        ],
+        "current_version_id": next((v.id for v in s.versions if v.is_current), None),
+        "created_at": s.created_at.isoformat(),
+    }
+
+
+@app.get("/api/sources")
+def list_sources(db: Session = Depends(get_db)):
+    return [_source_to_out(s) for s in db.query(models.Source).order_by(models.Source.created_at.desc()).all()]
+
+
+@app.post("/api/sources")
+def create_source(req: schemas.SourceCreate, db: Session = Depends(get_db)):
+    key = _slugify(req.key)
+    if db.query(models.Source).filter_by(key=key).first():
+        raise HTTPException(400, f"Source with key '{key}' already exists")
+    source = models.Source(
+        key=key,
+        name=req.name.strip(),
+        description=req.description,
+        detect_rules_json=req.detect_rules or {},
+    )
+    db.add(source)
+    db.flush()
+
+    # Fields
+    field_by_key: Dict[str, models.SourceField] = {}
+    for f_in in req.fields:
+        f = models.SourceField(
+            source_id=source.id,
+            key=_slugify(f_in.key),
+            display_name=f_in.display_name,
+            data_type=f_in.data_type,
+            unit=f_in.unit,
+            description=f_in.description,
+        )
+        db.add(f)
+        db.flush()
+        field_by_key[f.key] = f
+
+    # Version 1
+    version = models.SourceVersion(
+        source_id=source.id,
+        version=1,
+        is_current=True,
+        notes="Initial version",
+    )
+    db.add(version)
+    db.flush()
+
+    for field_key, column_name in (req.initial_column_mapping or {}).items():
+        fkey = _slugify(field_key)
+        if fkey in field_by_key:
+            db.add(models.SourceFieldMapping(
+                source_version_id=version.id,
+                source_field_id=field_by_key[fkey].id,
+                column_name=column_name,
+            ))
+
+    db.commit()
+    db.refresh(source)
+    return _source_to_out(source)
+
+
+@app.get("/api/sources/{source_id}")
+def get_source(source_id: str, db: Session = Depends(get_db)):
+    s = db.query(models.Source).filter(
+        (models.Source.id == source_id) | (models.Source.key == source_id)
+    ).first()
+    if not s:
+        raise HTTPException(404, "Source not found")
+    return _source_to_out(s)
+
+
+@app.patch("/api/sources/{source_id}")
+def update_source(source_id: str, req: schemas.SourceUpdate, db: Session = Depends(get_db)):
+    s = db.query(models.Source).filter(
+        (models.Source.id == source_id) | (models.Source.key == source_id)
+    ).first()
+    if not s:
+        raise HTTPException(404, "Source not found")
+    if req.name is not None:
+        s.name = req.name.strip()
+    if req.description is not None:
+        s.description = req.description
+    if req.detect_rules is not None:
+        s.detect_rules_json = req.detect_rules
+    db.commit()
+    db.refresh(s)
+    return _source_to_out(s)
+
+
+@app.delete("/api/sources/{source_id}")
+def delete_source(source_id: str, db: Session = Depends(get_db)):
+    s = db.query(models.Source).filter(
+        (models.Source.id == source_id) | (models.Source.key == source_id)
+    ).first()
+    if not s:
+        raise HTTPException(404, "Source not found")
+    db.delete(s)
+    db.commit()
+    return {"deleted": True}
+
+
+class SourceFieldAdd(BaseModel):
+    key: str
+    display_name: str
+    data_type: str = "str"
+    unit: str = ""
+    description: str = ""
+
+
+@app.post("/api/sources/{source_id}/fields")
+def add_source_field(source_id: str, req: SourceFieldAdd, db: Session = Depends(get_db)):
+    s = db.query(models.Source).filter(
+        (models.Source.id == source_id) | (models.Source.key == source_id)
+    ).first()
+    if not s:
+        raise HTTPException(404, "Source not found")
+    fkey = _slugify(req.key)
+    if any(f.key == fkey for f in s.fields):
+        raise HTTPException(400, f"Field with key '{fkey}' already exists")
+    f = models.SourceField(
+        source_id=s.id,
+        key=fkey,
+        display_name=req.display_name,
+        data_type=req.data_type,
+        unit=req.unit,
+        description=req.description,
+    )
+    db.add(f)
+    db.commit()
+    db.refresh(s)
+    return _source_to_out(s)
+
+
+@app.delete("/api/sources/{source_id}/fields/{field_id}")
+def delete_source_field(source_id: str, field_id: str, db: Session = Depends(get_db)):
+    f = db.query(models.SourceField).filter_by(id=field_id).first()
+    if not f:
+        raise HTTPException(404, "Field not found")
+    db.delete(f)
+    db.commit()
+    return {"deleted": True}
+
+
+@app.post("/api/sources/{source_id}/versions")
+def create_source_version(source_id: str, req: schemas.SourceVersionIn, db: Session = Depends(get_db)):
+    s = db.query(models.Source).filter(
+        (models.Source.id == source_id) | (models.Source.key == source_id)
+    ).first()
+    if not s:
+        raise HTTPException(404, "Source not found")
+    # Mark current as not current
+    for v in s.versions:
+        v.is_current = False
+    new_version_num = (max((v.version for v in s.versions), default=0) or 0) + 1
+    version = models.SourceVersion(
+        source_id=s.id,
+        version=new_version_num,
+        is_current=True,
+        notes=req.notes,
+    )
+    db.add(version)
+    db.flush()
+    for m in req.mappings:
+        db.add(models.SourceFieldMapping(
+            source_version_id=version.id,
+            source_field_id=m.source_field_id,
+            column_name=m.column_name,
+        ))
+    db.commit()
+    db.refresh(s)
+    return _source_to_out(s)
+
+
+# ------------------------------------------------------------------
+# UPLOAD + DETECT
+# ------------------------------------------------------------------
 @app.post("/api/customers/{customer_id}/upload")
-async def upload_customer_file(customer_id: str, file: UploadFile = File(...)):
-    cdir = os.path.join(KUNDER_DIR, customer_id, "data")
-    os.makedirs(cdir, exist_ok=True)
-    filepath = os.path.join(cdir, file.filename)
-    content = await file.read()
-    with open(filepath, "wb") as f:
-        f.write(content)
-    from engine.data_analyzer import detect_file_type
-    return {"filename": file.filename, "size": len(content), "type": detect_file_type(file.filename)}
+async def upload_to_customer(customer_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    c = db.query(models.Customer).filter(
+        (models.Customer.id == customer_id) | (models.Customer.slug == customer_id)
+    ).first()
+    if not c:
+        raise HTTPException(404, "Customer not found")
 
-@app.get("/api/customers/{customer_id}/files")
-def list_customer_files(customer_id: str):
-    cdir = os.path.join(KUNDER_DIR, customer_id, "data")
-    if not os.path.exists(cdir):
-        return []
-    from engine.data_analyzer import detect_file_type
-    files = []
-    for f in sorted(os.listdir(cdir)):
-        fp = os.path.join(cdir, f)
-        if os.path.isfile(fp):
-            files.append({"name": f, "size": os.path.getsize(fp), "type": detect_file_type(f)})
-    return files
+    raw = await file.read()
+    df = src_engine.parse_file(raw, file.filename or "upload.csv")
+    if df is None:
+        raise HTTPException(422, "Kunde inte läsa filen. Stöd: CSV, TSV, XLS, XLSX.")
 
-@app.get("/api/customers/{customer_id}/reports/{filename}")
-def read_report(customer_id: str, filename: str, page: int = 1, page_size: int = 100):
-    """Read a CSV/XLS file and return structured table data with pagination."""
-    from engine.data_analyzer import detect_file_type, read_utf16_csv, read_xls_file, read_xlsx_file
-    cdir = os.path.join(KUNDER_DIR, customer_id, "data")
-    filepath = os.path.join(cdir, filename)
-    
-    # Also check global Insiderskunder
-    if not os.path.exists(filepath):
-        alt = os.path.join(os.path.dirname(__file__), "..", "Insiderskunder", filename)
-        if os.path.exists(alt):
-            filepath = alt
-        else:
-            return {"error": f"File not found: {filename}"}
-    
-    ftype = detect_file_type(filename)
-    rows = []
-    columns = []
-    
-    try:
-        lower = filename.lower()
-        if lower.endswith('.csv'):
-            # Try UTF-16 first (LinkedIn Campaign Manager), then UTF-8
-            parsed = read_utf16_csv(filepath, skip_header_rows=7)
-            if not parsed:
-                # Try standard CSV
-                try:
-                    import codecs
-                    with open(filepath, 'r', encoding='utf-8-sig') as f:
-                        reader = csv.DictReader(f)
-                        parsed = [{k.strip(): (v.strip() if v else '') for k, v in row.items() if k} for row in reader]
-                except:
-                    with open(filepath, 'r', encoding='latin-1') as f:
-                        reader = csv.DictReader(f)
-                        parsed = [{k.strip(): (v.strip() if v else '') for k, v in row.items() if k} for row in reader]
-            rows = parsed
-        elif lower.endswith('.xls'):
-            df = read_xls_file(filepath)
-            if df is not None:
-                df = df.fillna('')
-                rows = df.to_dict('records')
-        elif lower.endswith('.xlsx'):
-            df = read_xlsx_file(filepath)
-            if df is not None:
-                df = df.fillna('')
-                rows = df.to_dict('records')
-    except Exception as e:
-        return {"error": f"Failed to parse file: {str(e)}"}
-    
-    # Apply edits overlay if exists
-    edits_file = os.path.join(KUNDER_DIR, customer_id, f"edits_{filename}.json")
-    edits = {}
-    if os.path.exists(edits_file):
-        with open(edits_file, "r", encoding="utf-8") as f:
-            edits = json.load(f)
-        for key, val in edits.items():
-            row_idx, col = key.split("::", 1)
-            row_idx = int(row_idx)
-            if 0 <= row_idx < len(rows):
-                rows[row_idx][col] = val
-    
-    if rows:
-        columns = list(rows[0].keys()) if rows else []
-    
-    total = len(rows)
+    status, source, version, detail = src_engine.detect_source(db, df, file.filename or "")
+
+    if status == "no_match":
+        return {
+            "status": "no_match",
+            "message": "Kunde inte känna igen filen som en registrerad Source. Skapa en ny Source först.",
+            "file_columns": detail.get("file_columns", []),
+            "row_count": int(len(df)),
+        }
+
+    if status == "drift":
+        return {
+            "status": "drift",
+            "message": f"Filen liknar '{source.name}' men kolumnerna matchar inte nuvarande version fullt ut. Skapa en ny SourceVersion?",
+            "source_id": source.id,
+            "source_key": source.key,
+            "source_version_id": version.id,
+            "source_version": version.version,
+            "matched_columns": detail.get("matched_columns", []),
+            "missing_columns": detail.get("missing_columns", []),
+            "extra_columns": detail.get("extra_columns", []),
+            "row_count": int(len(df)),
+        }
+
+    # matched → ingest
+    dataset = src_engine.ingest_dataset(db, c, source, version, df, file.filename or "upload", raw)
+    return {
+        "status": "matched",
+        "dataset_id": dataset.id,
+        "source_id": source.id,
+        "source_key": source.key,
+        "source_version": version.version,
+        "original_filename": dataset.original_filename,
+        "row_count": dataset.row_count,
+        "matched_columns": detail.get("matched_columns", []),
+        "missing_columns": detail.get("missing_columns", []),
+        "extra_columns": detail.get("extra_columns", []),
+    }
+
+
+class ForceIngestReq(BaseModel):
+    source_version_id: str
+
+
+@app.post("/api/customers/{customer_id}/upload/force")
+async def force_ingest(customer_id: str, source_version_id: str = Form(...), file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Ingest a file against an explicitly chosen SourceVersion (used after 'drift' warning)."""
+    c = db.query(models.Customer).filter(
+        (models.Customer.id == customer_id) | (models.Customer.slug == customer_id)
+    ).first()
+    if not c:
+        raise HTTPException(404, "Customer not found")
+
+    version = db.query(models.SourceVersion).filter_by(id=source_version_id).first()
+    if not version:
+        raise HTTPException(404, "SourceVersion not found")
+
+    raw = await file.read()
+    df = src_engine.parse_file(raw, file.filename or "upload.csv")
+    if df is None:
+        raise HTTPException(422, "Kunde inte läsa filen.")
+    dataset = src_engine.ingest_dataset(db, c, version.source, version, df, file.filename or "upload", raw)
+    return {"status": "ingested", "dataset_id": dataset.id, "row_count": dataset.row_count}
+
+
+# ------------------------------------------------------------------
+# DATASETS
+# ------------------------------------------------------------------
+@app.get("/api/datasets/{dataset_id}")
+def get_dataset(dataset_id: str, page: int = 1, page_size: int = 100, db: Session = Depends(get_db)):
+    d = db.query(models.Dataset).filter_by(id=dataset_id).first()
+    if not d:
+        raise HTTPException(404, "Dataset not found")
+
+    # Columns: fields used in this source's current version mappings
+    fields = [mapping.source_field for mapping in d.source_version.mappings]
+    columns = [
+        {"field_id": f.id, "key": f.key, "display_name": f.display_name, "unit": f.unit or "", "data_type": f.data_type}
+        for f in fields
+    ]
+    field_id_to_key = {f.id: f.key for f in fields}
+
+    total = len(d.rows)
+    rows_sorted = sorted(d.rows, key=lambda r: r.row_index)
     start = (page - 1) * page_size
     end = start + page_size
-    paged_rows = rows[start:end]
-    
-    # Convert all values to strings for consistent frontend handling
-    for row in paged_rows:
-        for k in row:
-            row[k] = str(row[k]) if row[k] is not None else ''
-    
-    return Response(content=safe_json_dumps({
-        "filename": filename,
-        "file_type": ftype,
+    page_rows = rows_sorted[start:end]
+
+    out_rows = []
+    for r in page_rows:
+        out = {}
+        for field_id, value in (r.values_json or {}).items():
+            key = field_id_to_key.get(field_id)
+            if key:
+                out[key] = value
+        out_rows.append(out)
+
+    return {
+        "dataset_id": d.id,
+        "customer_id": d.customer_id,
+        "source_id": d.source_id,
+        "source_key": d.source.key,
+        "source_name": d.source.name,
+        "source_version": d.source_version.version,
+        "original_filename": d.original_filename,
+        "row_count": d.row_count,
         "columns": columns,
-        "total_rows": total,
+        "rows": out_rows,
         "page": page,
         "page_size": page_size,
+        "total": total,
         "total_pages": (total + page_size - 1) // page_size,
-        "rows": paged_rows,
-        "edits_count": len(edits),
-    }), media_type="application/json")
+    }
 
 
-@app.put("/api/customers/{customer_id}/reports/{filename}/edit")
-def edit_report_cell(customer_id: str, filename: str, row_index: int = 0, column: str = "", value: str = ""):
-    """Save an edit to a specific cell. Stored as overlay, original file untouched."""
-    edits_file = os.path.join(KUNDER_DIR, customer_id, f"edits_{filename}.json")
-    edits = {}
-    if os.path.exists(edits_file):
-        with open(edits_file, "r", encoding="utf-8") as f:
-            edits = json.load(f)
-    edits[f"{row_index}::{column}"] = value
-    with open(edits_file, "w", encoding="utf-8") as f:
-        json.dump(edits, f, indent=2, ensure_ascii=False)
-    return {"status": "saved", "edits_count": len(edits)}
+@app.delete("/api/datasets/{dataset_id}")
+def delete_dataset(dataset_id: str, db: Session = Depends(get_db)):
+    d = db.query(models.Dataset).filter_by(id=dataset_id).first()
+    if not d:
+        raise HTTPException(404, "Dataset not found")
+    db.delete(d)
+    db.commit()
+    return {"deleted": True}
 
 
-@app.delete("/api/customers/{customer_id}/reports/{filename}/edits")
-def reset_report_edits(customer_id: str, filename: str):
-    """Remove all edits and revert to original file data."""
-    edits_file = os.path.join(KUNDER_DIR, customer_id, f"edits_{filename}.json")
-    if os.path.exists(edits_file):
-        os.remove(edits_file)
-    return {"status": "reset"}
-
-
-@app.get("/api/customers/{customer_id}/analytics")
-def get_customer_analytics(customer_id: str):
-    """Run analysis on a specific customer's data."""
-    cdir = os.path.join(KUNDER_DIR, customer_id, "data")
-    cache = os.path.join(KUNDER_DIR, customer_id, "analysis_cache.json")
-    if os.path.exists(cache):
-        with open(cache, "r", encoding="utf-8") as f:
-            return Response(content=f.read(), media_type="application/json")
-    if not os.path.exists(cdir) or not os.listdir(cdir):
-        # Fallback to global Insiderskunder
-        if os.path.exists(ANALYSIS_FILE):
-            with open(ANALYSIS_FILE, "r", encoding="utf-8") as f:
-                return Response(content=f.read(), media_type="application/json")
-        return {"error": "No data files found"}
-    result = analyze_all(cdir)
-    content = safe_json_dumps(result)
-    with open(cache, "w", encoding="utf-8") as f:
-        f.write(content)
-    return Response(content=content, media_type="application/json")
-
-@app.get("/api/customers/{customer_id}/scorecard")
-def get_customer_scorecard(customer_id: str):
-    """Calculate all active modules for a specific customer."""
-    customers = load_customers()
-    customer = next((c for c in customers if c["id"] == customer_id), None)
-    if not customer:
-        return {"error": "Customer not found"}
-    # Load analytics (customer-specific or global)
-    analytics_data = None
-    cache = os.path.join(KUNDER_DIR, customer_id, "analysis_cache.json")
-    if os.path.exists(cache):
-        with open(cache, "r", encoding="utf-8") as f:
-            analytics_data = json.loads(f.read())
-    elif os.path.exists(ANALYSIS_FILE):
-        with open(ANALYSIS_FILE, "r", encoding="utf-8") as f:
-            analytics_data = json.loads(f.read())
-    if not analytics_data:
-        return {"error": "No analytics data. Upload files and run analysis first."}
-    scorecard = calculate_all_kpis(analytics_data, customer["name"])
-    return Response(content=safe_json_dumps(scorecard), media_type="application/json")
-
-
-# ============================================================
+# ------------------------------------------------------------------
 # MODULES
-# ============================================================
+# ------------------------------------------------------------------
+def _module_to_out(m: models.Module) -> Dict[str, Any]:
+    return {
+        "id": m.id,
+        "customer_id": m.customer_id,
+        "name": m.name,
+        "abbr": m.abbr,
+        "category": m.category,
+        "description": m.description or "",
+        "formula": m.formula_json or {},
+        "thresholds": m.thresholds_json or {},
+        "visualization": m.visualization,
+        "insight_template": m.insight_template or "",
+        "inverted": m.inverted,
+        "field_refs": [
+            {
+                "id": ref.id,
+                "source_field_id": ref.source_field_id,
+                "alias": ref.alias,
+                "field_key": ref.source_field.key,
+                "field_display_name": ref.source_field.display_name,
+                "source_id": ref.source_field.source_id,
+                "source_key": ref.source_field.source.key,
+            }
+            for ref in m.field_refs
+        ],
+        "created_at": m.created_at.isoformat(),
+    }
 
-class ModuleCreate(BaseModel):
-    name: str
-    abbr: str
-    category: str = "custom"
-    description: str = ""
-    data_sources: List[str] = []
-    requires_icp: bool = False
-    formula: Dict[str, Any] = {}
-    thresholds: Dict[str, float] = {}
-    inverted: bool = False
-    visualization: Dict[str, str] = {"primary": "gauge", "secondary": "bar"}
-    insight_template: str = ""
-
-class ModuleUpdate(BaseModel):
-    name: Optional[str] = None
-    abbr: Optional[str] = None
-    category: Optional[str] = None
-    description: Optional[str] = None
-    thresholds: Optional[Dict[str, float]] = None
-    visualization: Optional[Dict[str, str]] = None
-    insight_template: Optional[str] = None
 
 @app.get("/api/modules")
-def list_modules():
-    return load_modules()
+def list_modules(customer_id: Optional[str] = None, include_global: bool = True, db: Session = Depends(get_db)):
+    q = db.query(models.Module)
+    if customer_id:
+        c = db.query(models.Customer).filter(
+            (models.Customer.id == customer_id) | (models.Customer.slug == customer_id)
+        ).first()
+        if not c:
+            raise HTTPException(404, "Customer not found")
+        if include_global:
+            q = q.filter((models.Module.customer_id == c.id) | (models.Module.customer_id.is_(None)))
+        else:
+            q = q.filter(models.Module.customer_id == c.id)
+    return [_module_to_out(m) for m in q.order_by(models.Module.created_at.desc()).all()]
+
 
 @app.post("/api/modules")
-def create_module(req: ModuleCreate):
-    modules = load_modules()
-    mid = req.abbr.lower().replace(" ", "_")
-    if any(m["id"] == mid for m in modules):
-        return {"error": f"Module '{mid}' already exists"}
-    module = {
-        "id": mid,
-        "name": req.name,
-        "abbr": req.abbr,
-        "category": req.category,
-        "description": req.description,
-        "data_sources": req.data_sources,
-        "requires_icp": req.requires_icp,
-        "formula": req.formula,
-        "thresholds": req.thresholds,
-        "inverted": req.inverted,
-        "visualization": req.visualization,
-        "insight_template": req.insight_template,
-        "is_default": False,
-        "created_at": datetime.now().isoformat(),
-    }
-    modules.append(module)
-    save_modules(modules)
-    return module
+def create_module(req: schemas.ModuleCreate, db: Session = Depends(get_db)):
+    customer_id = None
+    if req.customer_id:
+        c = db.query(models.Customer).filter(
+            (models.Customer.id == req.customer_id) | (models.Customer.slug == req.customer_id)
+        ).first()
+        if not c:
+            raise HTTPException(404, "Customer not found")
+        customer_id = c.id
+
+    m = models.Module(
+        customer_id=customer_id,
+        name=req.name,
+        abbr=req.abbr,
+        category=req.category,
+        description=req.description,
+        formula_json=req.formula or {},
+        thresholds_json=req.thresholds or {},
+        visualization=req.visualization,
+        insight_template=req.insight_template,
+        inverted=req.inverted,
+    )
+    db.add(m)
+    db.flush()
+    for ref in req.field_refs:
+        db.add(models.ModuleFieldRef(
+            module_id=m.id,
+            source_field_id=ref.source_field_id,
+            alias=ref.alias,
+        ))
+    db.commit()
+    db.refresh(m)
+    return _module_to_out(m)
+
 
 @app.get("/api/modules/{module_id}")
-def get_module(module_id: str):
-    modules = load_modules()
-    m = next((m for m in modules if m["id"] == module_id), None)
-    return m if m else {"error": "Module not found"}
+def get_module(module_id: str, db: Session = Depends(get_db)):
+    m = db.query(models.Module).filter_by(id=module_id).first()
+    if not m:
+        raise HTTPException(404, "Module not found")
+    return _module_to_out(m)
 
-@app.put("/api/modules/{module_id}")
-def update_module(module_id: str, req: ModuleUpdate):
-    modules = load_modules()
-    idx = next((i for i, m in enumerate(modules) if m["id"] == module_id), None)
-    if idx is None:
-        return {"error": "Module not found"}
-    for field in ["name", "abbr", "category", "description", "thresholds", "visualization", "insight_template"]:
-        val = getattr(req, field, None)
+
+@app.patch("/api/modules/{module_id}")
+def update_module(module_id: str, req: schemas.ModuleUpdate, db: Session = Depends(get_db)):
+    m = db.query(models.Module).filter_by(id=module_id).first()
+    if not m:
+        raise HTTPException(404, "Module not found")
+    for field in ("name", "abbr", "category", "description", "visualization", "insight_template", "inverted"):
+        val = getattr(req, field)
         if val is not None:
-            modules[idx][field] = val
-    save_modules(modules)
-    return modules[idx]
+            setattr(m, field, val)
+    if req.formula is not None:
+        m.formula_json = req.formula
+    if req.thresholds is not None:
+        m.thresholds_json = req.thresholds
+    if req.field_refs is not None:
+        # replace all field_refs
+        for ref in list(m.field_refs):
+            db.delete(ref)
+        db.flush()
+        for ref in req.field_refs:
+            db.add(models.ModuleFieldRef(
+                module_id=m.id,
+                source_field_id=ref.source_field_id,
+                alias=ref.alias,
+            ))
+    db.commit()
+    db.refresh(m)
+    return _module_to_out(m)
+
 
 @app.delete("/api/modules/{module_id}")
-def delete_module(module_id: str):
-    modules = load_modules()
-    modules = [m for m in modules if m["id"] != module_id]
-    save_modules(modules)
-    return {"status": "deleted"}
+def delete_module(module_id: str, db: Session = Depends(get_db)):
+    m = db.query(models.Module).filter_by(id=module_id).first()
+    if not m:
+        raise HTTPException(404, "Module not found")
+    db.delete(m)
+    db.commit()
+    return {"deleted": True}
 
 
-# ============================================================
-# COMPARE (Cross-customer)
-# ============================================================
+# ---- Evaluation ----
+class ModuleEvaluateReq(BaseModel):
+    customer_ids: List[str]  # one or many (for global view)
+    # Optional per-alias aggregation override: { alias: "sum" | "avg" | ... }
+    aggregations: Optional[Dict[str, str]] = None
 
-@app.get("/api/compare")
-def compare_customers(customer_ids: str = "", module_ids: str = ""):
-    """Compare KPIs across multiple customers."""
-    cids = [c.strip() for c in customer_ids.split(",") if c.strip()]
-    mids = [m.strip() for m in module_ids.split(",") if m.strip()]
-    if len(cids) < 2:
-        return {"error": "Provide at least 2 customer IDs (comma-separated)"}
-    customers = load_customers()
-    results = {}
-    for cid in cids:
-        customer = next((c for c in customers if c["id"] == cid), None)
-        if not customer:
+
+def _evaluate_for_customer(db: Session, module: models.Module, customer: models.Customer, default_aggs: Dict[str, str]) -> Dict[str, Any]:
+    # For each field_ref, find all dataset rows that contain that field for this customer
+    context: Dict[str, Any] = {}
+    aliases_used = {}
+    for ref in module.field_refs:
+        field_id = ref.source_field_id
+        values: List[Any] = []
+        for dataset in customer.datasets:
+            if dataset.source_id == ref.source_field.source_id:
+                for row in dataset.rows:
+                    if field_id in (row.values_json or {}):
+                        values.append(row.values_json[field_id])
+        agg = default_aggs.get(ref.alias) or (module.formula_json or {}).get("aggregations", {}).get(ref.alias) or (module.formula_json or {}).get("aggregation", "sum")
+        try:
+            context[ref.alias] = aggregate(values, agg)
+        except FormulaError as e:
+            context[ref.alias] = 0
+        aliases_used[ref.alias] = {"source_field_id": field_id, "value_count": len(values), "aggregation": agg}
+
+    expression = (module.formula_json or {}).get("expression", "")
+    value: Any = None
+    error: Optional[str] = None
+    if expression:
+        try:
+            value = evaluate(expression, context)
+        except FormulaError as e:
+            error = str(e)
+    else:
+        # If no expression, return sum of all aliases (simple default)
+        value = sum(context.values()) if context else 0
+
+    return {
+        "customer_id": customer.id,
+        "customer_name": customer.name,
+        "customer_slug": customer.slug,
+        "value": value,
+        "context": context,
+        "aliases": aliases_used,
+        "error": error,
+    }
+
+
+@app.post("/api/modules/{module_id}/evaluate")
+def evaluate_module(module_id: str, req: ModuleEvaluateReq, db: Session = Depends(get_db)):
+    m = db.query(models.Module).filter_by(id=module_id).first()
+    if not m:
+        raise HTTPException(404, "Module not found")
+
+    default_aggs = req.aggregations or {}
+    results = []
+    for cid in req.customer_ids:
+        c = db.query(models.Customer).filter(
+            (models.Customer.id == cid) | (models.Customer.slug == cid)
+        ).first()
+        if not c:
             continue
-        # Load analytics
-        analytics_data = None
-        cache = os.path.join(KUNDER_DIR, cid, "analysis_cache.json")
-        if os.path.exists(cache):
-            with open(cache, "r", encoding="utf-8") as f:
-                analytics_data = json.loads(f.read())
-        elif os.path.exists(ANALYSIS_FILE):
-            with open(ANALYSIS_FILE, "r", encoding="utf-8") as f:
-                analytics_data = json.loads(f.read())
-        if analytics_data:
-            sc = calculate_all_kpis(analytics_data, customer["name"])
-            if mids:
-                sc["all_kpis"] = [k for k in sc.get("all_kpis", []) if k["abbr"].lower() in mids]
-            results[cid] = {
-                "name": customer["name"],
-                "emoji": customer.get("logo_emoji", "🏢"),
-                "overall_score": sc.get("overall_score", 0),
-                "kpis": {k["abbr"]: k for k in sc.get("all_kpis", [])},
-            }
-    return {"customers": results, "compared_at": datetime.now().isoformat()}
+        results.append(_evaluate_for_customer(db, m, c, default_aggs))
+
+    return {
+        "module_id": m.id,
+        "module_name": m.name,
+        "module_abbr": m.abbr,
+        "expression": (m.formula_json or {}).get("expression", ""),
+        "results": results,
+    }
 
 
-# ============================================================
-# KANBAN / ISSUES
-# ============================================================
+# ------------------------------------------------------------------
+# REPORTS (saved views)
+# ------------------------------------------------------------------
+def _report_to_out(r: models.Report) -> Dict[str, Any]:
+    return {
+        "id": r.id,
+        "customer_id": r.customer_id,
+        "name": r.name,
+        "description": r.description or "",
+        "config": r.config_json or {},
+        "created_at": r.created_at.isoformat(),
+    }
 
+
+@app.get("/api/reports")
+def list_reports(customer_id: Optional[str] = None, db: Session = Depends(get_db)):
+    q = db.query(models.Report)
+    if customer_id:
+        c = db.query(models.Customer).filter(
+            (models.Customer.id == customer_id) | (models.Customer.slug == customer_id)
+        ).first()
+        if c:
+            q = q.filter((models.Report.customer_id == c.id) | (models.Report.customer_id.is_(None)))
+    return [_report_to_out(r) for r in q.order_by(models.Report.created_at.desc()).all()]
+
+
+@app.post("/api/reports")
+def create_report(req: schemas.ReportCreate, db: Session = Depends(get_db)):
+    customer_id = None
+    if req.customer_id:
+        c = db.query(models.Customer).filter(
+            (models.Customer.id == req.customer_id) | (models.Customer.slug == req.customer_id)
+        ).first()
+        if c:
+            customer_id = c.id
+    r = models.Report(
+        customer_id=customer_id,
+        name=req.name,
+        description=req.description,
+        config_json=req.config or {},
+    )
+    db.add(r)
+    db.commit()
+    db.refresh(r)
+    return _report_to_out(r)
+
+
+@app.get("/api/reports/{report_id}")
+def get_report(report_id: str, db: Session = Depends(get_db)):
+    r = db.query(models.Report).filter_by(id=report_id).first()
+    if not r:
+        raise HTTPException(404, "Report not found")
+    return _report_to_out(r)
+
+
+@app.patch("/api/reports/{report_id}")
+def update_report(report_id: str, req: schemas.ReportUpdate, db: Session = Depends(get_db)):
+    r = db.query(models.Report).filter_by(id=report_id).first()
+    if not r:
+        raise HTTPException(404, "Report not found")
+    if req.name is not None:
+        r.name = req.name
+    if req.description is not None:
+        r.description = req.description
+    if req.config is not None:
+        r.config_json = req.config
+    db.commit()
+    db.refresh(r)
+    return _report_to_out(r)
+
+
+@app.delete("/api/reports/{report_id}")
+def delete_report(report_id: str, db: Session = Depends(get_db)):
+    r = db.query(models.Report).filter_by(id=report_id).first()
+    if not r:
+        raise HTTPException(404, "Report not found")
+    db.delete(r)
+    db.commit()
+    return {"deleted": True}
+
+
+class ReportRunReq(BaseModel):
+    customer_ids: Optional[List[str]] = None  # overrides config
+    module_ids: Optional[List[str]] = None
+
+
+@app.post("/api/reports/{report_id}/run")
+def run_report(report_id: str, req: ReportRunReq, db: Session = Depends(get_db)):
+    r = db.query(models.Report).filter_by(id=report_id).first()
+    if not r:
+        raise HTTPException(404, "Report not found")
+    cfg = r.config_json or {}
+    customer_ids = req.customer_ids or cfg.get("customer_ids") or ([r.customer_id] if r.customer_id else [])
+    module_ids = req.module_ids or cfg.get("module_ids") or []
+
+    modules = db.query(models.Module).filter(models.Module.id.in_(module_ids)).all() if module_ids else []
+
+    panels = []
+    for m in modules:
+        evaluate_req = ModuleEvaluateReq(customer_ids=customer_ids)
+        result = evaluate_module(m.id, evaluate_req, db)
+        panels.append(result)
+
+    return {
+        "report_id": r.id,
+        "name": r.name,
+        "customer_ids": customer_ids,
+        "module_ids": module_ids,
+        "panels": panels,
+        "ran_at": datetime.utcnow().isoformat(),
+    }
+
+
+# ------------------------------------------------------------------
+# KANBAN / ISSUES (kept — collaboration feature)
+# ------------------------------------------------------------------
 class IssueCreate(BaseModel):
     title: str
     description: str
     images: Optional[List[Dict[str, str]]] = None
+
 
 class IssueUpdate(BaseModel):
     status: Optional[str] = None
     title: Optional[str] = None
     description: Optional[str] = None
 
+
 class CommentCreate(BaseModel):
     body: str
     author: str = "Team Member"
     images: Optional[List[Dict[str, str]]] = None
 
+
 @app.get("/api/issues")
 def list_issues():
-    return load_issues()
+    return _file_json(ISSUES_FILE, [])
+
 
 @app.post("/api/issues")
 def create_issue(req: IssueCreate):
-    issues = load_issues()
+    issues = _file_json(ISSUES_FILE, [])
     issue = {
         "id": str(uuid.uuid4()),
         "title": req.title.strip(),
@@ -623,35 +922,35 @@ def create_issue(req: IssueCreate):
         "updatedAt": datetime.utcnow().isoformat(),
     }
     issues.insert(0, issue)
-    save_issues(issues)
+    _save_json(ISSUES_FILE, issues)
     return issue
+
 
 @app.patch("/api/issues/{issue_id}")
 def update_issue(issue_id: str, req: IssueUpdate):
-    issues = load_issues()
+    issues = _file_json(ISSUES_FILE, [])
     for issue in issues:
         if issue["id"] == issue_id:
-            if req.status is not None:
-                issue["status"] = req.status
-            if req.title is not None:
-                issue["title"] = req.title.strip()
-            if req.description is not None:
-                issue["description"] = req.description.strip()
+            if req.status is not None: issue["status"] = req.status
+            if req.title is not None: issue["title"] = req.title.strip()
+            if req.description is not None: issue["description"] = req.description.strip()
             issue["updatedAt"] = datetime.utcnow().isoformat()
-            save_issues(issues)
+            _save_json(ISSUES_FILE, issues)
             return issue
-    return {"error": "Not found"}, 404
+    raise HTTPException(404, "Issue not found")
+
 
 @app.delete("/api/issues/{issue_id}")
 def delete_issue(issue_id: str):
-    issues = load_issues()
+    issues = _file_json(ISSUES_FILE, [])
     issues = [i for i in issues if i["id"] != issue_id]
-    save_issues(issues)
+    _save_json(ISSUES_FILE, issues)
     return {"deleted": True}
+
 
 @app.post("/api/issues/{issue_id}/comments")
 def add_comment(issue_id: str, req: CommentCreate):
-    issues = load_issues()
+    issues = _file_json(ISSUES_FILE, [])
     for issue in issues:
         if issue["id"] == issue_id:
             comment = {
@@ -663,34 +962,31 @@ def add_comment(issue_id: str, req: CommentCreate):
             }
             issue["comments"].append(comment)
             issue["updatedAt"] = datetime.utcnow().isoformat()
-            save_issues(issues)
+            _save_json(ISSUES_FILE, issues)
             return comment
-    return {"error": "Not found"}, 404
+    raise HTTPException(404, "Issue not found")
 
 
-# ============================================================
-# FILE UPLOADS
-# ============================================================
+# ------------------------------------------------------------------
+# FILE UPLOADS (generic admin file store — kept)
+# ------------------------------------------------------------------
+FILES_META = os.path.join(DATA_DIR, "files.json")
+
 
 @app.get("/api/files")
 def list_files():
-    return load_files_metadata()
+    return _file_json(FILES_META, [])
+
 
 @app.post("/api/files")
-async def upload_file(
-    file: UploadFile = File(...),
-    name: str = Form(""),
-    category: str = Form("Övrigt"),
-):
+async def upload_file(file: UploadFile = File(...), name: str = Form(""), category: str = Form("Övrigt")):
     file_id = str(uuid.uuid4())
     ext = os.path.splitext(file.filename or "file")[1]
     stored_name = f"{file_id}{ext}"
     filepath = os.path.join(UPLOADS_DIR, stored_name)
-
     content = await file.read()
     with open(filepath, "wb") as f:
         f.write(content)
-
     meta = {
         "id": file_id,
         "originalName": file.filename,
@@ -701,62 +997,53 @@ async def upload_file(
         "contentType": file.content_type,
         "uploadedAt": datetime.utcnow().isoformat(),
     }
-
-    files = load_files_metadata()
+    files = _file_json(FILES_META, [])
     files.insert(0, meta)
-    save_files_metadata(files)
+    _save_json(FILES_META, files)
     return meta
+
 
 @app.get("/api/files/{file_id}/download")
 def download_file(file_id: str):
-    files = load_files_metadata()
+    files = _file_json(FILES_META, [])
     meta = next((f for f in files if f["id"] == file_id), None)
     if not meta:
         return Response(status_code=404, content="Not found")
-
     filepath = os.path.join(UPLOADS_DIR, meta["storedName"])
     if not os.path.exists(filepath):
         return Response(status_code=404, content="File not found on disk")
-
     with open(filepath, "rb") as f:
         content = f.read()
-
     return Response(
         content=content,
         media_type=meta.get("contentType", "application/octet-stream"),
-        headers={"Content-Disposition": f'attachment; filename="{meta["originalName"]}"'}
+        headers={"Content-Disposition": f'attachment; filename="{meta["originalName"]}"'},
     )
+
 
 @app.delete("/api/files/{file_id}")
 def delete_file(file_id: str):
-    files = load_files_metadata()
+    files = _file_json(FILES_META, [])
     meta = next((f for f in files if f["id"] == file_id), None)
     if meta:
         filepath = os.path.join(UPLOADS_DIR, meta["storedName"])
         if os.path.exists(filepath):
             os.remove(filepath)
     files = [f for f in files if f["id"] != file_id]
-    save_files_metadata(files)
+    _save_json(FILES_META, files)
     return {"deleted": True}
 
 
-# ============================================================
-# CHAT — Conversations, Messages, Reactions, WebSocket
-# ============================================================
-from fastapi import WebSocket, WebSocketDisconnect
-
-CONVOS_FILE = os.path.join(DATA_DIR, "conversations.json")
-
-# --- WebSocket manager ---
+# ------------------------------------------------------------------
+# CHAT (kept — WebSocket + message history)
+# ------------------------------------------------------------------
 class ConnectionManager:
     def __init__(self):
-        self.active: Dict[str, list] = {}  # convo_id -> [ws, ...]
+        self.active: Dict[str, list] = {}
 
     async def connect(self, ws: WebSocket, convo_id: str):
         await ws.accept()
-        if convo_id not in self.active:
-            self.active[convo_id] = []
-        self.active[convo_id].append(ws)
+        self.active.setdefault(convo_id, []).append(ws)
 
     def disconnect(self, ws: WebSocket, convo_id: str):
         if convo_id in self.active:
@@ -766,20 +1053,11 @@ class ConnectionManager:
         for ws in self.active.get(convo_id, []):
             try:
                 await ws.send_json(data)
-            except:
+            except Exception:
                 pass
 
+
 manager = ConnectionManager()
-
-def load_convos() -> list:
-    if not os.path.exists(CONVOS_FILE):
-        return []
-    with open(CONVOS_FILE, "r") as f:
-        return json.load(f)
-
-def save_convos(convos: list):
-    with open(CONVOS_FILE, "w") as f:
-        json.dump(convos, f, indent=2, default=str)
 
 
 class ConvoCreate(BaseModel):
@@ -787,25 +1065,26 @@ class ConvoCreate(BaseModel):
     members: List[str]
     emoji: Optional[str] = "💬"
 
+
 class MsgSend(BaseModel):
     body: str
     author: str
     images: Optional[List[str]] = None
+
 
 class ReactionToggle(BaseModel):
     emoji: str
     user: str
 
 
-# --- Conversations ---
 @app.get("/api/conversations")
 def list_conversations():
-    return load_convos()
+    return _file_json(CONVOS_FILE, [])
 
 
 @app.post("/api/conversations")
 def create_conversation(req: ConvoCreate):
-    convos = load_convos()
+    convos = _file_json(CONVOS_FILE, [])
     convo = {
         "id": str(uuid.uuid4()),
         "name": req.name.strip(),
@@ -816,35 +1095,31 @@ def create_conversation(req: ConvoCreate):
         "updatedAt": datetime.utcnow().isoformat(),
     }
     convos.insert(0, convo)
-    save_convos(convos)
+    _save_json(CONVOS_FILE, convos)
     return convo
 
 
 @app.delete("/api/conversations/{convo_id}")
 def delete_conversation(convo_id: str):
-    convos = load_convos()
+    convos = _file_json(CONVOS_FILE, [])
     convos = [c for c in convos if c["id"] != convo_id]
-    save_convos(convos)
+    _save_json(CONVOS_FILE, convos)
     return {"deleted": True}
 
 
-# --- Messages ---
 @app.get("/api/conversations/{convo_id}/messages")
 def get_messages(convo_id: str):
-    convos = load_convos()
+    convos = _file_json(CONVOS_FILE, [])
     convo = next((c for c in convos if c["id"] == convo_id), None)
-    if not convo:
-        return []
-    return convo.get("messages", [])
+    return convo.get("messages", []) if convo else []
 
 
 @app.post("/api/conversations/{convo_id}/messages")
 async def send_msg(convo_id: str, req: MsgSend):
-    convos = load_convos()
+    convos = _file_json(CONVOS_FILE, [])
     convo = next((c for c in convos if c["id"] == convo_id), None)
     if not convo:
         return Response(status_code=404, content="Conversation not found")
-
     message = {
         "id": str(uuid.uuid4()),
         "body": req.body.strip(),
@@ -856,34 +1131,24 @@ async def send_msg(convo_id: str, req: MsgSend):
     }
     convo["messages"].append(message)
     convo["updatedAt"] = datetime.utcnow().isoformat()
-    save_convos(convos)
-
-    # Broadcast to WebSocket listeners
+    _save_json(CONVOS_FILE, convos)
     await manager.broadcast(convo_id, {"type": "new_message", "message": message})
     return message
 
 
 @app.post("/api/conversations/{convo_id}/upload")
-async def convo_upload(
-    convo_id: str,
-    file: UploadFile = File(...),
-    author: str = Form(""),
-    body: str = Form(""),
-):
-    convos = load_convos()
+async def convo_upload(convo_id: str, file: UploadFile = File(...), author: str = Form(""), body: str = Form("")):
+    convos = _file_json(CONVOS_FILE, [])
     convo = next((c for c in convos if c["id"] == convo_id), None)
     if not convo:
         return Response(status_code=404, content="Conversation not found")
-
     file_id = str(uuid.uuid4())
     ext = os.path.splitext(file.filename or "file")[1]
     stored_name = f"chat_{file_id}{ext}"
     filepath = os.path.join(UPLOADS_DIR, stored_name)
-
     content = await file.read()
     with open(filepath, "wb") as f:
         f.write(content)
-
     attachment = {
         "id": file_id,
         "name": file.filename,
@@ -891,7 +1156,6 @@ async def convo_upload(
         "size": len(content),
         "contentType": file.content_type,
     }
-
     message = {
         "id": str(uuid.uuid4()),
         "body": body.strip(),
@@ -903,15 +1167,14 @@ async def convo_upload(
     }
     convo["messages"].append(message)
     convo["updatedAt"] = datetime.utcnow().isoformat()
-    save_convos(convos)
-
+    _save_json(CONVOS_FILE, convos)
     await manager.broadcast(convo_id, {"type": "new_message", "message": message})
     return message
 
 
 @app.get("/api/conversations/attachment/{file_id}")
 def download_chat_attachment(file_id: str):
-    convos = load_convos()
+    convos = _file_json(CONVOS_FILE, [])
     for convo in convos:
         for msg in convo.get("messages", []):
             for att in msg.get("attachments", []):
@@ -929,18 +1192,15 @@ def download_chat_attachment(file_id: str):
     return Response(status_code=404, content="Attachment not found")
 
 
-# --- Reactions ---
 @app.post("/api/conversations/{convo_id}/messages/{msg_id}/react")
 async def toggle_reaction(convo_id: str, msg_id: str, req: ReactionToggle):
-    convos = load_convos()
+    convos = _file_json(CONVOS_FILE, [])
     convo = next((c for c in convos if c["id"] == convo_id), None)
     if not convo:
         return Response(status_code=404, content="Not found")
-
     msg = next((m for m in convo.get("messages", []) if m["id"] == msg_id), None)
     if not msg:
         return Response(status_code=404, content="Message not found")
-
     reactions = msg.get("reactions", [])
     existing = next((r for r in reactions if r["emoji"] == req.emoji and r["user"] == req.user), None)
     if existing:
@@ -948,19 +1208,16 @@ async def toggle_reaction(convo_id: str, msg_id: str, req: ReactionToggle):
     else:
         reactions.append({"emoji": req.emoji, "user": req.user})
     msg["reactions"] = reactions
-    save_convos(convos)
-
+    _save_json(CONVOS_FILE, convos)
     await manager.broadcast(convo_id, {"type": "reaction", "messageId": msg_id, "reactions": reactions})
     return {"reactions": reactions}
 
 
-# --- WebSocket ---
 @app.websocket("/ws/chat/{convo_id}")
 async def ws_chat(ws: WebSocket, convo_id: str):
     await manager.connect(ws, convo_id)
     try:
         while True:
-            await ws.receive_text()  # keep alive
+            await ws.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(ws, convo_id)
-

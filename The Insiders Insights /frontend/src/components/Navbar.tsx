@@ -26,10 +26,10 @@ export default function Navbar() {
 
   const navLinks = [
     { href: '/', label: 'Engine', emoji: '⚡' },
-    { href: '/analytics', label: 'Analytics', emoji: '📊' },
     { href: '/kunder', label: 'Kunder', emoji: '🏢' },
+    { href: '/sources', label: 'Källor', emoji: '📥' },
     { href: '/moduler', label: 'Moduler', emoji: '📐' },
-    { href: '/compare', label: 'Jämför', emoji: '⚖️' },
+    { href: '/rapporter', label: 'Rapporter', emoji: '📊' },
     { href: '/admin', label: 'Admin', emoji: '📋' },
   ];
 

@@ -1,185 +1,262 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-const C = { bg:'#0a0a0f', card:'#12121a', border:'rgba(255,255,255,0.06)', accent:'#a855f7', success:'#22c55e', warning:'#f59e0b', danger:'#ef4444', text:'#f8fafc', muted:'rgba(255,255,255,0.45)', dim:'rgba(255,255,255,0.25)' };
-const CAT_COLORS: Record<string,{emoji:string,color:string}> = { demografi:{emoji:'🎯',color:'#3b82f6'}, kampanj:{emoji:'💰',color:'#f59e0b'}, konkurrenter:{emoji:'⚔️',color:'#a855f7'}, innehåll:{emoji:'📝',color:'#22c55e'}, beslutstratt:{emoji:'🔄',color:'#06b6d4'}, video:{emoji:'🎬',color:'#ec4899'}, målgrupp:{emoji:'👥',color:'#f97316'}, budget:{emoji:'🏦',color:'#ef4444'}, custom:{emoji:'⚙️',color:'#6366f1'} };
-const VIZ_LABELS: Record<string,string> = { gauge:'🔵 Gauge', bar:'📊 Stapel', line:'📈 Linje', radar:'🕸️ Radar', pie:'🥧 Tårta', table:'📋 Tabell', funnel:'🔻 Tratt', heatmap:'🟧 Heatmap', kpi_card:'🃏 KPI-kort', stacked_bar:'📊 Staplad' };
+const C = {
+  bg: '#0a0a0f', card: '#12121a', border: 'rgba(255,255,255,0.08)',
+  accent: '#a855f7', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
+  text: '#f8fafc', muted: 'rgba(255,255,255,0.5)', dim: 'rgba(255,255,255,0.3)',
+};
 
-export default function ModulerPage() {
-  const [modules, setModules] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all');
-  const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ name: '', abbr: '', category: 'custom', description: '', visualization: { primary: 'gauge', secondary: 'bar' }, thresholds: { critical_below: 0.35, good_above: 0.60 }, insight_template: '', data_sources: [] as string[] });
+type Field = { id: string; key: string; display_name: string; data_type: string; unit: string };
+type Source = { id: string; key: string; name: string; fields: Field[] };
+type FieldRef = { id: string; source_field_id: string; alias: string; field_key: string; field_display_name: string; source_id: string; source_key: string };
+type Module = { id: string; customer_id: string | null; name: string; abbr: string; category: string; description: string; formula: any; thresholds: any; visualization: string; insight_template: string; inverted: boolean; field_refs: FieldRef[] };
+type Customer = { id: string; name: string; logo_emoji: string };
 
-  useEffect(() => { fetchModules(); }, []);
+export default function ModulesPage() {
+  const [modules, setModules] = useState<Module[]>([]);
+  const [sources, setSources] = useState<Source[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [open, setOpen] = useState<Module | null>(null);
+  const [creating, setCreating] = useState(false);
 
-  async function fetchModules() {
-    try { const res = await fetch(`${API}/api/modules`); setModules(await res.json()); }
-    catch (e) { console.error(e); }
-    finally { setLoading(false); }
+  async function refresh() {
+    const [ms, ss, cs] = await Promise.all([
+      fetch(`${API}/api/modules`).then(r => r.json()),
+      fetch(`${API}/api/sources`).then(r => r.json()),
+      fetch(`${API}/api/customers`).then(r => r.json()),
+    ]);
+    setModules(ms); setSources(ss); setCustomers(cs);
   }
-
-  async function createModule() {
-    if (!form.name || !form.abbr) return;
-    await fetch(`${API}/api/modules`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    });
-    setShowCreate(false);
-    setForm({ name: '', abbr: '', category: 'custom', description: '', visualization: { primary: 'gauge', secondary: 'bar' }, thresholds: { critical_below: 0.35, good_above: 0.60 }, insight_template: '', data_sources: [] });
-    fetchModules();
-  }
-
-  const categories = ['all', ...Array.from(new Set(modules.map(m => m.category)))];
-  const filtered = filter === 'all' ? modules : modules.filter(m => m.category === filter);
+  useEffect(() => { refresh(); }, []);
 
   return (
-    <main style={{ maxWidth: '1400px', margin: '0 auto', padding: '24px 24px 60px', fontFamily: "'Inter', system-ui, sans-serif" }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+    <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px 60px', fontFamily: "'Inter', system-ui, sans-serif", color: C.text }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>📐 Modulbibliotek</h1>
-          <p style={{ fontSize: '0.8125rem', color: C.muted, margin: '4px 0 0' }}>{modules.length} moduler • {modules.filter(m => m.is_default).length} standard</p>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>📐 Moduler</h1>
+          <p style={{ fontSize: '0.8125rem', color: C.muted, margin: '4px 0 0' }}>
+            Beräkningar som binder mot fält från en eller flera datakällor. Globala mallar eller kund-specifika.
+          </p>
         </div>
-        <button onClick={() => setShowCreate(!showCreate)} style={{
-          padding: '10px 20px', borderRadius: '12px', fontSize: '0.875rem', fontWeight: 700,
-          background: 'linear-gradient(135deg, #a855f7, #6366f1)', color: '#fff', border: 'none', cursor: 'pointer',
-        }}>+ Ny modul</button>
+        <button onClick={() => setCreating(true)} style={btn('accent')} disabled={sources.length === 0}>
+          + Ny modul
+        </button>
       </div>
 
-      {/* Create form */}
-      {showCreate && (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: '16px', padding: '24px', marginBottom: '24px' }}>
-          <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 16px' }}>Skapa ny modul</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 160px', gap: '12px', marginBottom: '12px' }}>
-            <div>
-              <label style={{ fontSize: '0.6875rem', color: C.dim, display: 'block', marginBottom: '4px' }}>Namn</label>
-              <input value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="T.ex. Custom Conversion Index"
-                style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', fontSize: '0.875rem', background: 'rgba(255,255,255,0.04)', border: `1px solid ${C.border}`, color: C.text }} />
-            </div>
-            <div>
-              <label style={{ fontSize: '0.6875rem', color: C.dim, display: 'block', marginBottom: '4px' }}>Förkortning</label>
-              <input value={form.abbr} onChange={e => setForm({...form, abbr: e.target.value.toUpperCase()})} placeholder="CCI"
-                style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', fontSize: '0.875rem', background: 'rgba(255,255,255,0.04)', border: `1px solid ${C.border}`, color: C.text, fontFamily: 'monospace' }} />
-            </div>
-            <div>
-              <label style={{ fontSize: '0.6875rem', color: C.dim, display: 'block', marginBottom: '4px' }}>Kategori</label>
-              <select value={form.category} onChange={e => setForm({...form, category: e.target.value})}
-                style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', fontSize: '0.875rem', background: C.card, border: `1px solid ${C.border}`, color: C.text }}>
-                {Object.entries(CAT_COLORS).map(([k, v]) => <option key={k} value={k}>{v.emoji} {k}</option>)}
-              </select>
-            </div>
-          </div>
-          <div style={{ marginBottom: '12px' }}>
-            <label style={{ fontSize: '0.6875rem', color: C.dim, display: 'block', marginBottom: '4px' }}>Beskrivning</label>
-            <input value={form.description} onChange={e => setForm({...form, description: e.target.value})}
-              style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', fontSize: '0.875rem', background: 'rgba(255,255,255,0.04)', border: `1px solid ${C.border}`, color: C.text }} />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 120px 120px', gap: '12px', marginBottom: '16px' }}>
-            <div>
-              <label style={{ fontSize: '0.6875rem', color: C.dim, display: 'block', marginBottom: '4px' }}>Primär visualisering</label>
-              <select value={form.visualization.primary} onChange={e => setForm({...form, visualization: {...form.visualization, primary: e.target.value}})}
-                style={{ width: '100%', padding: '10px', borderRadius: '10px', fontSize: '0.8125rem', background: C.card, border: `1px solid ${C.border}`, color: C.text }}>
-                {Object.entries(VIZ_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: '0.6875rem', color: C.dim, display: 'block', marginBottom: '4px' }}>Sekundär visualisering</label>
-              <select value={form.visualization.secondary} onChange={e => setForm({...form, visualization: {...form.visualization, secondary: e.target.value}})}
-                style={{ width: '100%', padding: '10px', borderRadius: '10px', fontSize: '0.8125rem', background: C.card, border: `1px solid ${C.border}`, color: C.text }}>
-                {Object.entries(VIZ_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: '0.6875rem', color: C.dim, display: 'block', marginBottom: '4px' }}>🔴 Kritisk &lt;</label>
-              <input type="number" step="0.01" value={form.thresholds.critical_below} onChange={e => setForm({...form, thresholds: {...form.thresholds, critical_below: parseFloat(e.target.value)}})}
-                style={{ width: '100%', padding: '10px', borderRadius: '10px', fontSize: '0.875rem', background: 'rgba(255,255,255,0.04)', border: `1px solid ${C.border}`, color: C.text }} />
-            </div>
-            <div>
-              <label style={{ fontSize: '0.6875rem', color: C.dim, display: 'block', marginBottom: '4px' }}>🟢 Bra &gt;</label>
-              <input type="number" step="0.01" value={form.thresholds.good_above} onChange={e => setForm({...form, thresholds: {...form.thresholds, good_above: parseFloat(e.target.value)}})}
-                style={{ width: '100%', padding: '10px', borderRadius: '10px', fontSize: '0.875rem', background: 'rgba(255,255,255,0.04)', border: `1px solid ${C.border}`, color: C.text }} />
-            </div>
-          </div>
-          <button onClick={createModule} style={{
-            padding: '10px 28px', borderRadius: '10px', fontSize: '0.875rem', fontWeight: 700,
-            background: C.accent, color: '#fff', border: 'none', cursor: 'pointer',
-          }}>Skapa modul</button>
+      {sources.length === 0 && (
+        <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 12, padding: 16, marginBottom: 20, fontSize: 13 }}>
+          💡 Du behöver minst en datakälla innan du kan skapa moduler. <a href="/sources" style={{ color: C.accent }}>Gå till Källor →</a>
         </div>
       )}
 
-      {/* Category filter */}
-      <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', overflowX: 'auto', paddingBottom: '4px' }}>
-        {categories.map(cat => {
-          const meta = CAT_COLORS[cat] || { emoji: '📊', color: C.accent };
-          return (
-            <button key={cat} onClick={() => setFilter(cat)} style={{
-              padding: '6px 14px', borderRadius: '10px', fontSize: '0.8125rem', fontWeight: 600, whiteSpace: 'nowrap',
-              background: filter === cat ? `${meta.color}15` : 'rgba(255,255,255,0.02)',
-              border: filter === cat ? `1px solid ${meta.color}40` : `1px solid ${C.border}`,
-              color: filter === cat ? meta.color : C.muted, cursor: 'pointer',
-            }}>
-              {cat === 'all' ? `📊 Alla (${modules.length})` : `${meta.emoji} ${cat} (${modules.filter(m => m.category === cat).length})`}
-            </button>
-          );
-        })}
+      {(creating || open) && (
+        <ModuleEditor
+          module={open}
+          sources={sources}
+          customers={customers}
+          onClose={() => { setOpen(null); setCreating(false); }}
+          onSaved={() => { setOpen(null); setCreating(false); refresh(); }}
+        />
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
+        {modules.map(m => (
+          <div key={m.id} onClick={() => setOpen(m)} style={{
+            background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 18, cursor: 'pointer',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+              <h3 style={{ margin: 0, fontSize: 15 }}>{m.name}</h3>
+              <span style={{ fontSize: 11, color: C.accent, fontWeight: 700, padding: '2px 8px', borderRadius: 12, background: 'rgba(168,85,247,0.1)' }}>{m.abbr}</span>
+            </div>
+            <div style={{ fontSize: 11, color: C.dim, marginBottom: 10 }}>
+              {m.customer_id ? customers.find(c => c.id === m.customer_id)?.name || 'Kund' : 'Global mall'} · {m.category}
+            </div>
+            {m.description && <p style={{ fontSize: 12, color: C.muted, margin: '0 0 10px' }}>{m.description}</p>}
+            <div style={{ fontSize: 12, color: C.muted, fontFamily: 'monospace', background: 'rgba(0,0,0,0.25)', padding: 8, borderRadius: 8 }}>
+              {m.formula?.expression || '—'}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+              {m.field_refs.map(ref => (
+                <span key={ref.id} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 10, background: 'rgba(168,85,247,0.08)', color: C.accent }}>
+                  {ref.alias}={ref.field_key}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+        {modules.length === 0 && (
+          <div style={{ color: C.muted, fontSize: 13, padding: 40, textAlign: 'center', gridColumn: '1 / -1' }}>
+            Inga moduler ännu.
+          </div>
+        )}
       </div>
+    </main>
+  );
+}
 
-      {/* Module grid */}
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '60px', color: C.muted }}>Laddar moduler...</div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '14px' }}>
-          {filtered.map((m: any) => {
-            const catMeta = CAT_COLORS[m.category] || { emoji: '📊', color: C.accent };
+function ModuleEditor({ module, sources, customers, onClose, onSaved }: { module: Module | null; sources: Source[]; customers: Customer[]; onClose: () => void; onSaved: () => void }) {
+  const isNew = !module;
+  const [name, setName] = useState(module?.name || '');
+  const [abbr, setAbbr] = useState(module?.abbr || '');
+  const [category, setCategory] = useState(module?.category || 'custom');
+  const [description, setDescription] = useState(module?.description || '');
+  const [expression, setExpression] = useState(module?.formula?.expression || '');
+  const [aggregations, setAggregations] = useState<Record<string, string>>(module?.formula?.aggregations || {});
+  const [customerId, setCustomerId] = useState<string | null>(module?.customer_id || null);
+  const [fieldRefs, setFieldRefs] = useState<{ source_field_id: string; alias: string }[]>(
+    module?.field_refs.map(r => ({ source_field_id: r.source_field_id, alias: r.alias })) || []
+  );
+  const [testResults, setTestResults] = useState<any>(null);
+
+  const allFields = useMemo(() => sources.flatMap(s => s.fields.map(f => ({ ...f, source_id: s.id, source_name: s.name, source_key: s.key }))), [sources]);
+  const fieldById = Object.fromEntries(allFields.map(f => [f.id, f]));
+
+  function addFieldRef() {
+    const candidate = allFields.find(f => !fieldRefs.some(r => r.source_field_id === f.id));
+    if (!candidate) return;
+    setFieldRefs([...fieldRefs, { source_field_id: candidate.id, alias: candidate.key }]);
+  }
+  function removeFieldRef(idx: number) {
+    setFieldRefs(fieldRefs.filter((_, i) => i !== idx));
+  }
+  function updateRef(idx: number, patch: Partial<{ source_field_id: string; alias: string }>) {
+    setFieldRefs(fieldRefs.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  }
+
+  async function save() {
+    const body = {
+      customer_id: customerId,
+      name, abbr, category, description,
+      formula: { expression, aggregations },
+      field_refs: fieldRefs,
+      visualization: 'gauge',
+    };
+    const url = isNew ? `${API}/api/modules` : `${API}/api/modules/${module!.id}`;
+    const method = isNew ? 'POST' : 'PATCH';
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!res.ok) { alert('Sparning misslyckades: ' + (await res.text())); return; }
+    onSaved();
+  }
+
+  async function remove() {
+    if (!module) return;
+    if (!confirm(`Radera modulen "${module.name}"?`)) return;
+    await fetch(`${API}/api/modules/${module.id}`, { method: 'DELETE' });
+    onSaved();
+  }
+
+  async function testEval() {
+    if (!module) { alert('Spara modulen först för att testa.'); return; }
+    const cids = customerId ? [customerId] : customers.slice(0, 3).map(c => c.id);
+    if (cids.length === 0) { alert('Ingen kund tillgänglig att testa mot.'); return; }
+    const res = await fetch(`${API}/api/modules/${module.id}/evaluate`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customer_ids: cids }),
+    });
+    setTestResults(await res.json());
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, padding: 20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24, width: '95%', maxWidth: 900, maxHeight: '92vh', overflow: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+          <h2 style={{ margin: 0 }}>{isNew ? 'Ny modul' : module!.name}</h2>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {!isNew && <button onClick={remove} style={btn('danger')}>Ta bort</button>}
+            <button onClick={onClose} style={btn('ghost')}>Stäng</button>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
+          <div><label style={lbl}>Namn *</label><input value={name} onChange={e => setName(e.target.value)} style={inp} /></div>
+          <div><label style={lbl}>Förkortning *</label><input value={abbr} onChange={e => setAbbr(e.target.value)} style={inp} /></div>
+          <div><label style={lbl}>Kategori</label><input value={category} onChange={e => setCategory(e.target.value)} style={inp} /></div>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={lbl}>Beskrivning</label>
+          <input value={description} onChange={e => setDescription(e.target.value)} style={inp} />
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={lbl}>Scope</label>
+          <select value={customerId || ''} onChange={e => setCustomerId(e.target.value || null)} style={inp}>
+            <option value="">Global mall (alla kunder)</option>
+            {customers.map(c => <option key={c.id} value={c.id}>{c.logo_emoji} {c.name} (kund-specifik)</option>)}
+          </select>
+        </div>
+
+        {/* Field refs */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+            <label style={lbl}>Datapunkter (fält som modulen läser)</label>
+            <button onClick={addFieldRef} style={btn('ghost')}>+ Lägg till fält</button>
+          </div>
+          {fieldRefs.length === 0 && <div style={{ color: C.muted, fontSize: 12, padding: 12, border: `1px dashed ${C.border}`, borderRadius: 10 }}>Inga fält valda. Lägg till minst ett för att kunna skriva en formel.</div>}
+          {fieldRefs.map((ref, i) => {
+            const f = fieldById[ref.source_field_id];
             return (
-              <div key={m.id} style={{
-                background: C.card, border: `1px solid ${C.border}`, borderRadius: '14px',
-                padding: '20px', position: 'relative', overflow: 'hidden', transition: 'all 0.2s',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = `${catMeta.color}40`; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = C.border; }}
-              >
-                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '2px', background: `linear-gradient(90deg, transparent, ${catMeta.color}60, transparent)` }} />
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '0.6875rem', fontWeight: 800, color: catMeta.color, fontFamily: 'monospace', letterSpacing: '0.05em' }}>{m.abbr}</span>
-                    {m.is_default && <span style={{ fontSize: '0.5625rem', padding: '1px 6px', borderRadius: '4px', background: 'rgba(255,255,255,0.06)', color: C.dim }}>STANDARD</span>}
-                  </div>
-                  <span style={{ fontSize: '0.6875rem', padding: '2px 8px', borderRadius: '12px', background: `${catMeta.color}12`, color: catMeta.color, fontWeight: 600 }}>
-                    {catMeta.emoji} {m.category}
-                  </span>
-                </div>
-
-                <h3 style={{ fontSize: '0.875rem', fontWeight: 700, margin: '0 0 6px' }}>{m.name}</h3>
-                <p style={{ fontSize: '0.75rem', color: C.muted, margin: '0 0 12px', lineHeight: 1.4 }}>{m.description}</p>
-
-                {/* Visualization + Data sources */}
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
-                  {m.visualization && (
-                    <span style={{ fontSize: '0.625rem', padding: '2px 6px', borderRadius: '6px', background: 'rgba(255,255,255,0.04)', color: C.dim }}>
-                      {VIZ_LABELS[m.visualization.primary] || m.visualization.primary}
-                    </span>
-                  )}
-                  {m.data_sources?.map((ds: string) => (
-                    <span key={ds} style={{ fontSize: '0.625rem', padding: '2px 6px', borderRadius: '6px', background: 'rgba(59,130,246,0.08)', color: '#3b82f6' }}>
-                      {ds}
-                    </span>
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 140px 80px', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+                <select value={ref.source_field_id} onChange={e => updateRef(i, { source_field_id: e.target.value })} style={inp}>
+                  {sources.map(s => (
+                    <optgroup key={s.id} label={s.name}>
+                      {s.fields.map(ff => <option key={ff.id} value={ff.id}>{ff.key} — {ff.display_name}</option>)}
+                    </optgroup>
                   ))}
-                </div>
-
-                {/* Thresholds */}
-                <div style={{ display: 'flex', gap: '12px', fontSize: '0.6875rem', color: C.dim }}>
-                  <span>🔴 {m.inverted ? '>' : '<'} {String(Object.values(m.thresholds || {})[0] ?? '')}</span>
-                  <span>🟢 {m.inverted ? '<' : '>'} {String(Object.values(m.thresholds || {})[1] ?? '')}</span>
-                </div>
+                </select>
+                <input value={ref.alias} onChange={e => updateRef(i, { alias: e.target.value })} placeholder="alias" style={{ ...inp, fontFamily: 'monospace' }} />
+                <select value={aggregations[ref.alias] || 'sum'} onChange={e => setAggregations({ ...aggregations, [ref.alias]: e.target.value })} style={inp}>
+                  <option value="sum">sum</option><option value="avg">avg</option><option value="min">min</option><option value="max">max</option><option value="count">count</option><option value="latest">latest</option>
+                </select>
+                <button onClick={() => removeFieldRef(i)} style={btn('ghost')}>✕</button>
               </div>
             );
           })}
+          <div style={{ fontSize: 11, color: C.dim, marginTop: 4 }}>
+            <b>alias</b> är variabelnamnet du använder i formeln. <b>aggregation</b> styr hur raderna reduceras till ett värde.
+          </div>
         </div>
-      )}
-    </main>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={lbl}>Formel (expression)</label>
+          <input value={expression} onChange={e => setExpression(e.target.value)} placeholder="t.ex. if_(imp > 0, clk / imp * 100, 0)" style={{ ...inp, fontFamily: 'monospace' }} />
+          <div style={{ fontSize: 11, color: C.dim, marginTop: 4 }}>
+            Stöd: + - * / % ** · min/max/abs/round · if_(cond, a, b) · jämförelser · aliasen ovan används som variabler.
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <button onClick={save} style={btn('accent')}>{isNew ? 'Skapa modul' : 'Spara ändringar'}</button>
+          {!isNew && <button onClick={testEval} style={btn('ghost')}>Testa mot kunder</button>}
+        </div>
+
+        {testResults && (
+          <div style={{ background: 'rgba(0,0,0,0.25)', border: `1px solid ${C.border}`, borderRadius: 10, padding: 14, fontFamily: 'monospace', fontSize: 12 }}>
+            <div style={{ color: C.muted, marginBottom: 8 }}>Testresultat:</div>
+            {testResults.results.map((r: any) => (
+              <div key={r.customer_id} style={{ marginBottom: 6 }}>
+                <b style={{ color: C.text }}>{r.customer_name}</b>: <span style={{ color: C.accent }}>{typeof r.value === 'number' ? r.value.toLocaleString(undefined, { maximumFractionDigits: 3 }) : String(r.value)}</span>
+                <span style={{ color: C.dim, marginLeft: 10 }}>
+                  {Object.entries(r.context || {}).map(([k, v]) => `${k}=${v}`).join(' · ')}
+                </span>
+                {r.error && <span style={{ color: C.danger, marginLeft: 10 }}>⚠ {r.error}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
+}
+
+const lbl: React.CSSProperties = { display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 };
+const inp: React.CSSProperties = { width: '100%', padding: '9px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, color: C.text, fontSize: 13, boxSizing: 'border-box', fontFamily: 'inherit' };
+
+function btn(kind: 'accent' | 'ghost' | 'danger'): React.CSSProperties {
+  const base: React.CSSProperties = { padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: '1px solid transparent', fontFamily: 'inherit' };
+  if (kind === 'accent') return { ...base, background: C.accent, color: '#fff' };
+  if (kind === 'danger') return { ...base, background: 'rgba(239,68,68,0.12)', color: C.danger, borderColor: 'rgba(239,68,68,0.3)' };
+  return { ...base, background: 'transparent', color: C.muted, borderColor: C.border };
 }

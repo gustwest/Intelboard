@@ -111,11 +111,11 @@ export default function KunderPage() {
                 <div style={{ display: 'flex', gap: '16px', marginBottom: '12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ fontSize: '0.75rem', color: C.muted }}>📁</span>
-                    <span style={{ fontSize: '0.8125rem', fontWeight: 600 }}>{c.file_count || 0} filer</span>
+                    <span style={{ fontSize: '0.8125rem', fontWeight: 600 }}>{c.dataset_count || 0} dataset</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ fontSize: '0.75rem', color: C.muted }}>🎯</span>
-                    <span style={{ fontSize: '0.8125rem', fontWeight: 600 }}>{c.active_modules?.length || 0} moduler</span>
+                    <span style={{ fontSize: '0.8125rem', fontWeight: 600 }}>{c.module_count || 0} moduler</span>
                   </div>
                 </div>
 
