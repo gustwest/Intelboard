@@ -147,7 +147,7 @@ async function matchOne({ assignment, consultant, userId }) {
   };
 }
 
-export async function runMatchingForAssignment({ assignmentId, consultantIds, userId, concurrency = 5 }) {
+export async function runMatchingForAssignment({ assignmentId, consultantIds, userId, concurrency = 2 }) {
   const assignment = await prisma.assignment.findUnique({ where: { id: assignmentId } });
   if (!assignment) throw new Error(`Assignment not found: ${assignmentId}`);
 
