@@ -9,6 +9,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from engine.monte_carlo import run_multi_domain_simulation
 from engine.data_analyzer import analyze_all
+from engine.kpi_calculator import calculate_all_kpis
 
 app = FastAPI(title="The Predictive Network Engine - API")
 
@@ -145,6 +146,443 @@ def run_analysis_now():
         f.write(content)
     
     return Response(content=content, media_type="application/json")
+
+
+# ============================================================
+# SCORECARD (22 Strategic KPIs)
+# ============================================================
+
+@app.get("/api/scorecard")
+def get_scorecard(customer: str = "Malmö stad"):
+    """Calculate all 22 strategic KPIs from existing analytics data."""
+    # Load analytics data (cached or fresh)
+    analytics_data = None
+    if os.path.exists(ANALYSIS_FILE):
+        with open(ANALYSIS_FILE, "r", encoding="utf-8") as f:
+            analytics_data = json.loads(f.read())
+    elif os.path.exists(INSIDERSKUNDER_DIR):
+        analytics_data = analyze_all(INSIDERSKUNDER_DIR)
+        content = safe_json_dumps(analytics_data)
+        with open(ANALYSIS_FILE, "w", encoding="utf-8") as f:
+            f.write(content)
+    
+    if not analytics_data:
+        return {"error": "No analytics data available. Run analysis first."}
+    
+    scorecard = calculate_all_kpis(analytics_data, customer)
+    return Response(
+        content=safe_json_dumps(scorecard),
+        media_type="application/json"
+    )
+
+
+# ============================================================
+# CUSTOMERS
+# ============================================================
+
+CUSTOMERS_FILE = os.path.join(DATA_DIR, "customers.json")
+MODULES_FILE = os.path.join(DATA_DIR, "modules.json")
+KUNDER_DIR = os.path.join(DATA_DIR, "kunder")
+os.makedirs(KUNDER_DIR, exist_ok=True)
+
+def load_customers() -> list:
+    if not os.path.exists(CUSTOMERS_FILE):
+        return []
+    with open(CUSTOMERS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_customers(customers: list):
+    with open(CUSTOMERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(customers, f, indent=2, ensure_ascii=False, default=str)
+
+def load_modules() -> list:
+    if not os.path.exists(MODULES_FILE):
+        return []
+    with open(MODULES_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_modules(modules: list):
+    with open(MODULES_FILE, "w", encoding="utf-8") as f:
+        json.dump(modules, f, indent=2, ensure_ascii=False, default=str)
+
+
+class CustomerCreate(BaseModel):
+    name: str
+    logo_emoji: str = "🏢"
+    tags: Optional[List[str]] = []
+    icp: Optional[Dict[str, Any]] = {}
+
+class CustomerUpdate(BaseModel):
+    name: Optional[str] = None
+    logo_emoji: Optional[str] = None
+    tags: Optional[List[str]] = None
+    icp: Optional[Dict[str, Any]] = None
+    active_modules: Optional[List[str]] = None
+
+
+@app.get("/api/customers")
+def list_customers():
+    customers = load_customers()
+    # Enrich with file counts
+    for c in customers:
+        cdir = os.path.join(KUNDER_DIR, c["id"], "data")
+        if os.path.exists(cdir):
+            c["file_count"] = len([f for f in os.listdir(cdir) if os.path.isfile(os.path.join(cdir, f))])
+        else:
+            c["file_count"] = 0
+    return customers
+
+@app.post("/api/customers")
+def create_customer(req: CustomerCreate):
+    customers = load_customers()
+    cid = req.name.lower().replace(" ", "-").replace("å", "a").replace("ä", "a").replace("ö", "o")
+    if any(c["id"] == cid for c in customers):
+        return {"error": f"Customer '{cid}' already exists"}
+    customer = {
+        "id": cid,
+        "name": req.name,
+        "logo_emoji": req.logo_emoji,
+        "created_at": datetime.now().isoformat(),
+        "icp": req.icp or {},
+        "tags": req.tags or [],
+        "active_modules": [m["id"] for m in load_modules() if m.get("is_default")],
+    }
+    customers.append(customer)
+    save_customers(customers)
+    os.makedirs(os.path.join(KUNDER_DIR, cid, "data"), exist_ok=True)
+    return customer
+
+@app.get("/api/customers/{customer_id}")
+def get_customer(customer_id: str):
+    customers = load_customers()
+    customer = next((c for c in customers if c["id"] == customer_id), None)
+    if not customer:
+        return {"error": "Customer not found"}
+    # Add file list
+    cdir = os.path.join(KUNDER_DIR, customer_id, "data")
+    customer["files"] = []
+    if os.path.exists(cdir):
+        for f in sorted(os.listdir(cdir)):
+            fp = os.path.join(cdir, f)
+            if os.path.isfile(fp):
+                from engine.data_analyzer import detect_file_type
+                customer["files"].append({
+                    "name": f,
+                    "size": os.path.getsize(fp),
+                    "type": detect_file_type(f),
+                })
+    return customer
+
+@app.put("/api/customers/{customer_id}")
+def update_customer(customer_id: str, req: CustomerUpdate):
+    customers = load_customers()
+    idx = next((i for i, c in enumerate(customers) if c["id"] == customer_id), None)
+    if idx is None:
+        return {"error": "Customer not found"}
+    if req.name is not None: customers[idx]["name"] = req.name
+    if req.logo_emoji is not None: customers[idx]["logo_emoji"] = req.logo_emoji
+    if req.tags is not None: customers[idx]["tags"] = req.tags
+    if req.icp is not None: customers[idx]["icp"] = req.icp
+    if req.active_modules is not None: customers[idx]["active_modules"] = req.active_modules
+    save_customers(customers)
+    return customers[idx]
+
+@app.post("/api/customers/{customer_id}/upload")
+async def upload_customer_file(customer_id: str, file: UploadFile = File(...)):
+    cdir = os.path.join(KUNDER_DIR, customer_id, "data")
+    os.makedirs(cdir, exist_ok=True)
+    filepath = os.path.join(cdir, file.filename)
+    content = await file.read()
+    with open(filepath, "wb") as f:
+        f.write(content)
+    from engine.data_analyzer import detect_file_type
+    return {"filename": file.filename, "size": len(content), "type": detect_file_type(file.filename)}
+
+@app.get("/api/customers/{customer_id}/files")
+def list_customer_files(customer_id: str):
+    cdir = os.path.join(KUNDER_DIR, customer_id, "data")
+    if not os.path.exists(cdir):
+        return []
+    from engine.data_analyzer import detect_file_type
+    files = []
+    for f in sorted(os.listdir(cdir)):
+        fp = os.path.join(cdir, f)
+        if os.path.isfile(fp):
+            files.append({"name": f, "size": os.path.getsize(fp), "type": detect_file_type(f)})
+    return files
+
+@app.get("/api/customers/{customer_id}/reports/{filename}")
+def read_report(customer_id: str, filename: str, page: int = 1, page_size: int = 100):
+    """Read a CSV/XLS file and return structured table data with pagination."""
+    from engine.data_analyzer import detect_file_type, read_utf16_csv, read_xls_file, read_xlsx_file
+    cdir = os.path.join(KUNDER_DIR, customer_id, "data")
+    filepath = os.path.join(cdir, filename)
+    
+    # Also check global Insiderskunder
+    if not os.path.exists(filepath):
+        alt = os.path.join(os.path.dirname(__file__), "..", "Insiderskunder", filename)
+        if os.path.exists(alt):
+            filepath = alt
+        else:
+            return {"error": f"File not found: {filename}"}
+    
+    ftype = detect_file_type(filename)
+    rows = []
+    columns = []
+    
+    try:
+        lower = filename.lower()
+        if lower.endswith('.csv'):
+            # Try UTF-16 first (LinkedIn Campaign Manager), then UTF-8
+            parsed = read_utf16_csv(filepath, skip_header_rows=7)
+            if not parsed:
+                # Try standard CSV
+                try:
+                    import codecs
+                    with open(filepath, 'r', encoding='utf-8-sig') as f:
+                        reader = csv.DictReader(f)
+                        parsed = [{k.strip(): (v.strip() if v else '') for k, v in row.items() if k} for row in reader]
+                except:
+                    with open(filepath, 'r', encoding='latin-1') as f:
+                        reader = csv.DictReader(f)
+                        parsed = [{k.strip(): (v.strip() if v else '') for k, v in row.items() if k} for row in reader]
+            rows = parsed
+        elif lower.endswith('.xls'):
+            df = read_xls_file(filepath)
+            if df is not None:
+                df = df.fillna('')
+                rows = df.to_dict('records')
+        elif lower.endswith('.xlsx'):
+            df = read_xlsx_file(filepath)
+            if df is not None:
+                df = df.fillna('')
+                rows = df.to_dict('records')
+    except Exception as e:
+        return {"error": f"Failed to parse file: {str(e)}"}
+    
+    # Apply edits overlay if exists
+    edits_file = os.path.join(KUNDER_DIR, customer_id, f"edits_{filename}.json")
+    edits = {}
+    if os.path.exists(edits_file):
+        with open(edits_file, "r", encoding="utf-8") as f:
+            edits = json.load(f)
+        for key, val in edits.items():
+            row_idx, col = key.split("::", 1)
+            row_idx = int(row_idx)
+            if 0 <= row_idx < len(rows):
+                rows[row_idx][col] = val
+    
+    if rows:
+        columns = list(rows[0].keys()) if rows else []
+    
+    total = len(rows)
+    start = (page - 1) * page_size
+    end = start + page_size
+    paged_rows = rows[start:end]
+    
+    # Convert all values to strings for consistent frontend handling
+    for row in paged_rows:
+        for k in row:
+            row[k] = str(row[k]) if row[k] is not None else ''
+    
+    return Response(content=safe_json_dumps({
+        "filename": filename,
+        "file_type": ftype,
+        "columns": columns,
+        "total_rows": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size,
+        "rows": paged_rows,
+        "edits_count": len(edits),
+    }), media_type="application/json")
+
+
+@app.put("/api/customers/{customer_id}/reports/{filename}/edit")
+def edit_report_cell(customer_id: str, filename: str, row_index: int = 0, column: str = "", value: str = ""):
+    """Save an edit to a specific cell. Stored as overlay, original file untouched."""
+    edits_file = os.path.join(KUNDER_DIR, customer_id, f"edits_{filename}.json")
+    edits = {}
+    if os.path.exists(edits_file):
+        with open(edits_file, "r", encoding="utf-8") as f:
+            edits = json.load(f)
+    edits[f"{row_index}::{column}"] = value
+    with open(edits_file, "w", encoding="utf-8") as f:
+        json.dump(edits, f, indent=2, ensure_ascii=False)
+    return {"status": "saved", "edits_count": len(edits)}
+
+
+@app.delete("/api/customers/{customer_id}/reports/{filename}/edits")
+def reset_report_edits(customer_id: str, filename: str):
+    """Remove all edits and revert to original file data."""
+    edits_file = os.path.join(KUNDER_DIR, customer_id, f"edits_{filename}.json")
+    if os.path.exists(edits_file):
+        os.remove(edits_file)
+    return {"status": "reset"}
+
+
+@app.get("/api/customers/{customer_id}/analytics")
+def get_customer_analytics(customer_id: str):
+    """Run analysis on a specific customer's data."""
+    cdir = os.path.join(KUNDER_DIR, customer_id, "data")
+    cache = os.path.join(KUNDER_DIR, customer_id, "analysis_cache.json")
+    if os.path.exists(cache):
+        with open(cache, "r", encoding="utf-8") as f:
+            return Response(content=f.read(), media_type="application/json")
+    if not os.path.exists(cdir) or not os.listdir(cdir):
+        # Fallback to global Insiderskunder
+        if os.path.exists(ANALYSIS_FILE):
+            with open(ANALYSIS_FILE, "r", encoding="utf-8") as f:
+                return Response(content=f.read(), media_type="application/json")
+        return {"error": "No data files found"}
+    result = analyze_all(cdir)
+    content = safe_json_dumps(result)
+    with open(cache, "w", encoding="utf-8") as f:
+        f.write(content)
+    return Response(content=content, media_type="application/json")
+
+@app.get("/api/customers/{customer_id}/scorecard")
+def get_customer_scorecard(customer_id: str):
+    """Calculate all active modules for a specific customer."""
+    customers = load_customers()
+    customer = next((c for c in customers if c["id"] == customer_id), None)
+    if not customer:
+        return {"error": "Customer not found"}
+    # Load analytics (customer-specific or global)
+    analytics_data = None
+    cache = os.path.join(KUNDER_DIR, customer_id, "analysis_cache.json")
+    if os.path.exists(cache):
+        with open(cache, "r", encoding="utf-8") as f:
+            analytics_data = json.loads(f.read())
+    elif os.path.exists(ANALYSIS_FILE):
+        with open(ANALYSIS_FILE, "r", encoding="utf-8") as f:
+            analytics_data = json.loads(f.read())
+    if not analytics_data:
+        return {"error": "No analytics data. Upload files and run analysis first."}
+    scorecard = calculate_all_kpis(analytics_data, customer["name"])
+    return Response(content=safe_json_dumps(scorecard), media_type="application/json")
+
+
+# ============================================================
+# MODULES
+# ============================================================
+
+class ModuleCreate(BaseModel):
+    name: str
+    abbr: str
+    category: str = "custom"
+    description: str = ""
+    data_sources: List[str] = []
+    requires_icp: bool = False
+    formula: Dict[str, Any] = {}
+    thresholds: Dict[str, float] = {}
+    inverted: bool = False
+    visualization: Dict[str, str] = {"primary": "gauge", "secondary": "bar"}
+    insight_template: str = ""
+
+class ModuleUpdate(BaseModel):
+    name: Optional[str] = None
+    abbr: Optional[str] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    thresholds: Optional[Dict[str, float]] = None
+    visualization: Optional[Dict[str, str]] = None
+    insight_template: Optional[str] = None
+
+@app.get("/api/modules")
+def list_modules():
+    return load_modules()
+
+@app.post("/api/modules")
+def create_module(req: ModuleCreate):
+    modules = load_modules()
+    mid = req.abbr.lower().replace(" ", "_")
+    if any(m["id"] == mid for m in modules):
+        return {"error": f"Module '{mid}' already exists"}
+    module = {
+        "id": mid,
+        "name": req.name,
+        "abbr": req.abbr,
+        "category": req.category,
+        "description": req.description,
+        "data_sources": req.data_sources,
+        "requires_icp": req.requires_icp,
+        "formula": req.formula,
+        "thresholds": req.thresholds,
+        "inverted": req.inverted,
+        "visualization": req.visualization,
+        "insight_template": req.insight_template,
+        "is_default": False,
+        "created_at": datetime.now().isoformat(),
+    }
+    modules.append(module)
+    save_modules(modules)
+    return module
+
+@app.get("/api/modules/{module_id}")
+def get_module(module_id: str):
+    modules = load_modules()
+    m = next((m for m in modules if m["id"] == module_id), None)
+    return m if m else {"error": "Module not found"}
+
+@app.put("/api/modules/{module_id}")
+def update_module(module_id: str, req: ModuleUpdate):
+    modules = load_modules()
+    idx = next((i for i, m in enumerate(modules) if m["id"] == module_id), None)
+    if idx is None:
+        return {"error": "Module not found"}
+    for field in ["name", "abbr", "category", "description", "thresholds", "visualization", "insight_template"]:
+        val = getattr(req, field, None)
+        if val is not None:
+            modules[idx][field] = val
+    save_modules(modules)
+    return modules[idx]
+
+@app.delete("/api/modules/{module_id}")
+def delete_module(module_id: str):
+    modules = load_modules()
+    modules = [m for m in modules if m["id"] != module_id]
+    save_modules(modules)
+    return {"status": "deleted"}
+
+
+# ============================================================
+# COMPARE (Cross-customer)
+# ============================================================
+
+@app.get("/api/compare")
+def compare_customers(customer_ids: str = "", module_ids: str = ""):
+    """Compare KPIs across multiple customers."""
+    cids = [c.strip() for c in customer_ids.split(",") if c.strip()]
+    mids = [m.strip() for m in module_ids.split(",") if m.strip()]
+    if len(cids) < 2:
+        return {"error": "Provide at least 2 customer IDs (comma-separated)"}
+    customers = load_customers()
+    results = {}
+    for cid in cids:
+        customer = next((c for c in customers if c["id"] == cid), None)
+        if not customer:
+            continue
+        # Load analytics
+        analytics_data = None
+        cache = os.path.join(KUNDER_DIR, cid, "analysis_cache.json")
+        if os.path.exists(cache):
+            with open(cache, "r", encoding="utf-8") as f:
+                analytics_data = json.loads(f.read())
+        elif os.path.exists(ANALYSIS_FILE):
+            with open(ANALYSIS_FILE, "r", encoding="utf-8") as f:
+                analytics_data = json.loads(f.read())
+        if analytics_data:
+            sc = calculate_all_kpis(analytics_data, customer["name"])
+            if mids:
+                sc["all_kpis"] = [k for k in sc.get("all_kpis", []) if k["abbr"].lower() in mids]
+            results[cid] = {
+                "name": customer["name"],
+                "emoji": customer.get("logo_emoji", "🏢"),
+                "overall_score": sc.get("overall_score", 0),
+                "kpis": {k["abbr"]: k for k in sc.get("all_kpis", [])},
+            }
+    return {"customers": results, "compared_at": datetime.now().isoformat()}
 
 
 # ============================================================

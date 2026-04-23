@@ -1,0 +1,36 @@
+[
+  {
+    "id": "malmo-stad",
+    "name": "Malmö stad",
+    "logo_emoji": "🏛️",
+    "created_at": "2026-01-15",
+    "icp": {
+      "target_industries": ["Government Administration", "Public Safety", "Education Management", "Civic & Social Organization", "Urban Planning"],
+      "target_seniorities": ["Senior", "Manager", "Director", "VP", "CXO"],
+      "target_regions": ["Skåne", "Malmö", "Lund", "Helsingborg", "Sweden"],
+      "target_job_functions": ["Education", "Community and Social Services", "Administrative", "Human Resources", "Information Technology"],
+      "internal_followers": 14647,
+      "total_followers": 54340,
+      "regional_followers": 45103
+    },
+    "tags": ["kommun", "offentlig sektor"],
+    "active_modules": ["iai", "soi", "gci", "jfmi", "cpri", "ecr", "var", "cfe", "osov", "pei", "ai", "fssa", "wacr", "ctei", "alf", "aar", "cci", "vctd", "ffms", "ifpr", "rfc", "anwi"]
+  },
+  {
+    "id": "coromatic",
+    "name": "Coromatic AB",
+    "logo_emoji": "⚡",
+    "created_at": "2026-02-01",
+    "icp": {
+      "target_industries": ["Information Technology", "Data Center", "Electrical Engineering", "Facilities Management", "Construction"],
+      "target_seniorities": ["Senior", "Manager", "Director", "VP", "CXO"],
+      "target_regions": ["Stockholm", "Göteborg", "Malmö", "Sweden", "Nordics"],
+      "target_job_functions": ["Information Technology", "Engineering", "Operations", "Facilities", "Project Management"],
+      "internal_followers": 500,
+      "total_followers": 8500,
+      "regional_followers": 6200
+    },
+    "tags": ["tech", "datacenter", "B2B"],
+    "active_modules": ["iai", "soi", "gci", "jfmi", "cpri", "ecr", "cfe", "osov", "ctei", "ifpr", "rfc"]
+  }
+]

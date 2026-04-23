@@ -4,14 +4,7 @@
  */
 import NextAuth from 'next-auth';
 import Google from 'next-auth/providers/google';
-
-// ── Approved emails ──────────────────────────────────────────────
-const ALLOWED_EMAILS: Record<string, 'SUPERADMIN' | 'ADMIN'> = {
-  'guswes@gmail.com': 'SUPERADMIN',
-  'josefin@theinsiders.se': 'ADMIN',
-  'benjamin@theinsiders.se': 'ADMIN',
-  'erik@theinsiders.se': 'ADMIN',
-};
+import { ALLOWED_EMAILS } from './team';
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [

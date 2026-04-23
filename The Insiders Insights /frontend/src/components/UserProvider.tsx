@@ -1,64 +1,57 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, ReactNode } from 'react';
+import { useSession } from 'next-auth/react';
+import { TEAM, colorForEmail, defaultNameForEmail } from '@/lib/team';
 
 export interface AppUser {
   name: string;
-  avatar: string;
+  email: string;
   color: string;
 }
 
-const USERS: AppUser[] = [
-  { name: 'Gustav', avatar: '👤', color: '#a855f7' },
-  { name: 'Erik', avatar: '👤', color: '#3b82f6' },
-  { name: 'Ben', avatar: '👤', color: '#22c55e' },
-  { name: 'Jossan', avatar: '👤', color: '#f59e0b' },
-];
+const TEAM_USERS: AppUser[] = TEAM.map(m => ({
+  name: defaultNameForEmail(m.email),
+  email: m.email,
+  color: m.color,
+}));
 
 interface UserContextType {
   currentUser: AppUser | null;
-  setUser: (user: AppUser) => void;
-  logout: () => void;
   allUsers: AppUser[];
+  sessionStatus: 'loading' | 'authenticated' | 'unauthenticated';
 }
 
 const UserContext = createContext<UserContextType>({
   currentUser: null,
-  setUser: () => {},
-  logout: () => {},
-  allUsers: USERS,
+  allUsers: TEAM_USERS,
+  sessionStatus: 'loading',
 });
 
 export function UserProvider({ children }: { children: ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
-  const [mounted, setMounted] = useState(false);
+  const { data: session, status } = useSession();
+  const sessionEmail = session?.user?.email?.toLowerCase() || null;
 
-  useEffect(() => {
-    setMounted(true);
-    const stored = localStorage.getItem('insiders-user');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        const match = USERS.find(u => u.name === parsed.name);
-        if (match) setCurrentUser(match);
-      } catch { /* */ }
-    }
-  }, []);
+  const currentUser: AppUser | null = sessionEmail
+    ? {
+        name: session?.user?.name || defaultNameForEmail(sessionEmail),
+        email: sessionEmail,
+        color: colorForEmail(sessionEmail),
+      }
+    : null;
 
-  const setUser = (user: AppUser) => {
-    setCurrentUser(user);
-    localStorage.setItem('insiders-user', JSON.stringify(user));
-  };
+  // Replace the email-derived placeholder with the Google display name for the logged-in user.
+  let allUsers: AppUser[] = currentUser
+    ? TEAM_USERS.map(u => (u.email === currentUser.email ? { ...u, name: currentUser.name } : u))
+    : TEAM_USERS;
 
-  const logout = () => {
-    setCurrentUser(null);
-    localStorage.removeItem('insiders-user');
-  };
-
-  if (!mounted) return <>{children}</>;
+  // Include the current user even if they aren't (yet) part of the static roster.
+  if (currentUser && !TEAM_USERS.some(u => u.email === currentUser.email)) {
+    allUsers = [currentUser, ...allUsers];
+  }
 
   return (
-    <UserContext.Provider value={{ currentUser, setUser, logout, allUsers: USERS }}>
+    <UserContext.Provider value={{ currentUser, allUsers, sessionStatus: status }}>
       {children}
     </UserContext.Provider>
   );

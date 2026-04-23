@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useUser } from '@/components/UserProvider';
+import { colorForName } from '@/lib/team';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -15,7 +16,7 @@ interface ChatMsg {
 }
 
 export default function ChatPage() {
-  const { currentUser, setUser, allUsers } = useUser();
+  const { currentUser, allUsers } = useUser();
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
@@ -130,8 +131,8 @@ export default function ChatPage() {
   };
 
   const getUserColor = (name: string) => {
-    const user = allUsers.find(u => u.name === name);
-    return user?.color || '#6b7280';
+    if (currentUser && name === currentUser.name) return currentUser.color;
+    return allUsers.find(u => u.name === name)?.color || colorForName(name);
   };
 
   // Group messages by date
@@ -146,52 +147,17 @@ export default function ChatPage() {
     }
   });
 
-  // Not logged in
+  // Session is still loading (middleware guarantees the user is authenticated)
   if (!currentUser) {
     return (
       <div id="chat-overlay" style={{
         minHeight: 'calc(100vh - 56px)',
         background: 'linear-gradient(135deg, #0a0a14 0%, #0f0f1e 50%, #0a0a14 100%)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: 'rgba(255,255,255,0.3)', fontSize: '0.875rem',
         fontFamily: "'Inter', system-ui, sans-serif",
       }}>
-        <div style={{
-          background: '#12121c', border: '1px solid rgba(255,255,255,0.08)',
-          borderRadius: '24px', padding: '40px', textAlign: 'center', maxWidth: '400px',
-          boxShadow: '0 8px 40px rgba(0,0,0,0.4)',
-        }}>
-          <div style={{ fontSize: '3rem', marginBottom: '16px' }}>💬</div>
-          <h1 style={{ fontSize: '1.375rem', fontWeight: 700, color: '#e2e8f0', margin: '0 0 8px' }}>
-            Team Chat
-          </h1>
-          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.875rem', margin: '0 0 28px' }}>
-            Välj vem du är för att börja chatta
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {allUsers.map(user => (
-              <button
-                key={user.name}
-                onClick={() => setUser(user)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '12px',
-                  padding: '14px 20px', background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.06)', borderRadius: '14px',
-                  cursor: 'pointer', color: '#e2e8f0', fontSize: '0.9375rem',
-                  fontWeight: 600, transition: 'all 0.2s', textAlign: 'left',
-                }}
-              >
-                <span style={{
-                  width: '36px', height: '36px', borderRadius: '50%',
-                  background: user.color, display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', fontSize: '0.9375rem', fontWeight: 700, color: '#fff',
-                }}>
-                  {user.name[0]}
-                </span>
-                {user.name}
-              </button>
-            ))}
-          </div>
-        </div>
+        Laddar...
       </div>
     );
   }

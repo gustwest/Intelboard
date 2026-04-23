@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useUser } from './UserProvider';
+import { colorForName } from '@/lib/team';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const WS_URL = API_URL.replace('https://', 'wss://').replace('http://', 'ws://');
@@ -28,14 +29,15 @@ interface Convo {
 type View = 'closed' | 'list' | 'chat' | 'create';
 
 export default function ChatWidget() {
-  const { currentUser, allUsers } = useUser();
+  const { currentUser, allUsers, sessionStatus } = useUser();
   const [view, setView] = useState<View>('closed');
   const [convos, setConvos] = useState<Convo[]>([]);
   const [activeConvo, setActiveConvo] = useState<Convo | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [lastSeen, setLastSeen] = useState<Record<string, string>>({});
+  const [lastSeenLoaded, setLastSeenLoaded] = useState(false);
   const [reactingMsgId, setReactingMsgId] = useState<string | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
@@ -47,6 +49,8 @@ export default function ChatWidget() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const prevConvoLastMsgRef = useRef<Record<string, string>>({});
+  const notifiedMsgIdsRef = useRef<Set<string>>(new Set());
 
   // Fetch conversations
   const fetchConvos = useCallback(async () => {
@@ -65,6 +69,98 @@ export default function ChatWidget() {
     return () => clearInterval(interval);
   }, [fetchConvos]);
 
+  // Load lastSeen from localStorage when user changes
+  useEffect(() => {
+    if (!currentUser) return;
+    try {
+      const raw = localStorage.getItem(`chat:lastSeen:${currentUser.name}`);
+      if (raw) setLastSeen(JSON.parse(raw));
+    } catch { /* */ }
+    setLastSeenLoaded(true);
+  }, [currentUser?.name]);
+
+  // Persist lastSeen on change
+  useEffect(() => {
+    if (!currentUser || !lastSeenLoaded) return;
+    try {
+      localStorage.setItem(`chat:lastSeen:${currentUser.name}`, JSON.stringify(lastSeen));
+    } catch { /* */ }
+  }, [lastSeen, currentUser?.name, lastSeenLoaded]);
+
+  // Initialize lastSeen for convos we haven't seen before (so existing history isn't flagged unread)
+  useEffect(() => {
+    if (!currentUser || !lastSeenLoaded || convos.length === 0) return;
+    setLastSeen(prev => {
+      const next = { ...prev };
+      let changed = false;
+      for (const c of convos) {
+        if (!next[c.id]) {
+          const msgs = c.messages || [];
+          const last = msgs[msgs.length - 1];
+          next[c.id] = last?.createdAt || new Date(0).toISOString();
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [convos, currentUser?.name, lastSeenLoaded]);
+
+  // Play a short ding via Web Audio (no external asset needed)
+  const playDing = useCallback(() => {
+    try {
+      const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AC) return;
+      const ctx = new AC();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(523, ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.3);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+    } catch { /* */ }
+  }, []);
+
+  // Detect new messages across all convos → ding + browser notification
+  useEffect(() => {
+    if (!currentUser) return;
+    const prev = prevConvoLastMsgRef.current;
+    const next: Record<string, string> = {};
+
+    for (const c of convos) {
+      const msgs = c.messages || [];
+      const last = msgs[msgs.length - 1];
+      if (!last) continue;
+      next[c.id] = last.createdAt;
+
+      const isNewSincePrev = prev[c.id] !== undefined && last.createdAt !== prev[c.id];
+      const isMine = last.author === currentUser.name;
+      const isActivelyViewing = activeConvo?.id === c.id && view === 'chat';
+      const alreadyNotified = notifiedMsgIdsRef.current.has(last.id);
+
+      if (isNewSincePrev && !isMine && !isActivelyViewing && !alreadyNotified) {
+        notifiedMsgIdsRef.current.add(last.id);
+        playDing();
+        try {
+          if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            const n = new Notification(`${last.author} · ${c.name}`, {
+              body: last.body || '📎 Bilaga',
+              icon: '/favicon.ico',
+              silent: true,
+              tag: `chat:${c.id}`,
+            });
+            n.onclick = () => { window.focus(); };
+          }
+        } catch { /* */ }
+      }
+    }
+    prevConvoLastMsgRef.current = next;
+  }, [convos, currentUser?.name, activeConvo?.id, view, playDing]);
+
   // WebSocket per active conversation
   useEffect(() => {
     if (!activeConvo) return;
@@ -76,6 +172,9 @@ export default function ChatWidget() {
       const data = JSON.parse(event.data);
       if (data.type === 'new_message') {
         setMessages(prev => [...prev, data.message]);
+        if (activeConvo) {
+          setLastSeen(prev => ({ ...prev, [activeConvo.id]: data.message.createdAt }));
+        }
       } else if (data.type === 'reaction') {
         setMessages(prev => prev.map(m =>
           m.id === data.messageId ? { ...m, reactions: data.reactions } : m
@@ -98,6 +197,7 @@ export default function ChatWidget() {
   const openConvo = async (convo: Convo) => {
     setActiveConvo(convo);
     setView('chat');
+    setLastSeen(prev => ({ ...prev, [convo.id]: new Date().toISOString() }));
     try {
       const res = await fetch(`${API_URL}/api/conversations/${convo.id}/messages`);
       if (res.ok) setMessages(await res.json());
@@ -203,42 +303,66 @@ export default function ChatWidget() {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
-  const getUserColor = (name: string) => allUsers.find(u => u.name === name)?.color || '#6b7280';
+  const getUserColor = (name: string) => {
+    if (currentUser && name === currentUser.name) return currentUser.color;
+    return allUsers.find(u => u.name === name)?.color || colorForName(name);
+  };
 
   const lastMsg = (convo: Convo) => {
     const msgs = convo.messages || [];
     return msgs.length > 0 ? msgs[msgs.length - 1] : null;
   };
 
-  if (!currentUser) return null;
+  // Unread computation
+  const unreadByConvo: Record<string, number> = {};
+  if (currentUser && lastSeenLoaded) {
+    for (const c of convos) {
+      const since = lastSeen[c.id];
+      let count = 0;
+      for (const m of (c.messages || [])) {
+        if (m.author === currentUser.name) continue;
+        if (!since || m.createdAt > since) count++;
+      }
+      unreadByConvo[c.id] = count;
+    }
+  }
+  const totalUnread = Object.values(unreadByConvo).reduce((a, b) => a + b, 0);
+
+  if (sessionStatus === 'unauthenticated') return null;
 
   // === FLOATING BUBBLE ===
   if (view === 'closed') {
     return (
       <div id="chat-widget-root">
         <button
-          onClick={() => setView('list')}
+          onClick={() => {
+            if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+              Notification.requestPermission().catch(() => {});
+            }
+            setView('list');
+          }}
           style={{
-            position: 'fixed', bottom: '24px', right: '24px',
-            width: '56px', height: '56px', borderRadius: '50%',
+            position: 'fixed', bottom: '88px', left: '24px',
+            width: '52px', height: '52px', borderRadius: '50%',
             background: 'linear-gradient(135deg, #a855f7, #7c3aed)',
             border: 'none', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             boxShadow: '0 4px 24px rgba(168,85,247,0.4)',
-            zIndex: 1000, transition: 'all 0.2s',
-            fontSize: '1.5rem', color: '#fff',
+            zIndex: 100000, transition: 'all 0.2s',
+            fontSize: '1.375rem', color: '#fff',
           }}
         >
           💬
-          {unreadCount > 0 && (
+          {totalUnread > 0 && (
             <span style={{
               position: 'absolute', top: '-4px', right: '-4px',
-              width: '20px', height: '20px', borderRadius: '50%',
+              minWidth: '20px', height: '20px', padding: '0 6px', borderRadius: '10px',
               background: '#ef4444', fontSize: '0.6875rem',
               fontWeight: 700, color: '#fff',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
+              border: '2px solid #12121c',
             }}>
-              {unreadCount}
+              {totalUnread > 99 ? '99+' : totalUnread}
             </span>
           )}
         </button>
@@ -247,14 +371,14 @@ export default function ChatWidget() {
   }
 
   const panelStyle: React.CSSProperties = {
-    position: 'fixed', bottom: '24px', right: '24px',
+    position: 'fixed', bottom: '24px', left: '24px',
     width: '380px', height: '540px',
     borderRadius: '20px', overflow: 'hidden',
     display: 'flex', flexDirection: 'column',
     background: '#12121c',
     border: '1px solid rgba(255,255,255,0.08)',
     boxShadow: '0 12px 60px rgba(0,0,0,0.6)',
-    zIndex: 1000,
+    zIndex: 100000,
     fontFamily: "'Inter', system-ui, sans-serif",
   };
 
@@ -321,15 +445,37 @@ export default function ChatWidget() {
                     {convo.emoji}
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: '0.875rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div style={{
+                      fontWeight: unreadByConvo[convo.id] > 0 ? 700 : 600,
+                      fontSize: '0.875rem',
+                      color: unreadByConvo[convo.id] > 0 ? '#fff' : '#e2e8f0',
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    }}>
                       {convo.name}
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.35)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '2px' }}>
+                    <div style={{
+                      fontSize: '0.75rem',
+                      color: unreadByConvo[convo.id] > 0 ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.35)',
+                      fontWeight: unreadByConvo[convo.id] > 0 ? 600 : 400,
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '2px',
+                    }}>
                       {last ? `${last.author}: ${last.body}` : 'Ingen meddelande ännu'}
                     </div>
                   </div>
-                  <div style={{ fontSize: '0.625rem', color: 'rgba(255,255,255,0.2)', flexShrink: 0 }}>
-                    {last ? formatTime(last.createdAt) : ''}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', flexShrink: 0 }}>
+                    <div style={{ fontSize: '0.625rem', color: 'rgba(255,255,255,0.2)' }}>
+                      {last ? formatTime(last.createdAt) : ''}
+                    </div>
+                    {unreadByConvo[convo.id] > 0 && (
+                      <span style={{
+                        minWidth: '18px', height: '18px', padding: '0 6px',
+                        borderRadius: '9px', background: '#ef4444',
+                        fontSize: '0.625rem', fontWeight: 700, color: '#fff',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        {unreadByConvo[convo.id] > 99 ? '99+' : unreadByConvo[convo.id]}
+                      </span>
+                    )}
                   </div>
                 </button>
               );
@@ -469,7 +615,7 @@ export default function ChatWidget() {
           </div>
         ) : (
           messages.map((msg, i) => {
-            const isMe = msg.author === currentUser.name;
+            const isMe = !!currentUser && msg.author === currentUser.name;
             const showAuthor = i === 0 || messages[i - 1]?.author !== msg.author;
             return (
               <div key={msg.id} style={{ marginBottom: showAuthor ? '10px' : '3px' }}>
@@ -545,9 +691,9 @@ export default function ChatWidget() {
                             title={users.join(', ')}
                             style={{
                               padding: '2px 6px', borderRadius: '10px', fontSize: '0.6875rem',
-                              border: users.includes(currentUser.name)
+                              border: currentUser && users.includes(currentUser.name)
                                 ? '1px solid rgba(168,85,247,0.4)' : '1px solid rgba(255,255,255,0.08)',
-                              background: users.includes(currentUser.name)
+                              background: currentUser && users.includes(currentUser.name)
                                 ? 'rgba(168,85,247,0.15)' : 'rgba(255,255,255,0.04)',
                               cursor: 'pointer', color: '#e2e8f0',
                               display: 'flex', alignItems: 'center', gap: '3px',
