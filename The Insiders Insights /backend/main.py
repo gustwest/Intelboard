@@ -868,6 +868,42 @@ def evaluate_module(module_id: str, req: ModuleEvaluateReq, db: Session = Depend
 
 
 # ------------------------------------------------------------------
+# BULK MODULE EVALUATE (per customer)
+# ------------------------------------------------------------------
+class BulkEvaluateReq(BaseModel):
+    module_ids: List[str]
+    aggregations: Optional[Dict[str, str]] = None
+
+
+@app.post("/api/customers/{customer_id}/evaluate")
+def evaluate_modules_for_customer(customer_id: str, req: BulkEvaluateReq, db: Session = Depends(get_db)):
+    """Evaluate multiple modules for a single customer in one call."""
+    c = db.query(models.Customer).filter(
+        (models.Customer.id == customer_id) | (models.Customer.slug == customer_id)
+    ).first()
+    if not c:
+        raise HTTPException(404, "Customer not found")
+
+    default_aggs = req.aggregations or {}
+    results = []
+    for mid in req.module_ids:
+        m = db.query(models.Module).filter_by(id=mid).first()
+        if not m:
+            continue
+        r = _evaluate_for_customer(db, m, c, default_aggs)
+        results.append({
+            "module_id": m.id,
+            "module_name": m.name,
+            "module_abbr": m.abbr,
+            "expression": (m.formula_json or {}).get("expression", ""),
+            **r,
+        })
+
+    log.info("customer.evaluate", customer=c.slug, module_count=len(results))
+    return {"customer_id": c.id, "customer_name": c.name, "results": results}
+
+
+# ------------------------------------------------------------------
 # REPORTS (saved views)
 # ------------------------------------------------------------------
 def _report_to_out(r: models.Report) -> Dict[str, Any]:

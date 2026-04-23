@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Gauge from '@/components/Gauge';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
@@ -12,6 +13,8 @@ const C = {
 type Dataset = { id: string; source_id: string; source_key: string; source_name: string; source_version: number; original_filename: string; row_count: number; uploaded_at: string };
 type Customer = { id: string; slug: string; name: string; logo_emoji: string; tags: string[]; icp: any; datasets?: Dataset[] };
 type DatasetDetail = { dataset_id: string; source_name: string; source_version: number; original_filename: string; row_count: number; columns: { field_id: string; key: string; display_name: string; unit: string }[]; rows: Record<string, any>[]; page: number; total_pages: number; total: number };
+type Module = { id: string; name: string; abbr: string; category: string; description: string; customer_id: string | null; field_refs: any[]; formula: any; thresholds: any; visualization: string; inverted: boolean };
+type EvalResult = { value: number | null; context: Record<string, number>; aliases: Record<string, any>; error: string | null };
 
 export default function CustomerDetailPage() {
   const params = useParams() as { id: string };
@@ -24,11 +27,57 @@ export default function CustomerDetailPage() {
   const [dragOver, setDragOver] = useState(false);
   const lastFile = useRef<File | null>(null);
 
+  // Module state
+  const [modules, setModules] = useState<Module[]>([]);
+  const [evalResults, setEvalResults] = useState<Record<string, EvalResult | 'loading'>>({});
+
   async function refresh() {
     const res = await fetch(`${API}/api/customers/${params.id}`);
     if (res.ok) setCustomer(await res.json());
   }
-  useEffect(() => { refresh(); }, [params.id]);
+
+  async function fetchModules() {
+    const res = await fetch(`${API}/api/modules?customer_id=${params.id}&include_global=true`);
+    if (res.ok) setModules(await res.json());
+  }
+
+  useEffect(() => { refresh(); fetchModules(); }, [params.id]);
+
+  async function runModule(moduleId: string, customerId: string) {
+    setEvalResults(prev => ({ ...prev, [moduleId]: 'loading' }));
+    const res = await fetch(`${API}/api/modules/${moduleId}/evaluate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customer_ids: [customerId] }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const r = data.results?.[0];
+      setEvalResults(prev => ({
+        ...prev,
+        [moduleId]: r ? { value: r.value, context: r.context, aliases: r.aliases, error: r.error } : { value: null, context: {}, aliases: {}, error: 'No result' },
+      }));
+    }
+  }
+
+  async function runAllModules() {
+    if (!customer || modules.length === 0) return;
+    const loadingState = Object.fromEntries(modules.map(m => [m.id, 'loading' as const]));
+    setEvalResults(prev => ({ ...prev, ...loadingState }));
+    const res = await fetch(`${API}/api/customers/${customer.id}/evaluate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ module_ids: modules.map(m => m.id) }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const updates: Record<string, EvalResult> = {};
+      for (const r of (data.results || [])) {
+        updates[r.module_id] = { value: r.value, context: r.context, aliases: r.aliases, error: r.error };
+      }
+      setEvalResults(prev => ({ ...prev, ...updates }));
+    }
+  }
 
   async function upload(file: File) {
     lastFile.current = file;
@@ -75,19 +124,24 @@ export default function CustomerDetailPage() {
 
   if (!customer) return <main style={{ padding: 40, color: C.muted }}>Laddar…</main>;
 
+  const customerModules = modules.filter(m => m.customer_id !== null);
+  const globalModules = modules.filter(m => m.customer_id === null);
+
   return (
     <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px 60px', fontFamily: "'Inter', system-ui, sans-serif", color: C.text }}>
+      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <span style={{ fontSize: '2.5rem' }}>{customer.logo_emoji}</span>
           <div>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>{customer.name}</h1>
-            <div style={{ fontSize: 12, color: C.dim, marginTop: 4 }}>slug: <code>{customer.slug}</code> · {customer.datasets?.length || 0} dataset</div>
+            <div style={{ fontSize: 12, color: C.dim, marginTop: 4 }}>slug: <code>{customer.slug}</code> · {customer.datasets?.length || 0} dataset · {modules.length} moduler</div>
           </div>
         </div>
         <button onClick={deleteCustomer} style={btn('danger')}>Ta bort kund</button>
       </div>
 
+      {/* Upload zone */}
       <div
         onDragOver={e => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
@@ -116,7 +170,8 @@ export default function CustomerDetailPage() {
         <UploadStatusPanel status={uploadStatus} onDismiss={() => setUploadStatus(null)} onForceIngest={forceIngest} />
       )}
 
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20 }}>
+      {/* Datasets */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, marginBottom: 20 }}>
         <h3 style={{ margin: '0 0 12px', fontSize: 14 }}>Dataset ({customer.datasets?.length || 0})</h3>
         {!customer.datasets?.length ? (
           <div style={{ color: C.muted, fontSize: 13, padding: 20, textAlign: 'center' }}>
@@ -146,6 +201,43 @@ export default function CustomerDetailPage() {
         )}
       </div>
 
+      {/* Module overview */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <h3 style={{ margin: 0, fontSize: 14 }}>Moduler ({modules.length})</h3>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={runAllModules} style={btn('accent')} disabled={modules.length === 0}>
+              ▶ Kör alla
+            </button>
+            <a href="/moduler" style={{ ...btn('ghost'), textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+              Hantera moduler →
+            </a>
+          </div>
+        </div>
+
+        {modules.length === 0 ? (
+          <div style={{ color: C.muted, fontSize: 13, padding: 20, textAlign: 'center' }}>
+            Inga moduler. Klona en global mall från <a href="/moduler" style={{ color: C.accent }}>Moduler</a>.
+          </div>
+        ) : (
+          <>
+            {customerModules.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 11, color: C.dim, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>Kundspecifika</div>
+                <ModuleGrid modules={customerModules} customerId={customer.id} evalResults={evalResults} onRun={runModule} />
+              </div>
+            )}
+            {globalModules.length > 0 && (
+              <div>
+                <div style={{ fontSize: 11, color: C.dim, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>Globala mallar</div>
+                <ModuleGrid modules={globalModules} customerId={customer.id} evalResults={evalResults} onRun={runModule} />
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Dataset detail modal */}
       {openDataset && (
         <div onClick={() => { setOpenDataset(null); setDsDetail(null); }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, padding: 20 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, width: '95%', maxWidth: 1200, maxHeight: '88vh', overflow: 'auto' }}>
@@ -186,6 +278,87 @@ export default function CustomerDetailPage() {
         </div>
       )}
     </main>
+  );
+}
+
+function ModuleGrid({ modules, customerId, evalResults, onRun }: {
+  modules: Module[];
+  customerId: string;
+  evalResults: Record<string, EvalResult | 'loading'>;
+  onRun: (moduleId: string, customerId: string) => void;
+}) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+      {modules.map(m => {
+        const result = evalResults[m.id];
+        const isLoading = result === 'loading';
+        const hasResult = result && result !== 'loading';
+        const evalResult = hasResult ? (result as EvalResult) : null;
+        const unit = m.thresholds?.unit || '';
+        return (
+          <div key={m.id} style={{
+            background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`,
+            borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 10,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>{m.name}</div>
+                {m.abbr && <div style={{ fontSize: 10, color: C.dim, fontFamily: 'monospace', marginTop: 2 }}>{m.abbr}</div>}
+                {m.category && <div style={{ fontSize: 10, color: C.accent, marginTop: 2 }}>{m.category}</div>}
+              </div>
+              <button
+                onClick={() => onRun(m.id, customerId)}
+                disabled={isLoading}
+                style={{
+                  ...btn('accent'),
+                  padding: '4px 12px', fontSize: 12,
+                  opacity: isLoading ? 0.6 : 1,
+                }}
+              >
+                {isLoading ? '…' : '▶'}
+              </button>
+            </div>
+
+            {evalResult && (
+              <>
+                {evalResult.error ? (
+                  <div style={{ fontSize: 11, color: C.danger, background: 'rgba(239,68,68,0.1)', borderRadius: 6, padding: '6px 8px' }}>
+                    {evalResult.error}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <Gauge
+                      value={evalResult.value ?? 0}
+                      thresholds={m.thresholds}
+                      inverted={m.inverted}
+                      unit={unit}
+                      size="sm"
+                    />
+                    {evalResult.context && Object.keys(evalResult.context).length > 0 && (
+                      <div style={{ fontSize: 10, color: C.muted, marginTop: 4, width: '100%' }}>
+                        {Object.entries(evalResult.context).map(([k, v]) => (
+                          <span key={k} style={{ marginRight: 10 }}>
+                            <span style={{ color: C.dim }}>{k}=</span>
+                            <span style={{ fontFamily: 'monospace' }}>{typeof v === 'number' ? v.toLocaleString() : String(v)}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
+            {m.field_refs.length > 0 && !evalResult && (
+              <div style={{ fontSize: 10, color: C.dim }}>
+                {m.field_refs.length} datapunkt{m.field_refs.length > 1 ? 'er' : ''}
+                {m.field_refs.map((r: any) => r.alias).join(', ') && ': ' + m.field_refs.map((r: any) => r.alias).join(', ')}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
