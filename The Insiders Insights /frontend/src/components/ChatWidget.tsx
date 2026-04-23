@@ -52,14 +52,18 @@ export default function ChatWidget() {
   const prevConvoLastMsgRef = useRef<Record<string, string>>({});
   const notifiedMsgIdsRef = useRef<Set<string>>(new Set());
 
-  // Fetch conversations
+  // Fetch conversations — only replace state if the summary actually changed,
+  // otherwise every 10s poll would churn downstream effects & renders.
+  const convoSigRef = useRef<string>('');
   const fetchConvos = useCallback(async () => {
     try {
       const res = await fetch(`${API_URL}/api/conversations`);
-      if (res.ok) {
-        const data = await res.json();
-        setConvos(data);
-      }
+      if (!res.ok) return;
+      const data: Convo[] = await res.json();
+      const sig = data.map(c => `${c.id}:${c.updatedAt}:${(c.messages || []).length}`).join('|');
+      if (sig === convoSigRef.current) return;
+      convoSigRef.current = sig;
+      setConvos(data);
     } catch { /* silent */ }
   }, []);
 
@@ -188,10 +192,14 @@ export default function ChatWidget() {
     return () => { ws.close(); wsRef.current = null; };
   }, [activeConvo?.id]);
 
-  // Scroll to bottom on new messages
+  // Scroll to bottom only when a new message is appended (not on unrelated re-renders).
+  const prevMsgCountRef = useRef(0);
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (messages.length > prevMsgCountRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+    prevMsgCountRef.current = messages.length;
+  }, [messages.length]);
 
   // Open conversation
   const openConvo = async (convo: Convo) => {
