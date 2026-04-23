@@ -1,37 +1,39 @@
 /**
- * Middleware — protect all routes except /login and /api/auth/*
- * Redirects unauthenticated users to /login
+ * Middleware — NextAuth v5 edge-compatible auth guard
+ * Protects all routes except /login and API routes
  */
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-import { getToken } from 'next-auth/jwt';
+import NextAuth from 'next-auth';
+import Google from 'next-auth/providers/google';
 
-export async function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
+// Minimal auth config for middleware (edge compatible)
+const { auth } = NextAuth({
+  providers: [
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
+  ],
+  pages: {
+    signIn: '/login',
+  },
+  session: { strategy: 'jwt' },
+  trustHost: true,
+  callbacks: {
+    authorized({ auth: session, request: { nextUrl } }) {
+      const isLoggedIn = !!session?.user;
+      const isLoginPage = nextUrl.pathname.startsWith('/login');
+      const isApiRoute = nextUrl.pathname.startsWith('/api');
 
-  // Allow public routes
-  if (
-    pathname.startsWith('/login') ||
-    pathname.startsWith('/api/auth') ||
-    pathname.startsWith('/api/admin/agent/poll') ||  // Agent poller needs access
-    pathname.startsWith('/api/admin/agent/status') ||
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/favicon') ||
-    pathname === '/robots.txt'
-  ) {
-    return NextResponse.next();
-  }
+      if (isApiRoute) return true;
+      if (isLoginPage) return true;
+      if (!isLoggedIn) return false; // will redirect to signIn page
 
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+      return true;
+    },
+  },
+});
 
-  if (!token) {
-    const loginUrl = new URL('/login', req.url);
-    loginUrl.searchParams.set('callbackUrl', pathname);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  return NextResponse.next();
-}
+export default auth;
 
 export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],

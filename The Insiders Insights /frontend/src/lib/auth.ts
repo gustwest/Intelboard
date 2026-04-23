@@ -1,9 +1,9 @@
 /**
- * NextAuth configuration — Google OAuth with email whitelist
+ * NextAuth v5 config — Google OAuth with email whitelist
  * Only approved emails can sign in.
  */
-import type { NextAuthOptions } from 'next-auth';
-import GoogleProvider from 'next-auth/providers/google';
+import NextAuth from 'next-auth';
+import Google from 'next-auth/providers/google';
 
 // ── Approved emails ──────────────────────────────────────────────
 const ALLOWED_EMAILS: Record<string, 'SUPERADMIN' | 'ADMIN'> = {
@@ -13,30 +13,24 @@ const ALLOWED_EMAILS: Record<string, 'SUPERADMIN' | 'ADMIN'> = {
   'erik@theinsiders.se': 'ADMIN',
 };
 
-export const authOptions: NextAuthOptions = {
+export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
   ],
-  secret: process.env.NEXTAUTH_SECRET,
   pages: {
     signIn: '/login',
     error: '/login',
   },
+  session: { strategy: 'jwt' },
+  trustHost: true,
   callbacks: {
     async signIn({ user }) {
       const email = user.email?.toLowerCase();
       if (!email) return false;
       return email in ALLOWED_EMAILS;
-    },
-    async session({ session }) {
-      if (session.user?.email) {
-        const email = session.user.email.toLowerCase();
-        (session as any).user.role = ALLOWED_EMAILS[email] || 'VIEWER';
-      }
-      return session;
     },
     async jwt({ token, user }) {
       if (user?.email) {
@@ -45,5 +39,11 @@ export const authOptions: NextAuthOptions = {
       }
       return token;
     },
+    async session({ session, token }) {
+      if (session.user) {
+        (session.user as any).role = (token.role as string) || 'VIEWER';
+      }
+      return session;
+    },
   },
-};
+});
