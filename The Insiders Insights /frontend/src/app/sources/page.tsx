@@ -92,6 +92,7 @@ function SourceDetail({ source, onChange }: { source: Source; onChange: () => vo
   const [newField, setNewField] = useState<{ key: string; display_name: string; data_type: string; unit: string }>({
     key: '', display_name: '', data_type: 'str', unit: '',
   });
+  const [bumping, setBumping] = useState(false);
 
   async function addField() {
     if (!newField.key || !newField.display_name) return;
@@ -168,16 +169,89 @@ function SourceDetail({ source, onChange }: { source: Source; onChange: () => vo
 
       {/* Versions */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20 }}>
-        <h3 style={{ margin: '0 0 6px', fontSize: '1rem' }}>Versioner</h3>
-        <p style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Varje version mappar fält till kolumnnamn i den tidens format.</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <div>
+            <h3 style={{ margin: '0 0 6px', fontSize: '1rem' }}>Versioner</h3>
+            <p style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Varje version mappar fält → kolumnnamn i tidens format. Skapa ny version när rapporten ändrar kolumner.</p>
+          </div>
+          {!bumping && <button onClick={() => setBumping(true)} style={btn('accent')}>+ Ny version</button>}
+        </div>
         {source.versions.map(v => (
           <div key={v.id} style={{ padding: '10px 12px', border: `1px solid ${v.is_current ? 'rgba(34,197,94,0.25)' : C.border}`, borderRadius: 10, marginBottom: 8, background: v.is_current ? 'rgba(34,197,94,0.05)' : 'transparent' }}>
             <div style={{ fontWeight: 700, fontSize: 13 }}>
               v{v.version} {v.is_current && <span style={{ fontSize: 11, color: C.success, marginLeft: 6 }}>● aktuell</span>}
             </div>
             <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>{v.notes || '—'} · {v.mappings.length} fält mappade</div>
+            <details style={{ marginTop: 6 }}>
+              <summary style={{ fontSize: 10, color: C.dim, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 0.5 }}>Mappning</summary>
+              <div style={{ marginTop: 6, fontSize: 11, fontFamily: 'monospace' }}>
+                {v.mappings.map(m => {
+                  const f = source.fields.find(ff => ff.id === m.source_field_id);
+                  return <div key={m.source_field_id} style={{ padding: '2px 0' }}><span style={{ color: C.accent }}>{f?.key || m.source_field_id}</span> ⇒ <code>{m.column_name}</code></div>;
+                })}
+              </div>
+            </details>
           </div>
         ))}
+
+        {bumping && (
+          <VersionBumpForm source={source} onClose={() => setBumping(false)} onCreated={() => { setBumping(false); onChange(); }} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function VersionBumpForm({ source, onClose, onCreated }: { source: Source; onClose: () => void; onCreated: () => void }) {
+  const currentVersion = source.versions.find(v => v.is_current);
+  const initialMappings: Record<string, string> = {};
+  source.fields.forEach(f => {
+    const m = currentVersion?.mappings.find(mm => mm.source_field_id === f.id);
+    initialMappings[f.id] = m?.column_name || f.display_name;
+  });
+  const [mappings, setMappings] = useState<Record<string, string>>(initialMappings);
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function submit() {
+    setSaving(true);
+    try {
+      const body = {
+        notes,
+        mappings: Object.entries(mappings)
+          .filter(([_, col]) => col.trim())
+          .map(([source_field_id, column_name]) => ({ source_field_id, column_name: column_name.trim() })),
+      };
+      const res = await fetch(`${API}/api/sources/${source.id}/versions`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      if (!res.ok) { alert('Kunde inte skapa version: ' + (await res.text())); return; }
+      onCreated();
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <div style={{ marginTop: 12, padding: 16, background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.3)', borderRadius: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Ny version (blir ny aktuell)</div>
+      <label style={lbl}>Anteckningar</label>
+      <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="t.ex. 'LinkedIn lade till Click Type-kolumnen 2026-04'" style={{ ...inp, marginBottom: 12 }} />
+
+      <label style={lbl}>Fält → kolumnnamn i den nya formaten</label>
+      <div style={{ display: 'grid', gap: 6 }}>
+        {source.fields.map(f => (
+          <div key={f.id} style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 8, alignItems: 'center' }}>
+            <code style={{ fontSize: 12, color: C.accent }}>{f.key}</code>
+            <input value={mappings[f.id] || ''} onChange={e => setMappings({ ...mappings, [f.id]: e.target.value })} placeholder="Kolumnnamn i v2" style={inp} />
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>
+        Lämna tomt för att utelämna ett fält i den nya versionen (gamla datasets påverkas inte, men framtida uploads ignorerar det).
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+        <button onClick={submit} disabled={saving} style={btn('accent')}>{saving ? 'Skapar…' : 'Skapa ny version'}</button>
+        <button onClick={onClose} style={btn('ghost')}>Avbryt</button>
       </div>
     </div>
   );

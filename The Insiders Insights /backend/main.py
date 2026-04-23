@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import numpy as np
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -20,6 +20,7 @@ import sources as src_engine
 from db import SessionLocal, get_db, init_db
 from engine.monte_carlo import run_multi_domain_simulation
 from formula import FormulaError, aggregate, evaluate
+from logging_config import clear_recent, get_recent, log
 
 # ------------------------------------------------------------------
 # App setup
@@ -34,6 +35,31 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def request_logger(request: Request, call_next):
+    """Log every HTTP request with status + latency. Skips /api/logs and /health to avoid noise."""
+    import time as _t
+    start = _t.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        elapsed_ms = int((_t.perf_counter() - start) * 1000)
+        log.exception("http.error", method=request.method, path=request.url.path, elapsed_ms=elapsed_ms)
+        raise
+    elapsed_ms = int((_t.perf_counter() - start) * 1000)
+    skip = request.url.path in ("/health", "/api/logs")
+    if not skip:
+        level = "warn" if response.status_code >= 400 else "info"
+        getattr(log, level)(
+            "http.request",
+            method=request.method,
+            path=request.url.path,
+            status=response.status_code,
+            elapsed_ms=elapsed_ms,
+        )
+    return response
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 ISSUES_FILE = os.path.join(DATA_DIR, "issues.json")
@@ -90,6 +116,20 @@ def _save_json(path: str, data):
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "insiders-api"}
+
+
+# ------------------------------------------------------------------
+# LOGS (debugging aid — returns recent in-memory structured events)
+# ------------------------------------------------------------------
+@app.get("/api/logs")
+def api_logs(limit: int = 200, level: Optional[str] = None):
+    return {"count": len(get_recent(limit, level)), "entries": get_recent(limit, level)}
+
+
+@app.delete("/api/logs")
+def api_logs_clear():
+    clear_recent()
+    return {"cleared": True}
 
 
 # ------------------------------------------------------------------
@@ -434,11 +474,23 @@ async def upload_to_customer(customer_id: str, file: UploadFile = File(...), db:
         raise HTTPException(404, "Customer not found")
 
     raw = await file.read()
+    log.info("upload.received", customer=c.slug, filename=file.filename, size_bytes=len(raw))
     df = src_engine.parse_file(raw, file.filename or "upload.csv")
     if df is None:
+        log.warn("upload.parse_failed", customer=c.slug, filename=file.filename)
         raise HTTPException(422, "Kunde inte läsa filen. Stöd: CSV, TSV, XLS, XLSX.")
 
     status, source, version, detail = src_engine.detect_source(db, df, file.filename or "")
+    log.info(
+        "upload.detect",
+        customer=c.slug,
+        filename=file.filename,
+        status=status,
+        source=source.key if source else None,
+        version=version.version if version else None,
+        overlap=detail.get("overlap"),
+        file_columns=len(df.columns),
+    )
 
     if status == "no_match":
         return {
@@ -464,6 +516,7 @@ async def upload_to_customer(customer_id: str, file: UploadFile = File(...), db:
 
     # matched → ingest
     dataset = src_engine.ingest_dataset(db, c, source, version, df, file.filename or "upload", raw)
+    log.info("upload.ingested", customer=c.slug, source=source.key, version=version.version, rows=dataset.row_count, dataset_id=dataset.id)
     return {
         "status": "matched",
         "dataset_id": dataset.id,
@@ -694,6 +747,50 @@ def delete_module(module_id: str, db: Session = Depends(get_db)):
     return {"deleted": True}
 
 
+class ModuleCloneReq(BaseModel):
+    customer_id: str
+    name_override: Optional[str] = None
+
+
+@app.post("/api/modules/{module_id}/clone")
+def clone_module(module_id: str, req: ModuleCloneReq, db: Session = Depends(get_db)):
+    """Clone a module (typically a global template) into a customer-specific copy.
+    The clone keeps the same field_refs so it runs immediately against that customer's data."""
+    source_module = db.query(models.Module).filter_by(id=module_id).first()
+    if not source_module:
+        raise HTTPException(404, "Module not found")
+    customer = db.query(models.Customer).filter(
+        (models.Customer.id == req.customer_id) | (models.Customer.slug == req.customer_id)
+    ).first()
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+
+    new_module = models.Module(
+        customer_id=customer.id,
+        name=req.name_override or source_module.name,
+        abbr=source_module.abbr,
+        category=source_module.category,
+        description=source_module.description,
+        formula_json=dict(source_module.formula_json or {}),
+        thresholds_json=dict(source_module.thresholds_json or {}),
+        visualization=source_module.visualization,
+        insight_template=source_module.insight_template,
+        inverted=source_module.inverted,
+    )
+    db.add(new_module)
+    db.flush()
+    for ref in source_module.field_refs:
+        db.add(models.ModuleFieldRef(
+            module_id=new_module.id,
+            source_field_id=ref.source_field_id,
+            alias=ref.alias,
+        ))
+    db.commit()
+    db.refresh(new_module)
+    log.info("module.cloned", source_module=source_module.abbr, customer=customer.slug, new_module_id=new_module.id)
+    return _module_to_out(new_module)
+
+
 # ---- Evaluation ----
 class ModuleEvaluateReq(BaseModel):
     customer_ids: List[str]  # one or many (for global view)
@@ -718,6 +815,7 @@ def _evaluate_for_customer(db: Session, module: models.Module, customer: models.
             context[ref.alias] = aggregate(values, agg)
         except FormulaError as e:
             context[ref.alias] = 0
+            log.warn("module.eval.aggregate_error", module=module.abbr, alias=ref.alias, error=str(e))
         aliases_used[ref.alias] = {"source_field_id": field_id, "value_count": len(values), "aggregation": agg}
 
     expression = (module.formula_json or {}).get("expression", "")
@@ -728,6 +826,7 @@ def _evaluate_for_customer(db: Session, module: models.Module, customer: models.
             value = evaluate(expression, context)
         except FormulaError as e:
             error = str(e)
+            log.warn("module.eval.formula_error", module=module.abbr, customer=customer.slug, expression=expression, error=error)
     else:
         # If no expression, return sum of all aliases (simple default)
         value = sum(context.values()) if context else 0

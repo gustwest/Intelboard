@@ -106,13 +106,7 @@ def detect_source(
                 fn_score = 1.0
                 break
 
-        # 2) required columns gate
-        required = [_norm(c) for c in rules.get("required_columns", [])]
-        if required and not all(c in file_cols_norm for c in required):
-            # doesn't meet hard gate
-            continue
-
-        # 3) score against current version's mapped columns
+        # 2) score against current version's mapped columns
         current_version = next((v for v in source.versions if v.is_current), None)
         if current_version is None:
             continue
@@ -123,11 +117,19 @@ def detect_source(
 
         matched = mapped_cols_norm & set(file_cols_norm.keys())
         overlap = len(matched) / max(1, len(mapped_cols_norm))
-        score = overlap + 0.25 * fn_score + (0.25 if required else 0)
+
+        # required_columns from detect_rules is a *boost* — a file that includes
+        # them gets +0.3 but not meeting them is no longer disqualifying,
+        # since a version bump can rename/drop those very columns.
+        required = [_norm(c) for c in rules.get("required_columns", [])]
+        req_met = bool(required) and all(c in file_cols_norm for c in required)
+
+        score = overlap + 0.25 * fn_score + (0.3 if req_met else 0)
 
         detail = {
             "overlap": overlap,
             "fn_score": fn_score,
+            "required_met": req_met,
             "matched_columns": [file_cols_norm[c] for c in matched],
             "missing_columns": [m.column_name for m in current_version.mappings if _norm(m.column_name) not in file_cols_norm],
             "extra_columns": [c for c in file_cols if _norm(c) not in mapped_cols_norm],

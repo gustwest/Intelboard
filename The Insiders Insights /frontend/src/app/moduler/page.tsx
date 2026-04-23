@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import Gauge from '../../components/Gauge';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
@@ -14,12 +15,16 @@ type FieldRef = { id: string; source_field_id: string; alias: string; field_key:
 type Module = { id: string; customer_id: string | null; name: string; abbr: string; category: string; description: string; formula: any; thresholds: any; visualization: string; insight_template: string; inverted: boolean; field_refs: FieldRef[] };
 type Customer = { id: string; name: string; logo_emoji: string };
 
+type Filter = 'all' | 'global' | 'customer';
+
 export default function ModulesPage() {
   const [modules, setModules] = useState<Module[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [open, setOpen] = useState<Module | null>(null);
   const [creating, setCreating] = useState(false);
+  const [filter, setFilter] = useState<Filter>('all');
+  const [filterCustomer, setFilterCustomer] = useState<string>('');
 
   async function refresh() {
     const [ms, ss, cs] = await Promise.all([
@@ -31,18 +36,49 @@ export default function ModulesPage() {
   }
   useEffect(() => { refresh(); }, []);
 
+  const filtered = modules.filter(m => {
+    if (filter === 'global') return m.customer_id === null;
+    if (filter === 'customer') {
+      if (!filterCustomer) return m.customer_id !== null;
+      return m.customer_id === filterCustomer;
+    }
+    return true;
+  });
+
   return (
     <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px 60px', fontFamily: "'Inter', system-ui, sans-serif", color: C.text }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>📐 Moduler</h1>
           <p style={{ fontSize: '0.8125rem', color: C.muted, margin: '4px 0 0' }}>
-            Beräkningar som binder mot fält från en eller flera datakällor. Globala mallar eller kund-specifika.
+            Globala mallar som kan klonas per kund, eller direkt kund-specifika moduler.
           </p>
         </div>
         <button onClick={() => setCreating(true)} style={btn('accent')} disabled={sources.length === 0}>
           + Ny modul
         </button>
+      </div>
+
+      {/* Filter bar */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>Visa:</span>
+        {(['all', 'global', 'customer'] as Filter[]).map(f => (
+          <button key={f} onClick={() => setFilter(f)} style={{
+            padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+            background: filter === f ? 'rgba(168,85,247,0.15)' : 'transparent',
+            color: filter === f ? C.accent : C.muted,
+            border: `1px solid ${filter === f ? 'rgba(168,85,247,0.3)' : C.border}`,
+          }}>
+            {f === 'all' ? 'Alla' : f === 'global' ? 'Globala mallar' : 'Kund-specifika'}
+          </button>
+        ))}
+        {filter === 'customer' && (
+          <select value={filterCustomer} onChange={e => setFilterCustomer(e.target.value)} style={{ ...inp, maxWidth: 240 }}>
+            <option value="">Alla kunder</option>
+            {customers.map(c => <option key={c.id} value={c.id}>{c.logo_emoji} {c.name}</option>)}
+          </select>
+        )}
+        <span style={{ fontSize: 11, color: C.dim, marginLeft: 'auto' }}>{filtered.length} visade · {modules.length} totalt</span>
       </div>
 
       {sources.length === 0 && (
@@ -62,37 +98,79 @@ export default function ModulesPage() {
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
-        {modules.map(m => (
-          <div key={m.id} onClick={() => setOpen(m)} style={{
-            background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 18, cursor: 'pointer',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
-              <h3 style={{ margin: 0, fontSize: 15 }}>{m.name}</h3>
-              <span style={{ fontSize: 11, color: C.accent, fontWeight: 700, padding: '2px 8px', borderRadius: 12, background: 'rgba(168,85,247,0.1)' }}>{m.abbr}</span>
-            </div>
-            <div style={{ fontSize: 11, color: C.dim, marginBottom: 10 }}>
-              {m.customer_id ? customers.find(c => c.id === m.customer_id)?.name || 'Kund' : 'Global mall'} · {m.category}
-            </div>
-            {m.description && <p style={{ fontSize: 12, color: C.muted, margin: '0 0 10px' }}>{m.description}</p>}
-            <div style={{ fontSize: 12, color: C.muted, fontFamily: 'monospace', background: 'rgba(0,0,0,0.25)', padding: 8, borderRadius: 8 }}>
-              {m.formula?.expression || '—'}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-              {m.field_refs.map(ref => (
-                <span key={ref.id} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 10, background: 'rgba(168,85,247,0.08)', color: C.accent }}>
-                  {ref.alias}={ref.field_key}
-                </span>
-              ))}
-            </div>
-          </div>
+        {filtered.map(m => (
+          <ModuleCard key={m.id} module={m} customers={customers} onOpen={() => setOpen(m)} onChanged={refresh} />
         ))}
-        {modules.length === 0 && (
+        {filtered.length === 0 && (
           <div style={{ color: C.muted, fontSize: 13, padding: 40, textAlign: 'center', gridColumn: '1 / -1' }}>
-            Inga moduler ännu.
+            Inga moduler i detta urval.
           </div>
         )}
       </div>
     </main>
+  );
+}
+
+function ModuleCard({ module: m, customers, onOpen, onChanged }: { module: Module; customers: Customer[]; onOpen: () => void; onChanged: () => void }) {
+  const [showClone, setShowClone] = useState(false);
+  const isGlobal = m.customer_id === null;
+  const cust = m.customer_id ? customers.find(c => c.id === m.customer_id) : null;
+
+  async function clone(customer_id: string) {
+    const res = await fetch(`${API}/api/modules/${m.id}/clone`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customer_id }),
+    });
+    if (res.ok) { setShowClone(false); onChanged(); }
+    else alert('Kunde inte klona: ' + (await res.text()));
+  }
+
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 18, position: 'relative' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+        <h3 style={{ margin: 0, fontSize: 15, cursor: 'pointer' }} onClick={onOpen}>{m.name}</h3>
+        <span style={{ fontSize: 11, color: C.accent, fontWeight: 700, padding: '2px 8px', borderRadius: 12, background: 'rgba(168,85,247,0.1)' }}>{m.abbr}</span>
+      </div>
+      <div style={{ fontSize: 11, color: C.dim, marginBottom: 10 }}>
+        {isGlobal ? <span style={{ color: C.muted, fontWeight: 600 }}>GLOBAL MALL</span>
+          : <span style={{ color: C.accent }}>KUND: {cust?.logo_emoji} {cust?.name || m.customer_id}</span>}
+        {' · '}{m.category}
+      </div>
+      {m.description && <p style={{ fontSize: 12, color: C.muted, margin: '0 0 10px' }}>{m.description}</p>}
+      <div onClick={onOpen} style={{ fontSize: 12, color: C.muted, fontFamily: 'monospace', background: 'rgba(0,0,0,0.25)', padding: 8, borderRadius: 8, cursor: 'pointer' }}>
+        {m.formula?.expression || '—'}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+        {m.field_refs.map(ref => (
+          <span key={ref.id} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 10, background: 'rgba(168,85,247,0.08)', color: C.accent }}>
+            {ref.alias}={ref.field_key}
+          </span>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <button onClick={onOpen} style={btn('ghost')}>Öppna / Redigera</button>
+        {isGlobal && (
+          <button onClick={() => setShowClone(!showClone)} style={btn('ghost')}>Klona till kund</button>
+        )}
+      </div>
+
+      {showClone && (
+        <div style={{ marginTop: 10, padding: 10, background: 'rgba(0,0,0,0.3)', borderRadius: 10, border: `1px solid ${C.border}` }}>
+          <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>Välj kund att klona till:</div>
+          {customers.length === 0 ? (
+            <div style={{ fontSize: 12, color: C.dim }}>Inga kunder tillgängliga.</div>
+          ) : customers.map(c => (
+            <button key={c.id} onClick={() => clone(c.id)} style={{
+              display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', borderRadius: 8,
+              background: 'transparent', border: `1px solid ${C.border}`, color: C.text, fontSize: 12, cursor: 'pointer',
+              marginBottom: 4, fontFamily: 'inherit',
+            }}>
+              {c.logo_emoji} {c.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -105,6 +183,12 @@ function ModuleEditor({ module, sources, customers, onClose, onSaved }: { module
   const [expression, setExpression] = useState(module?.formula?.expression || '');
   const [aggregations, setAggregations] = useState<Record<string, string>>(module?.formula?.aggregations || {});
   const [customerId, setCustomerId] = useState<string | null>(module?.customer_id || null);
+  const [inverted, setInverted] = useState<boolean>(module?.inverted || false);
+  const [thresholds, setThresholds] = useState<{ red: string; yellow: string; green: string }>({
+    red: module?.thresholds?.red?.toString() || '',
+    yellow: module?.thresholds?.yellow?.toString() || '',
+    green: module?.thresholds?.green?.toString() || '',
+  });
   const [fieldRefs, setFieldRefs] = useState<{ source_field_id: string; alias: string }[]>(
     module?.field_refs.map(r => ({ source_field_id: r.source_field_id, alias: r.alias })) || []
   );
@@ -125,11 +209,21 @@ function ModuleEditor({ module, sources, customers, onClose, onSaved }: { module
     setFieldRefs(fieldRefs.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
   }
 
+  function parsedThresholds() {
+    const out: any = {};
+    for (const k of ['red', 'yellow', 'green'] as const) {
+      const n = parseFloat(thresholds[k]);
+      if (!Number.isNaN(n)) out[k] = n;
+    }
+    return out;
+  }
+
   async function save() {
     const body = {
       customer_id: customerId,
-      name, abbr, category, description,
+      name, abbr, category, description, inverted,
       formula: { expression, aggregations },
+      thresholds: parsedThresholds(),
       field_refs: fieldRefs,
       visualization: 'gauge',
     };
@@ -183,7 +277,7 @@ function ModuleEditor({ module, sources, customers, onClose, onSaved }: { module
         <div style={{ marginBottom: 16 }}>
           <label style={lbl}>Scope</label>
           <select value={customerId || ''} onChange={e => setCustomerId(e.target.value || null)} style={inp}>
-            <option value="">Global mall (alla kunder)</option>
+            <option value="">Global mall (kan klonas till kunder)</option>
             {customers.map(c => <option key={c.id} value={c.id}>{c.logo_emoji} {c.name} (kund-specifik)</option>)}
           </select>
         </div>
@@ -227,23 +321,45 @@ function ModuleEditor({ module, sources, customers, onClose, onSaved }: { module
           </div>
         </div>
 
+        {/* Thresholds + inversion */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={lbl}>Tröskelvärden (för gauge-visualisering)</label>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr) auto', gap: 8, alignItems: 'center' }}>
+            <input value={thresholds.red} onChange={e => setThresholds({ ...thresholds, red: e.target.value })} placeholder="röd" style={{ ...inp, borderColor: 'rgba(239,68,68,0.3)' }} />
+            <input value={thresholds.yellow} onChange={e => setThresholds({ ...thresholds, yellow: e.target.value })} placeholder="gul" style={{ ...inp, borderColor: 'rgba(245,158,11,0.3)' }} />
+            <input value={thresholds.green} onChange={e => setThresholds({ ...thresholds, green: e.target.value })} placeholder="grön" style={{ ...inp, borderColor: 'rgba(34,197,94,0.3)' }} />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.muted, whiteSpace: 'nowrap' }}>
+              <input type="checkbox" checked={inverted} onChange={e => setInverted(e.target.checked)} /> Lägre = bättre
+            </label>
+          </div>
+          <div style={{ fontSize: 11, color: C.dim, marginTop: 4 }}>Lämna tomt om modulen inte ska visualiseras med ampel.</div>
+        </div>
+
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           <button onClick={save} style={btn('accent')}>{isNew ? 'Skapa modul' : 'Spara ändringar'}</button>
           {!isNew && <button onClick={testEval} style={btn('ghost')}>Testa mot kunder</button>}
         </div>
 
         {testResults && (
-          <div style={{ background: 'rgba(0,0,0,0.25)', border: `1px solid ${C.border}`, borderRadius: 10, padding: 14, fontFamily: 'monospace', fontSize: 12 }}>
-            <div style={{ color: C.muted, marginBottom: 8 }}>Testresultat:</div>
-            {testResults.results.map((r: any) => (
-              <div key={r.customer_id} style={{ marginBottom: 6 }}>
-                <b style={{ color: C.text }}>{r.customer_name}</b>: <span style={{ color: C.accent }}>{typeof r.value === 'number' ? r.value.toLocaleString(undefined, { maximumFractionDigits: 3 }) : String(r.value)}</span>
-                <span style={{ color: C.dim, marginLeft: 10 }}>
-                  {Object.entries(r.context || {}).map(([k, v]) => `${k}=${v}`).join(' · ')}
-                </span>
-                {r.error && <span style={{ color: C.danger, marginLeft: 10 }}>⚠ {r.error}</span>}
-              </div>
-            ))}
+          <div style={{ background: 'rgba(0,0,0,0.25)', border: `1px solid ${C.border}`, borderRadius: 10, padding: 14 }}>
+            <div style={{ color: C.muted, marginBottom: 8, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>Testresultat:</div>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 10 }}>
+              {testResults.results.map((r: any) => (
+                <div key={r.customer_id} style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 11, color: C.muted, marginBottom: 2 }}>{r.customer_name}</div>
+                  <Gauge value={r.value} thresholds={parsedThresholds()} inverted={inverted} size="sm" />
+                  {r.error && <div style={{ fontSize: 10, color: C.danger, marginTop: 4 }}>⚠ {r.error}</div>}
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: C.dim, fontFamily: 'monospace' }}>
+              {testResults.results.map((r: any) => (
+                <div key={r.customer_id}>
+                  <b style={{ color: C.text }}>{r.customer_name}</b>:{' '}
+                  {Object.entries(r.context || {}).map(([k, v]) => `${k}=${Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}`).join(' · ')}
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

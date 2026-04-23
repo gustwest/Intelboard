@@ -30,6 +30,7 @@ export default function Navbar() {
     { href: '/sources', label: 'Källor', emoji: '📥' },
     { href: '/moduler', label: 'Moduler', emoji: '📐' },
     { href: '/rapporter', label: 'Rapporter', emoji: '📊' },
+    { href: '/loggar', label: 'Loggar', emoji: '🪵' },
     { href: '/admin', label: 'Admin', emoji: '📋' },
   ];
 
