@@ -39,11 +39,20 @@ src/
 └── middleware.ts        # Auth middleware
 ```
 
+## Deploy
+
+Staging deploys **automatically** on `git push origin main` via Cloud Build trigger (`aidas-staging`).
+Cloud Build uses Kaniko caching. Config in `cloudbuild.yaml`.
+Path-filter: only changes in `aidas/` trigger this build.
+
+**Repo:** `gustwest/Intelboard` (monorepo, subfolder `aidas/`)
+
 ## Commands
 ```bash
-npm run dev          # Start dev server (localhost:3000)
-npm run build        # Production build
-./deploy-cloud-run.sh  # Deploy to Cloud Run
+npm run dev              # Start dev server (localhost:3000)
+npm run build            # Production build
+git push origin main     # Auto-deploy via Cloud Build (preferred)
+./deploy-cloud-run.sh    # Manual deploy (fallback)
 ```
 
 ## Environment Variables
