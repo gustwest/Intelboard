@@ -1,5 +1,5 @@
 import 'server-only';
-import { getAccessToken, getVertexConfig } from '@/lib/ai/vertex-auth';
+import { getAccessToken, getVertexConfig, getVertexBaseUrl } from '@/lib/ai/vertex-auth';
 
 function buildContents(messages) {
   // Gemini expects: contents: [{ role: 'user'|'model', parts: [{text}] }]
@@ -25,7 +25,7 @@ export async function generateWithGemini({ modelId, messages, temperature, maxTo
   const token = await getAccessToken();
 
   const endpoint =
-    `https://${location}-aiplatform.googleapis.com/v1/projects/${project}` +
+    `${getVertexBaseUrl(location)}/v1/projects/${project}` +
     `/locations/${location}/publishers/google/models/${modelId}:generateContent`;
 
   const body = {
@@ -55,6 +55,7 @@ export async function generateWithGemini({ modelId, messages, temperature, maxTo
 
     if (!res.ok) {
       const errText = await res.text();
+      console.error(`[vertex-gemini] HTTP ${res.status} endpoint=${endpoint.replace(/\/projects\/[^/]+/, '/projects/REDACTED')} body=${errText.slice(0, 500)}`);
       throw new Error(`Gemini API error (${res.status}): ${errText.slice(0, 500)}`);
     }
 

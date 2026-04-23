@@ -1,6 +1,6 @@
 import { getCurrentUser } from '@/lib/auth/dal';
 import { isAdmin } from '@/lib/auth/roles';
-import { getAccessToken, getVertexConfig } from '@/lib/ai/vertex-auth';
+import { getAccessToken, getVertexConfig, getVertexBaseUrl } from '@/lib/ai/vertex-auth';
 import prisma from '@/lib/prisma';
 import { generateTailoredCv } from '@/lib/assignments/cv';
 
@@ -500,7 +500,7 @@ export async function POST(req) {
       try {
         const { project, location } = getVertexConfig();
         const endpoint =
-          `https://${location}-aiplatform.googleapis.com/v1/projects/${project}` +
+          `${getVertexBaseUrl(location)}/v1/projects/${project}` +
           `/locations/${location}/publishers/anthropic/models/${CHAT_MODEL}:rawPredict`;
 
         const systemPrompt = await buildSystemPrompt(context);

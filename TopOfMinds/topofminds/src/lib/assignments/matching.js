@@ -156,15 +156,20 @@ export async function runMatchingForAssignment({ assignmentId, consultantIds, us
     orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
   });
 
+  console.log(`[matching] start assignmentId=${assignmentId} title="${assignment.title}" consultants=${consultants.length} concurrency=${concurrency}`);
+
   if (consultants.length === 0) {
+    console.warn(`[matching] no consultants found — returning early`);
     return { matches: [], errors: [] };
   }
 
   const results = await pLimit(consultants, concurrency, async (consultant) => {
     try {
       const match = await matchOne({ assignment, consultant, userId });
+      console.log(`[matching] ok consultantId=${consultant.id} name="${consultant.firstName} ${consultant.lastName}" score=${match.score} recommendation=${match.recommendation}`);
       return { consultantId: consultant.id, ok: true, match };
     } catch (error) {
+      console.error(`[matching] failed consultantId=${consultant.id} name="${consultant.firstName} ${consultant.lastName}" error="${error?.message || error}"`);
       return { consultantId: consultant.id, ok: false, error: error?.message || String(error) };
     }
   });
@@ -212,6 +217,14 @@ export async function runMatchingForAssignment({ assignmentId, consultantIds, us
       data: { status: 'MATCHED' },
     });
   }
+
+  if (errors.length > 0) {
+    console.error(`[matching] ${errors.length} consultant(s) failed for assignmentId=${assignmentId}:`);
+    for (const e of errors) {
+      console.error(`  consultantId=${e.consultantId} error="${e.error}"`);
+    }
+  }
+  console.log(`[matching] done assignmentId=${assignmentId} successes=${successes.length} errors=${errors.length}`);
 
   return {
     matchesCount: successes.length,

@@ -62,7 +62,10 @@ export async function generateWithGemini({ modelId, messages, temperature, maxTo
     }
 
     const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') ?? '';
+    const text = data?.candidates?.[0]?.content?.parts
+      ?.filter((p) => !p.thought)
+      ?.map((p) => p.text)
+      .join('') ?? '';
     const usage = data?.usageMetadata || {};
     return {
       text,

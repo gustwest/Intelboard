@@ -61,6 +61,7 @@ async function runSingle({ pipelineStep, modelId, role, messages, temperature, m
     });
     return { ok: true, result };
   } catch (error) {
+    console.error(`[runner] ${pipelineStep} ${role} failed modelId=${modelId} jobId=${jobId} error="${error?.message}"`);
     await logUsage({
       pipelineStep,
       modelId,
@@ -87,8 +88,10 @@ export async function runPipelineStep({
 }) {
   const setting = await prisma.aISetting.findUnique({ where: { pipelineStep } });
   if (!setting) {
+    console.error(`[runner] no AISetting found for pipelineStep=${pipelineStep} — run db seed or add via admin UI`);
     throw new Error(`No AISetting configured for pipeline step ${pipelineStep}`);
   }
+  console.log(`[runner] ${pipelineStep} champion=${setting.championModelId}${setting.challengerModelId ? ` challenger=${setting.challengerModelId}` : ''} jobId to be assigned`);
 
   const temperature = temperatureOverride ?? setting.temperature ?? undefined;
   const maxTokens = maxTokensOverride ?? setting.maxTokens ?? undefined;

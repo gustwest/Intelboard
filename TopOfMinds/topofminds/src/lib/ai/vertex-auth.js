@@ -23,9 +23,16 @@ export async function getAccessToken() {
 
 export function getVertexConfig() {
   const project = process.env.GCP_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;
-  const location = process.env.VERTEX_AI_LOCATION || 'europe-north1';
+  const location = process.env.VERTEX_AI_LOCATION || 'global';
   if (!project) {
     throw new Error('GCP_PROJECT_ID environment variable is required for Vertex AI');
   }
   return { project, location };
+}
+
+// The global endpoint drops the region prefix from the hostname.
+export function getVertexBaseUrl(location) {
+  return location === 'global'
+    ? 'https://aiplatform.googleapis.com'
+    : `https://${location}-aiplatform.googleapis.com`;
 }
