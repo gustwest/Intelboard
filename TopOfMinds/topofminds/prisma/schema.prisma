@@ -47,7 +47,9 @@ model User {
   id            String   @id @default(uuid())
   email         String   @unique
   name          String?
-  passwordHash  String
+  passwordHash  String?  // Optional — Google OAuth users don't have passwords
+  googleId      String?  @unique // Google 'sub' claim
+  avatarUrl     String?  // Profile picture from Google
   role          String   @default("CONSULTANT") // SUPERADMIN, ADMIN, CONSULTANT
   isActive      Boolean  @default(true)
   lastLoginAt   DateTime?

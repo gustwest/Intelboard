@@ -4,6 +4,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import KanbanBoard from './KanbanBoard';
 import styles from './admin.module.css';
 
+const ROLE_LABELS = { SUPERADMIN: 'Superadmin', ADMIN: 'Admin', CONSULTANT: 'Konsult' };
+const ROLE_OPTIONS = ['SUPERADMIN', 'ADMIN', 'CONSULTANT'];
+
 export default function AdminPage() {
   const [tab, setTab] = useState('kanban');
 
@@ -21,6 +24,15 @@ export default function AdminPage() {
   // Live log state
   const [taskLogs, setTaskLogs] = useState({});
   const [expandedLogs, setExpandedLogs] = useState({});
+
+  // Users state
+  const [users, setUsers] = useState([]);
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserRole, setNewUserRole] = useState('CONSULTANT');
+  const [userError, setUserError] = useState(null);
+  const [userSaving, setUserSaving] = useState(false);
 
   // Refs
   const eventSourceRef = useRef(null);
@@ -55,6 +67,14 @@ export default function AdminPage() {
     }
   }, []);
 
+  // ── Fetch users ──
+  const fetchUsers = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/users');
+      if (res.ok) setUsers(await res.json());
+    } catch {}
+  }, []);
+
   // ── Polling (only when agent tab is active) ──
   useEffect(() => {
     if (tab !== 'agent') return;
@@ -64,6 +84,11 @@ export default function AdminPage() {
     const s2 = setInterval(fetchAgentStatus, 10000);
     return () => { clearInterval(s1); clearInterval(s2); };
   }, [tab, fetchSessions, fetchAgentStatus]);
+
+  // ── Load users when users tab is active ──
+  useEffect(() => {
+    if (tab === 'users') fetchUsers();
+  }, [tab, fetchUsers]);
 
   // ── Notification when task completes ──
   useEffect(() => {
@@ -320,6 +345,9 @@ export default function AdminPage() {
         <button className={`${styles.tab} ${tab === 'agent' ? styles.tabActive : ''}`} onClick={() => setTab('agent')}>
           🤖 AI Agent
         </button>
+        <button className={`${styles.tab} ${tab === 'users' ? styles.tabActive : ''}`} onClick={() => setTab('users')}>
+          👥 Användare
+        </button>
       </div>
 
       {tab === 'kanban' && <KanbanBoard />}
@@ -544,6 +572,172 @@ export default function AdminPage() {
             </div>
           )}
         </>
+      )}
+
+      {tab === 'users' && (
+        <div className={styles.panel}>
+          <div className={styles.chatHeader}>
+            <h2 className={styles.panelTitle}>👥 Användare</h2>
+            <button className="btn btn-sm btn-primary" onClick={() => { setShowAddUser(true); setUserError(null); }}>
+              + Lägg till användare
+            </button>
+          </div>
+
+          {/* Add user form */}
+          {showAddUser && (
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(99,102,241,0.04)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: 10, alignItems: 'end' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: 4 }}>E-post *</label>
+                  <input
+                    type="email"
+                    value={newUserEmail}
+                    onChange={(e) => setNewUserEmail(e.target.value)}
+                    placeholder="namn@exempel.se"
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'var(--color-text-primary)', fontSize: '0.85rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: 4 }}>Namn</label>
+                  <input
+                    type="text"
+                    value={newUserName}
+                    onChange={(e) => setNewUserName(e.target.value)}
+                    placeholder="Förnamn Efternamn"
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'var(--color-text-primary)', fontSize: '0.85rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: 4 }}>Roll</label>
+                  <select
+                    value={newUserRole}
+                    onChange={(e) => setNewUserRole(e.target.value)}
+                    style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'var(--color-text-primary)', fontSize: '0.85rem' }}
+                  >
+                    {ROLE_OPTIONS.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                  </select>
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    disabled={!newUserEmail.trim() || userSaving}
+                    onClick={async () => {
+                      setUserSaving(true);
+                      setUserError(null);
+                      try {
+                        const res = await fetch('/api/admin/users', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ email: newUserEmail, name: newUserName, role: newUserRole }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) { setUserError(data.error); return; }
+                        setNewUserEmail(''); setNewUserName(''); setNewUserRole('CONSULTANT');
+                        setShowAddUser(false);
+                        fetchUsers();
+                      } catch (e) { setUserError(e.message); } finally { setUserSaving(false); }
+                    }}
+                  >{userSaving ? 'Sparar...' : '✓ Spara'}</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setShowAddUser(false)}>Avbryt</button>
+                </div>
+              </div>
+              {userError && <p style={{ color: '#f87171', fontSize: '0.8rem', marginTop: 8 }}>{userError}</p>}
+            </div>
+          )}
+
+          {/* Users table */}
+          <div className="data-table-wrapper" style={{ border: 'none' }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Användare</th>
+                  <th>Roll</th>
+                  <th>Status</th>
+                  <th>Senast inloggad</th>
+                  <th>Skapad</th>
+                  <th style={{ width: 120 }}>Åtgärder</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map(u => (
+                  <tr key={u.id} style={{ opacity: u.isActive ? 1 : 0.5 }}>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        {u.avatarUrl ? (
+                          <img src={u.avatarUrl} alt="" style={{ width: 32, height: 32, borderRadius: '50%' }} />
+                        ) : (
+                          <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'linear-gradient(135deg, hsl(220,70%,55%), hsl(260,60%,55%))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, color: '#fff' }}>
+                            {(u.name || u.email)[0].toUpperCase()}
+                          </div>
+                        )}
+                        <div>
+                          <div style={{ fontWeight: 500 }}>{u.name || '—'}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{u.email}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <select
+                        value={u.role}
+                        onChange={async (e) => {
+                          await fetch(`/api/admin/users/${u.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ role: e.target.value }),
+                          });
+                          fetchUsers();
+                        }}
+                        style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'var(--color-text-primary)', fontSize: '0.8rem' }}
+                      >
+                        {ROLE_OPTIONS.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                      </select>
+                    </td>
+                    <td>
+                      <span className={`badge ${u.isActive ? 'success' : 'neutral'}`}>
+                        <span className="badge-dot"></span>
+                        {u.isActive ? 'Aktiv' : 'Inaktiv'}
+                      </span>
+                    </td>
+                    <td style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>
+                      {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString('sv-SE', { timeZone: 'Europe/Stockholm' }) : 'Aldrig'}
+                    </td>
+                    <td style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                      {new Date(u.createdAt).toLocaleDateString('sv-SE', { timeZone: 'Europe/Stockholm' })}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={async () => {
+                            await fetch(`/api/admin/users/${u.id}`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ isActive: !u.isActive }),
+                            });
+                            fetchUsers();
+                          }}
+                          title={u.isActive ? 'Inaktivera' : 'Aktivera'}
+                        >{u.isActive ? '🔒' : '🔓'}</button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          style={{ color: '#f87171' }}
+                          onClick={async () => {
+                            if (!confirm(`Ta bort ${u.email}?`)) return;
+                            await fetch(`/api/admin/users/${u.id}`, { method: 'DELETE' });
+                            fetchUsers();
+                          }}
+                        >🗑</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {users.length === 0 && (
+                  <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: 40 }}>Inga användare ännu</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -1,0 +1,25 @@
+.container { max-width: 900px; }
+.header { margin-bottom: var(--space-xl); }
+.title {
+  font-size: 1.6rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.subtitle {
+  color: var(--text-secondary);
+  margin-top: 6px;
+  font-size: 0.88rem;
+}
+.comingSoon {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2xl);
+  text-align: center;
+}
+.comingSoon .icon { font-size: 3rem; margin-bottom: var(--space-md); }
+.comingSoon h2 { font-size: 1.2rem; font-weight: 700; margin-bottom: 8px; }
+.comingSoon p { color: var(--text-secondary); font-size: 0.88rem; line-height: 1.6; max-width: 500px; margin: 0 auto; }

@@ -15,7 +15,6 @@ const ADMIN_LINKS = [
   { href: '/financials', label: 'Ekonomi', icon: '💰', section: 'Planering' },
   { href: '/notifications', label: 'Notifikationer', icon: '🔔', section: 'System', badgeKey: 'notifications' },
   { href: '/admin', label: 'Admin', icon: '⚙️', section: 'System' },
-  { href: '/admin/users', label: 'Användare', icon: '🔐', section: 'System' },
   { href: '/admin/ai', label: 'AI-inställningar', icon: '🤖', section: 'System' },
 ];
 
@@ -73,7 +72,11 @@ export default function Sidebar({ user, notificationCount = 0 }) {
       {user && (
         <div className="sidebar-user">
           <div className="sidebar-user-info">
-            <div className="sidebar-user-avatar">{initialsFrom(user.name || user.email)}</div>
+            {user.avatarUrl ? (
+              <img src={user.avatarUrl} alt="" className="sidebar-user-avatar" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
+            ) : (
+              <div className="sidebar-user-avatar">{initialsFrom(user.name || user.email)}</div>
+            )}
             <div className="sidebar-user-meta">
               <div className="sidebar-user-name">{user.name || user.email}</div>
               <div className="sidebar-user-role">{user.role === ROLES.CONSULTANT ? 'Konsult' : user.role}</div>

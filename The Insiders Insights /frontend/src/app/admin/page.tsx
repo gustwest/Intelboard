@@ -61,7 +61,7 @@ const FILE_CATEGORIES = [
 // MAIN PAGE
 // ============================================================
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'kanban' | 'files'>('kanban');
+  const [activeTab, setActiveTab] = useState<'kanban' | 'files' | 'agent'>('kanban');
 
   return (
     <div style={{
@@ -70,7 +70,7 @@ export default function AdminPage() {
       color: '#e2e8f0',
       fontFamily: "'Inter', system-ui, sans-serif",
     }}>
-      {/* Sub-nav: Ärenden / Filer tabs */}
+      {/* Sub-nav: Ärenden / Filer / Agent tabs */}
       <div style={{
         padding: '12px 32px',
         borderBottom: '1px solid rgba(255,255,255,0.04)',
@@ -79,10 +79,13 @@ export default function AdminPage() {
       }}>
         <TabButton active={activeTab === 'kanban'} onClick={() => setActiveTab('kanban')} emoji="📋" label="Ärenden" />
         <TabButton active={activeTab === 'files'} onClick={() => setActiveTab('files')} emoji="📁" label="Filer" />
+        <TabButton active={activeTab === 'agent'} onClick={() => setActiveTab('agent')} emoji="🤖" label="AI Agent" />
       </div>
 
       <main style={{ padding: '24px 32px' }}>
-        {activeTab === 'kanban' ? <KanbanTab /> : <FilesTab />}
+        {activeTab === 'kanban' && <KanbanTab />}
+        {activeTab === 'files' && <FilesTab />}
+        {activeTab === 'agent' && <AgentTab />}
       </main>
     </div>
   );
@@ -638,5 +641,405 @@ function FilesTab() {
         )}
       </div>
     </>
+  );
+}
+
+// ============================================================
+// AGENT TAB
+// ============================================================
+interface AgentSession {
+  id: string;
+  title: string;
+  pinned: boolean;
+  claudeSessionId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  tasks: AgentTaskItem[];
+}
+
+interface AgentTaskItem {
+  id: string;
+  prompt: string;
+  status: 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED';
+  model: string;
+  response?: string | null;
+  error?: string | null;
+  claudeSessionId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  logs: { id: string; message: string; createdAt: string }[];
+}
+
+interface AgentStatus {
+  online: boolean;
+  lastPoll?: string;
+  model?: string;
+  cliVersion?: string;
+  projectDir?: string;
+  stats: { total: number; completed: number; failed: number; successRate: number };
+}
+
+function AgentTab() {
+  const [sessions, setSessions] = useState<AgentSession[]>([]);
+  const [activeSession, setActiveSession] = useState<string | null>(null);
+  const [prompt, setPrompt] = useState('');
+  const [model, setModel] = useState('claude-sonnet-4-6');
+  const [status, setStatus] = useState<AgentStatus | null>(null);
+  const [sending, setSending] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Poll status every 5s
+  useEffect(() => {
+    const poll = () => fetch('/api/admin/agent/status').then(r => r.json()).then(setStatus).catch(() => {});
+    poll();
+    const iv = setInterval(poll, 5000);
+    return () => clearInterval(iv);
+  }, []);
+
+  // Load sessions
+  const loadSessions = useCallback(() => {
+    fetch('/api/admin/agent').then(r => r.json()).then(setSessions).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadSessions();
+    const iv = setInterval(loadSessions, 4000);
+    return () => clearInterval(iv);
+  }, [loadSessions]);
+
+  // Auto-scroll to bottom on new messages
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [sessions, activeSession]);
+
+  const sendTask = async () => {
+    if (!prompt.trim() || sending) return;
+    setSending(true);
+    try {
+      const res = await fetch('/api/admin/agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: prompt.trim(), sessionId: activeSession, model }),
+      });
+      const data = await res.json();
+      if (data.session) {
+        setActiveSession(data.session.id);
+      }
+      setPrompt('');
+      loadSessions();
+    } catch (err) {
+      console.error('Send task error:', err);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const deleteSession = async (id: string) => {
+    if (!confirm('Ta bort denna session?')) return;
+    await fetch(`/api/admin/agent/${id}`, { method: 'DELETE' });
+    if (activeSession === id) setActiveSession(null);
+    loadSessions();
+  };
+
+  const currentSession = sessions.find(s => s.id === activeSession);
+
+  const statusColor = status?.online ? '#22c55e' : '#ef4444';
+  const statusText = status?.online ? 'Online' : 'Offline';
+
+  return (
+    <div style={{ display: 'flex', gap: '16px', height: 'calc(100vh - 130px)' }}>
+      {/* LEFT — Sessions sidebar */}
+      <div style={{
+        width: '280px',
+        flexShrink: 0,
+        background: 'rgba(255,255,255,0.02)',
+        border: '1px solid rgba(255,255,255,0.06)',
+        borderRadius: '16px',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}>
+        {/* Agent status */}
+        <div style={{
+          padding: '16px',
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <div style={{
+              width: '8px', height: '8px', borderRadius: '50%',
+              background: statusColor,
+              boxShadow: `0 0 8px ${statusColor}`,
+              animation: status?.online ? 'pulse 2s infinite' : 'none',
+            }} />
+            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: statusColor }}>{statusText}</span>
+            {status?.model && (
+              <span style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.35)', marginLeft: 'auto' }}>{status.model}</span>
+            )}
+          </div>
+          {status && (
+            <div style={{ display: 'flex', gap: '12px', fontSize: '0.6875rem', color: 'rgba(255,255,255,0.4)' }}>
+              <span>✅ {status.stats.completed}</span>
+              <span>❌ {status.stats.failed}</span>
+              <span>📊 {status.stats.successRate}%</span>
+            </div>
+          )}
+        </div>
+
+        {/* New session button */}
+        <button
+          onClick={() => setActiveSession(null)}
+          style={{
+            margin: '12px 12px 8px',
+            padding: '10px',
+            background: 'linear-gradient(135deg, rgba(168,85,247,0.2), rgba(139,92,246,0.2))',
+            border: '1px solid rgba(168,85,247,0.3)',
+            borderRadius: '10px',
+            color: '#a855f7',
+            cursor: 'pointer',
+            fontSize: '0.8125rem',
+            fontWeight: 600,
+          }}
+        >
+          ➕ Ny session
+        </button>
+
+        {/* Session list */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '4px 8px' }}>
+          {sessions.map(session => (
+            <div
+              key={session.id}
+              onClick={() => setActiveSession(session.id)}
+              style={{
+                padding: '10px 12px',
+                marginBottom: '4px',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                background: activeSession === session.id ? 'rgba(168,85,247,0.15)' : 'transparent',
+                border: activeSession === session.id ? '1px solid rgba(168,85,247,0.3)' : '1px solid transparent',
+                transition: 'all 0.15s',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <span style={{
+                  fontSize: '0.8125rem',
+                  fontWeight: 500,
+                  color: activeSession === session.id ? '#e2e8f0' : 'rgba(255,255,255,0.6)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '200px',
+                }}>
+                  {session.title}
+                </span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); deleteSession(session.id); }}
+                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', fontSize: '0.75rem', padding: '0 2px' }}
+                >
+                  ✕
+                </button>
+              </div>
+              <div style={{ display: 'flex', gap: '6px', marginTop: '4px', fontSize: '0.6875rem', color: 'rgba(255,255,255,0.3)' }}>
+                <span>{session.tasks.length} meddelanden</span>
+                <span>•</span>
+                <span>{new Date(session.updatedAt).toLocaleDateString('sv-SE')}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* RIGHT — Chat area */}
+      <div style={{
+        flex: 1,
+        background: 'rgba(255,255,255,0.02)',
+        border: '1px solid rgba(255,255,255,0.06)',
+        borderRadius: '16px',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}>
+        {/* Chat messages */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+          {currentSession ? (
+            currentSession.tasks.map(task => (
+              <div key={task.id} style={{ marginBottom: '20px' }}>
+                {/* User prompt */}
+                <div style={{
+                  display: 'flex', justifyContent: 'flex-end', marginBottom: '8px',
+                }}>
+                  <div style={{
+                    maxWidth: '80%',
+                    padding: '12px 16px',
+                    background: 'linear-gradient(135deg, rgba(168,85,247,0.2), rgba(139,92,246,0.15))',
+                    border: '1px solid rgba(168,85,247,0.25)',
+                    borderRadius: '16px 16px 4px 16px',
+                    fontSize: '0.875rem',
+                    lineHeight: 1.5,
+                  }}>
+                    {task.prompt}
+                  </div>
+                </div>
+
+                {/* Status */}
+                {task.status === 'RUNNING' && (
+                  <div style={{
+                    display: 'flex', gap: '8px', alignItems: 'center',
+                    padding: '8px 14px',
+                    background: 'rgba(234,179,8,0.1)',
+                    border: '1px solid rgba(234,179,8,0.2)',
+                    borderRadius: '12px',
+                    fontSize: '0.8125rem',
+                    color: '#eab308',
+                    marginBottom: '8px',
+                    maxWidth: '80%',
+                  }}>
+                    <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⚙️</span>
+                    Agenten arbetar...
+                    {task.model && <span style={{ fontSize: '0.6875rem', color: 'rgba(234,179,8,0.6)', marginLeft: 'auto' }}>{task.model}</span>}
+                  </div>
+                )}
+
+                {task.status === 'PENDING' && (
+                  <div style={{
+                    padding: '8px 14px',
+                    background: 'rgba(88,166,255,0.1)',
+                    border: '1px solid rgba(88,166,255,0.2)',
+                    borderRadius: '12px',
+                    fontSize: '0.8125rem',
+                    color: '#58a6ff',
+                    marginBottom: '8px',
+                    maxWidth: '80%',
+                  }}>
+                    ⏳ Väntar på agent...
+                  </div>
+                )}
+
+                {/* Response */}
+                {task.response && (
+                  <div style={{
+                    maxWidth: '85%',
+                    padding: '14px 16px',
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: '16px 16px 16px 4px',
+                    fontSize: '0.8125rem',
+                    lineHeight: 1.6,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}>
+                    {task.response}
+                  </div>
+                )}
+
+                {/* Error */}
+                {task.status === 'FAILED' && task.error && (
+                  <div style={{
+                    maxWidth: '80%',
+                    padding: '10px 14px',
+                    background: 'rgba(248,81,73,0.1)',
+                    border: '1px solid rgba(248,81,73,0.2)',
+                    borderRadius: '12px',
+                    fontSize: '0.8125rem',
+                    color: '#f85149',
+                  }}>
+                    ❌ {task.error}
+                  </div>
+                )}
+
+                {/* Logs */}
+                {task.logs.length > 0 && (
+                  <details style={{ marginTop: '6px', maxWidth: '80%' }}>
+                    <summary style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.3)', cursor: 'pointer' }}>📋 {task.logs.length} loggar</summary>
+                    <div style={{ padding: '8px', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', marginTop: '4px', fontSize: '0.6875rem', color: 'rgba(255,255,255,0.5)', maxHeight: '150px', overflowY: 'auto' }}>
+                      {task.logs.map(l => (
+                        <div key={l.id} style={{ marginBottom: '2px' }}>{l.message}</div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </div>
+            ))
+          ) : (
+            <div style={{
+              height: '100%', display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center',
+              color: 'rgba(255,255,255,0.3)', gap: '12px',
+            }}>
+              <span style={{ fontSize: '3rem' }}>🤖</span>
+              <span style={{ fontSize: '1rem', fontWeight: 600 }}>Insiders AI Agent</span>
+              <span style={{ fontSize: '0.8125rem' }}>Skriv en uppgift nedan för att starta en ny session</span>
+            </div>
+          )}
+          <div ref={chatEndRef} />
+        </div>
+
+        {/* Input area */}
+        <div style={{
+          padding: '16px 20px',
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+          display: 'flex',
+          gap: '10px',
+          alignItems: 'flex-end',
+        }}>
+          <select
+            value={model}
+            onChange={e => setModel(e.target.value)}
+            style={{
+              padding: '10px 12px',
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '10px',
+              color: '#e2e8f0',
+              fontSize: '0.75rem',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="claude-sonnet-4-6">Sonnet 4</option>
+            <option value="claude-opus-4-7">Opus 4</option>
+            <option value="claude-haiku-3-5">Haiku 3.5</option>
+          </select>
+          <textarea
+            value={prompt}
+            onChange={e => setPrompt(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendTask(); } }}
+            placeholder={activeSession ? 'Följdfråga...' : 'Beskriv uppgiften för AI-agenten...'}
+            rows={2}
+            style={{
+              flex: 1,
+              padding: '10px 14px',
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '12px',
+              color: '#e2e8f0',
+              fontSize: '0.875rem',
+              resize: 'none',
+              outline: 'none',
+              lineHeight: 1.5,
+              fontFamily: 'inherit',
+            }}
+          />
+          <button
+            onClick={sendTask}
+            disabled={!prompt.trim() || sending}
+            style={{
+              padding: '10px 20px',
+              background: prompt.trim() && !sending
+                ? 'linear-gradient(135deg, #a855f7, #8b5cf6)'
+                : 'rgba(255,255,255,0.05)',
+              border: 'none',
+              borderRadius: '12px',
+              color: prompt.trim() && !sending ? '#fff' : 'rgba(255,255,255,0.3)',
+              cursor: prompt.trim() && !sending ? 'pointer' : 'not-allowed',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+              transition: 'all 0.15s',
+            }}
+          >
+            {sending ? '⏳' : '🚀'} Skicka
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

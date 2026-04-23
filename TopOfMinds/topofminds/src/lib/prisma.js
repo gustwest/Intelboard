@@ -1,18 +1,37 @@
 import { PrismaClient } from '@prisma/client';
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
-import path from 'path';
-
-// Resolve path to DB relative to project root
-const dbPath = path.resolve(process.cwd(), 'prisma/dev.db');
-
-function createPrismaClient() {
-  const adapter = new PrismaBetterSqlite3({ url: `file:${dbPath}` });
-  return new PrismaClient({ adapter });
-}
+import { PrismaPg } from '@prisma/adapter-pg';
 
 const globalForPrisma = globalThis;
-const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+function createClient() {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error('DATABASE_URL environment variable is required');
+  }
+
+  const adapter = new PrismaPg({
+    connectionString,
+    max: process.env.NODE_ENV === 'production' ? 10 : 5,
+  });
+  return new PrismaClient({
+    adapter,
+    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+  });
+}
+
+// Lazy-initialize: don't create the client at import time so that
+// Next.js static analysis can proceed without a live DATABASE_URL.
+// Cache on globalThis in ALL environments to avoid new pools per request.
+let _client = globalForPrisma.prisma;
+
+const prisma = new Proxy({}, {
+  get(_target, prop) {
+    if (!_client) {
+      _client = createClient();
+      globalForPrisma.prisma = _client;
+    }
+    return Reflect.get(_client, prop);
+  },
+});
 
 export default prisma;

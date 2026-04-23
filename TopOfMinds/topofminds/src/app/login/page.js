@@ -1,5 +1,4 @@
 import LoginForm from './LoginForm';
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth/dal';
 import { ROLES } from '@/lib/auth/roles';
@@ -14,20 +13,21 @@ export default async function LoginPage() {
     redirect(user.role === ROLES.CONSULTANT ? '/my' : '/');
   }
 
+  const clientId = process.env.GOOGLE_CLIENT_ID || '';
+
   return (
-    <div className="auth-card">
-      <div className="auth-logo">
-        <div className="auth-logo-icon">T</div>
-        <span className="auth-logo-text">TopOfMinds</span>
+    <>
+      <meta name="google-client-id" content={clientId} />
+      <div className="auth-card">
+        <div className="auth-logo">
+          <div className="auth-logo-icon">T</div>
+          <span className="auth-logo-text">TopOfMinds</span>
+        </div>
+        <h1 className="auth-title">Logga in</h1>
+        <p className="auth-subtitle">Välkommen tillbaka. Logga in med ditt Google-konto.</p>
+
+        <LoginForm />
       </div>
-      <h1 className="auth-title">Logga in</h1>
-      <p className="auth-subtitle">Välkommen tillbaka. Logga in med din e-post.</p>
-
-      <LoginForm />
-
-      <p className="auth-footer">
-        Ingen konto? <Link href="/signup">Skapa konto</Link>
-      </p>
-    </div>
+    </>
   );
 }

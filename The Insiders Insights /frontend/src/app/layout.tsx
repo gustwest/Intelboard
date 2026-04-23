@@ -5,6 +5,7 @@ import FeedbackBubble from "@/components/FeedbackBubble";
 import Navbar from "@/components/Navbar";
 import { UserProvider } from "@/components/UserProvider";
 import ChatWidget from "@/components/ChatWidget";
+import AuthSessionProvider from "@/components/AuthSessionProvider";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -31,14 +32,15 @@ export default function RootLayout({
           fontFamily: "'Inter', system-ui, sans-serif",
         }}
       >
-        <UserProvider>
-          <Navbar />
-          {children}
-          <FeedbackBubble />
-          <ChatWidget />
-        </UserProvider>
+        <AuthSessionProvider>
+          <UserProvider>
+            <Navbar />
+            {children}
+            <FeedbackBubble />
+            <ChatWidget />
+          </UserProvider>
+        </AuthSessionProvider>
       </body>
     </html>
   );
 }
-

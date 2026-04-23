@@ -22,26 +22,31 @@ export default async function AssignmentDetail({ params }) {
   await requireAdmin();
   const { id } = await params;
 
-  const assignment = await prisma.assignment.findUnique({
-    where: { id },
-    include: {
-      matches: {
-        include: {
-          consultant: {
-            select: {
-              id: true, firstName: true, lastName: true, title: true, team: true, status: true, wantsNewAssignment: true, avatarUrl: true,
+  const [assignment, consultants] = await Promise.all([
+    prisma.assignment.findUnique({
+      where: { id },
+      include: {
+        matches: {
+          include: {
+            consultant: {
+              select: {
+                id: true, firstName: true, lastName: true, title: true,
+                team: true, status: true, wantsNewAssignment: true, avatarUrl: true,
+              },
             },
           },
+          orderBy: { score: 'desc' },
         },
-        orderBy: { score: 'desc' },
-      },
-      applications: {
-        include: {
-          consultant: { select: { id: true, firstName: true, lastName: true } },
+        applications: {
+          include: { consultant: { select: { id: true, firstName: true, lastName: true } } },
         },
       },
-    },
-  });
+    }),
+    prisma.consultant.findMany({
+      orderBy: [{ firstName: 'asc' }],
+      select: { id: true, firstName: true, lastName: true, title: true, status: true },
+    }),
+  ]);
 
   if (!assignment) notFound();
 
@@ -65,7 +70,7 @@ export default async function AssignmentDetail({ params }) {
   return (
     <div className="page">
       <Link href="/assignments" className="page-back">← Tillbaka till uppdrag</Link>
-      <AssignmentHeader assignment={serialized} />
+      <AssignmentHeader assignment={serialized} consultants={consultants} />
 
       <div className="assignment-layout">
         <div className="assignment-main">

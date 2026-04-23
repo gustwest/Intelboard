@@ -14,7 +14,7 @@ export async function intakeAssignmentAction(_prev, formData) {
   const emailSubject = String(formData.get('emailSubject') || '').trim() || null;
 
   if (!emailBody) {
-    return { ok: false, message: 'E-postinnehåll krävs.' };
+    return { ok: false, message: 'E-postinnehål krävs.' };
   }
 
   try {
@@ -27,18 +27,21 @@ export async function intakeAssignmentAction(_prev, formData) {
     revalidatePath('/assignments');
     redirect(`/assignments/${assignment.id}`);
   } catch (error) {
-    // redirect() throws — don't swallow it
     if (error?.digest?.startsWith?.('NEXT_REDIRECT')) throw error;
     return { ok: false, message: error?.message || 'Okänt fel vid extraktion.' };
   }
 }
 
-export async function triggerMatchingAction(assignmentId) {
+export async function triggerMatchingAction(assignmentId, consultantIds) {
   const admin = await requireAdmin();
   if (!assignmentId) return { ok: false, message: 'assignmentId krävs' };
 
   try {
-    const result = await runMatchingForAssignment({ assignmentId, userId: admin.id });
+    const result = await runMatchingForAssignment({
+      assignmentId,
+      consultantIds: consultantIds?.length ? consultantIds : undefined,
+      userId: admin.id,
+    });
     revalidatePath(`/assignments/${assignmentId}`);
     return { ok: true, ...result };
   } catch (error) {
@@ -59,13 +62,7 @@ export async function generateCvAction({ assignmentId, consultantId }) {
 
     await prisma.application.upsert({
       where: { assignmentId_consultantId: { assignmentId, consultantId } },
-      create: {
-        assignmentId,
-        consultantId,
-        status: 'DRAFT_CV',
-        tailoredCv: cvText,
-        createdByUserId: admin.id,
-      },
+      create: { assignmentId, consultantId, status: 'DRAFT_CV', tailoredCv: cvText, createdByUserId: admin.id },
       update: { tailoredCv: cvText, status: 'DRAFT_CV' },
     });
 
@@ -73,6 +70,23 @@ export async function generateCvAction({ assignmentId, consultantId }) {
     return { ok: true, cvText, modelId, jobId };
   } catch (error) {
     return { ok: false, message: error?.message || 'CV-generering misslyckades' };
+  }
+}
+
+export async function updateCvDraftAction({ applicationId, tailoredCv }) {
+  await requireAdmin();
+  if (!applicationId) return { ok: false, message: 'applicationId krävs' };
+  if (typeof tailoredCv !== 'string') return { ok: false, message: 'tailoredCv måste vara en sträng' };
+
+  try {
+    const app = await prisma.application.update({
+      where: { id: applicationId },
+      data: { tailoredCv },
+    });
+    revalidatePath(`/assignments/${app.assignmentId}`);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, message: error?.message || 'Kunde inte spara CV' };
   }
 }
 

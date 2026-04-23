@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { decryptSession, SESSION_COOKIE } from '@/lib/auth/jwt';
 import { isAdmin, ROLES } from '@/lib/auth/roles';
 
-const PUBLIC_ROUTES = ['/login', '/signup'];
+const PUBLIC_ROUTES = ['/login'];
 const ADMIN_ROUTES = ['/admin', '/assignments', '/consultants', '/contracts', '/clients', '/gantt', '/financials', '/notifications'];
 // /admin/users and /admin/ai are covered by /admin prefix
 const CONSULTANT_ROUTES = ['/my'];
@@ -18,6 +18,7 @@ export default async function proxy(req) {
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api/auth') ||
+    pathname.startsWith('/api/admin/agent/poll') ||
     pathname === '/favicon.ico' ||
     /\.(png|jpg|jpeg|svg|ico|css|js|webp|woff2?)$/i.test(pathname)
   ) {

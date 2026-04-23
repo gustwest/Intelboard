@@ -3,13 +3,16 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useUser } from './UserProvider';
+import { useSession, signOut } from 'next-auth/react';
 
 export default function Navbar() {
   const pathname = usePathname();
-  const { currentUser, setUser, logout, allUsers } = useUser();
+  const { data: session } = useSession();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Don't show navbar on login page
+  if (pathname === '/login') return null;
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -26,6 +29,11 @@ export default function Navbar() {
     { href: '/analytics', label: 'Analytics', emoji: '📊' },
     { href: '/admin', label: 'Admin', emoji: '📋' },
   ];
+
+  const user = session?.user;
+  const role = (session as any)?.user?.role;
+  const initial = user?.name?.[0] || user?.email?.[0] || '?';
+  const avatarUrl = user?.image;
 
   return (
     <header
@@ -95,117 +103,106 @@ export default function Navbar() {
           Engine Online
         </div>
 
+        {/* Role badge */}
+        {role && (
+          <span style={{
+            padding: '2px 8px',
+            borderRadius: '6px',
+            fontSize: '0.625rem',
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+            background: role === 'SUPERADMIN' ? 'rgba(239,68,68,0.15)' : 'rgba(168,85,247,0.15)',
+            color: role === 'SUPERADMIN' ? '#ef4444' : '#a855f7',
+            border: `1px solid ${role === 'SUPERADMIN' ? 'rgba(239,68,68,0.25)' : 'rgba(168,85,247,0.25)'}`,
+          }}>
+            {role}
+          </span>
+        )}
+
         {/* User Menu */}
-        <div ref={menuRef} style={{ position: 'relative' }}>
-          <button
-            onClick={() => setShowUserMenu(!showUserMenu)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
-              padding: '5px 12px 5px 8px',
-              borderRadius: '12px',
-              border: '1px solid rgba(255,255,255,0.08)',
-              background: 'rgba(255,255,255,0.04)',
-              cursor: 'pointer',
-              color: '#e2e8f0',
-              fontSize: '0.8125rem',
-              transition: 'all 0.15s',
-            }}
-          >
-            {currentUser ? (
-              <>
+        {user && (
+          <div ref={menuRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                padding: '5px 12px 5px 5px',
+                borderRadius: '12px',
+                border: '1px solid rgba(255,255,255,0.08)',
+                background: 'rgba(255,255,255,0.04)',
+                cursor: 'pointer',
+                color: '#e2e8f0',
+                fontSize: '0.8125rem',
+                transition: 'all 0.15s',
+              }}
+            >
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt=""
+                  style={{
+                    width: '28px', height: '28px', borderRadius: '50%',
+                    border: '2px solid rgba(168,85,247,0.3)',
+                  }}
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
                 <span style={{
-                  width: '26px', height: '26px', borderRadius: '50%',
-                  background: currentUser.color,
+                  width: '28px', height: '28px', borderRadius: '50%',
+                  background: '#a855f7',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: '0.75rem', fontWeight: 700, color: '#fff',
                 }}>
-                  {currentUser.name[0]}
+                  {initial}
                 </span>
-                <span style={{ fontWeight: 600 }}>{currentUser.name}</span>
-                <span style={{ fontSize: '0.625rem', color: 'rgba(255,255,255,0.3)' }}>▼</span>
-              </>
-            ) : (
-              <>
-                <span style={{
-                  width: '26px', height: '26px', borderRadius: '50%',
-                  background: 'rgba(255,255,255,0.1)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '0.75rem',
-                }}>
-                  ?
-                </span>
-                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Välj användare</span>
-                <span style={{ fontSize: '0.625rem', color: 'rgba(255,255,255,0.3)' }}>▼</span>
-              </>
-            )}
-          </button>
+              )}
+              <span style={{ fontWeight: 600, maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user.name || user.email?.split('@')[0]}
+              </span>
+              <span style={{ fontSize: '0.625rem', color: 'rgba(255,255,255,0.3)' }}>▼</span>
+            </button>
 
-          {/* Dropdown */}
-          {showUserMenu && (
-            <div style={{
-              position: 'absolute',
-              top: 'calc(100% + 8px)',
-              right: 0,
-              background: '#1a1a24',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: '14px',
-              padding: '6px',
-              minWidth: '200px',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-              zIndex: 200,
-            }}>
-              <div style={{ padding: '8px 12px 4px', fontSize: '0.6875rem', fontWeight: 600, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Välj konto
-              </div>
-              {allUsers.map(user => (
+            {/* Dropdown */}
+            {showUserMenu && (
+              <div style={{
+                position: 'absolute',
+                top: 'calc(100% + 8px)',
+                right: 0,
+                background: '#1a1a24',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '14px',
+                padding: '8px',
+                minWidth: '240px',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                zIndex: 200,
+              }}>
+                {/* User info */}
+                <div style={{ padding: '8px 12px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: '6px' }}>
+                  <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#e2e8f0' }}>
+                    {user.name}
+                  </div>
+                  <div style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.35)', marginTop: '2px' }}>
+                    {user.email}
+                  </div>
+                </div>
                 <button
-                  key={user.name}
-                  onClick={() => { setUser(user); setShowUserMenu(false); }}
+                  onClick={() => { signOut({ callbackUrl: '/login' }); setShowUserMenu(false); }}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: '10px',
-                    width: '100%', padding: '8px 12px',
-                    border: 'none',
-                    background: currentUser?.name === user.name ? 'rgba(168,85,247,0.12)' : 'transparent',
-                    color: '#e2e8f0', fontSize: '0.8125rem',
+                    display: 'block', width: '100%', padding: '8px 12px',
+                    border: 'none', background: 'transparent',
+                    color: '#f87171', fontSize: '0.8125rem',
                     cursor: 'pointer', borderRadius: '10px',
-                    transition: 'background 0.15s',
-                    textAlign: 'left',
+                    textAlign: 'left', transition: 'background 0.15s',
+                    fontFamily: 'inherit',
                   }}
                 >
-                  <span style={{
-                    width: '28px', height: '28px', borderRadius: '50%',
-                    background: user.color,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '0.75rem', fontWeight: 700, color: '#fff', flexShrink: 0,
-                  }}>
-                    {user.name[0]}
-                  </span>
-                  <span style={{ fontWeight: 600 }}>{user.name}</span>
-                  {currentUser?.name === user.name && (
-                    <span style={{ marginLeft: 'auto', color: '#a855f7', fontSize: '0.75rem' }}>✓</span>
-                  )}
+                  🚪 Logga ut
                 </button>
-              ))}
-              {currentUser && (
-                <>
-                  <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)', margin: '4px 8px' }} />
-                  <button
-                    onClick={() => { logout(); setShowUserMenu(false); }}
-                    style={{
-                      display: 'block', width: '100%', padding: '8px 12px',
-                      border: 'none', background: 'transparent',
-                      color: '#f87171', fontSize: '0.8125rem',
-                      cursor: 'pointer', borderRadius: '10px',
-                      textAlign: 'left', transition: 'background 0.15s',
-                    }}
-                  >
-                    🚪 Logga ut
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-        </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </header>
   );

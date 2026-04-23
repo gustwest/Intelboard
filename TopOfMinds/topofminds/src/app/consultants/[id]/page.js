@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import DocumentUpload from '@/components/DocumentUpload';
 
 const AVATAR_COLORS = [
   'linear-gradient(135deg, hsl(220, 70%, 55%), hsl(260, 60%, 55%))',
@@ -96,6 +97,9 @@ export default function ConsultantDetailPage() {
               <span style={{ fontSize: '14px', fontWeight: 600 }}>{formatCurrency(consultant.hourlyRate)}/h</span>
               <span style={{ color: 'var(--color-text-muted)', fontSize: '13px' }}>·</span>
               <Link href={`/consultants/${consultant.id}/cv`} className="btn btn-primary btn-sm" style={{ fontSize: '13px', padding: '5px 14px' }}>📄 Visa CV</Link>
+            </div>
+            <div style={{ marginTop: '12px' }}>
+              <DocumentUpload label="Importera CV" pageContext={{ consultantId: consultant.id }} />
             </div>
           </div>
         </div>

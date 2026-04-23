@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
+import AssistantPanel from '@/components/AssistantPanel';
 
 const AUTH_ROUTES = ['/login', '/signup'];
 
@@ -23,6 +24,7 @@ export default function AppShell({ children, user, notificationCount = 0 }) {
       <main className="main-content">
         <div className="page-content">{children}</div>
       </main>
+      <AssistantPanel />
     </div>
   );
 }

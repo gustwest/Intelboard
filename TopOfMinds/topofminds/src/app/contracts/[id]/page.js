@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import DocumentUpload from '@/components/DocumentUpload';
 
 function formatCurrency(a) { if (!a) return '–'; return new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK', minimumFractionDigits: 0 }).format(a); }
 function formatDate(d) { return new Date(d).toLocaleDateString('sv-SE', { year: 'numeric', month: 'long', day: 'numeric' }); }
@@ -110,7 +111,8 @@ export default function ContractDetailPage() {
     <div className="fade-in">
       <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
         <Link href="/contracts" className="btn btn-ghost btn-sm">← Tillbaka till kontrakt</Link>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <DocumentUpload label="Importera kontrakt" pageContext={{ contractId: params.id }} />
           <button className="btn btn-primary btn-sm" onClick={openEdit}>✏️ Redigera</button>
           <button className="btn btn-ghost btn-sm" onClick={deleteContract} disabled={deleting} style={{ color: 'var(--color-danger)' }}>
             {deleting ? 'Tar bort...' : '🗑️ Ta bort'}

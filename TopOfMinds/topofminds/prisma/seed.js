@@ -578,6 +578,19 @@ async function main() {
   await seedDefaultAISettings(prisma);
   await seedInitialAdmin(prisma);
 
+  // Superadmin user (Google OAuth whitelist)
+  await prisma.user.upsert({
+    where: { email: 'guswes@gmail.com' },
+    update: { role: 'SUPERADMIN', isActive: true },
+    create: {
+      email: 'guswes@gmail.com',
+      name: 'Gustav Westergren',
+      role: 'SUPERADMIN',
+      isActive: true,
+    },
+  });
+  console.log('   ✅ Superadmin user guswes@gmail.com created/updated');
+
   console.log('✅ Seeding complete!');
   console.log(`   ${clients.length} clients (ICA, LFAB, Autoliv, Vattenfall, IKEA, SJ, Region Sthlm, Telia)`);
   console.log(`   ${consultants.length} consultants (Connie, Gustav, Jeff, Johan, Jon, Linn H, Linn StC, Malin, Stefan, Ulrik)`);

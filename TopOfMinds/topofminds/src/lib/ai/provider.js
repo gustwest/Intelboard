@@ -1,6 +1,6 @@
 import 'server-only';
 import prisma from '@/lib/prisma';
-import { generateWithGemini } from '@/lib/ai/providers/vertex-gemini';
+import { generateWithGemini } from '@/lib/ai/providers/gemini';
 import { generateWithClaude } from '@/lib/ai/providers/vertex-claude';
 import { calculateCostUSD } from '@/lib/ai/pricing';
 

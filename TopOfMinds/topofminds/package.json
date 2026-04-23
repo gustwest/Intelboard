@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "agent": "node scripts/agent-poll.mjs"
+    "agent": "node scripts/agent-poll.mjs",
+    "seed:assignments": "node scripts/seed-assignments.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.7.0",
@@ -14,11 +15,15 @@
     "bcryptjs": "^3.0.3",
     "google-auth-library": "^10.6.2",
     "jose": "^6.2.2",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.12.0",
     "next": "16.2.2",
+    "pdf-parse": "^2.4.5",
     "pg": "^8.20.0",
     "prisma": "^7.7.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "xlsx": "^0.18.5",
     "zod": "^4.3.6"
   }
 }
