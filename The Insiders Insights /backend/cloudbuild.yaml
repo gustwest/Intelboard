@@ -1,0 +1,36 @@
+# Cloud Build — auto-deploy Insiders Insights API on push to main
+# Uses Kaniko for Docker layer caching
+# Triggered only when files in The Insiders Insights /backend/ change
+# Context set to subfolder since this is a monorepo
+
+steps:
+  # 1. Build + push with Kaniko (context = subfolder)
+  - name: 'gcr.io/kaniko-project/executor:latest'
+    args:
+      - '--dockerfile=The Insiders Insights /backend/Dockerfile'
+      - '--context=dir://The Insiders Insights /backend'
+      - '--destination=europe-north1-docker.pkg.dev/$PROJECT_ID/insiders-api-repo/insiders-api:$COMMIT_SHA'
+      - '--destination=europe-north1-docker.pkg.dev/$PROJECT_ID/insiders-api-repo/insiders-api:latest'
+      - '--cache=true'
+      - '--cache-ttl=720h'
+      - '--compressed-caching=false'
+      - '--snapshot-mode=redo'
+      - '--use-new-run'
+
+  # 2. Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'insiders-api'
+      - '--image=europe-north1-docker.pkg.dev/$PROJECT_ID/insiders-api-repo/insiders-api:$COMMIT_SHA'
+      - '--region=europe-north1'
+      - '--allow-unauthenticated'
+      - '--platform=managed'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+
+timeout: '1200s'
