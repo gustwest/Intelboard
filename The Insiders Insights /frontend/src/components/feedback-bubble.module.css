@@ -3,7 +3,7 @@
   bottom: 24px;
   left: 24px;
   z-index: 99999;
-  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-family: var(--brand-font-sans);
 }
 
 .fab {

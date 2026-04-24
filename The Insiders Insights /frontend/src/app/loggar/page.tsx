@@ -57,9 +57,9 @@ export default function LogsPage() {
     : entries;
 
   return (
-    <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px 60px', fontFamily: "'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif", color: C.text }}>
+    <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px 60px', fontFamily: "var(--brand-font-sans)", color: C.text }}>
       <div style={{ marginBottom: 16 }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>🪵 Loggar</h1>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 600, letterSpacing: '-0.02em', margin: 0 }}>🪵 Loggar</h1>
         <p style={{ fontSize: '0.8125rem', color: C.muted, margin: '4px 0 0' }}>
           Senaste händelser från backend (in-memory, senaste 1000). Varje rad är ett strukturerat event.
         </p>

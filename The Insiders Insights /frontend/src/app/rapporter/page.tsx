@@ -94,9 +94,9 @@ export default function RapporterPage() {
   const canSave = canRun && saveName.trim().length > 0;
 
   return (
-    <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px 60px', fontFamily: "'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif", color: C.text }}>
+    <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px 60px', fontFamily: "var(--brand-font-sans)", color: C.text }}>
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>📊 Rapporter (Global vy)</h1>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 600, letterSpacing: '-0.02em', margin: 0 }}>📊 Rapporter (Global vy)</h1>
         <p style={{ fontSize: '0.8125rem', color: C.muted, margin: '4px 0 0' }}>
           Välj bolag och moduler — kör för jämförelse över kunder. Spara urvalet som återanvändbar rapport.
         </p>

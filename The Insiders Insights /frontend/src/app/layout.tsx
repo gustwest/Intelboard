@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter_Tight, PT_Serif } from "next/font/google";
 import "./globals.css";
 import FeedbackBubble from "@/components/FeedbackBubble";
 import Navbar from "@/components/Navbar";
@@ -7,9 +7,17 @@ import { UserProvider } from "@/components/UserProvider";
 import ChatWidget from "@/components/ChatWidget";
 import AuthSessionProvider from "@/components/AuthSessionProvider";
 
-const inter = Inter({
+const interTight = Inter_Tight({
   subsets: ["latin"],
-  variable: "--font-inter",
+  weight: ["300", "400", "500", "600", "700"],
+  variable: "--font-inter-tight",
+});
+
+const ptSerif = PT_Serif({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  style: ["normal", "italic"],
+  variable: "--font-pt-serif",
 });
 
 export const metadata: Metadata = {
@@ -23,15 +31,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="sv" className={`${inter.variable} h-full antialiased`}>
-      <body
-        className="min-h-full flex flex-col"
-        style={{
-          background: "#0f0e12",
-          color: "#e9e8ec",
-          fontFamily: "'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif",
-        }}
-      >
+    <html lang="sv" className={`${interTight.variable} ${ptSerif.variable} h-full antialiased`}>
+      <body className="min-h-full flex flex-col">
         <AuthSessionProvider>
           <UserProvider>
             <Navbar />

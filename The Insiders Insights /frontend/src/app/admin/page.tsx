@@ -68,7 +68,7 @@ export default function AdminPage() {
       minHeight: '100vh',
       background: 'linear-gradient(135deg, #0f0e12 0%, #16141c 50%, #0f0e12 100%)',
       color: '#e2e8f0',
-      fontFamily: "'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+      fontFamily: "var(--brand-font-sans)",
     }}>
       {/* Sub-nav: Ärenden / Filer / Agent tabs */}
       <div style={{

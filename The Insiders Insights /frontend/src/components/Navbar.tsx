@@ -53,7 +53,7 @@ export default function Navbar() {
         position: 'sticky',
         top: 0,
         zIndex: 100,
-        fontFamily: "'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+        fontFamily: "var(--brand-font-sans)",
       }}
     >
       {/* Left: Logo + Nav */}
@@ -61,8 +61,8 @@ export default function Navbar() {
         {/* Logo */}
         <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
-            <span style={{ fontSize: '1rem', fontWeight: 800, color: '#fff', letterSpacing: '-0.01em' }}>THE</span>
-            <span style={{ fontSize: '1rem', fontWeight: 800, color: '#b14ef4', letterSpacing: '-0.01em' }}>INSIDERS.</span>
+            <span style={{ fontSize: '1rem', fontWeight: 600, color: '#fff', letterSpacing: '-0.02em' }}>THE</span>
+            <span style={{ fontSize: '1rem', fontWeight: 600, color: '#b14ef4', letterSpacing: '-0.02em' }}>INSIDERS.</span>
           </div>
         </Link>
 

@@ -124,7 +124,7 @@ export default function Dashboard() {
   const chartColor = activeTab === 'sales' ? '#b14ef4' : activeTab === 'recruiting' ? '#22c55e' : '#ec4899';
 
   return (
-    <div className="h-[calc(100vh-56px)] bg-[#0f0e12] text-slate-100 flex flex-col overflow-hidden" style={{ fontFamily: "'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
+    <div className="h-[calc(100vh-56px)] bg-[#0f0e12] text-slate-100 flex flex-col overflow-hidden" style={{ fontFamily: "var(--brand-font-sans)" }}>
 
       {/* Header is now in the global Navbar */}
 
@@ -231,7 +231,7 @@ export default function Dashboard() {
             <button
               onClick={runSimulation}
               disabled={loading}
-              className="w-full py-4 bg-purple-600 hover:bg-purple-500 transition-all rounded-xl font-semibold flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(177,78,244,0.25)] hover:shadow-[0_0_40px_rgba(177,78,244,0.45)] disabled:opacity-50 text-white"
+              className="brand-btn-primary w-full flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(177,78,244,0.25)] hover:shadow-[0_0_40px_rgba(177,78,244,0.45)]"
             >
               {loading ? (
                 <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
@@ -252,7 +252,7 @@ export default function Dashboard() {
                 <div className="absolute inset-0 bg-purple-600 blur-[120px] opacity-15 rounded-full scale-150"></div>
                 <BrainCircuit className="w-28 h-28 text-slate-800 relative" />
               </div>
-              <h2 className="text-3xl font-bold text-slate-500 mb-3">Mata in data för att starta</h2>
+              <h2 className="text-4xl font-normal tracking-tight text-slate-400 mb-3 brand-serif">Mata in data för att starta</h2>
               <p className="text-slate-600 mb-10">Ställ in LinkedIn-data och beteendeparametrar, sedan tryck Kör Simulering</p>
               <div className="flex gap-8">
                 {[

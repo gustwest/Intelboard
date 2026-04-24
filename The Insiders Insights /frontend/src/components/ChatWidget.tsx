@@ -387,7 +387,7 @@ export default function ChatWidget() {
     border: '1px solid rgba(255,255,255,0.08)',
     boxShadow: '0 12px 60px rgba(0,0,0,0.6)',
     zIndex: 100000,
-    fontFamily: "'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+    fontFamily: "var(--brand-font-sans)",
   };
 
   // === CONVERSATION LIST ===

@@ -36,10 +36,10 @@ export default function SourcesPage() {
   const current = sources.find(s => s.id === selected) || null;
 
   return (
-    <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px 60px', fontFamily: "'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif", color: C.text }}>
+    <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px 60px', fontFamily: "var(--brand-font-sans)", color: C.text }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>📥 Datakällor</h1>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 600, letterSpacing: '-0.02em', margin: 0 }}>📥 Datakällor</h1>
           <p style={{ fontSize: '0.8125rem', color: C.muted, margin: '4px 0 0' }}>
             Definiera rapporter som kan laddas upp (t.ex. Campaign Manager, Recruiter). Moduler binder mot fälten här.
           </p>

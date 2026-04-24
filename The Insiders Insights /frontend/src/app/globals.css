@@ -1,36 +1,72 @@
 @import "tailwindcss";
 
 /*
- * Brand tokens — tuned to match https://www.theinsiders.se
- *   accent (CTA):     hsl(290, 100%, 35%)  ≈ #9500b3
- *   darkAccent (hi):  hsl(276, 88%, 63%)   ≈ #b14ef4
- *   lightAccent (bg): hsl(260, 10%, 6%)    ≈ #0f0e12
- *   safeLight (text): hsl(255, 10%, 92%)   ≈ #e9e8ec
- * Fonts follow the same stack as theinsiders.se (Clarkson is
- * proprietary — Inter is the closest free geometric sans).
+ * Brand tokens — matched to the exact site.css palette served by
+ * https://www.theinsiders.se (Squarespace CSS custom properties).
+ *   --accent-hsl:      290,100%,35%   ≈ #9500B3  (CTA)
+ *   --darkAccent-hsl:  276,88%,63%    ≈ #B14EF4  (bright purple accent)
+ *   --lightAccent-hsl: 260,10%,6%     ≈ #0F0E12  (near-black bg)
+ *   --white-hsl:       255,10%,92%    ≈ #E9E8EC  (off-white text)
+ *   --black-hsl:       266,6%,45%     ≈ #716D75  (muted mid-tone)
+ * Fonts match Squarespace site tokens: Inter Tight for body/headings,
+ * PT Serif for primary buttons (Clarkson — the theinsiders.se brand
+ * face — is proprietary, so we match by way of the site's own fallback
+ * stack).
  */
 :root {
-  --brand-accent: #9500b3;
-  --brand-accent-hsl: 290, 100%, 35%;
-  --brand-accent-bright: #b14ef4;
-  --brand-accent-bright-hsl: 276, 88%, 63%;
-  --brand-bg: #0f0e12;
-  --brand-surface: #151218;
-  --brand-surface-raised: #1f1b22;
-  --brand-text: #e9e8ec;
-  --brand-muted: rgba(233, 232, 236, 0.55);
-  --brand-dim: rgba(233, 232, 236, 0.32);
-  --brand-border: rgba(233, 232, 236, 0.08);
-  --brand-font-sans: var(--font-inter), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --accent-hsl: 290, 100%, 35%;
+  --darkAccent-hsl: 276, 88%, 63%;
+  --lightAccent-hsl: 260, 10%, 6%;
+  --white-hsl: 255, 10%, 92%;
+  --black-hsl: 266, 6%, 45%;
+
+  --brand-accent: hsl(var(--accent-hsl));
+  --brand-accent-bright: hsl(var(--darkAccent-hsl));
+  --brand-bg: hsl(var(--lightAccent-hsl));
+  --brand-surface: hsla(var(--white-hsl), 0.03);
+  --brand-surface-raised: hsla(var(--white-hsl), 0.06);
+  --brand-text: hsl(var(--white-hsl));
+  --brand-muted: hsla(var(--white-hsl), 0.55);
+  --brand-dim: hsla(var(--white-hsl), 0.32);
+  --brand-border: hsla(var(--white-hsl), 0.08);
+
+  --brand-font-sans: var(--font-inter-tight), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --brand-font-serif: var(--font-pt-serif), "PT Serif", Georgia, "Times New Roman", serif;
+  --brand-font-button: var(--brand-font-serif);
+
+  /* Typography — Squarespace site-styles defaults */
+  --brand-heading-weight: 400;
+  --brand-heading-tracking: -0.02em;
+  --brand-heading-leading: 1.2em;
+  --brand-body-weight: 300;
+  --brand-body-tracking: 0em;
+  --brand-body-leading: 1.5em;
 }
 
 @theme {
-  --font-sans: var(--font-inter), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-sans: var(--font-inter-tight), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-serif: var(--font-pt-serif), "PT Serif", Georgia, "Times New Roman", serif;
   --color-brand: #b14ef4;
   --color-brand-deep: #9500b3;
 }
 
 @layer base {
+  html, body {
+    background: var(--brand-bg);
+    color: var(--brand-text);
+    font-family: var(--brand-font-sans);
+    font-weight: var(--brand-body-weight);
+    letter-spacing: var(--brand-body-tracking);
+    line-height: var(--brand-body-leading);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--brand-font-sans);
+    font-weight: var(--brand-heading-weight);
+    letter-spacing: var(--brand-heading-tracking);
+    line-height: var(--brand-heading-leading);
+  }
+
   /* Custom slider thumb */
   input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
@@ -38,19 +74,19 @@
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: #b14ef4;
+    background: var(--brand-accent-bright);
     cursor: pointer;
-    box-shadow: 0 0 8px rgba(177, 78, 244, 0.4);
+    box-shadow: 0 0 8px hsla(var(--darkAccent-hsl), 0.4);
   }
 
   input[type="range"]::-moz-range-thumb {
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: #b14ef4;
+    background: var(--brand-accent-bright);
     cursor: pointer;
     border: none;
-    box-shadow: 0 0 8px rgba(177, 78, 244, 0.4);
+    box-shadow: 0 0 8px hsla(var(--darkAccent-hsl), 0.4);
   }
 
   /* Remove number input arrows */
@@ -71,10 +107,52 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: rgba(177, 78, 244, 0.2);
+    background: hsla(var(--darkAccent-hsl), 0.2);
     border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(177, 78, 244, 0.4);
+    background: hsla(var(--darkAccent-hsl), 0.4);
   }
+}
+
+/* Primary CTA — matches Squarespace primary-button spec
+ *   PT Serif, 400, 10px radius, padding 1rem 1.3rem, no uppercase
+ */
+.brand-btn-primary {
+  font-family: var(--brand-font-button);
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.2em;
+  text-transform: none;
+  border-radius: 10px;
+  padding: 1rem 1.3rem;
+  background: var(--brand-accent);
+  color: hsl(var(--white-hsl));
+  border: 0;
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.brand-btn-primary:hover {
+  background: var(--brand-accent-bright);
+  box-shadow: 0 0 30px hsla(var(--darkAccent-hsl), 0.35);
+}
+
+.brand-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Brand serif utility — use for display headings / buttons */
+.brand-serif {
+  font-family: var(--brand-font-serif);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+/* Brand wordmark */
+.brand-wordmark {
+  font-family: var(--brand-font-sans);
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }

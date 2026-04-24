@@ -32,11 +32,11 @@ export default function KunderPage() {
   }
 
   return (
-    <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '24px 24px 60px', fontFamily: "'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
+    <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '24px 24px 60px', fontFamily: "var(--brand-font-sans)" }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '28px' }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>🏢 Kunder</h1>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 600, letterSpacing: '-0.02em', margin: 0 }}>🏢 Kunder</h1>
           <p style={{ fontSize: '0.8125rem', color: C.muted, margin: '4px 0 0' }}>
             {customers.length} kunder registrerade
           </p>
