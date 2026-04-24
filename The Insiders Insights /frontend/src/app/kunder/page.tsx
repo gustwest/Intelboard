@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-const C = { bg:'#0a0a0f', card:'#12121a', border:'rgba(255,255,255,0.06)', accent:'#a855f7', success:'#22c55e', warning:'#f59e0b', danger:'#ef4444', text:'#f8fafc', muted:'rgba(255,255,255,0.45)', dim:'rgba(255,255,255,0.25)' };
+const C = { bg:'#0f0e12', card:'#151218', border:'rgba(255,255,255,0.06)', accent:'#b14ef4', success:'#22c55e', warning:'#f59e0b', danger:'#ef4444', text:'#f8fafc', muted:'rgba(255,255,255,0.45)', dim:'rgba(255,255,255,0.25)' };
 
 export default function KunderPage() {
   const [customers, setCustomers] = useState<any[]>([]);
@@ -32,7 +32,7 @@ export default function KunderPage() {
   }
 
   return (
-    <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '24px 24px 60px', fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '24px 24px 60px', fontFamily: "'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '28px' }}>
         <div>
@@ -43,7 +43,7 @@ export default function KunderPage() {
         </div>
         <button onClick={() => setShowCreate(!showCreate)} style={{
           padding: '10px 20px', borderRadius: '12px', fontSize: '0.875rem', fontWeight: 700,
-          background: 'linear-gradient(135deg, #a855f7, #6366f1)', color: '#fff',
+          background: 'linear-gradient(135deg, #b14ef4, #6366f1)', color: '#fff',
           border: 'none', cursor: 'pointer',
         }}>
           + Ny kund
@@ -93,7 +93,7 @@ export default function KunderPage() {
                 padding: '24px', cursor: 'pointer', transition: 'all 0.2s',
                 position: 'relative', overflow: 'hidden',
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(168,85,247,0.3)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)'; }}
+              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(177,78,244,0.3)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)'; }}
               onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = C.border; (e.currentTarget as HTMLDivElement).style.transform = 'none'; }}
               >
                 {/* Top glow */}
@@ -125,7 +125,7 @@ export default function KunderPage() {
                     {c.tags.map((t: string) => (
                       <span key={t} style={{
                         padding: '2px 10px', borderRadius: '20px', fontSize: '0.6875rem', fontWeight: 600,
-                        background: 'rgba(168,85,247,0.1)', color: C.accent, border: '1px solid rgba(168,85,247,0.2)',
+                        background: 'rgba(177,78,244,0.1)', color: C.accent, border: '1px solid rgba(177,78,244,0.2)',
                       }}>{t}</span>
                     ))}
                   </div>

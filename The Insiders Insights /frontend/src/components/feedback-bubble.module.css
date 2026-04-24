@@ -3,19 +3,19 @@
   bottom: 24px;
   left: 24px;
   z-index: 99999;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
 .fab {
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #a855f7, #7c3aed);
+  background: linear-gradient(135deg, #b14ef4, #9500b3);
   color: white;
   border: none;
   font-size: 1.25rem;
   cursor: pointer;
-  box-shadow: 0 4px 20px rgba(168, 85, 247, 0.4);
+  box-shadow: 0 4px 20px rgba(177,78,244, 0.4);
   transition: all 0.2s;
   display: flex;
   align-items: center;
@@ -23,7 +23,7 @@
 }
 .fab:hover {
   transform: scale(1.08);
-  box-shadow: 0 6px 30px rgba(168, 85, 247, 0.6);
+  box-shadow: 0 6px 30px rgba(177,78,244, 0.6);
 }
 .fabActive {
   background: #333;
@@ -34,7 +34,7 @@
   position: absolute;
   bottom: 64px;
   left: 0;
-  background: #1a1a24;
+  background: #1f1b22;
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 16px;
   padding: 8px;
@@ -63,7 +63,7 @@
   transition: background 0.15s;
 }
 .quickMenuItem:hover {
-  background: rgba(168, 85, 247, 0.15);
+  background: rgba(177,78,244, 0.15);
 }
 
 /* Capturing */
@@ -83,8 +83,8 @@
 .capturingSpinner {
   width: 32px;
   height: 32px;
-  border: 3px solid rgba(168,85,247,0.2);
-  border-top-color: #a855f7;
+  border: 3px solid rgba(177,78,244,0.2);
+  border-top-color: #b14ef4;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
@@ -101,7 +101,7 @@
   padding: 24px;
 }
 .annotatePanel {
-  background: #12121c;
+  background: #151218;
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 20px;
   max-width: 90vw;
@@ -126,7 +126,7 @@
 .annotateSkip {
   background: none;
   border: none;
-  color: #a855f7;
+  color: #b14ef4;
   cursor: pointer;
   font-size: 0.8125rem;
   font-weight: 500;
@@ -156,12 +156,12 @@
   transition: all 0.15s;
 }
 .toolBtn:hover {
-  background: rgba(168,85,247,0.15);
+  background: rgba(177,78,244,0.15);
 }
 .toolBtnActive {
-  background: rgba(168,85,247,0.25);
-  border-color: #a855f7;
-  color: #a855f7;
+  background: rgba(177,78,244,0.25);
+  border-color: #b14ef4;
+  color: #b14ef4;
 }
 .colorGroup {
   display: flex;
@@ -232,7 +232,7 @@
   color: #94a3b8;
 }
 .annotateFooter button:last-child {
-  background: linear-gradient(135deg, #a855f7, #7c3aed);
+  background: linear-gradient(135deg, #b14ef4, #9500b3);
   color: white;
   border-color: transparent;
 }
@@ -243,7 +243,7 @@
   bottom: 64px;
   left: 0;
   width: 380px;
-  background: #12121c;
+  background: #151218;
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 20px;
   padding: 20px;
@@ -290,7 +290,7 @@
   box-sizing: border-box;
 }
 .formInput:focus {
-  border-color: rgba(168,85,247,0.5);
+  border-color: rgba(177,78,244,0.5);
 }
 .formTextarea {
   width: 100%;
@@ -308,12 +308,12 @@
   box-sizing: border-box;
 }
 .formTextarea:focus {
-  border-color: rgba(168,85,247,0.5);
+  border-color: rgba(177,78,244,0.5);
 }
 .formSubmit {
   width: 100%;
   padding: 12px;
-  background: linear-gradient(135deg, #a855f7, #7c3aed);
+  background: linear-gradient(135deg, #b14ef4, #9500b3);
   color: white;
   border: none;
   border-radius: 12px;
@@ -323,7 +323,7 @@
   transition: all 0.2s;
 }
 .formSubmit:hover:not(:disabled) {
-  box-shadow: 0 4px 20px rgba(168,85,247,0.4);
+  box-shadow: 0 4px 20px rgba(177,78,244,0.4);
 }
 .formSubmit:disabled {
   opacity: 0.5;

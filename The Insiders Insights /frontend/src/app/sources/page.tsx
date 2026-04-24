@@ -3,8 +3,8 @@ import { useEffect, useMemo, useState } from 'react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
-  bg: '#0a0a0f', card: '#12121a', border: 'rgba(255,255,255,0.08)',
-  accent: '#a855f7', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
+  bg: '#0f0e12', card: '#151218', border: 'rgba(255,255,255,0.08)',
+  accent: '#b14ef4', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
   text: '#f8fafc', muted: 'rgba(255,255,255,0.5)', dim: 'rgba(255,255,255,0.3)',
 };
 
@@ -36,7 +36,7 @@ export default function SourcesPage() {
   const current = sources.find(s => s.id === selected) || null;
 
   return (
-    <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px 60px', fontFamily: "'Inter', system-ui, sans-serif", color: C.text }}>
+    <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px 60px', fontFamily: "'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif", color: C.text }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>📥 Datakällor</h1>
@@ -62,8 +62,8 @@ export default function SourcesPage() {
             sources.map(s => (
               <div key={s.id} onClick={() => setSelected(s.id)} style={{
                 padding: '12px 14px', borderRadius: 10, cursor: 'pointer',
-                background: selected === s.id ? 'rgba(168,85,247,0.12)' : 'transparent',
-                border: selected === s.id ? '1px solid rgba(168,85,247,0.3)' : '1px solid transparent',
+                background: selected === s.id ? 'rgba(177,78,244,0.12)' : 'transparent',
+                border: selected === s.id ? '1px solid rgba(177,78,244,0.3)' : '1px solid transparent',
                 marginBottom: 4,
               }}>
                 <div style={{ fontWeight: 700, fontSize: 14 }}>{s.name}</div>
@@ -231,7 +231,7 @@ function VersionBumpForm({ source, onClose, onCreated }: { source: Source; onClo
   }
 
   return (
-    <div style={{ marginTop: 12, padding: 16, background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.3)', borderRadius: 12 }}>
+    <div style={{ marginTop: 12, padding: 16, background: 'rgba(177,78,244,0.06)', border: '1px solid rgba(177,78,244,0.3)', borderRadius: 12 }}>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Ny version (blir ny aktuell)</div>
       <label style={lbl}>Anteckningar</label>
       <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="t.ex. 'LinkedIn lade till Click Type-kolumnen 2026-04'" style={{ ...inp, marginBottom: 12 }} />

@@ -5,8 +5,8 @@ import Gauge from '@/components/Gauge';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
-  bg: '#0a0a0f', card: '#12121a', border: 'rgba(255,255,255,0.08)',
-  accent: '#a855f7', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
+  bg: '#0f0e12', card: '#151218', border: 'rgba(255,255,255,0.08)',
+  accent: '#b14ef4', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
   text: '#f8fafc', muted: 'rgba(255,255,255,0.5)', dim: 'rgba(255,255,255,0.3)',
 };
 
@@ -128,7 +128,7 @@ export default function CustomerDetailPage() {
   const globalModules = modules.filter(m => m.customer_id === null);
 
   return (
-    <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px 60px', fontFamily: "'Inter', system-ui, sans-serif", color: C.text }}>
+    <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px 60px', fontFamily: "'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif", color: C.text }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -151,7 +151,7 @@ export default function CustomerDetailPage() {
         }}
         onClick={() => fileInput.current?.click()}
         style={{
-          background: dragOver ? 'rgba(168,85,247,0.1)' : C.card,
+          background: dragOver ? 'rgba(177,78,244,0.1)' : C.card,
           border: `2px dashed ${dragOver ? C.accent : C.border}`,
           borderRadius: 16, padding: 28, marginBottom: 20, textAlign: 'center',
           cursor: 'pointer', transition: 'all 0.15s',

@@ -1,7 +1,33 @@
 @import "tailwindcss";
 
+/*
+ * Brand tokens — tuned to match https://www.theinsiders.se
+ *   accent (CTA):     hsl(290, 100%, 35%)  ≈ #9500b3
+ *   darkAccent (hi):  hsl(276, 88%, 63%)   ≈ #b14ef4
+ *   lightAccent (bg): hsl(260, 10%, 6%)    ≈ #0f0e12
+ *   safeLight (text): hsl(255, 10%, 92%)   ≈ #e9e8ec
+ * Fonts follow the same stack as theinsiders.se (Clarkson is
+ * proprietary — Inter is the closest free geometric sans).
+ */
+:root {
+  --brand-accent: #9500b3;
+  --brand-accent-hsl: 290, 100%, 35%;
+  --brand-accent-bright: #b14ef4;
+  --brand-accent-bright-hsl: 276, 88%, 63%;
+  --brand-bg: #0f0e12;
+  --brand-surface: #151218;
+  --brand-surface-raised: #1f1b22;
+  --brand-text: #e9e8ec;
+  --brand-muted: rgba(233, 232, 236, 0.55);
+  --brand-dim: rgba(233, 232, 236, 0.32);
+  --brand-border: rgba(233, 232, 236, 0.08);
+  --brand-font-sans: var(--font-inter), "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
 @theme {
-  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-sans: var(--font-inter), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --color-brand: #b14ef4;
+  --color-brand-deep: #9500b3;
 }
 
 @layer base {
@@ -12,19 +38,19 @@
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: #a855f7;
+    background: #b14ef4;
     cursor: pointer;
-    box-shadow: 0 0 8px rgba(168, 85, 247, 0.4);
+    box-shadow: 0 0 8px rgba(177, 78, 244, 0.4);
   }
 
   input[type="range"]::-moz-range-thumb {
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: #a855f7;
+    background: #b14ef4;
     cursor: pointer;
     border: none;
-    box-shadow: 0 0 8px rgba(168, 85, 247, 0.4);
+    box-shadow: 0 0 8px rgba(177, 78, 244, 0.4);
   }
 
   /* Remove number input arrows */
@@ -45,10 +71,10 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: rgba(168, 85, 247, 0.2);
+    background: rgba(177, 78, 244, 0.2);
     border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(168, 85, 247, 0.4);
+    background: rgba(177, 78, 244, 0.4);
   }
 }

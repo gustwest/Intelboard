@@ -11,7 +11,7 @@ export interface TeamMember {
 }
 
 export const TEAM: TeamMember[] = [
-  { email: 'guswes@gmail.com',        role: 'SUPERADMIN', color: '#a855f7' },
+  { email: 'guswes@gmail.com',        role: 'SUPERADMIN', color: '#b14ef4' },
   { email: 'josefin@theinsiders.se',  role: 'ADMIN',      color: '#f59e0b' },
   { email: 'benjamin@theinsiders.se', role: 'ADMIN',      color: '#22c55e' },
   { email: 'erik@theinsiders.se',     role: 'ADMIN',      color: '#3b82f6' },

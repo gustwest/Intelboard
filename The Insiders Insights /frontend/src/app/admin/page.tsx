@@ -42,7 +42,7 @@ const COLUMNS = [
   { key: 'NY', label: 'Ny', emoji: '🆕', color: '#58a6ff' },
   { key: 'PRIORITERAD', label: 'Prioriterad', emoji: '⭐', color: '#f97316' },
   { key: 'PAGAR', label: 'Pågår', emoji: '🔨', color: '#eab308' },
-  { key: 'VERIFIERING', label: 'Verifiering', emoji: '🔍', color: '#a855f7' },
+  { key: 'VERIFIERING', label: 'Verifiering', emoji: '🔍', color: '#b14ef4' },
   { key: 'KLAR', label: 'Klar', emoji: '🎉', color: '#22c55e' },
 ] as const;
 
@@ -66,9 +66,9 @@ export default function AdminPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #0a0a14 0%, #0f0f1e 50%, #0a0a14 100%)',
+      background: 'linear-gradient(135deg, #0f0e12 0%, #16141c 50%, #0f0e12 100%)',
       color: '#e2e8f0',
-      fontFamily: "'Inter', system-ui, sans-serif",
+      fontFamily: "'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif",
     }}>
       {/* Sub-nav: Ärenden / Filer / Agent tabs */}
       <div style={{
@@ -98,9 +98,9 @@ function TabButton({ active, onClick, emoji, label }: { active: boolean; onClick
       style={{
         padding: '8px 16px',
         borderRadius: '10px',
-        border: active ? '1px solid rgba(168,85,247,0.4)' : '1px solid transparent',
-        background: active ? 'rgba(168,85,247,0.15)' : 'transparent',
-        color: active ? '#a855f7' : 'rgba(255,255,255,0.5)',
+        border: active ? '1px solid rgba(177,78,244,0.4)' : '1px solid transparent',
+        background: active ? 'rgba(177,78,244,0.15)' : 'transparent',
+        color: active ? '#b14ef4' : 'rgba(255,255,255,0.5)',
         cursor: 'pointer',
         fontSize: '0.8125rem',
         fontWeight: 600,
@@ -184,7 +184,7 @@ function KanbanTab() {
             }}
           />
           <button onClick={() => setShowNew(true)} style={{
-            padding: '8px 18px', background: 'linear-gradient(135deg, #a855f7, #7c3aed)',
+            padding: '8px 18px', background: 'linear-gradient(135deg, #b14ef4, #9500b3)',
             color: 'white', border: 'none', borderRadius: '10px', fontWeight: 600,
             fontSize: '0.8125rem', cursor: 'pointer',
           }}>+ Nytt ärende</button>
@@ -205,8 +205,8 @@ function KanbanTab() {
             onDragLeave={() => setDropTarget(null)}
             onDrop={e => { e.preventDefault(); handleDrop(col.key); }}
             style={{
-              background: dropTarget === col.key ? 'rgba(168,85,247,0.08)' : 'rgba(255,255,255,0.02)',
-              border: `1px solid ${dropTarget === col.key ? 'rgba(168,85,247,0.3)' : 'rgba(255,255,255,0.04)'}`,
+              background: dropTarget === col.key ? 'rgba(177,78,244,0.08)' : 'rgba(255,255,255,0.02)',
+              border: `1px solid ${dropTarget === col.key ? 'rgba(177,78,244,0.3)' : 'rgba(255,255,255,0.04)'}`,
               borderRadius: '16px', padding: '12px', transition: 'all 0.2s',
             }}
           >
@@ -231,7 +231,7 @@ function KanbanTab() {
                   onDragEnd={() => { setDraggedId(null); setDropTarget(null); }}
                   onClick={() => setSelectedIssue(issue)}
                   style={{
-                    background: draggedId === issue.id ? 'rgba(168,85,247,0.1)' : 'rgba(0,0,0,0.2)',
+                    background: draggedId === issue.id ? 'rgba(177,78,244,0.1)' : 'rgba(0,0,0,0.2)',
                     border: '1px solid rgba(255,255,255,0.06)',
                     borderRadius: '12px', padding: '12px', cursor: 'grab',
                     opacity: draggedId === issue.id ? 0.5 : 1,
@@ -312,7 +312,7 @@ function NewIssueModal({ onClose, onCreated }: { onClose: () => void; onCreated:
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#12121c', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', width: '460px', maxWidth: '90vw', padding: '24px' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#151218', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', width: '460px', maxWidth: '90vw', padding: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
           <h2 style={{ fontSize: '1.125rem', margin: 0 }}>🆕 Nytt ärende</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1.125rem' }}>✕</button>
@@ -326,7 +326,7 @@ function NewIssueModal({ onClose, onCreated }: { onClose: () => void; onCreated:
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
           <button onClick={onClose} style={{ padding: '8px 18px', background: 'rgba(255,255,255,0.05)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', cursor: 'pointer' }}>Avbryt</button>
           <button onClick={handleSubmit} disabled={isSubmitting || !title.trim() || !description.trim()}
-            style={{ padding: '8px 18px', background: 'linear-gradient(135deg, #a855f7, #7c3aed)', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 600, cursor: 'pointer', opacity: isSubmitting || !title.trim() || !description.trim() ? 0.5 : 1 }}>
+            style={{ padding: '8px 18px', background: 'linear-gradient(135deg, #b14ef4, #9500b3)', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 600, cursor: 'pointer', opacity: isSubmitting || !title.trim() || !description.trim() ? 0.5 : 1 }}>
             {isSubmitting ? 'Skapar...' : '🚀 Skapa ärende'}
           </button>
         </div>
@@ -385,7 +385,7 @@ function IssueDetailModal({ issue, onClose, onDeleted }: { issue: KanbanIssue; o
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-        <div onClick={e => e.stopPropagation()} style={{ background: '#12121c', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', width: '680px', maxWidth: '90vw', maxHeight: '85vh', overflow: 'auto', padding: '24px' }}>
+        <div onClick={e => e.stopPropagation()} style={{ background: '#151218', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', width: '680px', maxWidth: '90vw', maxHeight: '85vh', overflow: 'auto', padding: '24px' }}>
           {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
             <h2 style={{ fontSize: '1.125rem', margin: 0, lineHeight: 1.3 }}>{currentIssue.title}</h2>
@@ -436,7 +436,7 @@ function IssueDetailModal({ issue, onClose, onDeleted }: { issue: KanbanIssue; o
               {currentIssue.comments.map(c => (
                 <div key={c.id} style={{ background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.04)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#a855f7' }}>{c.author}</span>
+                    <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#b14ef4' }}>{c.author}</span>
                     <span style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.25)' }}>{new Date(c.createdAt).toLocaleString('sv-SE')}</span>
                   </div>
                   <div style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.7)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{c.body}</div>
@@ -457,7 +457,7 @@ function IssueDetailModal({ issue, onClose, onDeleted }: { issue: KanbanIssue; o
               <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.2)' }}>⌘+Enter</span>
                 <button onClick={handleComment} disabled={isSubmitting || !commentText.trim()}
-                  style={{ padding: '6px 14px', background: 'linear-gradient(135deg, #a855f7, #7c3aed)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, fontSize: '0.8125rem', cursor: 'pointer', opacity: isSubmitting || !commentText.trim() ? 0.5 : 1 }}>
+                  style={{ padding: '6px 14px', background: 'linear-gradient(135deg, #b14ef4, #9500b3)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, fontSize: '0.8125rem', cursor: 'pointer', opacity: isSubmitting || !commentText.trim() ? 0.5 : 1 }}>
                   {isSubmitting ? 'Skickar...' : 'Kommentera'}
                 </button>
               </div>
@@ -550,7 +550,7 @@ function FilesTab() {
 
       {/* Upload zone */}
       <div style={{
-        background: 'rgba(168,85,247,0.04)', border: '2px dashed rgba(168,85,247,0.2)',
+        background: 'rgba(177,78,244,0.04)', border: '2px dashed rgba(177,78,244,0.2)',
         borderRadius: '16px', padding: '24px', marginBottom: '24px',
       }}>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
@@ -578,7 +578,7 @@ function FilesTab() {
             </select>
           </div>
           <button onClick={handleUpload} disabled={!selectedFile || uploading}
-            style={{ padding: '8px 20px', background: 'linear-gradient(135deg, #a855f7, #7c3aed)', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 600, fontSize: '0.8125rem', cursor: 'pointer', opacity: !selectedFile || uploading ? 0.5 : 1, whiteSpace: 'nowrap' }}>
+            style={{ padding: '8px 20px', background: 'linear-gradient(135deg, #b14ef4, #9500b3)', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 600, fontSize: '0.8125rem', cursor: 'pointer', opacity: !selectedFile || uploading ? 0.5 : 1, whiteSpace: 'nowrap' }}>
             {uploading ? 'Laddar upp...' : '📤 Ladda upp'}
           </button>
         </div>
@@ -588,12 +588,12 @@ function FilesTab() {
       {categories.length > 0 && (
         <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', flexWrap: 'wrap' }}>
           <button onClick={() => setFilterCategory('')}
-            style={{ padding: '4px 12px', borderRadius: '999px', border: !filterCategory ? '1px solid rgba(168,85,247,0.4)' : '1px solid rgba(255,255,255,0.06)', background: !filterCategory ? 'rgba(168,85,247,0.1)' : 'rgba(255,255,255,0.03)', color: !filterCategory ? '#a855f7' : 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: '0.75rem' }}>
+            style={{ padding: '4px 12px', borderRadius: '999px', border: !filterCategory ? '1px solid rgba(177,78,244,0.4)' : '1px solid rgba(255,255,255,0.06)', background: !filterCategory ? 'rgba(177,78,244,0.1)' : 'rgba(255,255,255,0.03)', color: !filterCategory ? '#b14ef4' : 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: '0.75rem' }}>
             Alla ({files.length})
           </button>
           {categories.map(cat => (
             <button key={cat} onClick={() => setFilterCategory(cat)}
-              style={{ padding: '4px 12px', borderRadius: '999px', border: filterCategory === cat ? '1px solid rgba(168,85,247,0.4)' : '1px solid rgba(255,255,255,0.06)', background: filterCategory === cat ? 'rgba(168,85,247,0.1)' : 'rgba(255,255,255,0.03)', color: filterCategory === cat ? '#a855f7' : 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: '0.75rem' }}>
+              style={{ padding: '4px 12px', borderRadius: '999px', border: filterCategory === cat ? '1px solid rgba(177,78,244,0.4)' : '1px solid rgba(255,255,255,0.06)', background: filterCategory === cat ? 'rgba(177,78,244,0.1)' : 'rgba(255,255,255,0.03)', color: filterCategory === cat ? '#b14ef4' : 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: '0.75rem' }}>
               {cat} ({files.filter(f => f.category === cat).length})
             </button>
           ))}
@@ -626,7 +626,7 @@ function FilesTab() {
                   <span style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.2)' }}>{formatSize(f.size)}</span>
                 </div>
               </div>
-              <span style={{ padding: '3px 10px', borderRadius: '999px', background: 'rgba(168,85,247,0.1)', color: '#a855f7', fontSize: '0.6875rem', fontWeight: 500 }}>
+              <span style={{ padding: '3px 10px', borderRadius: '999px', background: 'rgba(177,78,244,0.1)', color: '#b14ef4', fontSize: '0.6875rem', fontWeight: 500 }}>
                 {f.category}
               </span>
               <span style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.2)' }}>
@@ -791,10 +791,10 @@ function AgentTab() {
           style={{
             margin: '12px 12px 8px',
             padding: '10px',
-            background: 'linear-gradient(135deg, rgba(168,85,247,0.2), rgba(139,92,246,0.2))',
-            border: '1px solid rgba(168,85,247,0.3)',
+            background: 'linear-gradient(135deg, rgba(177,78,244,0.2), rgba(139,92,246,0.2))',
+            border: '1px solid rgba(177,78,244,0.3)',
             borderRadius: '10px',
-            color: '#a855f7',
+            color: '#b14ef4',
             cursor: 'pointer',
             fontSize: '0.8125rem',
             fontWeight: 600,
@@ -814,8 +814,8 @@ function AgentTab() {
                 marginBottom: '4px',
                 borderRadius: '10px',
                 cursor: 'pointer',
-                background: activeSession === session.id ? 'rgba(168,85,247,0.15)' : 'transparent',
-                border: activeSession === session.id ? '1px solid rgba(168,85,247,0.3)' : '1px solid transparent',
+                background: activeSession === session.id ? 'rgba(177,78,244,0.15)' : 'transparent',
+                border: activeSession === session.id ? '1px solid rgba(177,78,244,0.3)' : '1px solid transparent',
                 transition: 'all 0.15s',
               }}
             >
@@ -870,8 +870,8 @@ function AgentTab() {
                   <div style={{
                     maxWidth: '80%',
                     padding: '12px 16px',
-                    background: 'linear-gradient(135deg, rgba(168,85,247,0.2), rgba(139,92,246,0.15))',
-                    border: '1px solid rgba(168,85,247,0.25)',
+                    background: 'linear-gradient(135deg, rgba(177,78,244,0.2), rgba(139,92,246,0.15))',
+                    border: '1px solid rgba(177,78,244,0.25)',
                     borderRadius: '16px 16px 4px 16px',
                     fontSize: '0.875rem',
                     lineHeight: 1.5,
@@ -1024,7 +1024,7 @@ function AgentTab() {
             style={{
               padding: '10px 20px',
               background: prompt.trim() && !sending
-                ? 'linear-gradient(135deg, #a855f7, #8b5cf6)'
+                ? 'linear-gradient(135deg, #b14ef4, #8b5cf6)'
                 : 'rgba(255,255,255,0.05)',
               border: 'none',
               borderRadius: '12px',

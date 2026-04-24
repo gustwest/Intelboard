@@ -4,8 +4,8 @@ import Gauge from '../../components/Gauge';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
-  bg: '#0a0a0f', card: '#12121a', border: 'rgba(255,255,255,0.08)',
-  accent: '#a855f7', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
+  bg: '#0f0e12', card: '#151218', border: 'rgba(255,255,255,0.08)',
+  accent: '#b14ef4', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
   text: '#f8fafc', muted: 'rgba(255,255,255,0.5)', dim: 'rgba(255,255,255,0.3)',
 };
 
@@ -94,7 +94,7 @@ export default function RapporterPage() {
   const canSave = canRun && saveName.trim().length > 0;
 
   return (
-    <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px 60px', fontFamily: "'Inter', system-ui, sans-serif", color: C.text }}>
+    <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px 60px', fontFamily: "'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif", color: C.text }}>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>📊 Rapporter (Global vy)</h1>
         <p style={{ fontSize: '0.8125rem', color: C.muted, margin: '4px 0 0' }}>
@@ -107,7 +107,7 @@ export default function RapporterPage() {
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, marginBottom: 20, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <span style={{ fontSize: 11, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, marginRight: 4 }}>Sparade:</span>
           {reports.map(r => (
-            <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px 4px 12px', borderRadius: 16, background: 'rgba(168,85,247,0.1)', border: '1px solid rgba(168,85,247,0.25)', fontSize: 12 }}>
+            <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px 4px 12px', borderRadius: 16, background: 'rgba(177,78,244,0.1)', border: '1px solid rgba(177,78,244,0.25)', fontSize: 12 }}>
               <button onClick={() => loadReport(r)} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontWeight: 600, padding: 0, fontFamily: 'inherit' }}>{r.name}</button>
               <button onClick={() => deleteReport(r.id)} title="Radera" style={{ background: 'none', border: 'none', color: C.dim, cursor: 'pointer', padding: 0, fontSize: 14 }}>×</button>
             </div>
@@ -121,7 +121,7 @@ export default function RapporterPage() {
           <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>Bolag ({selectedCustomers.size})</h3>
           {customers.length === 0 && <div style={{ color: C.muted, fontSize: 12 }}>Inga kunder ännu.</div>}
           {customers.map(c => (
-            <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 6px', cursor: 'pointer', borderRadius: 8, background: selectedCustomers.has(c.id) ? 'rgba(168,85,247,0.08)' : 'transparent' }}>
+            <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 6px', cursor: 'pointer', borderRadius: 8, background: selectedCustomers.has(c.id) ? 'rgba(177,78,244,0.08)' : 'transparent' }}>
               <input type="checkbox" checked={selectedCustomers.has(c.id)} onChange={() => toggle(selectedCustomers, setSelectedCustomers, c.id)} />
               <span style={{ fontSize: 18 }}>{c.logo_emoji}</span>
               <div style={{ flex: 1 }}>
@@ -137,12 +137,12 @@ export default function RapporterPage() {
           <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>Moduler ({selectedModules.size})</h3>
           {modules.length === 0 && <div style={{ color: C.muted, fontSize: 12 }}>Inga moduler ännu.</div>}
           {modules.map(m => (
-            <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 6px', cursor: 'pointer', borderRadius: 8, background: selectedModules.has(m.id) ? 'rgba(168,85,247,0.08)' : 'transparent' }}>
+            <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 6px', cursor: 'pointer', borderRadius: 8, background: selectedModules.has(m.id) ? 'rgba(177,78,244,0.08)' : 'transparent' }}>
               <input type="checkbox" checked={selectedModules.has(m.id)} onChange={() => toggle(selectedModules, setSelectedModules, m.id)} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>
                   {m.name} <span style={{ color: C.dim }}>({m.abbr})</span>
-                  {m.customer_id ? <span style={{ fontSize: 9, padding: '1px 6px', marginLeft: 6, borderRadius: 8, background: 'rgba(168,85,247,0.15)', color: C.accent }}>KUND</span>
+                  {m.customer_id ? <span style={{ fontSize: 9, padding: '1px 6px', marginLeft: 6, borderRadius: 8, background: 'rgba(177,78,244,0.15)', color: C.accent }}>KUND</span>
                     : <span style={{ fontSize: 9, padding: '1px 6px', marginLeft: 6, borderRadius: 8, background: 'rgba(255,255,255,0.06)', color: C.dim }}>GLOBAL</span>}
                 </div>
                 <div style={{ fontSize: 11, color: C.dim }}>{m.category} · {m.field_refs.length} fält</div>
@@ -156,7 +156,7 @@ export default function RapporterPage() {
           <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
             <button onClick={runReport} disabled={!canRun || running} style={{
               padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: canRun ? 'pointer' : 'not-allowed',
-              background: canRun ? C.accent : 'rgba(168,85,247,0.25)', color: '#fff', border: 'none', fontFamily: 'inherit',
+              background: canRun ? C.accent : 'rgba(177,78,244,0.25)', color: '#fff', border: 'none', fontFamily: 'inherit',
             }}>{running ? 'Kör…' : '▶ Kör jämförelse'}</button>
             <button onClick={() => setShowSave(!showSave)} disabled={!canRun} style={btn('ghost')}>💾 Spara som rapport</button>
           </div>

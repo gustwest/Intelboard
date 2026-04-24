@@ -4,8 +4,8 @@ import Gauge from '../../components/Gauge';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
-  bg: '#0a0a0f', card: '#12121a', border: 'rgba(255,255,255,0.08)',
-  accent: '#a855f7', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
+  bg: '#0f0e12', card: '#151218', border: 'rgba(255,255,255,0.08)',
+  accent: '#b14ef4', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
   text: '#f8fafc', muted: 'rgba(255,255,255,0.5)', dim: 'rgba(255,255,255,0.3)',
 };
 
@@ -46,7 +46,7 @@ export default function ModulesPage() {
   });
 
   return (
-    <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px 60px', fontFamily: "'Inter', system-ui, sans-serif", color: C.text }}>
+    <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px 60px', fontFamily: "'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif", color: C.text }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>📐 Moduler</h1>
@@ -65,9 +65,9 @@ export default function ModulesPage() {
         {(['all', 'global', 'customer'] as Filter[]).map(f => (
           <button key={f} onClick={() => setFilter(f)} style={{
             padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-            background: filter === f ? 'rgba(168,85,247,0.15)' : 'transparent',
+            background: filter === f ? 'rgba(177,78,244,0.15)' : 'transparent',
             color: filter === f ? C.accent : C.muted,
-            border: `1px solid ${filter === f ? 'rgba(168,85,247,0.3)' : C.border}`,
+            border: `1px solid ${filter === f ? 'rgba(177,78,244,0.3)' : C.border}`,
           }}>
             {f === 'all' ? 'Alla' : f === 'global' ? 'Globala mallar' : 'Kund-specifika'}
           </button>
@@ -128,7 +128,7 @@ function ModuleCard({ module: m, customers, onOpen, onChanged }: { module: Modul
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 18, position: 'relative' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
         <h3 style={{ margin: 0, fontSize: 15, cursor: 'pointer' }} onClick={onOpen}>{m.name}</h3>
-        <span style={{ fontSize: 11, color: C.accent, fontWeight: 700, padding: '2px 8px', borderRadius: 12, background: 'rgba(168,85,247,0.1)' }}>{m.abbr}</span>
+        <span style={{ fontSize: 11, color: C.accent, fontWeight: 700, padding: '2px 8px', borderRadius: 12, background: 'rgba(177,78,244,0.1)' }}>{m.abbr}</span>
       </div>
       <div style={{ fontSize: 11, color: C.dim, marginBottom: 10 }}>
         {isGlobal ? <span style={{ color: C.muted, fontWeight: 600 }}>GLOBAL MALL</span>
@@ -141,7 +141,7 @@ function ModuleCard({ module: m, customers, onOpen, onChanged }: { module: Modul
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
         {m.field_refs.map(ref => (
-          <span key={ref.id} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 10, background: 'rgba(168,85,247,0.08)', color: C.accent }}>
+          <span key={ref.id} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 10, background: 'rgba(177,78,244,0.08)', color: C.accent }}>
             {ref.alias}={ref.field_key}
           </span>
         ))}

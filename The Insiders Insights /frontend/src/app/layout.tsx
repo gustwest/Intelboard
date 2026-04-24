@@ -27,9 +27,9 @@ export default function RootLayout({
       <body
         className="min-h-full flex flex-col"
         style={{
-          background: "#0a0a0f",
-          color: "#f8fafc",
-          fontFamily: "'Inter', system-ui, sans-serif",
+          background: "#0f0e12",
+          color: "#e9e8ec",
+          fontFamily: "'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif",
         }}
       >
         <AuthSessionProvider>

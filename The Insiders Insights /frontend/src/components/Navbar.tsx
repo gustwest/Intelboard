@@ -53,7 +53,7 @@ export default function Navbar() {
         position: 'sticky',
         top: 0,
         zIndex: 100,
-        fontFamily: "'Inter', system-ui, sans-serif",
+        fontFamily: "'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif",
       }}
     >
       {/* Left: Logo + Nav */}
@@ -62,7 +62,7 @@ export default function Navbar() {
         <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
             <span style={{ fontSize: '1rem', fontWeight: 800, color: '#fff', letterSpacing: '-0.01em' }}>THE</span>
-            <span style={{ fontSize: '1rem', fontWeight: 800, color: '#a855f7', letterSpacing: '-0.01em' }}>INSIDERS.</span>
+            <span style={{ fontSize: '1rem', fontWeight: 800, color: '#b14ef4', letterSpacing: '-0.01em' }}>INSIDERS.</span>
           </div>
         </Link>
 
@@ -83,9 +83,9 @@ export default function Navbar() {
                   fontWeight: 600,
                   textDecoration: 'none',
                   transition: 'all 0.15s',
-                  color: isActive ? '#a855f7' : 'rgba(255,255,255,0.45)',
-                  background: isActive ? 'rgba(168,85,247,0.12)' : 'transparent',
-                  border: isActive ? '1px solid rgba(168,85,247,0.25)' : '1px solid transparent',
+                  color: isActive ? '#b14ef4' : 'rgba(255,255,255,0.45)',
+                  background: isActive ? 'rgba(177,78,244,0.12)' : 'transparent',
+                  border: isActive ? '1px solid rgba(177,78,244,0.25)' : '1px solid transparent',
                 }}
               >
                 {link.emoji} {link.label}
@@ -116,9 +116,9 @@ export default function Navbar() {
             fontWeight: 700,
             textTransform: 'uppercase',
             letterSpacing: '0.05em',
-            background: role === 'SUPERADMIN' ? 'rgba(239,68,68,0.15)' : 'rgba(168,85,247,0.15)',
-            color: role === 'SUPERADMIN' ? '#ef4444' : '#a855f7',
-            border: `1px solid ${role === 'SUPERADMIN' ? 'rgba(239,68,68,0.25)' : 'rgba(168,85,247,0.25)'}`,
+            background: role === 'SUPERADMIN' ? 'rgba(239,68,68,0.15)' : 'rgba(177,78,244,0.15)',
+            color: role === 'SUPERADMIN' ? '#ef4444' : '#b14ef4',
+            border: `1px solid ${role === 'SUPERADMIN' ? 'rgba(239,68,68,0.25)' : 'rgba(177,78,244,0.25)'}`,
           }}>
             {role}
           </span>
@@ -147,14 +147,14 @@ export default function Navbar() {
                   alt=""
                   style={{
                     width: '28px', height: '28px', borderRadius: '50%',
-                    border: '2px solid rgba(168,85,247,0.3)',
+                    border: '2px solid rgba(177,78,244,0.3)',
                   }}
                   referrerPolicy="no-referrer"
                 />
               ) : (
                 <span style={{
                   width: '28px', height: '28px', borderRadius: '50%',
-                  background: '#a855f7',
+                  background: '#b14ef4',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: '0.75rem', fontWeight: 700, color: '#fff',
                 }}>
@@ -173,7 +173,7 @@ export default function Navbar() {
                 position: 'absolute',
                 top: 'calc(100% + 8px)',
                 right: 0,
-                background: '#1a1a24',
+                background: '#1f1b22',
                 border: '1px solid rgba(255,255,255,0.08)',
                 borderRadius: '14px',
                 padding: '8px',
