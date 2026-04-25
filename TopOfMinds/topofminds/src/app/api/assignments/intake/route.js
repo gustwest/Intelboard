@@ -34,9 +34,11 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  // Normalize across common webhook shapes
-  const emailBody = body.emailBody || body.TextBody || body.text || body.bodyPlain;
+  // Normalize across common webhook shapes + scraper payloads
+  const emailBody = body.emailBody || body.TextBody || body.text || body.bodyPlain || body.body;
   const emailSubject = body.emailSubject || body.Subject || body.subject;
+  const sourceType = body.source || 'EMAIL'; // BROKER_SCRAPE from scrapers
+  const brokerFrom = body.from || null;
 
   if (!emailBody || typeof emailBody !== 'string' || emailBody.trim().length === 0) {
     return NextResponse.json({ error: 'emailBody required' }, { status: 400 });
@@ -46,8 +48,9 @@ export async function POST(request) {
     const { assignment } = await intakeAssignmentFromEmail({
       emailBody,
       emailSubject,
-      sourceType: 'EMAIL',
+      sourceType,
       userId: null,
+      brokerFrom,
     });
 
     if (url.searchParams.get('runMatching') === '1') {

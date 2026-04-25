@@ -38,6 +38,7 @@ export async function generateWithGemini({ modelId, messages, temperature, maxTo
     contents: buildContents(messages),
     systemInstruction: buildSystemInstruction(messages),
     generationConfig: {
+      responseMimeType: 'application/json',
       ...(temperature != null ? { temperature } : {}),
       ...(maxTokens != null ? { maxOutputTokens: maxTokens } : {}),
     },

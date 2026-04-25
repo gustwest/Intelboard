@@ -26,6 +26,7 @@ Schema:
   "languageRequirements": string[] ("Svenska", "Engelska", etc.),
   "industry": string | null,
   "seniority": "JUNIOR" | "MID" | "SENIOR" | null,
+  "category": string (klassificering — välj exakt EN: "Backend", "Frontend", "Fullstack", "DevOps/Cloud", "Data/BI", "AI/ML", "Projektledning", "Arkitektur", "Testning/QA", "Infrastruktur/Nätverk", "SAP/ERP", "Säkerhet", "Agile/Scrum", "UX/Design", "Management", "Övrigt IT", "Ej IT"),
   "description": string (sammanfattad men komplett beskrivning av uppdraget, 2-5 meningar),
   "extractionConfidence": number (0.0-1.0, hur säker du är),
   "extractionNotes": string | null (om något var otydligt eller gissade)
@@ -35,7 +36,8 @@ Viktigt:
 - Extrahera krav som de är listade i mailet, översätt inte skills
 - Om uppdraget är på engelska, håll skills på engelska
 - Om pris anges i timpris -> HOURLY, per månad -> MONTHLY, fast pris -> FIXED
-- Gissa inte datum som inte står i mailet, returnera null`;
+- Gissa inte datum som inte står i mailet, returnera null
+- Klassificera alltid med "category" baserat på uppdragets primära kompetensområde`;
 
 export async function extractAssignmentFromEmail({ emailBody, emailSubject, userId }) {
   const userContent = [

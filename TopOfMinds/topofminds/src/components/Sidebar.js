@@ -31,14 +31,14 @@ function initialsFrom(nameOrEmail) {
   return str.slice(0, 2).toUpperCase();
 }
 
-export default function Sidebar({ user, notificationCount = 0 }) {
+export default function Sidebar({ user, notificationCount = 0, mobileOpen = false, onMobileClose }) {
   const pathname = usePathname();
   const links = isAdmin(user?.role) ? ADMIN_LINKS : CONSULTANT_LINKS;
 
   let currentSection = '';
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${mobileOpen ? ' mobile-open' : ''}`}>
       <div className="sidebar-logo">
         <div className="sidebar-logo-icon">T</div>
         <span className="sidebar-logo-text">TopOfMinds</span>
@@ -59,7 +59,7 @@ export default function Sidebar({ user, notificationCount = 0 }) {
           return (
             <div key={link.href}>
               {showSection && <div className="sidebar-section-title">{link.section}</div>}
-              <Link href={link.href} className={`sidebar-link ${isActive ? 'active' : ''}`}>
+              <Link href={link.href} className={`sidebar-link ${isActive ? 'active' : ''}`} onClick={onMobileClose}>
                 <span className="sidebar-link-icon">{link.icon}</span>
                 {link.label}
                 {badge > 0 && <span className="sidebar-link-badge">{badge}</span>}

@@ -14,7 +14,7 @@ function toStringArrayJson(v) {
   return clean.length > 0 ? JSON.stringify(clean) : null;
 }
 
-export async function intakeAssignmentFromEmail({ emailBody, emailSubject, sourceType = 'EMAIL', userId }) {
+export async function intakeAssignmentFromEmail({ emailBody, emailSubject, sourceType = 'EMAIL', userId, brokerFrom }) {
   if (!emailBody || emailBody.trim().length === 0) {
     throw new Error('emailBody is required');
   }
@@ -26,7 +26,7 @@ export async function intakeAssignmentFromEmail({ emailBody, emailSubject, sourc
       title: data.title || emailSubject || 'Nytt uppdrag',
       description: data.description || emailBody.slice(0, 2000),
       clientName: data.clientName || null,
-      brokerName: data.brokerName || null,
+      brokerName: data.brokerName || brokerFrom || null,
       brokerEmail: data.brokerEmail || null,
       location: data.location || null,
       startDate: toDateOrNull(data.startDate),
@@ -41,6 +41,7 @@ export async function intakeAssignmentFromEmail({ emailBody, emailSubject, sourc
       languageRequirements: toStringArrayJson(data.languageRequirements),
       industry: data.industry || null,
       seniority: data.seniority || null,
+      category: data.category || null,
       status: 'NEW',
       sourceType,
       sourceRaw: emailBody,

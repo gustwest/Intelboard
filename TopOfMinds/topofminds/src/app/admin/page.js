@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import KanbanBoard from './KanbanBoard';
+import SourcesPanel from './SourcesPanel';
 import styles from './admin.module.css';
 
 const ROLE_LABELS = { SUPERADMIN: 'Superadmin', ADMIN: 'Admin', CONSULTANT: 'Konsult' };
@@ -348,9 +349,14 @@ export default function AdminPage() {
         <button className={`${styles.tab} ${tab === 'users' ? styles.tabActive : ''}`} onClick={() => setTab('users')}>
           👥 Användare
         </button>
+        <button className={`${styles.tab} ${tab === 'sources' ? styles.tabActive : ''}`} onClick={() => setTab('sources')}>
+          📡 Källor
+        </button>
       </div>
 
       {tab === 'kanban' && <KanbanBoard />}
+
+      {tab === 'sources' && <SourcesPanel />}
 
       {tab === 'agent' && (
         <>

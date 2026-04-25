@@ -225,6 +225,7 @@ model Assignment {
   languageRequirements String? // JSON array
   industry          String?
   seniority         String?  // JUNIOR | MID | SENIOR
+  category          String?  // Backend, Frontend, Fullstack, DevOps/Cloud, Data/BI, etc.
   status            String   @default("NEW") // NEW | MATCHED | SENT | CLOSED | ARCHIVED
   sourceType        String   @default("EMAIL") // EMAIL | MANUAL | API
   sourceRaw         String?  // original email body / raw input
@@ -283,6 +284,26 @@ model Application {
 
   @@unique([assignmentId, consultantId])
   @@index([consultantId, status])
+}
+
+// ==================== BROKER SOURCES ====================
+
+model BrokerSource {
+  id                String    @id @default(uuid())
+  name              String    // "Cinode", "E-Work", "Brights", etc.
+  type              String    // PORTAL | EMAIL | API
+  url               String?   // portal login URL
+  domain            String?   // email domain filter, e.g. "cinode.com"
+  username          String?   // login email/user (shown in UI)
+  credentialsCipher String?   // AES-256-GCM encrypted password/secret
+  config            String?   // JSON: platform-specific config (selectors, paths, etc.)
+  enabled           Boolean   @default(true)
+  lastCheckedAt     DateTime?
+  lastResult        String?   // SUCCESS | ERROR | description
+  assignmentsFound  Int       @default(0) // total assignments found from this source
+  checkIntervalMin  Int       @default(30)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 }
 
 // ==================== AI INFRASTRUCTURE ====================

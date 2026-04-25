@@ -61,6 +61,7 @@
 
   /* Header */
   --header-height: 64px;
+  --mobile-header-height: 56px;
 }
 
 *, *::before, *::after {
@@ -1000,15 +1001,97 @@ a:hover {
   background: hsla(220, 15%, 50%, 0.4);
 }
 
+/* ==================== MOBILE HEADER ==================== */
+.mobile-header {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--mobile-header-height);
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border);
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  z-index: 200;
+  backdrop-filter: blur(8px);
+}
+
+.mobile-header-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mobile-menu-btn {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  transition: background var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+.mobile-menu-btn:hover,
+.mobile-menu-btn:focus-visible {
+  background: var(--color-bg-hover);
+  outline: none;
+}
+
+.hamburger-line {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: var(--color-text-primary);
+  border-radius: 2px;
+}
+
+/* Mobile backdrop overlay */
+.mobile-overlay {
+  position: fixed;
+  inset: 0;
+  background: hsla(0, 0%, 0%, 0.6);
+  z-index: 290;
+  backdrop-filter: blur(2px);
+  animation: overlayFadeIn 200ms ease;
+}
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* ==================== RESPONSIVE ==================== */
 @media (max-width: 768px) {
-  .sidebar { display: none; }
-  .main-content { margin-left: 0; }
+  .mobile-header { display: flex; }
+
+  .sidebar {
+    transform: translateX(-100%);
+    z-index: 300;
+    transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+  }
+  .sidebar.mobile-open {
+    transform: translateX(0);
+    box-shadow: var(--shadow-lg), 4px 0 32px hsla(0, 0%, 0%, 0.4);
+  }
+
+  .main-content {
+    margin-left: 0;
+    padding-top: var(--mobile-header-height);
+  }
   .page-content { padding: 16px; }
   .stats-grid { grid-template-columns: 1fr 1fr; }
   .detail-grid { grid-template-columns: 1fr; }
   .form-row { grid-template-columns: 1fr; }
   .consultant-grid { grid-template-columns: 1fr; }
+
+  .page-header h1 { font-size: 22px; }
+  .page-header { margin-bottom: 20px; }
 }
 
 /* ==================== AUTH PAGES ==================== */
