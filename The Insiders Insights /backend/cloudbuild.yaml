@@ -28,6 +28,7 @@ steps:
       - '--region=europe-north1'
       - '--allow-unauthenticated'
       - '--platform=managed'
+      - '--add-cloudsql-instances=round-plating-480321-j7:europe-north1:dvoucher-db'
 
 options:
   logging: CLOUD_LOGGING_ONLY
