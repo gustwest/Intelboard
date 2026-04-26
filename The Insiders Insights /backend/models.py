@@ -184,3 +184,113 @@ class Report(Base):
     config_json = Column(JSON, default=dict)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ======================================================================
+# KANBAN / ISSUES
+# ======================================================================
+class Issue(Base):
+    __tablename__ = "issues"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    title = Column(String, nullable=False)
+    description = Column(Text, default="")
+    status = Column(String, nullable=False, default="NY", index=True)
+    order = Column(Integer, default=0)
+    images_json = Column(JSON, default=list)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    comments = relationship("IssueComment", back_populates="issue", cascade="all, delete-orphan",
+                            order_by="IssueComment.created_at")
+
+
+class IssueComment(Base):
+    __tablename__ = "issue_comments"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    issue_id = Column(String, ForeignKey("issues.id", ondelete="CASCADE"), nullable=False, index=True)
+    body = Column(Text, nullable=False)
+    author = Column(String, default="Team Member")
+    images_json = Column(JSON, default=list)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    issue = relationship("Issue", back_populates="comments")
+
+
+# ======================================================================
+# CHAT / CONVERSATIONS
+# ======================================================================
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    name = Column(String, nullable=False)
+    emoji = Column(String, default="💬")
+    members_json = Column(JSON, default=list)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    messages = relationship("ChatMessage", back_populates="conversation", cascade="all, delete-orphan",
+                            order_by="ChatMessage.created_at")
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    conversation_id = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    body = Column(Text, default="")
+    author = Column(String, nullable=False)
+    images_json = Column(JSON, default=list)
+    attachments_json = Column(JSON, default=list)
+    reactions_json = Column(JSON, default=list)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    conversation = relationship("Conversation", back_populates="messages")
+
+
+# ======================================================================
+# AI AGENT
+# ======================================================================
+class AgentSession(Base):
+    __tablename__ = "agent_sessions"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    title = Column(String, nullable=False)
+    pinned = Column(Boolean, default=False)
+    claude_session_id = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    tasks = relationship("AgentTask", back_populates="session", cascade="all, delete-orphan",
+                         order_by="AgentTask.created_at")
+
+
+class AgentTask(Base):
+    __tablename__ = "agent_tasks"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    prompt = Column(Text, nullable=False)
+    status = Column(String, nullable=False, default="PENDING", index=True)
+    model = Column(String, default="claude-sonnet-4-6")
+    response = Column(Text, nullable=True)
+    error = Column(Text, nullable=True)
+    claude_session_id = Column(String, nullable=True)
+    logs_json = Column(JSON, default=list)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    session = relationship("AgentSession", back_populates="tasks")
+
+
+class AgentMeta(Base):
+    """Singleton row tracking agent polling metadata."""
+    __tablename__ = "agent_meta"
+
+    id = Column(Integer, primary_key=True, default=1)
+    last_poll = Column(DateTime, nullable=True)
+    agent_model = Column(String, nullable=True)
+    agent_version = Column(String, nullable=True)
+    agent_project = Column(String, nullable=True)

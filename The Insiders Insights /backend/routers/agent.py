@@ -1,28 +1,22 @@
-"""AI Agent — sessions, tasks, polling (JSON-file backed)."""
+"""AI Agent — sessions, tasks, polling — PostgreSQL backed."""
 import os
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.orm import Session, joinedload
 
-from helpers import AGENT_FILE, file_json, save_json
+import models
+from db import get_db
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 
 
 # ------------------------------------------------------------------
-# State management
+# Auth
 # ------------------------------------------------------------------
-def _load_agent_state() -> Dict[str, Any]:
-    return file_json(AGENT_FILE, {"sessions": []})
-
-
-def _save_agent_state(state: Dict[str, Any]) -> None:
-    save_json(AGENT_FILE, state)
-
-
 def _require_agent_key(authorization: Optional[str]) -> None:
     expected = os.environ.get("AGENT_API_KEY")
     if not expected:
@@ -31,16 +25,8 @@ def _require_agent_key(authorization: Optional[str]) -> None:
         raise HTTPException(401, "Unauthorized")
 
 
-def _sorted_sessions(state: Dict[str, Any]) -> List[Dict[str, Any]]:
-    return sorted(
-        state.get("sessions", []),
-        key=lambda s: s.get("updatedAt", ""),
-        reverse=True,
-    )
-
-
 # ------------------------------------------------------------------
-# Models
+# Request models
 # ------------------------------------------------------------------
 class AgentTaskCreate(BaseModel):
     prompt: str
@@ -63,98 +49,138 @@ class AgentPollPatch(BaseModel):
 
 
 # ------------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------------
+def _task_to_out(t: models.AgentTask) -> dict:
+    return {
+        "id": t.id,
+        "prompt": t.prompt,
+        "status": t.status,
+        "model": t.model,
+        "response": t.response,
+        "error": t.error,
+        "sessionId": t.session_id,
+        "claudeSessionId": t.claude_session_id,
+        "createdAt": t.created_at.isoformat(),
+        "updatedAt": t.updated_at.isoformat(),
+        "logs": t.logs_json or [],
+    }
+
+
+def _session_to_out(s: models.AgentSession) -> dict:
+    return {
+        "id": s.id,
+        "title": s.title,
+        "pinned": s.pinned,
+        "claudeSessionId": s.claude_session_id,
+        "createdAt": s.created_at.isoformat(),
+        "updatedAt": s.updated_at.isoformat(),
+        "tasks": [_task_to_out(t) for t in s.tasks],
+    }
+
+
+def _get_or_create_meta(db: Session) -> models.AgentMeta:
+    meta = db.query(models.AgentMeta).first()
+    if not meta:
+        meta = models.AgentMeta(id=1)
+        db.add(meta)
+        db.flush()
+    return meta
+
+
+# ------------------------------------------------------------------
 # Routes
 # ------------------------------------------------------------------
 @router.get("/sessions")
-def agent_list_sessions():
-    state = _load_agent_state()
-    return _sorted_sessions(state)
+def agent_list_sessions(db: Session = Depends(get_db)):
+    sessions = (
+        db.query(models.AgentSession)
+        .options(joinedload(models.AgentSession.tasks))
+        .order_by(models.AgentSession.updated_at.desc())
+        .all()
+    )
+    return [_session_to_out(s) for s in sessions]
 
 
 @router.get("/sessions/{session_id}")
-def agent_get_session(session_id: str):
-    state = _load_agent_state()
-    session = next((s for s in state.get("sessions", []) if s["id"] == session_id), None)
+def agent_get_session(session_id: str, db: Session = Depends(get_db)):
+    session = (
+        db.query(models.AgentSession)
+        .options(joinedload(models.AgentSession.tasks))
+        .filter_by(id=session_id)
+        .first()
+    )
     if not session:
         raise HTTPException(404, "Session not found")
-    return session
+    return _session_to_out(session)
 
 
 @router.post("/tasks")
-def agent_create_task(req: AgentTaskCreate):
+def agent_create_task(req: AgentTaskCreate, db: Session = Depends(get_db)):
     if not req.prompt or not req.prompt.strip():
         raise HTTPException(400, "prompt is required")
 
-    state = _load_agent_state()
-    state.setdefault("sessions", [])
-    now = datetime.utcnow().isoformat()
-    task_id = str(uuid.uuid4())
+    now = datetime.utcnow()
     task_model = req.model or "claude-sonnet-4-6"
 
-    task = {
-        "id": task_id,
-        "prompt": req.prompt.strip(),
-        "status": "PENDING",
-        "model": task_model,
-        "response": None,
-        "error": None,
-        "sessionId": "",
-        "claudeSessionId": None,
-        "createdAt": now,
-        "updatedAt": now,
-        "logs": [],
-    }
-
     if req.sessionId:
-        session = next((s for s in state["sessions"] if s["id"] == req.sessionId), None)
+        session = (
+            db.query(models.AgentSession)
+            .options(joinedload(models.AgentSession.tasks))
+            .filter_by(id=req.sessionId)
+            .first()
+        )
         if not session:
             raise HTTPException(404, "Session not found")
-        task["sessionId"] = session["id"]
-        session.setdefault("tasks", []).append(task)
-        session["updatedAt"] = now
     else:
-        sid = str(uuid.uuid4())
         title = req.prompt[:50] + "…" if len(req.prompt) > 50 else req.prompt
-        session = {
-            "id": sid,
-            "title": title,
-            "pinned": False,
-            "claudeSessionId": None,
-            "createdAt": now,
-            "updatedAt": now,
-            "tasks": [task],
-        }
-        task["sessionId"] = sid
-        state["sessions"].insert(0, session)
+        session = models.AgentSession(title=title, created_at=now, updated_at=now)
+        db.add(session)
+        db.flush()
 
-    _save_agent_state(state)
-    return {"session": session, "task": task}
+    task = models.AgentTask(
+        session_id=session.id,
+        prompt=req.prompt.strip(),
+        status="PENDING",
+        model=task_model,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(task)
+    session.updated_at = now
+    db.commit()
+    db.refresh(session)
+    db.refresh(task)
+    return {"session": _session_to_out(session), "task": _task_to_out(task)}
 
 
 @router.patch("/sessions/{session_id}")
-def agent_patch_session(session_id: str, req: AgentSessionPatch):
-    state = _load_agent_state()
-    session = next((s for s in state.get("sessions", []) if s["id"] == session_id), None)
+def agent_patch_session(session_id: str, req: AgentSessionPatch, db: Session = Depends(get_db)):
+    session = (
+        db.query(models.AgentSession)
+        .options(joinedload(models.AgentSession.tasks))
+        .filter_by(id=session_id)
+        .first()
+    )
     if not session:
         raise HTTPException(404, "Session not found")
     if req.title is not None:
-        session["title"] = req.title
+        session.title = req.title
     if req.pinned is not None:
-        session["pinned"] = req.pinned
-    session["updatedAt"] = datetime.utcnow().isoformat()
-    _save_agent_state(state)
-    return session
+        session.pinned = req.pinned
+    session.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(session)
+    return _session_to_out(session)
 
 
 @router.delete("/sessions/{session_id}")
-def agent_delete_session(session_id: str):
-    state = _load_agent_state()
-    sessions = state.get("sessions", [])
-    new_sessions = [s for s in sessions if s["id"] != session_id]
-    if len(new_sessions) == len(sessions):
+def agent_delete_session(session_id: str, db: Session = Depends(get_db)):
+    session = db.query(models.AgentSession).filter_by(id=session_id).first()
+    if not session:
         raise HTTPException(404, "Session not found")
-    state["sessions"] = new_sessions
-    _save_agent_state(state)
+    db.delete(session)
+    db.commit()
     return {"ok": True}
 
 
@@ -164,97 +190,118 @@ def agent_poll_get(
     x_agent_model: Optional[str] = Header(None),
     x_agent_version: Optional[str] = Header(None),
     x_agent_project: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
 ):
     _require_agent_key(authorization)
-    state = _load_agent_state()
-    state["lastPoll"] = datetime.utcnow().isoformat()
-    if x_agent_model: state["agentModel"] = x_agent_model
-    if x_agent_version: state["agentVersion"] = x_agent_version
-    if x_agent_project: state["agentProject"] = x_agent_project
 
-    pending_task = None
-    pending_session = None
-    for session in state.get("sessions", []):
-        for task in session.get("tasks", []):
-            if task.get("status") == "PENDING":
-                pending_task = task
-                pending_session = session
-                break
-        if pending_task:
-            break
+    meta = _get_or_create_meta(db)
+    meta.last_poll = datetime.utcnow()
+    if x_agent_model:
+        meta.agent_model = x_agent_model
+    if x_agent_version:
+        meta.agent_version = x_agent_version
+    if x_agent_project:
+        meta.agent_project = x_agent_project
+
+    # Find the first PENDING task
+    pending_task = (
+        db.query(models.AgentTask)
+        .filter_by(status="PENDING")
+        .order_by(models.AgentTask.created_at.asc())
+        .first()
+    )
 
     if not pending_task:
-        _save_agent_state(state)
+        db.commit()
         return {"task": None, "timestamp": datetime.utcnow().isoformat()}
 
-    pending_task["status"] = "RUNNING"
-    now = datetime.utcnow().isoformat()
-    pending_task["updatedAt"] = now
-    pending_session["updatedAt"] = now
-    _save_agent_state(state)
+    pending_task.status = "RUNNING"
+    now = datetime.utcnow()
+    pending_task.updated_at = now
+
+    session = db.query(models.AgentSession).filter_by(id=pending_task.session_id).first()
+    if session:
+        session.updated_at = now
+
+    db.commit()
 
     return {
         "task": {
-            "id": pending_task["id"],
-            "prompt": pending_task["prompt"],
-            "model": pending_task["model"],
-            "sessionId": pending_task["sessionId"],
-            "resumeSessionId": pending_session.get("claudeSessionId"),
+            "id": pending_task.id,
+            "prompt": pending_task.prompt,
+            "model": pending_task.model,
+            "sessionId": pending_task.session_id,
+            "resumeSessionId": session.claude_session_id if session else None,
         },
-        "timestamp": now,
+        "timestamp": now.isoformat(),
     }
 
 
 @router.patch("/poll")
-def agent_poll_patch(req: AgentPollPatch, authorization: Optional[str] = Header(None)):
+def agent_poll_patch(req: AgentPollPatch, authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
     _require_agent_key(authorization)
-    state = _load_agent_state()
-    now = datetime.utcnow().isoformat()
-    for session in state.get("sessions", []):
-        task = next((t for t in session.get("tasks", []) if t["id"] == req.taskId), None)
-        if not task:
-            continue
-        if req.status: task["status"] = req.status
-        if req.response is not None: task["response"] = req.response
-        if req.error: task["error"] = req.error
-        if req.claudeSessionId:
-            task["claudeSessionId"] = req.claudeSessionId
-            session["claudeSessionId"] = req.claudeSessionId
-        if req.logs:
-            for msg in req.logs:
-                task.setdefault("logs", []).append({
-                    "id": str(uuid.uuid4()),
-                    "message": msg,
-                    "createdAt": now,
-                })
-        task["updatedAt"] = now
-        session["updatedAt"] = now
-        _save_agent_state(state)
-        return {"ok": True}
-    raise HTTPException(404, "Task not found")
+
+    task = db.query(models.AgentTask).filter_by(id=req.taskId).first()
+    if not task:
+        raise HTTPException(404, "Task not found")
+
+    now = datetime.utcnow()
+    if req.status:
+        task.status = req.status
+    if req.response is not None:
+        task.response = req.response
+    if req.error:
+        task.error = req.error
+    if req.claudeSessionId:
+        task.claude_session_id = req.claudeSessionId
+        session = db.query(models.AgentSession).filter_by(id=task.session_id).first()
+        if session:
+            session.claude_session_id = req.claudeSessionId
+            session.updated_at = now
+    if req.logs:
+        logs = list(task.logs_json or [])
+        for msg in req.logs:
+            logs.append({
+                "id": str(uuid.uuid4()),
+                "message": msg,
+                "createdAt": now.isoformat(),
+            })
+        task.logs_json = logs
+    task.updated_at = now
+
+    session = db.query(models.AgentSession).filter_by(id=task.session_id).first()
+    if session:
+        session.updated_at = now
+
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/status")
-def agent_status():
-    state = _load_agent_state()
-    all_tasks = [t for s in state.get("sessions", []) for t in s.get("tasks", [])]
-    total = len(all_tasks)
-    completed = sum(1 for t in all_tasks if t.get("status") == "DONE")
-    failed = sum(1 for t in all_tasks if t.get("status") == "FAILED")
-    last_poll = state.get("lastPoll")
+def agent_status(db: Session = Depends(get_db)):
+    meta = _get_or_create_meta(db)
+
+    total = db.query(models.AgentTask).count()
+    completed = db.query(models.AgentTask).filter_by(status="DONE").count()
+    failed = db.query(models.AgentTask).filter_by(status="FAILED").count()
+
     online = False
+    last_poll = meta.last_poll
     if last_poll:
         try:
-            delta = (datetime.utcnow() - datetime.fromisoformat(last_poll)).total_seconds()
+            delta = (datetime.utcnow() - last_poll).total_seconds()
             online = delta < 30
         except Exception:
             online = False
+
+    db.commit()  # persist any meta changes
+
     return {
         "online": online,
-        "lastPoll": last_poll,
-        "model": state.get("agentModel"),
-        "cliVersion": state.get("agentVersion"),
-        "projectDir": state.get("agentProject"),
+        "lastPoll": last_poll.isoformat() if last_poll else None,
+        "model": meta.agent_model,
+        "cliVersion": meta.agent_version,
+        "projectDir": meta.agent_project,
         "stats": {
             "total": total,
             "completed": completed,
