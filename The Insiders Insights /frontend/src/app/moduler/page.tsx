@@ -182,6 +182,13 @@ function ModuleEditor({ module, sources, customers, onClose, onSaved }: { module
   const [description, setDescription] = useState(module?.description || '');
   const [expression, setExpression] = useState(module?.formula?.expression || '');
   const [aggregations, setAggregations] = useState<Record<string, string>>(module?.formula?.aggregations || {});
+  const [moduleRefs, setModuleRefs] = useState<{ module_id: string; alias: string }[]>(
+    module?.formula?.module_refs || []
+  );
+  const [constants, setConstants] = useState<{ key: string; value: string }[]>(
+    Object.entries(module?.formula?.constants || {}).map(([k, v]) => ({ key: k, value: String(v) }))
+  );
+  const [allModules, setAllModules] = useState<Module[]>([]);
   const [customerId, setCustomerId] = useState<string | null>(module?.customer_id || null);
   const [inverted, setInverted] = useState<boolean>(module?.inverted || false);
   const [thresholds, setThresholds] = useState<{ red: string; yellow: string; green: string }>({
@@ -193,6 +200,11 @@ function ModuleEditor({ module, sources, customers, onClose, onSaved }: { module
     module?.field_refs.map(r => ({ source_field_id: r.source_field_id, alias: r.alias })) || []
   );
   const [testResults, setTestResults] = useState<any>(null);
+
+  useEffect(() => {
+    fetch(`${API}/api/modules`).then(r => r.json()).then(setAllModules);
+  }, []);
+  const otherModules = allModules.filter(m => !module || m.id !== module.id);
 
   const allFields = useMemo(() => sources.flatMap(s => s.fields.map(f => ({ ...f, source_id: s.id, source_name: s.name, source_key: s.key }))), [sources]);
   const fieldById = Object.fromEntries(allFields.map(f => [f.id, f]));
@@ -219,10 +231,23 @@ function ModuleEditor({ module, sources, customers, onClose, onSaved }: { module
   }
 
   async function save() {
+    const constantsObj: Record<string, number> = {};
+    for (const c of constants) {
+      const k = c.key.trim();
+      const n = parseFloat(c.value);
+      if (!k || Number.isNaN(n)) continue;
+      constantsObj[k] = n;
+    }
+    const cleanModuleRefs = moduleRefs.filter(r => r.module_id && r.alias.trim());
     const body = {
       customer_id: customerId,
       name, abbr, category, description, inverted,
-      formula: { expression, aggregations },
+      formula: {
+        expression,
+        aggregations,
+        module_refs: cleanModuleRefs,
+        constants: constantsObj,
+      },
       thresholds: parsedThresholds(),
       field_refs: fieldRefs,
       visualization: 'gauge',
@@ -313,11 +338,61 @@ function ModuleEditor({ module, sources, customers, onClose, onSaved }: { module
           </div>
         </div>
 
+        {/* Module references — module-of-modules */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+            <label style={lbl}>Modul-referenser (andra modulers värden som variabler)</label>
+            <button
+              onClick={() => {
+                const cand = otherModules.find(m => !moduleRefs.some(r => r.module_id === m.id));
+                if (!cand) return;
+                setModuleRefs([...moduleRefs, { module_id: cand.id, alias: cand.abbr.toLowerCase() }]);
+              }}
+              disabled={otherModules.length === 0}
+              style={btn('ghost')}
+            >+ Lägg till modul</button>
+          </div>
+          {moduleRefs.length === 0 ? (
+            <div style={{ color: C.dim, fontSize: 11, padding: 8 }}>
+              Lämnas tomt om modulen inte ska bygga vidare på andra moduler.
+            </div>
+          ) : moduleRefs.map((mr, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 140px 80px', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+              <select value={mr.module_id} onChange={e => setModuleRefs(moduleRefs.map((r, j) => j === i ? { ...r, module_id: e.target.value } : r))} style={inp}>
+                {otherModules.map(m => (
+                  <option key={m.id} value={m.id}>{m.abbr} — {m.name} {m.customer_id ? '(kund)' : '(global)'}</option>
+                ))}
+              </select>
+              <input value={mr.alias} onChange={e => setModuleRefs(moduleRefs.map((r, j) => j === i ? { ...r, alias: e.target.value } : r))} placeholder="alias" style={{ ...inp, fontFamily: 'monospace' }} />
+              <button onClick={() => setModuleRefs(moduleRefs.filter((_, j) => j !== i))} style={btn('ghost')}>✕</button>
+            </div>
+          ))}
+        </div>
+
+        {/* Constants — own values bound into the module */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+            <label style={lbl}>Egna värden (konstanter, t.ex. mål eller faktor)</label>
+            <button onClick={() => setConstants([...constants, { key: '', value: '' }])} style={btn('ghost')}>+ Lägg till värde</button>
+          </div>
+          {constants.length === 0 ? (
+            <div style={{ color: C.dim, fontSize: 11, padding: 8 }}>
+              Tillgängliga som variabler i formeln (t.ex. <code style={{ color: C.muted }}>mål</code>, <code style={{ color: C.muted }}>faktor</code>).
+            </div>
+          ) : constants.map((c, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 80px', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+              <input value={c.key} onChange={e => setConstants(constants.map((x, j) => j === i ? { ...x, key: e.target.value } : x))} placeholder="namn (t.ex. mål)" style={{ ...inp, fontFamily: 'monospace' }} />
+              <input value={c.value} onChange={e => setConstants(constants.map((x, j) => j === i ? { ...x, value: e.target.value } : x))} placeholder="värde (tal)" style={inp} />
+              <button onClick={() => setConstants(constants.filter((_, j) => j !== i))} style={btn('ghost')}>✕</button>
+            </div>
+          ))}
+        </div>
+
         <div style={{ marginBottom: 16 }}>
           <label style={lbl}>Formel (expression)</label>
           <input value={expression} onChange={e => setExpression(e.target.value)} placeholder="t.ex. if_(imp > 0, clk / imp * 100, 0)" style={{ ...inp, fontFamily: 'monospace' }} />
           <div style={{ fontSize: 11, color: C.dim, marginTop: 4 }}>
-            Stöd: + - * / % ** · min/max/abs/round · if_(cond, a, b) · jämförelser · aliasen ovan används som variabler.
+            Stöd: + - * / % ** · min/max/abs/round · if_(cond, a, b) · jämförelser. Variabler i formeln: datapunkts-aliasen ovan, modul-referenser och egna värden.
           </div>
         </div>
 

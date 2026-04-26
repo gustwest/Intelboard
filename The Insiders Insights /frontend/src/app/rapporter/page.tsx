@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import Gauge from '../../components/Gauge';
+import TrendChart from '../../components/TrendChart';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
@@ -14,29 +15,55 @@ type FieldRef = { id: string; source_field_id: string; alias: string; field_key:
 type Module = { id: string; customer_id: string | null; name: string; abbr: string; category: string; formula: any; thresholds: any; inverted: boolean; field_refs: FieldRef[] };
 type EvalResult = { module_id: string; module_name: string; module_abbr: string; expression: string; results: any[] };
 type Report = { id: string; customer_id: string | null; name: string; description: string; config: any; created_at: string };
+type SourceField = { id: string; key: string; display_name: string; data_type: string; unit: string };
+type Source = { id: string; key: string; name: string; fields: SourceField[] };
+type DatapointSpec = { source_field_id: string; alias?: string; aggregation: string };
+type DatapointResult = {
+  panel_kind: 'datapoint';
+  source_field_id: string; field_key: string; field_display_name: string; field_unit: string;
+  alias: string; aggregation: string;
+  results: { customer_id: string; customer_name: string; value: number | null; error?: string | null }[];
+};
+type TrendSeries = { customer_id: string; customer_name: string; points: { period: string; value: number | null; error?: string | null }[] };
+type TrendData = { module_id: string; module_name: string; module_abbr: string; granularity: string; periods: string[]; series: TrendSeries[] };
 
 export default function RapporterPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [modules, setModules] = useState<Module[]>([]);
+  const [sources, setSources] = useState<Source[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [selectedCustomers, setSelectedCustomers] = useState<Set<string>>(new Set());
   const [selectedModules, setSelectedModules] = useState<Set<string>>(new Set());
+  const [datapoints, setDatapoints] = useState<DatapointSpec[]>([]);
   const [results, setResults] = useState<EvalResult[]>([]);
+  const [datapointResults, setDatapointResults] = useState<DatapointResult[]>([]);
   const [running, setRunning] = useState(false);
   const [showSave, setShowSave] = useState(false);
   const [saveName, setSaveName] = useState('');
+  // Trend mode
+  const [trendMode, setTrendMode] = useState(false);
+  const [trendDateField, setTrendDateField] = useState<string>('');
+  const [trendGranularity, setTrendGranularity] = useState<'day' | 'week' | 'month'>('day');
+  const [trendData, setTrendData] = useState<TrendData[]>([]);
 
   const moduleById = useMemo(() => Object.fromEntries(modules.map(m => [m.id, m])), [modules]);
+  const allFields = useMemo(
+    () => sources.flatMap(s => s.fields.map(f => ({ ...f, source_id: s.id, source_name: s.name }))),
+    [sources]
+  );
+  const fieldById = useMemo(() => Object.fromEntries(allFields.map(f => [f.id, f])), [allFields]);
+  const dateFields = useMemo(() => allFields.filter(f => f.data_type === 'date'), [allFields]);
 
   useEffect(() => { refresh(); }, []);
 
   async function refresh() {
-    const [cs, ms, rs] = await Promise.all([
+    const [cs, ms, rs, ss] = await Promise.all([
       fetch(`${API}/api/customers`).then(r => r.json()),
       fetch(`${API}/api/modules`).then(r => r.json()),
       fetch(`${API}/api/reports`).then(r => r.json()),
+      fetch(`${API}/api/sources`).then(r => r.json()),
     ]);
-    setCustomers(cs); setModules(ms); setReports(rs);
+    setCustomers(cs); setModules(ms); setReports(rs); setSources(ss);
   }
 
   function toggle(set: Set<string>, setSet: (s: Set<string>) => void, id: string) {
@@ -48,8 +75,27 @@ export default function RapporterPage() {
   async function runReport() {
     setRunning(true);
     try {
-      const out: EvalResult[] = [];
       const cids = Array.from(selectedCustomers);
+
+      if (trendMode) {
+        // Trend per module
+        if (!trendDateField) { alert('Välj ett datumfält först.'); return; }
+        const trends: TrendData[] = [];
+        for (const mid of selectedModules) {
+          const res = await fetch(`${API}/api/modules/${mid}/trend`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ customer_ids: cids, date_field_id: trendDateField, granularity: trendGranularity }),
+          });
+          if (res.ok) trends.push(await res.json());
+        }
+        setTrendData(trends);
+        setResults([]);
+        setDatapointResults([]);
+        return;
+      }
+
+      // Module gauges
+      const out: EvalResult[] = [];
       for (const mid of selectedModules) {
         const res = await fetch(`${API}/api/modules/${mid}/evaluate`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -58,6 +104,38 @@ export default function RapporterPage() {
         if (res.ok) out.push(await res.json());
       }
       setResults(out);
+
+      // Datapoint panels — bundled via an ad-hoc report run if user has set them
+      const dpOut: DatapointResult[] = [];
+      if (datapoints.length > 0) {
+        // Use a temp report run by creating-and-deleting? Simpler: hit /run on a fresh transient pattern.
+        // Instead: call /api/customers/{id}/evaluate-datapoint per cust+dp via inline fetch.
+        for (const dp of datapoints) {
+          const field = fieldById[dp.source_field_id];
+          if (!field) continue;
+          const results: DatapointResult['results'] = [];
+          for (const cid of cids) {
+            const cust = customers.find(c => c.id === cid);
+            if (!cust) continue;
+            const res = await fetch(`${API}/api/datapoints/evaluate`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ customer_id: cid, source_field_id: dp.source_field_id, aggregation: dp.aggregation }),
+            });
+            if (res.ok) {
+              const j = await res.json();
+              results.push({ customer_id: cid, customer_name: cust.name, value: j.value, error: j.error });
+            }
+          }
+          dpOut.push({
+            panel_kind: 'datapoint',
+            source_field_id: field.id, field_key: field.key, field_display_name: field.display_name, field_unit: field.unit || '',
+            alias: dp.alias || field.key, aggregation: dp.aggregation,
+            results,
+          });
+        }
+      }
+      setDatapointResults(dpOut);
+      setTrendData([]);
     } finally { setRunning(false); }
   }
 
@@ -68,6 +146,8 @@ export default function RapporterPage() {
       config: {
         customer_ids: Array.from(selectedCustomers),
         module_ids: Array.from(selectedModules),
+        datapoints,
+        trend: trendMode ? { date_field_id: trendDateField, granularity: trendGranularity } : null,
       },
     };
     const res = await fetch(`${API}/api/reports`, {
@@ -81,7 +161,15 @@ export default function RapporterPage() {
   function loadReport(r: Report) {
     setSelectedCustomers(new Set(r.config.customer_ids || []));
     setSelectedModules(new Set(r.config.module_ids || []));
-    setResults([]);
+    setDatapoints(r.config.datapoints || []);
+    if (r.config.trend) {
+      setTrendMode(true);
+      setTrendDateField(r.config.trend.date_field_id || '');
+      setTrendGranularity(r.config.trend.granularity || 'day');
+    } else {
+      setTrendMode(false);
+    }
+    setResults([]); setDatapointResults([]); setTrendData([]);
   }
 
   async function deleteReport(id: string) {
@@ -115,7 +203,7 @@ export default function RapporterPage() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '280px 320px 1fr', gap: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '260px 280px 280px 1fr', gap: 16 }}>
         {/* Customers */}
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 16 }}>
           <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>Bolag ({selectedCustomers.size})</h3>
@@ -151,13 +239,83 @@ export default function RapporterPage() {
           ))}
         </div>
 
+        {/* Datapoints (raw fields) */}
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 14 }}>Datapunkter ({datapoints.length})</h3>
+            <button
+              onClick={() => {
+                const cand = allFields.find(f => !datapoints.some(d => d.source_field_id === f.id));
+                if (cand) setDatapoints([...datapoints, { source_field_id: cand.id, alias: cand.key, aggregation: 'sum' }]);
+              }}
+              disabled={allFields.length === 0}
+              style={btn('ghost')}
+            >+</button>
+          </div>
+          {datapoints.length === 0 ? (
+            <div style={{ color: C.muted, fontSize: 11 }}>
+              Lägg till råa fält för att visa dem som egna gauges (t.ex. totala impressions parallellt med din CTR-modul).
+            </div>
+          ) : datapoints.map((dp, i) => {
+            const f = fieldById[dp.source_field_id];
+            return (
+              <div key={i} style={{ marginBottom: 8, padding: 8, background: 'rgba(0,0,0,0.2)', borderRadius: 8 }}>
+                <select
+                  value={dp.source_field_id}
+                  onChange={e => setDatapoints(datapoints.map((d, j) => j === i ? { ...d, source_field_id: e.target.value } : d))}
+                  style={{ ...inp, marginBottom: 6, fontSize: 12 }}
+                >
+                  {sources.map(s => (
+                    <optgroup key={s.id} label={s.name}>
+                      {s.fields.map(ff => <option key={ff.id} value={ff.id}>{ff.key}</option>)}
+                    </optgroup>
+                  ))}
+                </select>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <select
+                    value={dp.aggregation}
+                    onChange={e => setDatapoints(datapoints.map((d, j) => j === i ? { ...d, aggregation: e.target.value } : d))}
+                    style={{ ...inp, fontSize: 12 }}
+                  >
+                    <option value="sum">sum</option><option value="avg">avg</option><option value="min">min</option><option value="max">max</option><option value="count">count</option><option value="latest">latest</option>
+                  </select>
+                  <button onClick={() => setDatapoints(datapoints.filter((_, j) => j !== i))} style={{ ...btn('ghost'), padding: '4px 10px' }}>✕</button>
+                </div>
+                {f && <div style={{ fontSize: 10, color: C.dim, marginTop: 4 }}>{f.display_name}{f.unit ? ` · ${f.unit}` : ''}</div>}
+              </div>
+            );
+          })}
+
+          {/* Trend toggle */}
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: C.muted, cursor: 'pointer' }}>
+              <input type="checkbox" checked={trendMode} onChange={e => setTrendMode(e.target.checked)} />
+              📈 Visa som trend (tidsserie)
+            </label>
+            {trendMode && (
+              <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
+                <select value={trendDateField} onChange={e => setTrendDateField(e.target.value)} style={{ ...inp, fontSize: 12 }}>
+                  <option value="">Välj datumfält…</option>
+                  {dateFields.map(f => <option key={f.id} value={f.id}>{f.key} ({f.display_name})</option>)}
+                  {dateFields.length === 0 && allFields.map(f => <option key={f.id} value={f.id}>{f.key} (försök som datum)</option>)}
+                </select>
+                <select value={trendGranularity} onChange={e => setTrendGranularity(e.target.value as any)} style={{ ...inp, fontSize: 12 }}>
+                  <option value="day">Per dag</option>
+                  <option value="week">Per vecka</option>
+                  <option value="month">Per månad</option>
+                </select>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Results */}
         <div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
             <button onClick={runReport} disabled={!canRun || running} style={{
               padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: canRun ? 'pointer' : 'not-allowed',
               background: canRun ? C.accent : 'rgba(177,78,244,0.25)', color: '#fff', border: 'none', fontFamily: 'inherit',
-            }}>{running ? 'Kör…' : '▶ Kör jämförelse'}</button>
+            }}>{running ? 'Kör…' : trendMode ? '▶ Kör trend' : '▶ Kör jämförelse'}</button>
             <button onClick={() => setShowSave(!showSave)} disabled={!canRun} style={btn('ghost')}>💾 Spara som rapport</button>
           </div>
 
@@ -169,7 +327,45 @@ export default function RapporterPage() {
             </div>
           )}
 
-          {results.length === 0 ? (
+          {/* Trend results */}
+          {trendData.length > 0 && trendData.map(td => (
+            <div key={td.module_id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
+                <h3 style={{ margin: 0, fontSize: 16 }}>📈 {td.module_name} <span style={{ color: C.dim, fontSize: 13 }}>{td.module_abbr}</span></h3>
+                <span style={{ fontSize: 11, color: C.dim }}>{td.granularity} · {td.periods.length} period(er)</span>
+              </div>
+              <TrendChart periods={td.periods} series={td.series.map(s => ({ ...s, points: s.points.map(p => ({ period: p.period, value: typeof p.value === 'number' ? p.value : null })) }))} />
+            </div>
+          ))}
+
+          {/* Datapoint results */}
+          {datapointResults.length > 0 && datapointResults.map(dp => (
+            <div key={dp.source_field_id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14 }}>
+                <h3 style={{ margin: 0, fontSize: 16 }}>📍 {dp.field_display_name} <span style={{ color: C.dim, fontSize: 12 }}>{dp.field_key}</span></h3>
+                <code style={{ fontSize: 11, color: C.dim }}>{dp.aggregation}{dp.field_unit ? ` · ${dp.field_unit}` : ''}</code>
+              </div>
+              <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', justifyContent: 'space-around' }}>
+                {dp.results.map(rr => {
+                  const cust = customers.find(c => c.id === rr.customer_id);
+                  return (
+                    <div key={rr.customer_id} style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>
+                        {cust?.logo_emoji} {rr.customer_name}
+                      </div>
+                      <div style={{ fontSize: 22, fontWeight: 700, color: rr.error ? C.danger : C.accent }}>
+                        {typeof rr.value === 'number' ? rr.value.toLocaleString('sv-SE', { maximumFractionDigits: 2 }) : '—'}
+                        {dp.field_unit && typeof rr.value === 'number' && <span style={{ fontSize: 12, color: C.muted, marginLeft: 4 }}>{dp.field_unit}</span>}
+                      </div>
+                      {rr.error && <div style={{ fontSize: 10, color: C.danger, marginTop: 4 }}>⚠ {rr.error}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {results.length === 0 && trendData.length === 0 && datapointResults.length === 0 ? (
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 40, textAlign: 'center', color: C.muted }}>
               Välj minst 1 bolag och 1 modul för att köra.
             </div>

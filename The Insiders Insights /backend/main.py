@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import numpy as np
+import pandas as pd
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
@@ -798,27 +799,96 @@ class ModuleEvaluateReq(BaseModel):
     aggregations: Optional[Dict[str, str]] = None
 
 
-def _evaluate_for_customer(db: Session, module: models.Module, customer: models.Customer, default_aggs: Dict[str, str]) -> Dict[str, Any]:
-    # For each field_ref, find all dataset rows that contain that field for this customer
+def _row_values_for_field(customer: models.Customer, source_field_id: str, source_id: str, row_filter=None) -> List[Any]:
+    """Collect raw values for a SourceField across this customer's datasets.
+    Optional row_filter(row) filters DatasetRow before pulling the value."""
+    values: List[Any] = []
+    for dataset in customer.datasets:
+        if dataset.source_id != source_id:
+            continue
+        for row in dataset.rows:
+            if row_filter and not row_filter(row):
+                continue
+            if source_field_id in (row.values_json or {}):
+                values.append(row.values_json[source_field_id])
+    return values
+
+
+def _evaluate_for_customer(
+    db: Session,
+    module: models.Module,
+    customer: models.Customer,
+    default_aggs: Dict[str, str],
+    _stack: Optional[List[str]] = None,
+    row_filter=None,
+) -> Dict[str, Any]:
+    """Evaluate a module for one customer.
+
+    Order of operations:
+      1. Resolve module_refs (formula_json.module_refs) — recursively eval those modules.
+         Cycle detection via _stack.
+      2. For each field_ref, aggregate raw values from this customer's datasets.
+      3. Merge constants (formula_json.constants) into context.
+      4. Evaluate the expression with the merged context.
+
+    row_filter (optional) lets callers narrow DatasetRows (used by trend bucketing).
+    """
+    stack = list(_stack or [])
+    if module.id in stack:
+        return {
+            "customer_id": customer.id,
+            "customer_name": customer.name,
+            "customer_slug": customer.slug,
+            "value": None,
+            "context": {},
+            "aliases": {},
+            "error": f"Cyklisk modul-referens: {' → '.join(stack + [module.abbr])}",
+        }
+    stack.append(module.id)
+
+    formula = module.formula_json or {}
     context: Dict[str, Any] = {}
-    aliases_used = {}
+    aliases_used: Dict[str, Any] = {}
+
+    # 1. Module references (module-of-modules)
+    for mref in (formula.get("module_refs") or []):
+        ref_alias = mref.get("alias")
+        ref_id = mref.get("module_id")
+        if not ref_alias or not ref_id:
+            continue
+        ref_mod = db.query(models.Module).filter_by(id=ref_id).first()
+        if not ref_mod:
+            context[ref_alias] = 0
+            aliases_used[ref_alias] = {"module_id": ref_id, "error": "module not found"}
+            continue
+        # Child module has its own alias scope — don't leak parent's per-alias overrides.
+        sub = _evaluate_for_customer(db, ref_mod, customer, {}, _stack=stack, row_filter=row_filter)
+        context[ref_alias] = sub["value"] if sub.get("value") is not None else 0
+        aliases_used[ref_alias] = {"kind": "module", "module_id": ref_mod.id, "module_abbr": ref_mod.abbr}
+
+    # 2. Field references
     for ref in module.field_refs:
-        field_id = ref.source_field_id
-        values: List[Any] = []
-        for dataset in customer.datasets:
-            if dataset.source_id == ref.source_field.source_id:
-                for row in dataset.rows:
-                    if field_id in (row.values_json or {}):
-                        values.append(row.values_json[field_id])
-        agg = default_aggs.get(ref.alias) or (module.formula_json or {}).get("aggregations", {}).get(ref.alias) or (module.formula_json or {}).get("aggregation", "sum")
+        values = _row_values_for_field(customer, ref.source_field_id, ref.source_field.source_id, row_filter=row_filter)
+        agg = default_aggs.get(ref.alias) or formula.get("aggregations", {}).get(ref.alias) or formula.get("aggregation", "sum")
         try:
             context[ref.alias] = aggregate(values, agg)
         except FormulaError as e:
             context[ref.alias] = 0
             log.warn("module.eval.aggregate_error", module=module.abbr, alias=ref.alias, error=str(e))
-        aliases_used[ref.alias] = {"source_field_id": field_id, "value_count": len(values), "aggregation": agg}
+        aliases_used[ref.alias] = {"kind": "field", "source_field_id": ref.source_field_id, "value_count": len(values), "aggregation": agg}
 
-    expression = (module.formula_json or {}).get("expression", "")
+    # 3. Constants (custom values bound into the module)
+    for k, v in (formula.get("constants") or {}).items():
+        if k in context:
+            continue  # don't shadow refs
+        try:
+            context[k] = float(v)
+            aliases_used[k] = {"kind": "constant", "value": float(v)}
+        except (TypeError, ValueError):
+            pass
+
+    # 4. Evaluate expression
+    expression = formula.get("expression", "")
     value: Any = None
     error: Optional[str] = None
     if expression:
@@ -828,8 +898,7 @@ def _evaluate_for_customer(db: Session, module: models.Module, customer: models.
             error = str(e)
             log.warn("module.eval.formula_error", module=module.abbr, customer=customer.slug, expression=expression, error=error)
     else:
-        # If no expression, return sum of all aliases (simple default)
-        value = sum(context.values()) if context else 0
+        value = sum(v for v in context.values() if isinstance(v, (int, float))) if context else 0
 
     return {
         "customer_id": customer.id,
@@ -984,9 +1053,81 @@ def delete_report(report_id: str, db: Session = Depends(get_db)):
     return {"deleted": True}
 
 
+class DatapointSpec(BaseModel):
+    source_field_id: str
+    alias: Optional[str] = None
+    aggregation: str = "sum"
+
+
+class DatapointEvaluateReq(BaseModel):
+    customer_id: str
+    source_field_id: str
+    aggregation: str = "sum"
+
+
+@app.post("/api/datapoints/evaluate")
+def evaluate_datapoint(req: DatapointEvaluateReq, db: Session = Depends(get_db)):
+    """Ad-hoc evaluation of a single SourceField for a single customer.
+    Used by the report page when user picks raw datapoints alongside modules."""
+    c = db.query(models.Customer).filter(
+        (models.Customer.id == req.customer_id) | (models.Customer.slug == req.customer_id)
+    ).first()
+    if not c:
+        raise HTTPException(404, "Customer not found")
+    field = db.query(models.SourceField).filter_by(id=req.source_field_id).first()
+    if not field:
+        raise HTTPException(404, "SourceField not found")
+    values = _row_values_for_field(c, field.id, field.source_id)
+    try:
+        value = aggregate(values, req.aggregation)
+    except FormulaError as e:
+        return {"value": None, "value_count": len(values), "error": str(e)}
+    return {
+        "customer_id": c.id,
+        "source_field_id": field.id,
+        "field_key": field.key,
+        "field_unit": field.unit or "",
+        "value": value,
+        "value_count": len(values),
+        "aggregation": req.aggregation,
+        "error": None,
+    }
+
+
 class ReportRunReq(BaseModel):
     customer_ids: Optional[List[str]] = None  # overrides config
     module_ids: Optional[List[str]] = None
+    datapoints: Optional[List[DatapointSpec]] = None
+
+
+def _evaluate_datapoint_for_customer(db: Session, dp: DatapointSpec, customer: models.Customer) -> Dict[str, Any]:
+    field = db.query(models.SourceField).filter_by(id=dp.source_field_id).first()
+    if not field:
+        return {
+            "customer_id": customer.id,
+            "customer_name": customer.name,
+            "value": None,
+            "error": "Datapunkt saknas",
+        }
+    values = _row_values_for_field(customer, field.id, field.source_id)
+    try:
+        value = aggregate(values, dp.aggregation)
+    except FormulaError as e:
+        return {
+            "customer_id": customer.id,
+            "customer_name": customer.name,
+            "value": None,
+            "error": str(e),
+        }
+    return {
+        "customer_id": customer.id,
+        "customer_name": customer.name,
+        "customer_slug": customer.slug,
+        "value": value,
+        "value_count": len(values),
+        "context": {dp.alias or field.key: value},
+        "error": None,
+    }
 
 
 @app.post("/api/reports/{report_id}/run")
@@ -998,13 +1139,41 @@ def run_report(report_id: str, req: ReportRunReq, db: Session = Depends(get_db))
     customer_ids = req.customer_ids or cfg.get("customer_ids") or ([r.customer_id] if r.customer_id else [])
     module_ids = req.module_ids or cfg.get("module_ids") or []
 
+    # Datapoints can come from request or config
+    raw_dps = req.datapoints if req.datapoints is not None else [DatapointSpec(**d) for d in (cfg.get("datapoints") or [])]
+
     modules = db.query(models.Module).filter(models.Module.id.in_(module_ids)).all() if module_ids else []
 
     panels = []
     for m in modules:
         evaluate_req = ModuleEvaluateReq(customer_ids=customer_ids)
         result = evaluate_module(m.id, evaluate_req, db)
+        result["panel_kind"] = "module"
         panels.append(result)
+
+    datapoint_panels: List[Dict[str, Any]] = []
+    for dp in raw_dps:
+        field = db.query(models.SourceField).filter_by(id=dp.source_field_id).first()
+        if not field:
+            continue
+        results = []
+        for cid in customer_ids:
+            c = db.query(models.Customer).filter(
+                (models.Customer.id == cid) | (models.Customer.slug == cid)
+            ).first()
+            if not c:
+                continue
+            results.append(_evaluate_datapoint_for_customer(db, dp, c))
+        datapoint_panels.append({
+            "panel_kind": "datapoint",
+            "source_field_id": field.id,
+            "field_key": field.key,
+            "field_display_name": field.display_name,
+            "field_unit": field.unit or "",
+            "alias": dp.alias or field.key,
+            "aggregation": dp.aggregation,
+            "results": results,
+        })
 
     return {
         "report_id": r.id,
@@ -1012,7 +1181,113 @@ def run_report(report_id: str, req: ReportRunReq, db: Session = Depends(get_db))
         "customer_ids": customer_ids,
         "module_ids": module_ids,
         "panels": panels,
+        "datapoints": datapoint_panels,
         "ran_at": datetime.utcnow().isoformat(),
+    }
+
+
+# ------------------------------------------------------------------
+# TREND / TIME-SERIES
+# ------------------------------------------------------------------
+def _bucket_key(value: Any, granularity: str) -> Optional[str]:
+    """Parse a row value as a date/datetime and return its bucket key.
+    Returns None if value can't be parsed."""
+    if value is None or value == "":
+        return None
+    try:
+        # pandas handles strings, ints (epoch), and datetimes uniformly
+        ts = pd.to_datetime(value, errors="coerce")
+    except Exception:
+        return None
+    if ts is None or pd.isna(ts):
+        return None
+    if granularity == "month":
+        return ts.strftime("%Y-%m")
+    if granularity == "week":
+        # ISO week: e.g. "2026-W17"
+        iso = ts.isocalendar()
+        return f"{iso.year:04d}-W{iso.week:02d}"
+    # default: day
+    return ts.strftime("%Y-%m-%d")
+
+
+def _evaluate_trend_for_customer(
+    db: Session,
+    module: models.Module,
+    customer: models.Customer,
+    date_field_id: str,
+    granularity: str,
+    default_aggs: Dict[str, str],
+) -> List[Dict[str, Any]]:
+    """Bucket this customer's rows by the given date field's value, then evaluate the
+    module per bucket. Returns a list of {period, value, context, error}."""
+    # Build period -> set of row ids belonging to that period
+    period_to_rows: Dict[str, set] = {}
+    for dataset in customer.datasets:
+        for row in dataset.rows:
+            v = (row.values_json or {}).get(date_field_id)
+            key = _bucket_key(v, granularity)
+            if key is None:
+                continue
+            period_to_rows.setdefault(key, set()).add(row.id)
+
+    out: List[Dict[str, Any]] = []
+    for period in sorted(period_to_rows.keys()):
+        row_ids = period_to_rows[period]
+        sub = _evaluate_for_customer(
+            db, module, customer, default_aggs,
+            row_filter=lambda r, _ids=row_ids: r.id in _ids,
+        )
+        out.append({
+            "period": period,
+            "value": sub["value"],
+            "context": sub["context"],
+            "error": sub.get("error"),
+        })
+    return out
+
+
+class TrendReq(BaseModel):
+    customer_ids: List[str]
+    date_field_id: str
+    granularity: str = "day"  # day | week | month
+    aggregations: Optional[Dict[str, str]] = None
+
+
+@app.post("/api/modules/{module_id}/trend")
+def module_trend(module_id: str, req: TrendReq, db: Session = Depends(get_db)):
+    m = db.query(models.Module).filter_by(id=module_id).first()
+    if not m:
+        raise HTTPException(404, "Module not found")
+    if req.granularity not in ("day", "week", "month"):
+        raise HTTPException(400, "granularity must be day | week | month")
+
+    series = []
+    default_aggs = req.aggregations or {}
+    all_periods: set = set()
+    for cid in req.customer_ids:
+        c = db.query(models.Customer).filter(
+            (models.Customer.id == cid) | (models.Customer.slug == cid)
+        ).first()
+        if not c:
+            continue
+        points = _evaluate_trend_for_customer(db, m, c, req.date_field_id, req.granularity, default_aggs)
+        for p in points:
+            all_periods.add(p["period"])
+        series.append({
+            "customer_id": c.id,
+            "customer_name": c.name,
+            "customer_slug": c.slug,
+            "points": points,
+        })
+
+    return {
+        "module_id": m.id,
+        "module_name": m.name,
+        "module_abbr": m.abbr,
+        "granularity": req.granularity,
+        "periods": sorted(all_periods),
+        "series": series,
     }
 
 
