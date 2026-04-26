@@ -23,12 +23,22 @@ export default function KunderPage() {
 
   async function createCustomer() {
     if (!newName.trim()) return;
-    await fetch(`${API}/api/customers`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newName, logo_emoji: newEmoji }),
-    });
-    setNewName(''); setShowCreate(false);
-    fetchCustomers();
+    try {
+      const res = await fetch(`${API}/api/customers`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName, logo_emoji: newEmoji }),
+      });
+      if (!res.ok) {
+        const err = await res.text().catch(() => 'Okänt fel');
+        alert(`Kunde inte skapa kund: ${err}`);
+        return;
+      }
+      setNewName(''); setShowCreate(false);
+      fetchCustomers();
+    } catch (e) {
+      alert('Nätverksfel — kontrollera att backend körs');
+      console.error(e);
+    }
   }
 
   return (
