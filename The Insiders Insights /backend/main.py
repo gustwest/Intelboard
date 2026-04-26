@@ -102,7 +102,29 @@ def _slugify(name: str) -> str:
     return s or uuid.uuid4().hex[:8]
 
 
+# Cloud Run's filesystem is ephemeral and per-instance. When DATA_GCS_BUCKET
+# is set we persist JSON state to that bucket so it survives scale-out and
+# revision deploys. Local dev (no env var) keeps using the on-disk path.
+_GCS_BUCKET_NAME = os.environ.get("DATA_GCS_BUCKET")
+_gcs_client = None
+_gcs_bucket = None
+if _GCS_BUCKET_NAME:
+    from google.cloud import storage as _gcs_storage  # type: ignore
+    _gcs_client = _gcs_storage.Client()
+    _gcs_bucket = _gcs_client.bucket(_GCS_BUCKET_NAME)
+
+
+def _gcs_blob_for(path: str):
+    key = os.path.relpath(path, DATA_DIR).replace(os.sep, "/")
+    return _gcs_bucket.blob(key)
+
+
 def _file_json(path: str, default):
+    if _gcs_bucket is not None:
+        blob = _gcs_blob_for(path)
+        if not blob.exists():
+            return default
+        return json.loads(blob.download_as_text())
     if not os.path.exists(path):
         return default
     with open(path, "r", encoding="utf-8") as f:
@@ -110,8 +132,12 @@ def _file_json(path: str, default):
 
 
 def _save_json(path: str, data):
+    payload = json.dumps(data, indent=2, ensure_ascii=False, default=str)
+    if _gcs_bucket is not None:
+        _gcs_blob_for(path).upload_from_string(payload, content_type="application/json")
+        return
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False, default=str)
+        f.write(payload)
 
 
 @app.get("/health")
@@ -1636,9 +1662,6 @@ async def ws_chat(ws: WebSocket, convo_id: str):
 # ------------------------------------------------------------------
 # AI AGENT — sessions, tasks, poll (single source of truth on backend)
 # ------------------------------------------------------------------
-# Sessions used to live in the frontend's /tmp, but Cloud Run has
-# multiple instances each with its own /tmp, so sessions vanished
-# whenever traffic hit a different instance. Now persisted here.
 AGENT_FILE = os.path.join(DATA_DIR, "agent_sessions.json")
 
 
