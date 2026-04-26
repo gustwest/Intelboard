@@ -3,9 +3,12 @@
  * PATCH /api/admin/agent/poll — Agent reports status/result
  *
  * Auth: Bearer token via AGENT_API_KEY env var
+ *
+ * State lives on the backend; this route is a thin authenticated proxy
+ * so the local CLI poller's API surface stays unchanged.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { getNextPendingTask, updateTask, recordPoll, getSession } from '@/lib/agent-store';
+import { pollNextTask, reportTaskUpdate } from '@/lib/agent-store';
 
 function authenticate(req: NextRequest): boolean {
   const apiKey = process.env.AGENT_API_KEY;
@@ -19,33 +22,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  await recordPoll({
-    model: req.headers.get('x-agent-model') || undefined,
-    version: req.headers.get('x-agent-version') || undefined,
-    project: req.headers.get('x-agent-project') || undefined,
-  });
-
-  const task = await getNextPendingTask();
-  if (!task) {
-    return NextResponse.json({ task: null, timestamp: new Date().toISOString() });
+  try {
+    const data = await pollNextTask({
+      model: req.headers.get('x-agent-model') || undefined,
+      version: req.headers.get('x-agent-version') || undefined,
+      project: req.headers.get('x-agent-project') || undefined,
+    });
+    return NextResponse.json(data);
+  } catch (err) {
+    console.error('Agent poll GET error:', err);
+    return NextResponse.json({ error: 'Backend unreachable' }, { status: 502 });
   }
-
-  // Mark as RUNNING
-  await updateTask(task.id, { status: 'RUNNING' });
-
-  // Get session to check for resumable Claude session
-  const session = await getSession(task.sessionId);
-
-  return NextResponse.json({
-    task: {
-      id: task.id,
-      prompt: task.prompt,
-      model: task.model,
-      sessionId: task.sessionId,
-      resumeSessionId: session?.claudeSessionId || null,
-    },
-    timestamp: new Date().toISOString(),
-  });
 }
 
 export async function PATCH(req: NextRequest) {
@@ -55,13 +42,10 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { taskId, status, response, error, logs, claudeSessionId } = body;
-
-    if (!taskId) {
+    if (!body.taskId) {
       return NextResponse.json({ error: 'taskId required' }, { status: 400 });
     }
-
-    await updateTask(taskId, { status, response, error, logs, claudeSessionId });
+    await reportTaskUpdate(body);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('Agent poll PATCH error:', err);

@@ -1,14 +1,11 @@
 /**
- * Agent Task Store — Simple JSON-file-backed storage for agent tasks.
- * No Prisma/DB needed — perfect for projects without a database in the frontend.
+ * Agent Task Store — thin proxy to the backend.
  *
- * Data persists across restarts via a JSON file in /tmp.
- * In-memory cache for fast reads.
+ * State lives on the backend (a JSON file in /app/data/agent_sessions.json),
+ * not in the frontend. Cloud Run runs multiple frontend instances that don't
+ * share /tmp, so any local cache here would lose sessions when traffic
+ * landed on a different instance. The backend is the single source of truth.
  */
-
-import { readFile, writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
-import { randomUUID } from 'crypto';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -42,200 +39,89 @@ export interface AgentLog {
   createdAt: string;
 }
 
-interface StoreData {
-  sessions: AgentSession[];
-  lastPoll?: string;
-  agentModel?: string;
-  agentVersion?: string;
-  agentProject?: string;
+// ── Backend client ───────────────────────────────────────────────
+
+const BACKEND_URL =
+  process.env.BACKEND_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  'http://localhost:8000';
+
+const AGENT_API_KEY = process.env.AGENT_API_KEY || '';
+
+function authHeaders(): Record<string, string> {
+  return AGENT_API_KEY ? { Authorization: `Bearer ${AGENT_API_KEY}` } : {};
 }
 
-// ── Storage ──────────────────────────────────────────────────────
+async function backend<T>(
+  path: string,
+  init?: RequestInit & { auth?: boolean }
+): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...((init?.headers as Record<string, string>) || {}),
+  };
+  if (init?.auth) Object.assign(headers, authHeaders());
 
-const DATA_DIR = process.env.AGENT_DATA_DIR || '/tmp/insiders-agent';
-const DATA_FILE = join(DATA_DIR, 'agent-store.json');
-
-let cache: StoreData | null = null;
-
-async function load(): Promise<StoreData> {
-  if (cache) return cache;
-  try {
-    const raw = await readFile(DATA_FILE, 'utf-8');
-    cache = JSON.parse(raw);
-    return cache!;
-  } catch {
-    cache = { sessions: [] };
-    return cache;
+  const res = await fetch(`${BACKEND_URL}${path}`, {
+    ...init,
+    headers,
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    throw new Error(`Backend ${init?.method || 'GET'} ${path} → ${res.status}`);
   }
-}
-
-async function save(data: StoreData): Promise<void> {
-  cache = data;
-  try {
-    await mkdir(DATA_DIR, { recursive: true });
-    await writeFile(DATA_FILE, JSON.stringify(data, null, 2));
-  } catch (e) {
-    console.error('Failed to save agent store:', e);
-  }
+  return res.json() as Promise<T>;
 }
 
 // ── Public API ───────────────────────────────────────────────────
 
 export async function getSessions(): Promise<AgentSession[]> {
-  const data = await load();
-  return data.sessions.sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  );
+  return backend<AgentSession[]>('/api/agent/sessions');
 }
 
 export async function getSession(id: string): Promise<AgentSession | undefined> {
-  const data = await load();
-  return data.sessions.find((s) => s.id === id);
+  try {
+    return await backend<AgentSession>(`/api/agent/sessions/${id}`);
+  } catch {
+    return undefined;
+  }
 }
 
-export async function createTask(prompt: string, sessionId?: string, model?: string): Promise<{ session: AgentSession; task: AgentTask }> {
-  const data = await load();
-  const now = new Date().toISOString();
-  const taskId = randomUUID();
-  const taskModel = model || 'claude-sonnet-4-6';
-
-  const task: AgentTask = {
-    id: taskId,
-    prompt,
-    status: 'PENDING',
-    model: taskModel,
-    response: null,
-    error: null,
-    sessionId: '',
-    claudeSessionId: null,
-    createdAt: now,
-    updatedAt: now,
-    logs: [],
-  };
-
-  let session: AgentSession;
-
-  if (sessionId) {
-    session = data.sessions.find((s) => s.id === sessionId)!;
-    if (!session) {
-      throw new Error('Session not found');
-    }
-    task.sessionId = session.id;
-    session.tasks.push(task);
-    session.updatedAt = now;
-  } else {
-    const sid = randomUUID();
-    // Auto-generate title from first few words
-    const title = prompt.length > 50 ? prompt.substring(0, 50) + '…' : prompt;
-    session = {
-      id: sid,
-      title,
-      pinned: false,
-      claudeSessionId: null,
-      createdAt: now,
-      updatedAt: now,
-      tasks: [task],
-    };
-    task.sessionId = sid;
-    data.sessions.unshift(session);
-  }
-
-  await save(data);
-  return { session, task };
-}
-
-export async function getNextPendingTask(): Promise<AgentTask | null> {
-  const data = await load();
-  for (const session of data.sessions) {
-    for (const task of session.tasks) {
-      if (task.status === 'PENDING') {
-        return task;
-      }
-    }
-  }
-  return null;
-}
-
-export async function updateTask(
-  taskId: string,
-  updates: {
-    status?: AgentTask['status'];
-    response?: string;
-    error?: string;
-    claudeSessionId?: string;
-    logs?: string[];
-  }
-): Promise<AgentTask | null> {
-  const data = await load();
-  const now = new Date().toISOString();
-
-  for (const session of data.sessions) {
-    const task = session.tasks.find((t) => t.id === taskId);
-    if (task) {
-      if (updates.status) task.status = updates.status;
-      if (updates.response !== undefined) task.response = updates.response;
-      if (updates.error) task.error = updates.error;
-      task.updatedAt = now;
-      session.updatedAt = now;
-
-      if (updates.claudeSessionId) {
-        task.claudeSessionId = updates.claudeSessionId;
-        session.claudeSessionId = updates.claudeSessionId;
-      }
-
-      if (updates.logs) {
-        for (const msg of updates.logs) {
-          task.logs.push({
-            id: randomUUID(),
-            message: msg,
-            createdAt: now,
-          });
-        }
-      }
-
-      await save(data);
-      return task;
-    }
-  }
-  return null;
+export async function createTask(
+  prompt: string,
+  sessionId?: string,
+  model?: string,
+): Promise<{ session: AgentSession; task: AgentTask }> {
+  return backend<{ session: AgentSession; task: AgentTask }>(
+    '/api/agent/tasks',
+    {
+      method: 'POST',
+      body: JSON.stringify({ prompt, sessionId, model }),
+    },
+  );
 }
 
 export async function patchSession(
   sessionId: string,
-  updates: { title?: string; pinned?: boolean }
+  updates: { title?: string; pinned?: boolean },
 ): Promise<AgentSession | null> {
-  const data = await load();
-  const session = data.sessions.find((s) => s.id === sessionId);
-  if (!session) return null;
-
-  if (updates.title !== undefined) session.title = updates.title;
-  if (updates.pinned !== undefined) session.pinned = updates.pinned;
-  session.updatedAt = new Date().toISOString();
-
-  await save(data);
-  return session;
+  try {
+    return await backend<AgentSession>(`/api/agent/sessions/${sessionId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+  } catch {
+    return null;
+  }
 }
 
 export async function deleteSession(sessionId: string): Promise<boolean> {
-  const data = await load();
-  const idx = data.sessions.findIndex((s) => s.id === sessionId);
-  if (idx === -1) return false;
-  data.sessions.splice(idx, 1);
-  await save(data);
-  return true;
-}
-
-export async function recordPoll(meta?: {
-  model?: string;
-  version?: string;
-  project?: string;
-}): Promise<void> {
-  const data = await load();
-  data.lastPoll = new Date().toISOString();
-  if (meta?.model) data.agentModel = meta.model;
-  if (meta?.version) data.agentVersion = meta.version;
-  if (meta?.project) data.agentProject = meta.project;
-  await save(data);
+  try {
+    await backend(`/api/agent/sessions/${sessionId}`, { method: 'DELETE' });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function getStatus(): Promise<{
@@ -246,28 +132,53 @@ export async function getStatus(): Promise<{
   projectDir?: string;
   stats: { total: number; completed: number; failed: number; successRate: number };
 }> {
-  const data = await load();
+  return backend('/api/agent/status');
+}
 
-  const allTasks = data.sessions.flatMap((s) => s.tasks);
-  const total = allTasks.length;
-  const completed = allTasks.filter((t) => t.status === 'DONE').length;
-  const failed = allTasks.filter((t) => t.status === 'FAILED').length;
+// ── Poll endpoints (used only by /api/admin/agent/poll route) ────
 
-  const online = data.lastPoll
-    ? Date.now() - new Date(data.lastPoll).getTime() < 30000
-    : false;
+export interface PollTask {
+  id: string;
+  prompt: string;
+  model: string;
+  sessionId: string;
+  resumeSessionId: string | null;
+}
 
-  return {
-    online,
-    lastPoll: data.lastPoll,
-    model: data.agentModel,
-    cliVersion: data.agentVersion,
-    projectDir: data.agentProject,
-    stats: {
-      total,
-      completed,
-      failed,
-      successRate: total > 0 ? Math.round((completed / total) * 100) : 0,
+export async function pollNextTask(meta: {
+  model?: string;
+  version?: string;
+  project?: string;
+}): Promise<{ task: PollTask | null; timestamp: string }> {
+  const headers: Record<string, string> = { ...authHeaders() };
+  if (meta.model) headers['x-agent-model'] = meta.model;
+  if (meta.version) headers['x-agent-version'] = meta.version;
+  if (meta.project) headers['x-agent-project'] = meta.project;
+
+  const res = await fetch(`${BACKEND_URL}/api/agent/poll`, {
+    headers,
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(`Backend poll → ${res.status}`);
+  return res.json();
+}
+
+export async function reportTaskUpdate(body: {
+  taskId: string;
+  status?: AgentTask['status'];
+  response?: string;
+  error?: string;
+  logs?: string[];
+  claudeSessionId?: string;
+}): Promise<void> {
+  const res = await fetch(`${BACKEND_URL}/api/agent/poll`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders(),
     },
-  };
+    body: JSON.stringify(body),
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(`Backend poll PATCH → ${res.status}`);
 }
