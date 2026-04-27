@@ -1,9 +1,10 @@
-"""Upload, detect, and dataset endpoints."""
+"""Upload, detect, and dataset endpoints — with SQL pagination."""
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy import func
+from sqlalchemy.orm import Session, joinedload
 
 import models
 import sources as src_engine
@@ -104,15 +105,23 @@ async def force_ingest(customer_id: str, source_version_id: str = Form(...), fil
 
 
 # ------------------------------------------------------------------
-# Datasets
+# Datasets — SQL OFFSET/LIMIT pagination
 # ------------------------------------------------------------------
 @router.get("/api/datasets/{dataset_id}")
 def get_dataset(dataset_id: str, page: int = 1, page_size: int = 100, db: Session = Depends(get_db)):
-    d = db.query(models.Dataset).filter_by(id=dataset_id).first()
+    d = (
+        db.query(models.Dataset)
+        .options(
+            joinedload(models.Dataset.source),
+            joinedload(models.Dataset.source_version).joinedload(models.SourceVersion.mappings).joinedload(models.SourceFieldMapping.source_field),
+        )
+        .filter_by(id=dataset_id)
+        .first()
+    )
     if not d:
         raise HTTPException(404, "Dataset not found")
 
-    # Columns: fields used in this source's current version mappings
+    # Columns from version mappings
     fields = [mapping.source_field for mapping in d.source_version.mappings]
     columns = [
         {"field_id": f.id, "key": f.key, "display_name": f.display_name, "unit": f.unit or "", "data_type": f.data_type}
@@ -120,11 +129,17 @@ def get_dataset(dataset_id: str, page: int = 1, page_size: int = 100, db: Sessio
     ]
     field_id_to_key = {f.id: f.key for f in fields}
 
-    total = len(d.rows)
-    rows_sorted = sorted(d.rows, key=lambda r: r.row_index)
-    start = (page - 1) * page_size
-    end = start + page_size
-    page_rows = rows_sorted[start:end]
+    # SQL-level pagination (no loading all rows into memory)
+    total = db.query(func.count(models.DatasetRow.id)).filter_by(dataset_id=d.id).scalar() or 0
+    offset = (page - 1) * page_size
+    page_rows = (
+        db.query(models.DatasetRow)
+        .filter_by(dataset_id=d.id)
+        .order_by(models.DatasetRow.row_index)
+        .offset(offset)
+        .limit(page_size)
+        .all()
+    )
 
     out_rows = []
     for r in page_rows:
@@ -149,7 +164,7 @@ def get_dataset(dataset_id: str, page: int = 1, page_size: int = 100, db: Sessio
         "page": page,
         "page_size": page_size,
         "total": total,
-        "total_pages": (total + page_size - 1) // page_size,
+        "total_pages": (total + page_size - 1) // page_size if total > 0 else 0,
     }
 
 

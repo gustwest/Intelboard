@@ -1,8 +1,9 @@
-"""Customer CRUD endpoints."""
+"""Customer CRUD endpoints — optimized with SQL COUNT."""
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy import func
+from sqlalchemy.orm import Session, subqueryload
 
 import models
 import schemas
@@ -15,7 +16,7 @@ router = APIRouter(prefix="/api/customers", tags=["customers"])
 # ------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------
-def _customer_to_out(c: models.Customer) -> Dict[str, Any]:
+def _customer_to_out(c: models.Customer, dataset_count: int = 0, module_count: int = 0) -> Dict[str, Any]:
     return {
         "id": c.id,
         "slug": c.slug,
@@ -23,8 +24,8 @@ def _customer_to_out(c: models.Customer) -> Dict[str, Any]:
         "logo_emoji": c.logo_emoji or "🏢",
         "tags": c.tags_json or [],
         "icp": c.icp_json or {},
-        "dataset_count": len(c.datasets),
-        "module_count": len(c.modules),
+        "dataset_count": dataset_count,
+        "module_count": module_count,
         "created_at": c.created_at.isoformat() if c.created_at else None,
     }
 
@@ -34,7 +35,27 @@ def _customer_to_out(c: models.Customer) -> Dict[str, Any]:
 # ------------------------------------------------------------------
 @router.get("")
 def list_customers(db: Session = Depends(get_db)):
-    return [_customer_to_out(c) for c in db.query(models.Customer).order_by(models.Customer.created_at.desc()).all()]
+    """List all customers with dataset/module counts via SQL aggregation (no N+1)."""
+    # Subquery for dataset counts
+    ds_counts = (
+        db.query(models.Dataset.customer_id, func.count(models.Dataset.id).label("cnt"))
+        .group_by(models.Dataset.customer_id)
+        .subquery()
+    )
+    # Subquery for module counts
+    mod_counts = (
+        db.query(models.Module.customer_id, func.count(models.Module.id).label("cnt"))
+        .group_by(models.Module.customer_id)
+        .subquery()
+    )
+    rows = (
+        db.query(models.Customer, ds_counts.c.cnt, mod_counts.c.cnt)
+        .outerjoin(ds_counts, models.Customer.id == ds_counts.c.customer_id)
+        .outerjoin(mod_counts, models.Customer.id == mod_counts.c.customer_id)
+        .order_by(models.Customer.created_at.desc())
+        .all()
+    )
+    return [_customer_to_out(c, dc or 0, mc or 0) for c, dc, mc in rows]
 
 
 @router.post("")
@@ -57,12 +78,19 @@ def create_customer(req: schemas.CustomerCreate, db: Session = Depends(get_db)):
 
 @router.get("/{customer_id}")
 def get_customer(customer_id: str, db: Session = Depends(get_db)):
-    c = db.query(models.Customer).filter(
-        (models.Customer.id == customer_id) | (models.Customer.slug == customer_id)
-    ).first()
+    c = (
+        db.query(models.Customer)
+        .options(subqueryload(models.Customer.datasets))
+        .filter(
+            (models.Customer.id == customer_id) | (models.Customer.slug == customer_id)
+        )
+        .first()
+    )
     if not c:
         raise HTTPException(404, "Customer not found")
-    out = _customer_to_out(c)
+    dataset_count = len(c.datasets)
+    module_count = db.query(func.count(models.Module.id)).filter_by(customer_id=c.id).scalar() or 0
+    out = _customer_to_out(c, dataset_count, module_count)
     out["datasets"] = [
         {
             "id": d.id,

@@ -1,15 +1,17 @@
-"""File uploads (generic admin file store) + simulation + logs endpoints."""
+"""File uploads (generic admin file store) + simulation + logs endpoints — PostgreSQL backed."""
 import os
-import uuid
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+import models
+from db import get_db
 from engine.monte_carlo import run_multi_domain_simulation
-from helpers import DATA_DIR, FILES_META, UPLOADS_DIR, file_json, save_json
+from helpers import UPLOADS_DIR
 from logging_config import clear_recent, get_recent
 
 router = APIRouter(tags=["misc"])
@@ -56,15 +58,30 @@ def simulate(req: SimulationRequest):
 
 
 # ------------------------------------------------------------------
-# File uploads (generic admin file store)
+# File uploads — PostgreSQL backed
 # ------------------------------------------------------------------
+def _file_to_out(f: models.AdminFile) -> dict:
+    return {
+        "id": f.id,
+        "originalName": f.original_name,
+        "displayName": f.display_name,
+        "category": f.category,
+        "storedName": f.stored_name,
+        "size": f.size,
+        "contentType": f.content_type,
+        "uploadedAt": f.uploaded_at.isoformat(),
+    }
+
+
 @router.get("/api/files")
-def list_files():
-    return file_json(FILES_META, [])
+def list_files(db: Session = Depends(get_db)):
+    files = db.query(models.AdminFile).order_by(models.AdminFile.uploaded_at.desc()).all()
+    return [_file_to_out(f) for f in files]
 
 
 @router.post("/api/files")
-async def upload_file(file: UploadFile = File(...), name: str = Form(""), category: str = Form("Övrigt")):
+async def upload_file(file: UploadFile = File(...), name: str = Form(""), category: str = Form("Övrigt"), db: Session = Depends(get_db)):
+    import uuid
     file_id = str(uuid.uuid4())
     ext = os.path.splitext(file.filename or "file")[1]
     stored_name = f"{file_id}{ext}"
@@ -72,48 +89,45 @@ async def upload_file(file: UploadFile = File(...), name: str = Form(""), catego
     content = await file.read()
     with open(filepath, "wb") as f:
         f.write(content)
-    meta = {
-        "id": file_id,
-        "originalName": file.filename,
-        "displayName": name.strip() or file.filename,
-        "category": category.strip(),
-        "storedName": stored_name,
-        "size": len(content),
-        "contentType": file.content_type,
-        "uploadedAt": datetime.utcnow().isoformat(),
-    }
-    files = file_json(FILES_META, [])
-    files.insert(0, meta)
-    save_json(FILES_META, files)
-    return meta
+    admin_file = models.AdminFile(
+        id=file_id,
+        original_name=file.filename or "unknown",
+        display_name=name.strip() or file.filename or "unknown",
+        category=category.strip(),
+        stored_name=stored_name,
+        size=len(content),
+        content_type=file.content_type or "application/octet-stream",
+    )
+    db.add(admin_file)
+    db.commit()
+    db.refresh(admin_file)
+    return _file_to_out(admin_file)
 
 
 @router.get("/api/files/{file_id}/download")
-def download_file(file_id: str):
-    files = file_json(FILES_META, [])
-    meta = next((f for f in files if f["id"] == file_id), None)
+def download_file(file_id: str, db: Session = Depends(get_db)):
+    meta = db.query(models.AdminFile).filter_by(id=file_id).first()
     if not meta:
         return Response(status_code=404, content="Not found")
-    filepath = os.path.join(UPLOADS_DIR, meta["storedName"])
+    filepath = os.path.join(UPLOADS_DIR, meta.stored_name)
     if not os.path.exists(filepath):
         return Response(status_code=404, content="File not found on disk")
     with open(filepath, "rb") as f:
         content = f.read()
     return Response(
         content=content,
-        media_type=meta.get("contentType", "application/octet-stream"),
-        headers={"Content-Disposition": f'attachment; filename="{meta["originalName"]}"'},
+        media_type=meta.content_type or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{meta.original_name}"'},
     )
 
 
 @router.delete("/api/files/{file_id}")
-def delete_file(file_id: str):
-    files = file_json(FILES_META, [])
-    meta = next((f for f in files if f["id"] == file_id), None)
+def delete_file(file_id: str, db: Session = Depends(get_db)):
+    meta = db.query(models.AdminFile).filter_by(id=file_id).first()
     if meta:
-        filepath = os.path.join(UPLOADS_DIR, meta["storedName"])
+        filepath = os.path.join(UPLOADS_DIR, meta.stored_name)
         if os.path.exists(filepath):
             os.remove(filepath)
-    files = [f for f in files if f["id"] != file_id]
-    save_json(FILES_META, files)
+        db.delete(meta)
+        db.commit()
     return {"deleted": True}

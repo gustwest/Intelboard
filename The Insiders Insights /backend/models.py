@@ -294,3 +294,20 @@ class AgentMeta(Base):
     agent_model = Column(String, nullable=True)
     agent_version = Column(String, nullable=True)
     agent_project = Column(String, nullable=True)
+
+
+# ======================================================================
+# ADMIN FILE STORE
+# ======================================================================
+class AdminFile(Base):
+    """Generic file uploaded via the Admin panel."""
+    __tablename__ = "admin_files"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    original_name = Column(String, nullable=False)
+    display_name = Column(String, nullable=False)
+    category = Column(String, default="Övrigt")
+    stored_name = Column(String, nullable=False)
+    size = Column(Integer, default=0)
+    content_type = Column(String, default="application/octet-stream")
+    uploaded_at = Column(DateTime, default=datetime.utcnow)
