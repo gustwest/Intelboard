@@ -275,7 +275,7 @@ export default function DashboardCharts({ customerId }: { customerId: string }) 
               <PieChart>
                 <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80}
                   paddingAngle={3} dataKey="value"
-                  label={({ name, percent }) => `${name.slice(0, 12)} ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }: { name?: string; percent?: number }) => `${(name || '').slice(0, 12)} ${((percent || 0) * 100).toFixed(0)}%`}
                   labelLine={{ stroke: C.dim, strokeWidth: 1 }}
                 >
                   {pieData.map((_, i) => (
