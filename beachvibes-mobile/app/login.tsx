@@ -1,83 +1,86 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ActivityIndicator, Image, Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Gradients } from '../src/theme/colors';
+import { Colors } from '../src/theme/colors';
 import { useAuth } from '../src/auth/AuthProvider';
 import { apiRequest } from '../src/api/client';
 import * as WebBrowser from 'expo-web-browser';
-import * as AuthSession from 'expo-auth-session';
+import * as Google from 'expo-auth-session/providers/google';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 
 WebBrowser.maybeCompleteAuthSession();
 
-const GOOGLE_CLIENT_ID = '815335042776-YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com';
-const API_BASE = 'https://dvoucher-app-815335042776.europe-north1.run.app';
+// Web client ID from Google Cloud Console (same as web app)
+const GOOGLE_WEB_CLIENT_ID = '815335042776-7p9osbj1e8ktr96j627a2bqqfc0bcvj3.apps.googleusercontent.com';
 
 export default function LoginScreen() {
   const { login } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleGoogleLogin = async () => {
+  // Google Auth Session — uses web client ID (works in Expo Go)
+  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+    clientId: GOOGLE_WEB_CLIENT_ID,
+  });
+
+  // Handle Google OAuth response
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const idToken = response.params.id_token;
+      if (idToken) {
+        handleGoogleToken(idToken);
+      }
+    } else if (response?.type === 'error') {
+      setError('Google-inloggning avbröts. Försök igen.');
+      setLoading(false);
+    } else if (response?.type === 'dismiss') {
+      setLoading(false);
+    }
+  }, [response]);
+
+  const handleGoogleToken = async (idToken: string) => {
     setLoading(true);
     setError(null);
     try {
-      // For now, use a demo login flow until Google OAuth is configured
-      // This calls the mobile-token endpoint with a test flow
-      const response = await apiRequest<{
+      const result = await apiRequest<{
         token: string;
         user: { id: string; name: string; email: string; image: string | null };
       }>('/api/auth/mobile-token', {
         method: 'POST',
-        body: { provider: 'demo' },
+        body: { provider: 'google', id_token: idToken },
         skipAuth: true,
       });
 
-      if (response.token && response.user) {
-        await login(response.token, response.user);
+      if (result.token && result.user) {
+        await login(result.token, result.user);
         router.replace('/(tabs)/feed');
       }
     } catch (err: any) {
-      console.error('Login failed:', err);
-      setError('Inloggningen misslyckades. Försök igen.');
+      console.error('Google login failed:', err);
+      setError('Inloggningen misslyckades. Kontrollera din internetanslutning.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Quick demo login for development
-  const handleDemoLogin = async () => {
+  const handleGoogleLogin = async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await apiRequest<{
-        token: string;
-        user: { id: string; name: string; email: string; image: string | null };
-      }>('/api/auth/mobile-token', {
-        method: 'POST',
-        body: { provider: 'demo', email: 'guswes@gmail.com' },
-        skipAuth: true,
-      });
-
-      if (response.token && response.user) {
-        await login(response.token, response.user);
-        router.replace('/(tabs)/feed');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Demo login misslyckades');
-    } finally {
+      await promptAsync();
+    } catch (err) {
+      setError('Kunde inte starta Google-inloggningen.');
       setLoading(false);
     }
   };
 
   return (
     <View style={styles.container}>
-      {/* Background gradient */}
       <LinearGradient
         colors={['#0f1117', '#1a1127', '#1a2744']}
         style={StyleSheet.absoluteFill}
@@ -86,7 +89,7 @@ export default function LoginScreen() {
       />
 
       <SafeAreaView style={styles.safeArea}>
-        {/* Logo area */}
+        {/* Logo */}
         <View style={styles.logoSection}>
           <View style={styles.logoCircle}>
             <Text style={styles.logoEmoji}>🏐</Text>
@@ -119,9 +122,9 @@ export default function LoginScreen() {
           )}
 
           <TouchableOpacity
-            style={styles.googleButton}
+            style={[styles.googleButton, !request && { opacity: 0.6 }]}
             onPress={handleGoogleLogin}
-            disabled={loading}
+            disabled={loading || !request}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
@@ -131,15 +134,6 @@ export default function LoginScreen() {
                 <Text style={styles.googleButtonText}>Fortsätt med Google</Text>
               </>
             )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.demoButton}
-            onPress={handleDemoLogin}
-            disabled={loading}
-          >
-            <Ionicons name="flash-outline" size={20} color={Colors.brandPrimary} />
-            <Text style={styles.demoButtonText}>Demo-inloggning</Text>
           </TouchableOpacity>
 
           <Text style={styles.terms}>
@@ -178,11 +172,5 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   googleButtonText: { fontSize: 16, fontWeight: '700', color: '#fff' },
-  demoButton: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 10, backgroundColor: Colors.bgSecondary, borderRadius: 16,
-    paddingVertical: 16, borderWidth: 1, borderColor: Colors.borderDefault,
-  },
-  demoButtonText: { fontSize: 15, fontWeight: '600', color: Colors.textPrimary },
   terms: { fontSize: 11, color: Colors.textTertiary, textAlign: 'center', marginTop: 4 },
 });
