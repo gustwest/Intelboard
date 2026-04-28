@@ -26,16 +26,23 @@ import models
 # ----------------- File parsing -----------------
 
 def _sniff_and_read_csv(data: bytes) -> Optional[pd.DataFrame]:
-    """Try several encodings and parsing strategies for CSV files."""
-    # UTF-16 (LinkedIn Campaign Manager often emits this with BOM + tabs)
+    """Try several encodings and parsing strategies for CSV files.
+    LinkedIn Campaign Manager CSVs are UTF-16 with tab separators and
+    7 metadata preamble rows before the real header."""
     for encoding in ("utf-16", "utf-16-le", "utf-16-be", "utf-8-sig", "utf-8", "latin-1"):
         for sep in ("\t", ",", ";"):
-            try:
-                df = pd.read_csv(io.BytesIO(data), encoding=encoding, sep=sep, engine="python", on_bad_lines="skip")
-                if df.shape[1] >= 2:
-                    return df
-            except Exception:
-                continue
+            for skip in (0, 1, 2, 3, 4, 5, 6, 7):
+                try:
+                    df = pd.read_csv(io.BytesIO(data), encoding=encoding, sep=sep,
+                                     skiprows=skip, engine="python", on_bad_lines="skip")
+                    if df.shape[1] >= 2:
+                        # Verify we got a real header (not metadata rows)
+                        cols = [str(c).strip() for c in df.columns]
+                        non_unnamed = sum(1 for c in cols if c and not c.startswith("Unnamed"))
+                        if non_unnamed >= max(2, len(cols) // 2):
+                            return df
+                except Exception:
+                    continue
     return None
 
 
