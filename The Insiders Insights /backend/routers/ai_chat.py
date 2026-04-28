@@ -323,14 +323,17 @@ När en användare laddar upp en fil i chatten kommer systemet att infoga intern
 - Om du vet vilken kund vi befinner oss på, fråga om användaren vill spara den. Om du INTE vet vilken kund filen tillhör (för att vi inte är på en kundsida), be användaren specificera vilken kund filen tillhör från listan av tillgängliga kunder.
 - NÄR användaren svarar "Ja" (om kund redan är känd) ELLER har angett vilken kund de vill spara på, MÅSTE du svara med den exakta strängen `[EXECUTE_SAVE:temp_id:customer_id]` (byt ut temp_id mot det id du fick tidigare, och customer_id mot kundens ID. Om kunden redan var angiven i kontexten "Aktuell kund" kan du lämna customer_id tomt, t.ex. `[EXECUTE_SAVE:temp_id]`). Systemet kommer då att spara filen automatiskt. Skriv ingen annan text i det svaret.
 
-## Skapande av Moduler och Mål
+## Skapande och Uppdatering av Moduler och Mål
 Om en användare bekräftar att de vill att du ska skapa en KPI/Modul, använd följande syntax exakt:
-`[EXECUTE_CREATE_MODULE: {{"name": "...", "abbr": "...", "description": "...", "category": "custom"}}]`
+`[EXECUTE_CREATE_MODULE: {{"name": "...", "abbr": "...", "description": "...", "category": "custom", "formula": {{"expression": "...", "metrics": ["..."]}}}}]`
+
+Om användaren vill *uppdatera* en befintlig modul (t.ex. lägga till en formel), använd:
+`[EXECUTE_UPDATE_MODULE: {{"abbr": "...", "formula": {{"expression": "...", "metrics": ["..."]}}}}]`
 
 Om användaren vill skapa ett nytt mål för kunden, använd:
 `[EXECUTE_CREATE_GOAL: {{"title": "...", "description": "..."}}]`
 
-(byt ut med relevant JSON). Om kunden är vald läggs de in på kunden automatiskt. Skriv ingen annan text i svaret om du använder en tagg.
+(byt ut med relevant JSON). Om kunden är vald läggs de in på kunden automatiskt. Formel (formula) är frivilligt, men expression är själva matten (t.ex. "(Reactions + Comments) / Impressions") och metrics är de exakta kolumnnamnen som behövs. Skriv ingen annan text i svaret om du använder en tagg.
 """
 
     # Get conversation history
@@ -430,13 +433,45 @@ Om användaren vill skapa ett nytt mål för kunden, använd:
                             name=mod_data.get("name", "Ny Modul"),
                             abbr=mod_data.get("abbr", "MOD"),
                             description=mod_data.get("description", ""),
-                            category=mod_data.get("category", "custom")
+                            category=mod_data.get("category", "custom"),
+                            formula_json=mod_data.get("formula", {})
                         )
                         db.add(new_mod)
                         db.commit()
                         reply = f"✅ Jag har nu skapat modulen **{new_mod.name}** ({new_mod.abbr}). Du kan hitta den under Moduler-fliken!"
                     except Exception as mod_err:
                         reply = f"⚠️ Jag försökte skapa modulen men något gick snett med formatet: {mod_err}"
+
+            elif "[EXECUTE_UPDATE_MODULE:" in reply:
+                import re
+                import json
+                match = re.search(r"\[EXECUTE_UPDATE_MODULE:\s*({.*?})\s*\]", reply, re.DOTALL)
+                if match:
+                    try:
+                        mod_data = json.loads(match.group(1))
+                        abbr = mod_data.get("abbr")
+                        if not abbr:
+                            reply = "⚠️ Jag kunde inte uppdatera modulen eftersom förkortningen (abbr) saknades."
+                        else:
+                            # Try to find the module by abbr
+                            # If customer_id is provided, check for that customer's module or a global module
+                            query = db.query(models.Module).filter(models.Module.abbr == abbr)
+                            if req.customer_id:
+                                query = query.filter((models.Module.customer_id == req.customer_id) | (models.Module.customer_id == None))
+                            else:
+                                query = query.filter(models.Module.customer_id == None)
+                                
+                            mod = query.first()
+                            
+                            if mod:
+                                if "formula" in mod_data:
+                                    mod.formula_json = mod_data["formula"]
+                                db.commit()
+                                reply = f"✅ Jag har nu uppdaterat modulen **{mod.name}** ({mod.abbr}) med de nya inställningarna!"
+                            else:
+                                reply = f"⚠️ Jag kunde inte hitta någon modul med förkortningen {abbr} för att uppdatera."
+                    except Exception as mod_err:
+                        reply = f"⚠️ Jag försökte uppdatera modulen men något gick snett med formatet: {mod_err}"
 
             elif "[EXECUTE_CREATE_GOAL:" in reply:
                 import re
