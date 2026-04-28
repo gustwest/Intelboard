@@ -4,12 +4,11 @@ Uses google-genai SDK with Vertex AI authentication (already available
 via Cloud Run's default service account).
 """
 import os
-import logging
 from typing import Optional
 
 import pandas as pd
 
-log = logging.getLogger("insiders.ai")
+from logging_config import log
 
 # --------------- Lazy client init ---------------
 _client = None
@@ -19,17 +18,20 @@ def _get_client():
     global _client
     if _client is None:
         from google import genai
-        # Use Vertex AI if on Cloud Run, otherwise fall back to API key
-        if os.environ.get("GOOGLE_GENAI_USE_VERTEXAI") or os.environ.get("GOOGLE_CLOUD_PROJECT"):
+        # On Cloud Run, K_SERVICE is always set — use Vertex AI with default service account
+        is_cloud_run = bool(os.environ.get("K_SERVICE"))
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT", "round-plating-480321-j7")
+
+        if is_cloud_run or os.environ.get("GOOGLE_GENAI_USE_VERTEXAI"):
             _client = genai.Client(
                 vertexai=True,
-                project=os.environ.get("GOOGLE_CLOUD_PROJECT", "round-plating-480321-j7"),
+                project=project,
                 location="global",  # gemini-3-flash-preview needs global endpoint
             )
         elif os.environ.get("GEMINI_API_KEY"):
             _client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
         else:
-            log.warning("ai.no_credentials", msg="No Gemini credentials found. AI summaries will be skipped.")
+            log.warn("ai.no_credentials", msg="No Gemini credentials found. Skipping.")
             return None
     return _client
 
@@ -118,5 +120,5 @@ def summarize_dataset(
         return summary
 
     except Exception as e:
-        log.warning("ai.summary_failed", filename=filename, error=str(e))
+        log.warn("ai.summary_failed", filename=filename, error=str(e))
         return None

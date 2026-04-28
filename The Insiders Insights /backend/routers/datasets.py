@@ -33,7 +33,7 @@ def _generate_summary_async(dataset_id: str, df_json: str, filename: str, source
             finally:
                 db.close()
     except Exception as e:
-        log.warning("ai.summary_background_error", dataset_id=dataset_id, error=str(e))
+        log.warn("ai.summary_background_error", dataset_id=dataset_id, error=str(e))
 
 
 def _trigger_ai_summary(dataset_id: str, df, filename: str, source_name: str):
@@ -48,7 +48,7 @@ def _trigger_ai_summary(dataset_id: str, df, filename: str, source_name: str):
         )
         t.start()
     except Exception as e:
-        log.warning("ai.trigger_failed", error=str(e))
+        log.warn("ai.trigger_failed", error=str(e))
 
 
 # ------------------------------------------------------------------
