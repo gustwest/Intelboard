@@ -7,11 +7,15 @@ import uuid
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, Depends
+import os
+import shutil
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 
 import models
+import sources as src_engine
+import routers.datasets as datasets_router
 from db import get_db
 from logging_config import log
 
@@ -26,12 +30,64 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = None
     customer_id: Optional[str] = None
     page_context: Optional[str] = None  # e.g. "customer_detail", "sources", "modules"
+    temp_file_id: Optional[str] = None
+    file_analysis: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
     session_id: str
     reply: str
     context_used: List[str]  # what context was injected
+
+
+# ------------------------------------------------------------------
+# Temp File Storage
+# ------------------------------------------------------------------
+TEMP_UPLOAD_DIR = "/tmp/insiders_temp"
+os.makedirs(TEMP_UPLOAD_DIR, exist_ok=True)
+
+
+@router.post("/api/ai/upload-temp")
+async def ai_upload_temp(customer_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Upload a file temporarily for AI analysis."""
+    c = db.query(models.Customer).filter(
+        (models.Customer.id == customer_id) | (models.Customer.slug == customer_id)
+    ).first()
+    if not c:
+        raise HTTPException(404, "Customer not found")
+
+    temp_id = str(uuid.uuid4())
+    temp_path = os.path.join(TEMP_UPLOAD_DIR, f"{temp_id}.csv")
+    
+    raw = await file.read()
+    with open(temp_path, "wb") as f:
+        f.write(raw)
+        
+    df = src_engine.parse_file(raw, file.filename or "upload.csv")
+    if df is None:
+        os.remove(temp_path)
+        raise HTTPException(422, "Kunde inte läsa filen. Stöd: CSV, TSV, XLS, XLSX.")
+
+    status, source, version, detail = src_engine.detect_source(db, df, file.filename or "")
+    
+    # Build a simple summary for the AI
+    summary_lines = [
+        f"Filnamn: {file.filename}",
+        f"Antal rader: {len(df)}",
+        f"Kolumner: {len(df.columns)} st",
+    ]
+    if source:
+        summary_lines.append(f"Matchad källa: {source.name} (v{version.version if version else 'ny'})")
+    else:
+        summary_lines.append("Matchad källa: INGEN (Ny källa kommer skapas automatiskt)")
+        
+    if "overlap" in detail:
+        summary_lines.append("Det finns en överlappande period i existerande data.")
+        
+    return {
+        "temp_file_id": temp_id,
+        "analysis": "\n".join(summary_lines)
+    }
 
 
 # ------------------------------------------------------------------
@@ -245,16 +301,27 @@ Regler:
 6. Om du inte vet svaret — var ärlig och föreslå var användaren kan hitta informationen
 7. Om användaren nämner specifika KPI:er, koppla dem till rätt LinkedIn-mätvärden
 8. Du kan svara på frågor om alla aspekter av plattformen, inklusive tekniska detaljer
+
+## Hantering av Uppladdade Filer
+När en användare laddar upp en fil i chatten kommer systemet att infoga intern information i meddelandet, t.ex. "[SYSTEM_FILE_ANALYSIS: temp_id=... ...]".
+- När du ser denna information, sammanfatta kort för användaren vad du ser (t.ex. "Jag ser att du har laddat upp en fil som matchar LinkedIn Campaign Manager...").
+- Fråga ALLTID om användaren vill spara den som ett nytt dataset.
+- NÄR användaren svarar "Ja" eller på annat sätt bekräftar att de vill spara den senaste filen, MÅSTE du svara med den exakta strängen `[EXECUTE_SAVE:temp_id]` (byt ut temp_id mot det id du fick tidigare). Systemet kommer då att spara filen automatiskt och meddela användaren. Skriv ingen annan text i det svaret om du använder taggen.
 """
 
     # Get conversation history
     history = _get_history(db, session_id)
 
+    # If there's a file attached, append the system analysis to the message for the AI
+    actual_message_for_ai = req.message
+    if req.temp_file_id and req.file_analysis:
+        actual_message_for_ai += f"\n\n[SYSTEM_FILE_ANALYSIS: temp_id={req.temp_file_id}]\nAnalys:\n{req.file_analysis}\nFråga användaren om de vill spara detta dataset."
+
     # Save user message
     user_msg = models.AIChatMessage(
         session_id=session_id,
         role="user",
-        content=req.message,
+        content=req.message,  # Save clean message in DB
         customer_id=req.customer_id,
         page_context=req.page_context,
     )
@@ -276,10 +343,10 @@ Regler:
                     role=h["role"] if h["role"] != "assistant" else "model",
                     parts=[types.Part.from_text(text=h["content"])],
                 ))
-            # Add current message
+            # Add current message (with internal system file info if any)
             contents.append(types.Content(
                 role="user",
-                parts=[types.Part.from_text(text=req.message)],
+                parts=[types.Part.from_text(text=actual_message_for_ai)],
             ))
 
             response = client.models.generate_content(
@@ -293,6 +360,40 @@ Regler:
                 ),
             )
             reply = response.text.strip() if response.text else "Jag kunde tyvärr inte generera ett svar. Försök igen!"
+            
+            # --- AGENT INTERCEPTION FOR EXECUTE_SAVE ---
+            if "[EXECUTE_SAVE:" in reply:
+                import re
+                match = re.search(r"\[EXECUTE_SAVE:(.*?)\]", reply)
+                if match:
+                    temp_id = match.group(1).strip()
+                    temp_path = os.path.join(TEMP_UPLOAD_DIR, f"{temp_id}.csv")
+                    
+                    if os.path.exists(temp_path) and req.customer_id:
+                        c = db.query(models.Customer).filter_by(id=req.customer_id).first()
+                        if c:
+                            # Run the ingestion
+                            with open(temp_path, "rb") as f:
+                                raw = f.read()
+                            df = src_engine.parse_file(raw, f"{temp_id}.csv")
+                            if df is not None:
+                                status, source, version, _ = src_engine.detect_source(db, df, f"{temp_id}.csv")
+                                
+                                if status == "no_match":
+                                    source, version = src_engine.auto_create_source(db, df, f"{temp_id}.csv")
+                                elif status == "drift":
+                                    version = src_engine.auto_create_version(db, source, version, df, f"{temp_id}.csv")
+                                    
+                                dataset = src_engine.ingest_dataset(db, c, source, version, df, "Bifogad_via_AI.csv", raw)
+                                datasets_router._generate_and_save_summary(db, dataset, df, "Bifogad_via_AI.csv", source.name)
+                                
+                                reply = f"✅ Klart! Datasetet är uppladdat och sparat under {source.name} med {dataset.row_count} rader. AI-sammanfattningen är också klar och datan är nu tillgänglig i dina moduler."
+                                os.remove(temp_path)
+                            else:
+                                reply = "⚠️ Jag försökte spara filen, men kunde inte tolka innehållet."
+                    else:
+                        reply = "⚠️ Det verkar som att filen har försvunnit eller att vi saknar kund-kontext."
+            
             log.info("ai_chat.response", session_id=session_id, length=len(reply), context=context_labels)
 
         except Exception as e:

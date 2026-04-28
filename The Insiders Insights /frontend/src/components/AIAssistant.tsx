@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
-import { Sparkles, RefreshCw, X, Send, Bot } from 'lucide-react';
+import { Sparkles, RefreshCw, X, Send, Bot, Paperclip } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -105,8 +105,11 @@ export default function AIAssistant() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Detect context from URL
   const getContext = useCallback((): { customerId: string | null; pageContext: string } => {
@@ -150,6 +153,32 @@ export default function AIAssistant() {
 
     const { customerId, pageContext } = getContext();
 
+    let tempFileId = undefined;
+    let fileAnalysis = undefined;
+
+    // Upload temp file if attached
+    if (pendingFile && customerId) {
+      try {
+        const formData = new FormData();
+        formData.append('file', pendingFile);
+        
+        const uploadRes = await fetch(`${API_URL}/api/ai/upload-temp?customer_id=${customerId}`, {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          tempFileId = uploadData.temp_file_id;
+          fileAnalysis = uploadData.analysis;
+        }
+      } catch (err) {
+        console.error("Kunde inte ladda upp filen", err);
+      } finally {
+        setPendingFile(null);
+      }
+    }
+
     try {
       const res = await fetch(`${API_URL}/api/ai/chat`, {
         method: 'POST',
@@ -159,6 +188,8 @@ export default function AIAssistant() {
           session_id: sessionId,
           customer_id: customerId,
           page_context: pageContext,
+          temp_file_id: tempFileId,
+          file_analysis: fileAnalysis,
         }),
       });
 
@@ -240,16 +271,34 @@ export default function AIAssistant() {
   // -- Open: chat panel --
   return (
     <div id="ai-assistant-root">
-      <div style={{
+      <div 
+        onDragOver={(e) => {
+          e.preventDefault();
+          if (getContext().customerId) setIsDragging(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          setIsDragging(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setIsDragging(false);
+          const file = e.dataTransfer.files?.[0];
+          if (file && getContext().customerId) {
+            setPendingFile(file);
+          }
+        }}
+        style={{
         position: 'fixed', bottom: '24px', right: '24px',
         width: '420px', height: '600px',
         borderRadius: '20px', overflow: 'hidden',
         display: 'flex', flexDirection: 'column',
         background: C.card,
-        border: `1px solid ${C.border}`,
+        border: isDragging ? `2px dashed ${C.accent}` : `1px solid ${C.border}`,
         boxShadow: `0 20px 80px rgba(0,0,0,0.6), 0 0 40px rgba(0,212,255,0.1)`,
         zIndex: 100000,
         fontFamily: 'var(--font-inter-tight), system-ui, sans-serif',
+        transition: 'border 0.2s ease',
       }}>
         {/* Header */}
         <div style={{
@@ -442,8 +491,62 @@ export default function AIAssistant() {
           padding: '12px 14px',
           borderTop: `1px solid ${C.border}`,
           background: 'rgba(10,10,20,0.6)',
+          position: 'relative',
         }}>
+          {pendingFile && (
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '4px 10px', background: 'rgba(0,212,255,0.1)',
+              border: `1px solid rgba(0,212,255,0.2)`, borderRadius: '12px',
+              marginBottom: '8px', fontSize: '0.75rem', color: C.accent,
+            }}>
+              <Paperclip size={12} />
+              <span style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {pendingFile.name}
+              </span>
+              <button 
+                onClick={() => setPendingFile(null)}
+                style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', padding: '0 2px', display: 'flex', alignItems: 'center' }}
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+            {getContext().customerId && (
+              <>
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  style={{ display: 'none' }} 
+                  accept=".csv,.tsv,.xlsx"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) setPendingFile(file);
+                  }}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{
+                    width: '40px', height: '40px', borderRadius: '12px',
+                    border: 'none', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'rgba(255,255,255,0.04)',
+                    color: C.dim, transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={e => {
+                    (e.target as HTMLElement).style.color = C.accent;
+                    (e.target as HTMLElement).style.background = 'rgba(0,212,255,0.1)';
+                  }}
+                  onMouseLeave={e => {
+                    (e.target as HTMLElement).style.color = C.dim;
+                    (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.04)';
+                  }}
+                >
+                  <Paperclip size={18} />
+                </button>
+              </>
+            )}
             <textarea
               ref={inputRef}
               value={input}
@@ -489,6 +592,20 @@ export default function AIAssistant() {
               <Send size={16} />
             </button>
           </div>
+          
+          {/* Drag Overlay Text */}
+          {isDragging && (
+            <div style={{
+              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(12,10,16,0.9)', backdropFilter: 'blur(4px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: C.accent, fontWeight: 600, fontSize: '0.875rem', zIndex: 10,
+              flexDirection: 'column', gap: '8px'
+            }}>
+              <Paperclip size={24} />
+              Släpp filen här för att ladda upp
+            </div>
+          )}
         </div>
       </div>
 
