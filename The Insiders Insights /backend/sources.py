@@ -150,6 +150,183 @@ def detect_source(
     return "no_match", None, None, {"file_columns": file_cols, "best_candidate": source.key, "overlap": detail["overlap"]}
 
 
+# ----------------- Auto-creation -----------------
+
+def _infer_data_type(series: pd.Series, sample_size: int = 100) -> str:
+    """Infer a SourceField data_type by sampling non-null values."""
+    vals = series.dropna().head(sample_size)
+    if vals.empty:
+        return "str"
+
+    # Check bool first (small set of known values)
+    bool_vals = {"true", "false", "yes", "no", "y", "n", "ja", "nej", "1", "0"}
+    str_vals = {_norm(v) for v in vals.astype(str)}
+    if str_vals and str_vals.issubset(bool_vals):
+        return "bool"
+
+    # Try int
+    try:
+        converted = vals.astype(str).str.replace(",", "").str.replace(" ", "").str.strip()
+        converted.astype(float).astype(int)
+        # Verify they're actually integers (no decimals)
+        floats = converted.astype(float)
+        if (floats == floats.astype(int).astype(float)).all():
+            return "int"
+    except (ValueError, TypeError):
+        pass
+
+    # Try float
+    try:
+        vals.astype(str).str.replace(",", ".").str.replace(" ", "").astype(float)
+        return "float"
+    except (ValueError, TypeError):
+        pass
+
+    # Try date
+    try:
+        pd.to_datetime(vals, infer_datetime_format=True)
+        return "date"
+    except Exception:
+        pass
+
+    return "str"
+
+
+def _source_name_from_filename(filename: str) -> str:
+    """'campaign_performance_2024.csv' → 'Campaign Performance 2024'."""
+    import re as _re
+    name = os.path.splitext(filename)[0]
+    name = _re.sub(r"[_\-]+", " ", name)
+    return name.strip().title()
+
+
+def auto_create_source(
+    db: Session,
+    df: pd.DataFrame,
+    filename: str,
+) -> Tuple[models.Source, models.SourceVersion]:
+    """Create a Source + SourceFields + SourceVersion v1 from a DataFrame's columns."""
+    from helpers import slugify
+
+    source_name = _source_name_from_filename(filename)
+    source_key = slugify(source_name)
+
+    # If a source with this key already exists, append a short hash
+    existing = db.query(models.Source).filter_by(key=source_key).first()
+    if existing:
+        import uuid
+        source_key = f"{source_key}-{uuid.uuid4().hex[:6]}"
+
+    source = models.Source(
+        key=source_key,
+        name=source_name,
+        description=f"Auto-skapad från {filename}",
+        detect_rules_json={"filename_patterns": [], "required_columns": []},
+    )
+    db.add(source)
+    db.flush()
+
+    # Create SourceFields + collect for mapping
+    fields: List[models.SourceField] = []
+    for col in df.columns:
+        col_str = str(col).strip()
+        if not col_str or col_str.startswith("Unnamed"):
+            continue
+        field = models.SourceField(
+            source_id=source.id,
+            key=slugify(col_str),
+            display_name=col_str,
+            data_type=_infer_data_type(df[col]),
+        )
+        db.add(field)
+        db.flush()
+        fields.append((field, col_str))
+
+    # Create SourceVersion v1 with 1:1 mappings
+    version = models.SourceVersion(
+        source_id=source.id,
+        version=1,
+        is_current=True,
+        notes=f"Auto-skapad från {filename}",
+    )
+    db.add(version)
+    db.flush()
+
+    for field, original_col in fields:
+        db.add(models.SourceFieldMapping(
+            source_version_id=version.id,
+            source_field_id=field.id,
+            column_name=original_col,
+        ))
+
+    db.flush()
+    return source, version
+
+
+def auto_create_version(
+    db: Session,
+    source: models.Source,
+    current_version: models.SourceVersion,
+    df: pd.DataFrame,
+    filename: str,
+) -> models.SourceVersion:
+    """Create a new SourceVersion for a drifted file: add new fields, keep existing ones."""
+    from helpers import slugify
+
+    file_cols = _columns_of(df)
+    existing_field_keys = {f.key: f for f in source.fields}
+
+    # Add SourceFields for any new columns
+    new_fields = []
+    for col in file_cols:
+        col_str = str(col).strip()
+        if not col_str or col_str.startswith("Unnamed"):
+            continue
+        fkey = slugify(col_str)
+        if fkey not in existing_field_keys:
+            field = models.SourceField(
+                source_id=source.id,
+                key=fkey,
+                display_name=col_str,
+                data_type=_infer_data_type(df[col]),
+            )
+            db.add(field)
+            db.flush()
+            existing_field_keys[fkey] = field
+            new_fields.append(col_str)
+
+    # Mark old version as not current
+    for v in source.versions:
+        v.is_current = False
+
+    new_version_num = max((v.version for v in source.versions), default=0) + 1
+    version = models.SourceVersion(
+        source_id=source.id,
+        version=new_version_num,
+        is_current=True,
+        notes=f"Auto-skapad vid drift från {filename}. Nya kolumner: {', '.join(new_fields) if new_fields else 'inga'}",
+    )
+    db.add(version)
+    db.flush()
+
+    # Map ALL file columns to their SourceField
+    for col in file_cols:
+        col_str = str(col).strip()
+        if not col_str or col_str.startswith("Unnamed"):
+            continue
+        fkey = slugify(col_str)
+        field = existing_field_keys.get(fkey)
+        if field:
+            db.add(models.SourceFieldMapping(
+                source_version_id=version.id,
+                source_field_id=field.id,
+                column_name=col_str,
+            ))
+
+    db.flush()
+    return version
+
+
 # ----------------- Ingestion -----------------
 
 def _cast(value: Any, data_type: str) -> Any:

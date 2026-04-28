@@ -45,25 +45,40 @@ async def upload_to_customer(customer_id: str, file: UploadFile = File(...), db:
     )
 
     if status == "no_match":
+        # Auto-create Source from the file's columns
+        log.info("upload.auto_create_source", customer=c.slug, filename=file.filename, file_columns=len(df.columns))
+        source, version = src_engine.auto_create_source(db, df, file.filename or "upload.csv")
+        dataset = src_engine.ingest_dataset(db, c, source, version, df, file.filename or "upload", raw)
+        log.info("upload.auto_created", customer=c.slug, source=source.key, fields=len(source.fields), rows=dataset.row_count)
         return {
-            "status": "no_match",
-            "message": "Kunde inte känna igen filen som en registrerad Source. Skapa en ny Source först.",
-            "file_columns": detail.get("file_columns", []),
-            "row_count": int(len(df)),
+            "status": "auto_created",
+            "message": f"Ny Source '{source.name}' skapades automatiskt med {len(source.fields)} fält.",
+            "dataset_id": dataset.id,
+            "source_id": source.id,
+            "source_key": source.key,
+            "source_name": source.name,
+            "source_version": version.version,
+            "original_filename": dataset.original_filename,
+            "row_count": dataset.row_count,
+            "fields_created": len(source.fields),
         }
 
     if status == "drift":
+        # Auto-create new SourceVersion with updated mappings
+        log.info("upload.auto_version_bump", customer=c.slug, source=source.key, filename=file.filename)
+        new_version = src_engine.auto_create_version(db, source, version, df, file.filename or "upload.csv")
+        dataset = src_engine.ingest_dataset(db, c, source, new_version, df, file.filename or "upload", raw)
+        log.info("upload.version_bumped", customer=c.slug, source=source.key, new_version=new_version.version, rows=dataset.row_count)
         return {
-            "status": "drift",
-            "message": f"Filen liknar '{source.name}' men kolumnerna matchar inte nuvarande version fullt ut. Skapa en ny SourceVersion?",
+            "status": "version_bumped",
+            "message": f"Ny version (v{new_version.version}) av '{source.name}' skapades automatiskt.",
+            "dataset_id": dataset.id,
             "source_id": source.id,
             "source_key": source.key,
-            "source_version_id": version.id,
-            "source_version": version.version,
-            "matched_columns": detail.get("matched_columns", []),
-            "missing_columns": detail.get("missing_columns", []),
-            "extra_columns": detail.get("extra_columns", []),
-            "row_count": int(len(df)),
+            "source_name": source.name,
+            "source_version": new_version.version,
+            "original_filename": dataset.original_filename,
+            "row_count": dataset.row_count,
         }
 
     # matched → ingest
