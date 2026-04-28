@@ -1,145 +1,126 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, Image,
-  TouchableOpacity, RefreshControl, ActivityIndicator,
+  TouchableOpacity, RefreshControl, ActivityIndicator, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../src/theme/colors';
 import { api } from '../../src/api/client';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AppHeader } from '../../src/components/AppHeader';
 import { router } from 'expo-router';
 
 interface GroupItem {
-  id: string;
-  name: string;
-  emoji: string | null;
-  imageUrl: string | null;
-  eventCount: number;
-  memberCount: number;
+  id: string; name: string; emoji: string | null; imageUrl: string | null;
+  eventCount: number; memberCount: number; isPinned?: boolean; unreadCount?: number;
 }
 
 interface EventItem {
-  id: string;
-  title: string;
-  type: string;
-  skillLevel: string | null;
-  startsAt: string;
-  endsAt: string;
-  location: string | null;
-  courtName: string | null;
-  maxPlayers: number | null;
-  participantCount: number;
+  id: string; title: string; type: string; skillLevel: string | null;
+  startsAt: string; endsAt: string; location: string | null; courtName: string | null;
+  maxPlayers: number | null; participantCount: number;
   participants: { name: string; image: string | null }[];
   creator: { name: string; image: string | null } | null;
-  userStatus: string | null;
-  isCreator: boolean;
+  userStatus: string | null; isCreator: boolean;
+  groupName: string | null; isPrivate: boolean;
+  commentCount: number; lastComment: string | null;
+  isPaused?: boolean; isPast?: boolean;
+  imageUrl?: string | null;
 }
 
-interface UpcomingItem {
-  id: string;
-  title: string;
-  startsAt: string;
-  location: string | null;
-  participants: number;
-  maxPlayers: number | null;
-}
+interface TabCounts { my_games: number; respond: number; find: number; paused: number; history: number; }
 
 const TABS = [
   { key: 'my_games', label: 'Mina spel' },
   { key: 'respond', label: 'Svara' },
   { key: 'find', label: 'Hitta spel' },
+  { key: 'paused', label: 'Pausat' },
   { key: 'history', label: 'Historik' },
 ] as const;
 
 const skillStars: Record<string, string> = {
-  ROOKIE: '⭐',
-  INTERMEDIATE: '⭐⭐',
-  COMPETITIVE: '⭐⭐⭐',
-  ADVANCED: '⭐⭐⭐⭐',
-  ELITE: '⭐⭐⭐⭐⭐',
+  ROOKIE: '⭐', INTERMEDIATE: '⭐⭐', COMPETITIVE: '⭐⭐⭐',
+  ADVANCED: '⭐⭐⭐⭐', ELITE: '⭐⭐⭐⭐⭐',
 };
 
 export default function PlayScreen() {
   const [tab, setTab] = useState<string>('my_games');
   const [groups, setGroups] = useState<GroupItem[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
-  const [upcoming, setUpcoming] = useState<UpcomingItem[]>([]);
+  const [tabCounts, setTabCounts] = useState<TabCounts>({ my_games: 0, respond: 0, find: 0, paused: 0, history: 0 });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [notifCount, setNotifCount] = useState(0);
 
   const loadData = useCallback(async () => {
     try {
-      const data = await api.get<{ groups: GroupItem[]; events: EventItem[]; upcoming: UpcomingItem[] }>(
-        `/api/mobile/play?tab=${tab}`
-      );
+      const [data, countData] = await Promise.all([
+        api.get<{ groups: GroupItem[]; events: EventItem[]; counts?: TabCounts }>(`/api/mobile/play?tab=${tab}`),
+        api.get<{ count: number }>('/api/mobile/notifications/count').catch(() => ({ count: 0 })),
+      ]);
       setGroups(data.groups || []);
       setEvents(data.events || []);
-      setUpcoming(data.upcoming || []);
-    } catch (err) {
-      console.warn('Failed to load play data:', err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+      if (data.counts) setTabCounts(data.counts);
+      setNotifCount(countData.count || 0);
+    } catch (err) { console.warn('Failed to load play data:', err); }
+    finally { setLoading(false); setRefreshing(false); }
   }, [tab]);
 
   useEffect(() => { setLoading(true); loadData(); }, [loadData]);
 
+  const handleInviteResponse = async (eventId: string, response: 'YES' | 'MAYBE' | 'NO') => {
+    try {
+      await api.post(`/api/mobile/events/${eventId}`, { action: 'respond', response });
+      loadData();
+    } catch { Alert.alert('Fel', 'Kunde inte svara på inbjudan'); }
+  };
+
+  const handleLeave = async (eventId: string) => {
+    Alert.alert('Hoppa av?', 'Vill du lämna detta spel?', [
+      { text: 'Avbryt', style: 'cancel' },
+      { text: 'Hoppa av', style: 'destructive', onPress: async () => {
+        try { await api.post(`/api/mobile/events/${eventId}`, { action: 'leave' }); loadData(); }
+        catch { Alert.alert('Fel', 'Kunde inte hoppa av'); }
+      }},
+    ]);
+  };
+
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
     const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
+    const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1);
     const time = d.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
-
     if (d.toDateString() === now.toDateString()) return `Idag ${time}`;
     if (d.toDateString() === tomorrow.toDateString()) return `Imorgon ${time}`;
-
     return d.toLocaleDateString('sv-SE', { weekday: 'short', day: 'numeric', month: 'short' }) + ` · ${time}`;
   };
 
   return (
     <SafeAreaView style={s.container} edges={['top']}>
-      {/* Header */}
-      <View style={s.header}>
-        <Text style={s.logo}>BeachVibes</Text>
-        <View style={s.headerRight}>
-          <TouchableOpacity style={s.iconBtn}>
-            <Ionicons name="notifications-outline" size={22} color={Colors.textSecondary} />
-          </TouchableOpacity>
-        </View>
-      </View>
+      <AppHeader notificationCount={notifCount} />
 
       <ScrollView
-        style={s.scroll}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} tintColor={Colors.brandPrimary} />
-        }
+        style={s.scroll} showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} tintColor={Colors.brandPrimary} />}
       >
         {/* Groups stories row */}
         {groups.length > 0 && (
           <View style={s.section}>
             <Text style={s.sectionLabel}>GRUPPER</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.storiesRow}>
-              {/* New group button */}
               <TouchableOpacity style={s.storyItem}>
-                <View style={s.storyAddCircle}>
-                  <Ionicons name="add" size={28} color={Colors.brandPrimary} />
-                </View>
+                <View style={s.storyAddCircle}><Ionicons name="add" size={28} color={Colors.brandPrimary} /></View>
                 <Text style={s.storyName} numberOfLines={1}>Ny grupp</Text>
               </TouchableOpacity>
-
               {groups.map((g) => (
                 <TouchableOpacity key={g.id} style={s.storyItem}>
                   <View style={s.storyCircle}>
-                    {g.imageUrl ? (
-                      <Image source={{ uri: g.imageUrl }} style={s.storyImage} />
-                    ) : (
-                      <Text style={s.storyEmoji}>{g.emoji || '🏐'}</Text>
-                    )}
+                    {g.imageUrl ? <Image source={{ uri: g.imageUrl }} style={s.storyImage} /> : <Text style={s.storyEmoji}>{g.emoji || '🏐'}</Text>}
+                    {g.isPinned && <View style={s.pinIcon}><Ionicons name="pin" size={10} color="#fff" /></View>}
                   </View>
+                  {(g.unreadCount || 0) > 0 && (
+                    <View style={s.storyBadge}><Text style={s.storyBadgeText}>{g.unreadCount}</Text></View>
+                  )}
                   <Text style={s.storyName} numberOfLines={1}>{g.name}</Text>
                 </TouchableOpacity>
               ))}
@@ -147,7 +128,7 @@ export default function PlayScreen() {
           </View>
         )}
 
-        {/* Search / filter bar */}
+        {/* Search/filter bar */}
         <TouchableOpacity style={s.searchBar}>
           <Ionicons name="search" size={18} color={Colors.textTertiary} />
           <Text style={s.searchText}>Hela Sverige</Text>
@@ -155,41 +136,49 @@ export default function PlayScreen() {
           <Ionicons name="options-outline" size={20} color={Colors.textTertiary} />
         </TouchableOpacity>
 
-        {/* Tabs */}
+        {/* Tabs with counts */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabsRow}>
-          {TABS.map((t) => (
-            <TouchableOpacity
-              key={t.key}
-              style={[s.tabPill, tab === t.key && s.tabPillActive]}
-              onPress={() => setTab(t.key)}
-            >
-              <Text style={[s.tabPillText, tab === t.key && s.tabPillTextActive]}>
-                {t.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          {TABS.map((t) => {
+            const count = tabCounts[t.key as keyof TabCounts] || 0;
+            const isActive = tab === t.key;
+            const isPaused = t.key === 'paused';
+            return (
+              <TouchableOpacity key={t.key} style={[s.tabPill, isActive && s.tabPillActive]} onPress={() => setTab(t.key)}>
+                <Text style={[s.tabPillText, isActive && s.tabPillTextActive]}>
+                  {t.label}{count > 0 ? ` ${count}` : ''}
+                </Text>
+                {isPaused && count > 0 && !isActive && <View style={s.pausedDot} />}
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
 
         {/* Events list */}
         {loading ? (
-          <View style={s.center}>
-            <ActivityIndicator size="large" color={Colors.brandPrimary} />
-          </View>
+          <View style={s.center}><ActivityIndicator size="large" color={Colors.brandPrimary} /></View>
         ) : events.length === 0 ? (
           <View style={s.center}>
             <Ionicons name="calendar-outline" size={52} color={Colors.brandPrimary} />
             <Text style={s.emptyTitle}>Inga spel</Text>
-            <Text style={s.emptyText}>
-              {tab === 'find' ? 'Inga öppna spel just nu' : 'Du har inga kommande spel'}
-            </Text>
+            <Text style={s.emptyText}>{tab === 'find' ? 'Inga öppna spel just nu' : 'Du har inga kommande spel'}</Text>
           </View>
         ) : (
           <View style={s.eventsList}>
             {events.map((event) => (
-              <TouchableOpacity key={event.id} style={s.eventCard} activeOpacity={0.7} onPress={() => router.push(`/event/${event.id}`)}>
+              <TouchableOpacity key={event.id} style={[s.eventCard, event.isPast && { opacity: 0.6 }]} activeOpacity={0.7} onPress={() => router.push(`/event/${event.id}`)}>
+                {/* Group name + lock */}
+                {event.groupName && (
+                  <View style={s.groupNameRow}>
+                    <Text style={s.groupNameText}>{event.groupName.toUpperCase()}</Text>
+                    {event.isPrivate && <Ionicons name="lock-closed" size={12} color={Colors.textTertiary} />}
+                  </View>
+                )}
+
                 {/* Event header */}
                 <View style={s.eventHeader}>
-                  {event.creator?.image ? (
+                  {event.imageUrl ? (
+                    <Image source={{ uri: event.imageUrl }} style={s.eventThumb} />
+                  ) : event.creator?.image ? (
                     <Image source={{ uri: event.creator.image }} style={s.eventCreatorImg} />
                   ) : (
                     <View style={[s.eventCreatorImg, { backgroundColor: Colors.bgTertiary, justifyContent: 'center', alignItems: 'center' }]}>
@@ -197,26 +186,18 @@ export default function PlayScreen() {
                     </View>
                   )}
                   <View style={{ flex: 1 }}>
-                    <Text style={s.eventTitle}>{event.title}</Text>
-                    {event.skillLevel && (
-                      <Text style={s.eventSkill}>
-                        Nivå {skillStars[event.skillLevel] || event.skillLevel}
-                      </Text>
-                    )}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={s.eventTitle} numberOfLines={1}>{event.title}</Text>
+                      {event.isPrivate && !event.groupName && <Ionicons name="lock-closed" size={13} color={Colors.textTertiary} />}
+                    </View>
+                    {event.skillLevel && <Text style={s.eventSkill}>Nivå {skillStars[event.skillLevel] || event.skillLevel}</Text>}
                   </View>
-                  {event.userStatus === 'CONFIRMED' && (
-                    <View style={s.statusBadge}>
-                      <Text style={s.statusText}>DU ÄR MED</Text>
-                    </View>
-                  )}
-                  {event.isCreator && (
-                    <View style={[s.statusBadge, { backgroundColor: 'rgba(249,115,22,0.15)' }]}>
-                      <Text style={[s.statusText, { color: Colors.brandPrimary }]}>✨ SKAPARE</Text>
-                    </View>
-                  )}
+                  {event.userStatus === 'CONFIRMED' && <View style={s.statusBadge}><Text style={s.statusText}>DU ÄR MED</Text></View>}
+                  {event.isCreator && <View style={[s.statusBadge, { backgroundColor: 'rgba(249,115,22,0.15)' }]}><Text style={[s.statusText, { color: Colors.brandPrimary }]}>✨ SKAPARE</Text></View>}
+                  {event.isPast && <View style={[s.statusBadge, { backgroundColor: 'rgba(107,114,128,0.15)' }]}><Text style={[s.statusText, { color: Colors.textTertiary }]}>Passerat</Text></View>}
                 </View>
 
-                {/* Event meta */}
+                {/* Meta */}
                 <View style={s.eventMeta}>
                   <Ionicons name="calendar-outline" size={14} color={Colors.brandPrimary} />
                   <Text style={s.eventMetaText}>{formatDate(event.startsAt)}</Text>
@@ -228,18 +209,14 @@ export default function PlayScreen() {
                   </View>
                 )}
 
-                {/* Participants row */}
+                {/* Participants */}
                 <View style={s.participantsRow}>
                   <View style={s.avatarStack}>
                     {event.participants.slice(0, 4).map((p, i) => (
                       <View key={i} style={[s.stackAvatar, { marginLeft: i > 0 ? -8 : 0 }]}>
-                        {p.image ? (
-                          <Image source={{ uri: p.image }} style={s.stackAvatarImg} />
-                        ) : (
+                        {p.image ? <Image source={{ uri: p.image }} style={s.stackAvatarImg} /> : (
                           <View style={[s.stackAvatarImg, { backgroundColor: Colors.bgTertiary, justifyContent: 'center', alignItems: 'center' }]}>
-                            <Text style={{ color: Colors.textSecondary, fontSize: 10 }}>
-                              {p.name?.charAt(0)}
-                            </Text>
+                            <Text style={{ color: Colors.textSecondary, fontSize: 10 }}>{p.name?.charAt(0)}</Text>
                           </View>
                         )}
                       </View>
@@ -247,40 +224,44 @@ export default function PlayScreen() {
                   </View>
                   <View style={{ flex: 1 }} />
                   <View style={s.countBadge}>
-                    <Text style={s.countText}>
-                      {event.participantCount}/{event.maxPlayers || '∞'} · behövs {Math.max(0, (event.maxPlayers || 0) - event.participantCount)}
-                    </Text>
+                    <Text style={s.countText}>{event.participantCount}/{event.maxPlayers || '∞'} · behövs {Math.max(0, (event.maxPlayers || 0) - event.participantCount)}</Text>
                   </View>
                 </View>
 
-                {/* Comment button */}
-                <TouchableOpacity style={s.commentBtn}>
-                  <Ionicons name="chatbubble-outline" size={14} color={Colors.textSecondary} />
-                  <Text style={s.commentText}>Kommentera</Text>
-                </TouchableOpacity>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
+                {/* Invite response buttons (for respond tab) */}
+                {tab === 'respond' && event.userStatus === 'INVITED' && (
+                  <View style={s.inviteRow}>
+                    <TouchableOpacity style={s.inviteNo} onPress={() => handleInviteResponse(event.id, 'NO')}>
+                      <Text style={s.inviteNoText}>Nej</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={s.inviteMaybe} onPress={() => handleInviteResponse(event.id, 'MAYBE')}>
+                      <Text style={s.inviteMaybeText}>Intresserad</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={s.inviteYes} onPress={() => handleInviteResponse(event.id, 'YES')}>
+                      <Text style={s.inviteYesText}>Ja</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
 
-        {/* Upcoming events (sidebar equivalent) */}
-        {upcoming.length > 0 && (
-          <View style={s.upcomingSection}>
-            <Text style={s.upcomingSectionTitle}>🗓 Kommande event</Text>
-            {upcoming.map((e) => (
-              <TouchableOpacity key={e.id} style={s.upcomingItem} onPress={() => router.push(`/event/${e.id}`)}>
-                <View style={s.upcomingDot} />
-                <View style={{ flex: 1 }}>
-                  <Text style={s.upcomingTitle}>{e.title}</Text>
-                  <Text style={s.upcomingMeta}>
-                    📅 {formatDate(e.startsAt)} · 📍 {e.location || '–'} · 👥 {e.participants}/{e.maxPlayers || '∞'}
+                {/* Leave button for my_games */}
+                {tab === 'my_games' && event.userStatus === 'CONFIRMED' && !event.isCreator && (
+                  <TouchableOpacity style={s.leaveBtn} onPress={() => handleLeave(event.id)}>
+                    <Text style={s.leaveBtnText}>Kan inte längre — hoppa av</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Comment preview */}
+                <View style={s.commentBtn}>
+                  <Ionicons name="chatbubble-outline" size={14} color={Colors.textSecondary} />
+                  <Text style={s.commentText}>
+                    {event.commentCount > 0 ? `${event.commentCount} kommentar${event.commentCount > 1 ? 'er' : ''}` : 'Kommentera'}
                   </Text>
+                  {event.lastComment && <Text style={s.lastCommentText} numberOfLines={1}> · {event.lastComment}</Text>}
                 </View>
               </TouchableOpacity>
             ))}
           </View>
         )}
-
         <View style={{ height: 100 }} />
       </ScrollView>
 
@@ -295,111 +276,64 @@ export default function PlayScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bgPrimary },
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle,
-  },
-  logo: { fontSize: 22, fontWeight: '800', color: Colors.brandPrimary, letterSpacing: -0.5 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  iconBtn: { padding: 4 },
   scroll: { flex: 1 },
   center: { paddingTop: 100, alignItems: 'center', gap: 10 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary },
   emptyText: { fontSize: 14, color: Colors.textSecondary },
-
-  // Groups stories
   section: { paddingTop: 12 },
   sectionLabel: { color: Colors.textTertiary, fontSize: 12, fontWeight: '600', paddingHorizontal: 16, marginBottom: 8, letterSpacing: 0.5 },
   storiesRow: { paddingHorizontal: 12, gap: 14, paddingBottom: 12 },
-  storyItem: { alignItems: 'center', width: 68 },
-  storyAddCircle: {
-    width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(249,115,22,0.1)',
-    justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: Colors.brandPrimary, borderStyle: 'dashed',
-  },
-  storyCircle: {
-    width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.bgTertiary,
-    justifyContent: 'center', alignItems: 'center', borderWidth: 2,
-    borderColor: 'rgba(249,115,22,0.4)', overflow: 'hidden',
-  },
+  storyItem: { alignItems: 'center', width: 68, position: 'relative' },
+  storyAddCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(249,115,22,0.1)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: Colors.brandPrimary, borderStyle: 'dashed' },
+  storyCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.bgTertiary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(249,115,22,0.4)', overflow: 'hidden' },
   storyImage: { width: 56, height: 56 },
   storyEmoji: { fontSize: 24 },
   storyName: { fontSize: 11, color: Colors.textSecondary, marginTop: 4, textAlign: 'center' },
-
-  // Search bar
-  searchBar: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: Colors.bgSecondary, marginHorizontal: 16, marginVertical: 8,
-    paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12,
-    borderWidth: 1, borderColor: Colors.borderSubtle,
-  },
+  pinIcon: { position: 'absolute', top: -2, right: -2, backgroundColor: Colors.brandPrimary, borderRadius: 8, width: 16, height: 16, justifyContent: 'center', alignItems: 'center' },
+  storyBadge: { position: 'absolute', top: -4, right: 2, backgroundColor: Colors.error, borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: Colors.bgPrimary },
+  storyBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.bgSecondary, marginHorizontal: 16, marginVertical: 8, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: Colors.borderSubtle },
   searchText: { fontSize: 14, color: Colors.textSecondary },
-
-  // Tabs
   tabsRow: { paddingHorizontal: 16, gap: 8, paddingVertical: 8 },
-  tabPill: {
-    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 100,
-    backgroundColor: Colors.bgTertiary,
-  },
+  tabPill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 100, backgroundColor: Colors.bgTertiary, position: 'relative' },
   tabPillActive: { backgroundColor: Colors.brandPrimary },
   tabPillText: { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
   tabPillTextActive: { color: '#fff' },
-
-  // Events
+  pausedDot: { position: 'absolute', top: 4, right: 4, width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.error },
   eventsList: { gap: 2, paddingTop: 8 },
-  eventCard: {
-    backgroundColor: Colors.bgSecondary, marginHorizontal: 12,
-    borderRadius: 14, padding: 16, gap: 8, marginBottom: 10,
-    borderWidth: 1, borderColor: Colors.borderSubtle,
-  },
+  eventCard: { backgroundColor: Colors.bgSecondary, marginHorizontal: 12, borderRadius: 14, padding: 16, gap: 8, marginBottom: 10, borderWidth: 1, borderColor: Colors.borderSubtle },
+  groupNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
+  groupNameText: { fontSize: 11, fontWeight: '800', color: Colors.textTertiary, letterSpacing: 0.8 },
   eventHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   eventCreatorImg: { width: 36, height: 36, borderRadius: 18, overflow: 'hidden' },
+  eventThumb: { width: 48, height: 48, borderRadius: 10, overflow: 'hidden' },
   eventTitle: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
   eventSkill: { fontSize: 12, color: Colors.textSecondary, marginTop: 1 },
-
   eventMeta: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   eventMetaText: { fontSize: 13, color: Colors.textSecondary },
-
   participantsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 4 },
   avatarStack: { flexDirection: 'row' },
   stackAvatar: { borderWidth: 2, borderColor: Colors.bgSecondary, borderRadius: 14, overflow: 'hidden' },
   stackAvatarImg: { width: 24, height: 24, borderRadius: 12 },
-
-  countBadge: {
-    borderWidth: 1, borderColor: Colors.brandPrimary, borderRadius: 100,
-    paddingHorizontal: 8, paddingVertical: 3,
-  },
+  countBadge: { borderWidth: 1, borderColor: Colors.brandPrimary, borderRadius: 100, paddingHorizontal: 8, paddingVertical: 3 },
   countText: { fontSize: 11, color: Colors.brandPrimary, fontWeight: '600' },
-
-  statusBadge: {
-    backgroundColor: 'rgba(34,197,94,0.12)', paddingHorizontal: 8, paddingVertical: 3,
-    borderRadius: 100,
-  },
+  statusBadge: { backgroundColor: 'rgba(34,197,94,0.12)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 100 },
   statusText: { fontSize: 10, fontWeight: '700', color: Colors.success, letterSpacing: 0.5 },
-
+  // Invite response
+  inviteRow: { flexDirection: 'row', gap: 8, paddingTop: 4 },
+  inviteNo: { flex: 1, backgroundColor: 'rgba(239,68,68,0.1)', paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+  inviteNoText: { color: Colors.error, fontWeight: '700', fontSize: 14 },
+  inviteMaybe: { flex: 1, backgroundColor: 'rgba(234,179,8,0.1)', paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+  inviteMaybeText: { color: '#eab308', fontWeight: '700', fontSize: 14 },
+  inviteYes: { flex: 1, backgroundColor: 'rgba(34,197,94,0.1)', paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+  inviteYesText: { color: Colors.success, fontWeight: '700', fontSize: 14 },
+  // Leave button
+  leaveBtn: { backgroundColor: 'rgba(120,53,15,0.1)', paddingVertical: 10, borderRadius: 10, alignItems: 'center', marginTop: 4 },
+  leaveBtnText: { color: '#92400e', fontWeight: '600', fontSize: 13 },
+  // Comments
   commentBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 4 },
   commentText: { fontSize: 13, color: Colors.textSecondary },
-
-  // Upcoming sidebar
-  upcomingSection: {
-    marginHorizontal: 12, marginTop: 16, padding: 16,
-    backgroundColor: Colors.bgSecondary, borderRadius: 14,
-    borderWidth: 1, borderColor: Colors.borderSubtle,
-  },
-  upcomingSectionTitle: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary, marginBottom: 12 },
-  upcomingItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 8, borderTopWidth: 1, borderTopColor: Colors.borderSubtle },
-  upcomingDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.brandPrimary, marginTop: 5 },
-  upcomingTitle: { fontSize: 14, fontWeight: '600', color: Colors.textPrimary },
-  upcomingMeta: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
-
-  // FAB
-  fab: {
-    position: 'absolute', bottom: 90, right: 16,
-    backgroundColor: Colors.brandPrimary, borderRadius: 26,
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 18, paddingVertical: 14,
-    shadowColor: Colors.brandPrimary, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35, shadowRadius: 12, elevation: 8,
-  },
+  lastCommentText: { fontSize: 12, color: Colors.textTertiary, flex: 1 },
+  fab: { position: 'absolute', bottom: 90, right: 16, backgroundColor: Colors.brandPrimary, borderRadius: 26, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 14, shadowColor: Colors.brandPrimary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 8 },
   fabText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 });
