@@ -698,7 +698,16 @@ function AgentTab() {
 
   // Load sessions
   const loadSessions = useCallback(() => {
-    fetch('/api/admin/agent').then(r => r.json()).then(setSessions).catch(() => {});
+    fetch('/api/admin/agent')
+      .then(r => r.json())
+      .then(data => {
+        setSessions(data);
+        setActiveSession(prev => {
+          if (!prev && data.length > 0) return data[0].id;
+          return prev;
+        });
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
