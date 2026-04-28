@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
+import { Sparkles, RefreshCw, X, Send, Bot } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -67,7 +68,7 @@ function renderMarkdown(text: string) {
     return s
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.+?)\*/g, '<em>$1</em>')
-      .replace(/`(.+?)`/g, '<code style="background:rgba(177,78,244,0.15);padding:1px 5px;border-radius:4px;font-size:0.75rem">$1</code>');
+      .replace(/`(.+?)`/g, '<code style="background:rgba(0,212,255,0.15);padding:1px 5px;border-radius:4px;font-size:0.75rem">$1</code>');
   };
 
   for (let i = 0; i < lines.length; i++) {
@@ -177,7 +178,7 @@ export default function AIAssistant() {
       const errMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: '⚠️ Kunde inte nå AI-tjänsten. Försök igen om en stund.',
+        content: 'Misslyckades att nå AI-tjänsten. Försök igen om en stund.',
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, errMsg]);
@@ -189,10 +190,10 @@ export default function AIAssistant() {
   // -- Styles --
   const C = {
     bg: '#0c0a10',
-    card: '#151218',
+    card: 'var(--brand-surface)',
     border: 'rgba(255,255,255,0.06)',
-    accent: '#b14ef4',
-    accentGlow: 'rgba(177,78,244,0.4)',
+    accent: 'var(--brand-accent)',
+    accentGlow: 'rgba(0,212,255,0.4)',
     text: '#e2e8f0',
     dim: 'rgba(255,255,255,0.3)',
   };
@@ -207,10 +208,10 @@ export default function AIAssistant() {
           style={{
             position: 'fixed', bottom: '24px', right: '24px',
             width: '56px', height: '56px', borderRadius: '50%',
-            background: 'linear-gradient(135deg, #b14ef4 0%, #7c3aed 50%, #4f46e5 100%)',
+            background: 'linear-gradient(135deg, var(--brand-accent) 0%, #7c3aed 50%, #4f46e5 100%)',
             border: 'none', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: `0 4px 30px ${C.accentGlow}, 0 0 60px rgba(177,78,244,0.15)`,
+            boxShadow: `0 4px 30px ${C.accentGlow}, 0 0 60px rgba(0,212,255,0.15)`,
             zIndex: 100000, transition: 'all 0.3s ease',
             fontSize: '1.5rem', color: '#fff',
             animation: 'ai-pulse 3s ease-in-out infinite',
@@ -224,12 +225,12 @@ export default function AIAssistant() {
             (e.target as HTMLElement).style.boxShadow = `0 4px 30px ${C.accentGlow}`;
           }}
         >
-          ✨
+          <Sparkles size={24} color="#fff" />
         </button>
         <style>{`
           @keyframes ai-pulse {
-            0%, 100% { box-shadow: 0 4px 30px ${C.accentGlow}, 0 0 60px rgba(177,78,244,0.1); }
-            50% { box-shadow: 0 4px 30px ${C.accentGlow}, 0 0 80px rgba(177,78,244,0.25); }
+            0%, 100% { box-shadow: 0 4px 30px ${C.accentGlow}, 0 0 60px rgba(0,212,255,0.1); }
+            50% { box-shadow: 0 4px 30px ${C.accentGlow}, 0 0 80px rgba(0,212,255,0.25); }
           }
         `}</style>
       </div>
@@ -246,26 +247,26 @@ export default function AIAssistant() {
         display: 'flex', flexDirection: 'column',
         background: C.card,
         border: `1px solid ${C.border}`,
-        boxShadow: `0 20px 80px rgba(0,0,0,0.6), 0 0 40px rgba(177,78,244,0.1)`,
+        boxShadow: `0 20px 80px rgba(0,0,0,0.6), 0 0 40px rgba(0,212,255,0.1)`,
         zIndex: 100000,
         fontFamily: 'var(--font-inter-tight), system-ui, sans-serif',
       }}>
         {/* Header */}
         <div style={{
           padding: '14px 18px',
-          background: 'linear-gradient(135deg, rgba(177,78,244,0.12) 0%, rgba(79,70,229,0.08) 100%)',
+          background: 'linear-gradient(135deg, rgba(0,212,255,0.12) 0%, rgba(79,70,229,0.08) 100%)',
           borderBottom: `1px solid ${C.border}`,
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{
               width: '36px', height: '36px', borderRadius: '12px',
-              background: 'linear-gradient(135deg, #b14ef4, #7c3aed)',
+              background: 'linear-gradient(135deg, var(--brand-accent), #7c3aed)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '1.125rem',
-              boxShadow: '0 2px 12px rgba(177,78,244,0.3)',
+              color: '#fff',
+              boxShadow: '0 2px 12px rgba(0,212,255,0.3)',
             }}>
-              ✨
+              <Bot size={20} />
             </div>
             <div>
               <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: C.text }}>Insiders AI</div>
@@ -282,10 +283,10 @@ export default function AIAssistant() {
                 width: '32px', height: '32px', borderRadius: '8px',
                 border: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.03)',
                 cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: C.dim, fontSize: '0.875rem', transition: 'all 0.15s',
+                color: C.dim, transition: 'all 0.15s',
               }}
             >
-              🔄
+              <RefreshCw size={14} />
             </button>
             <button
               onClick={() => setIsOpen(false)}
@@ -294,10 +295,10 @@ export default function AIAssistant() {
                 width: '32px', height: '32px', borderRadius: '8px',
                 border: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.03)',
                 cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: C.dim, fontSize: '0.875rem', transition: 'all 0.15s',
+                color: C.dim, transition: 'all 0.15s',
               }}
             >
-              ✕
+              <X size={16} />
             </button>
           </div>
         </div>
@@ -309,7 +310,16 @@ export default function AIAssistant() {
         }}>
           {messages.length === 0 && (
             <div style={{ padding: '20px 8px', textAlign: 'center' }}>
-              <div style={{ fontSize: '2rem', marginBottom: '8px' }}>✨</div>
+              <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'center' }}>
+                <div style={{
+                  width: '56px', height: '56px', borderRadius: '16px',
+                  background: 'linear-gradient(135deg, rgba(0,212,255,0.1), rgba(124,58,237,0.1))',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  border: `1px solid rgba(0,212,255,0.2)`,
+                }}>
+                  <Bot size={32} className="brand-text-accent" />
+                </div>
+              </div>
               <div style={{ fontWeight: 700, fontSize: '1rem', color: C.text, marginBottom: '4px' }}>
                 Hej! Jag är Insiders AI
               </div>
@@ -337,8 +347,8 @@ export default function AIAssistant() {
                       fontFamily: 'inherit',
                     }}
                     onMouseEnter={e => {
-                      (e.target as HTMLElement).style.background = 'rgba(177,78,244,0.08)';
-                      (e.target as HTMLElement).style.borderColor = 'rgba(177,78,244,0.2)';
+                      (e.target as HTMLElement).style.background = 'rgba(0,212,255,0.08)';
+                      (e.target as HTMLElement).style.borderColor = 'rgba(0,212,255,0.2)';
                     }}
                     onMouseLeave={e => {
                       (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.02)';
@@ -365,10 +375,10 @@ export default function AIAssistant() {
                 padding: msg.role === 'user' ? '10px 14px' : '12px 16px',
                 borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
                 background: msg.role === 'user'
-                  ? 'linear-gradient(135deg, rgba(177,78,244,0.25), rgba(124,58,237,0.2))'
+                  ? 'linear-gradient(135deg, rgba(0,212,255,0.25), rgba(124,58,237,0.2))'
                   : 'rgba(255,255,255,0.03)',
                 border: msg.role === 'user'
-                  ? '1px solid rgba(177,78,244,0.2)'
+                  ? '1px solid rgba(0,212,255,0.2)'
                   : `1px solid ${C.border}`,
               }}>
                 {msg.role === 'assistant' ? (
@@ -456,7 +466,7 @@ export default function AIAssistant() {
                 lineHeight: 1.5, maxHeight: '80px',
                 transition: 'border-color 0.15s',
               }}
-              onFocus={e => (e.target as HTMLElement).style.borderColor = 'rgba(177,78,244,0.3)'}
+              onFocus={e => (e.target as HTMLElement).style.borderColor = 'rgba(0,212,255,0.3)'}
               onBlur={e => (e.target as HTMLElement).style.borderColor = C.border}
             />
             <button
@@ -468,15 +478,15 @@ export default function AIAssistant() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: '1rem',
                 background: input.trim()
-                  ? 'linear-gradient(135deg, #b14ef4, #7c3aed)'
+                  ? 'linear-gradient(135deg, var(--brand-accent), #7c3aed)'
                   : 'rgba(255,255,255,0.05)',
                 color: '#fff',
                 transition: 'all 0.2s',
                 opacity: !input.trim() || isLoading ? 0.4 : 1,
-                boxShadow: input.trim() ? '0 2px 12px rgba(177,78,244,0.3)' : 'none',
+                boxShadow: input.trim() ? '0 2px 12px rgba(0,212,255,0.3)' : 'none',
               }}
             >
-              ➤
+              <Send size={16} />
             </button>
           </div>
         </div>

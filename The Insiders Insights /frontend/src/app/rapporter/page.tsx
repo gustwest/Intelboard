@@ -1,12 +1,13 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import { BarChart2, TrendingUp, MapPin, Play, Save, Plus, X, LineChart } from 'lucide-react';
 import Gauge from '../../components/Gauge';
 import TrendChart from '../../components/TrendChart';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
-  bg: '#0f0e12', card: '#151218', border: 'rgba(255,255,255,0.08)',
-  accent: '#b14ef4', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
+  bg: 'var(--brand-bg)', card: 'var(--brand-surface)', border: 'rgba(255,255,255,0.08)',
+  accent: 'var(--brand-accent)', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
   text: '#f8fafc', muted: 'rgba(255,255,255,0.5)', dim: 'rgba(255,255,255,0.3)',
 };
 
@@ -184,7 +185,9 @@ export default function RapporterPage() {
   return (
     <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px 60px', fontFamily: "var(--brand-font-sans)", color: C.text }}>
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 600, letterSpacing: '-0.02em', margin: 0 }}>📊 Rapporter (Global vy)</h1>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 600, letterSpacing: '-0.02em', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <BarChart2 size={24} className="brand-text-accent" /> Rapporter (Global vy)
+        </h1>
         <p style={{ fontSize: '0.8125rem', color: C.muted, margin: '4px 0 0' }}>
           Välj bolag och moduler — kör för jämförelse över kunder. Spara urvalet som återanvändbar rapport.
         </p>
@@ -195,7 +198,7 @@ export default function RapporterPage() {
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, marginBottom: 20, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <span style={{ fontSize: 11, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, marginRight: 4 }}>Sparade:</span>
           {reports.map(r => (
-            <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px 4px 12px', borderRadius: 16, background: 'rgba(177,78,244,0.1)', border: '1px solid rgba(177,78,244,0.25)', fontSize: 12 }}>
+            <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px 4px 12px', borderRadius: 16, background: 'rgba(0,212,255,0.1)', border: '1px solid rgba(0,212,255,0.25)', fontSize: 12 }}>
               <button onClick={() => loadReport(r)} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontWeight: 600, padding: 0, fontFamily: 'inherit' }}>{r.name}</button>
               <button onClick={() => deleteReport(r.id)} title="Radera" style={{ background: 'none', border: 'none', color: C.dim, cursor: 'pointer', padding: 0, fontSize: 14 }}>×</button>
             </div>
@@ -209,7 +212,7 @@ export default function RapporterPage() {
           <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>Bolag ({selectedCustomers.size})</h3>
           {customers.length === 0 && <div style={{ color: C.muted, fontSize: 12 }}>Inga kunder ännu.</div>}
           {customers.map(c => (
-            <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 6px', cursor: 'pointer', borderRadius: 8, background: selectedCustomers.has(c.id) ? 'rgba(177,78,244,0.08)' : 'transparent' }}>
+            <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 6px', cursor: 'pointer', borderRadius: 8, background: selectedCustomers.has(c.id) ? 'rgba(0,212,255,0.08)' : 'transparent' }}>
               <input type="checkbox" checked={selectedCustomers.has(c.id)} onChange={() => toggle(selectedCustomers, setSelectedCustomers, c.id)} />
               <span style={{ fontSize: 18 }}>{c.logo_emoji}</span>
               <div style={{ flex: 1 }}>
@@ -225,12 +228,12 @@ export default function RapporterPage() {
           <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>Moduler ({selectedModules.size})</h3>
           {modules.length === 0 && <div style={{ color: C.muted, fontSize: 12 }}>Inga moduler ännu.</div>}
           {modules.map(m => (
-            <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 6px', cursor: 'pointer', borderRadius: 8, background: selectedModules.has(m.id) ? 'rgba(177,78,244,0.08)' : 'transparent' }}>
+            <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 6px', cursor: 'pointer', borderRadius: 8, background: selectedModules.has(m.id) ? 'rgba(0,212,255,0.08)' : 'transparent' }}>
               <input type="checkbox" checked={selectedModules.has(m.id)} onChange={() => toggle(selectedModules, setSelectedModules, m.id)} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>
                   {m.name} <span style={{ color: C.dim }}>({m.abbr})</span>
-                  {m.customer_id ? <span style={{ fontSize: 9, padding: '1px 6px', marginLeft: 6, borderRadius: 8, background: 'rgba(177,78,244,0.15)', color: C.accent }}>KUND</span>
+                  {m.customer_id ? <span style={{ fontSize: 9, padding: '1px 6px', marginLeft: 6, borderRadius: 8, background: 'rgba(0,212,255,0.15)', color: C.accent }}>KUND</span>
                     : <span style={{ fontSize: 9, padding: '1px 6px', marginLeft: 6, borderRadius: 8, background: 'rgba(255,255,255,0.06)', color: C.dim }}>GLOBAL</span>}
                 </div>
                 <div style={{ fontSize: 11, color: C.dim }}>{m.category} · {m.field_refs.length} fält</div>
@@ -249,8 +252,8 @@ export default function RapporterPage() {
                 if (cand) setDatapoints([...datapoints, { source_field_id: cand.id, alias: cand.key, aggregation: 'sum' }]);
               }}
               disabled={allFields.length === 0}
-              style={btn('ghost')}
-            >+</button>
+              style={{ ...btn('ghost'), display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            ><Plus size={16} /></button>
           </div>
           {datapoints.length === 0 ? (
             <div style={{ color: C.muted, fontSize: 11 }}>
@@ -279,7 +282,7 @@ export default function RapporterPage() {
                   >
                     <option value="sum">sum</option><option value="avg">avg</option><option value="min">min</option><option value="max">max</option><option value="count">count</option><option value="latest">latest</option>
                   </select>
-                  <button onClick={() => setDatapoints(datapoints.filter((_, j) => j !== i))} style={{ ...btn('ghost'), padding: '4px 10px' }}>✕</button>
+                  <button onClick={() => setDatapoints(datapoints.filter((_, j) => j !== i))} style={{ ...btn('ghost'), padding: '4px 8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={14} /></button>
                 </div>
                 {f && <div style={{ fontSize: 10, color: C.dim, marginTop: 4 }}>{f.display_name}{f.unit ? ` · ${f.unit}` : ''}</div>}
               </div>
@@ -290,7 +293,7 @@ export default function RapporterPage() {
           <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: C.muted, cursor: 'pointer' }}>
               <input type="checkbox" checked={trendMode} onChange={e => setTrendMode(e.target.checked)} />
-              📈 Visa som trend (tidsserie)
+              <LineChart size={16} style={{ marginRight: 4 }} /> Visa som trend (tidsserie)
             </label>
             {trendMode && (
               <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
@@ -312,17 +315,22 @@ export default function RapporterPage() {
         {/* Results */}
         <div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <button onClick={runReport} disabled={!canRun || running} style={{
+            <button onClick={runReport} disabled={!canRun || running} className={canRun ? "brand-btn-primary" : ""} style={{
               padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: canRun ? 'pointer' : 'not-allowed',
-              background: canRun ? C.accent : 'rgba(177,78,244,0.25)', color: '#fff', border: 'none', fontFamily: 'inherit',
-            }}>{running ? 'Kör…' : trendMode ? '▶ Kör trend' : '▶ Kör jämförelse'}</button>
-            <button onClick={() => setShowSave(!showSave)} disabled={!canRun} style={btn('ghost')}>💾 Spara som rapport</button>
+              background: canRun ? undefined : 'rgba(0,212,255,0.25)', color: '#fff', border: 'none', fontFamily: 'inherit',
+              display: 'flex', alignItems: 'center', gap: '6px'
+            }}>
+              <Play size={16} fill="currentColor" /> {running ? 'Kör…' : trendMode ? 'Kör trend' : 'Kör jämförelse'}
+            </button>
+            <button onClick={() => setShowSave(!showSave)} disabled={!canRun} style={{ ...btn('ghost'), display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Save size={16} /> Spara som rapport
+            </button>
           </div>
 
           {showSave && (
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 16, display: 'flex', gap: 8 }}>
               <input autoFocus value={saveName} onChange={e => setSaveName(e.target.value)} placeholder="Rapportnamn, t.ex. 'Q1 kampanjjämförelse'" style={inp} onKeyDown={e => e.key === 'Enter' && canSave && saveReport()} />
-              <button onClick={saveReport} disabled={!canSave} style={btn('accent')}>Spara</button>
+              <button onClick={saveReport} disabled={!canSave} className="brand-btn-primary" style={{ padding: '8px 16px' }}>Spara</button>
               <button onClick={() => setShowSave(false)} style={btn('ghost')}>Avbryt</button>
             </div>
           )}
@@ -331,7 +339,7 @@ export default function RapporterPage() {
           {trendData.length > 0 && trendData.map(td => (
             <div key={td.module_id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
-                <h3 style={{ margin: 0, fontSize: 16 }}>📈 {td.module_name} <span style={{ color: C.dim, fontSize: 13 }}>{td.module_abbr}</span></h3>
+                <h3 style={{ margin: 0, fontSize: 16, display: 'flex', alignItems: 'center', gap: '6px' }}><TrendingUp size={18} className="brand-text-accent" /> {td.module_name} <span style={{ color: C.dim, fontSize: 13, marginLeft: 4 }}>{td.module_abbr}</span></h3>
                 <span style={{ fontSize: 11, color: C.dim }}>{td.granularity} · {td.periods.length} period(er)</span>
               </div>
               <TrendChart periods={td.periods} series={td.series.map(s => ({ ...s, points: s.points.map(p => ({ period: p.period, value: typeof p.value === 'number' ? p.value : null })) }))} />
@@ -342,7 +350,7 @@ export default function RapporterPage() {
           {datapointResults.length > 0 && datapointResults.map(dp => (
             <div key={dp.source_field_id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14 }}>
-                <h3 style={{ margin: 0, fontSize: 16 }}>📍 {dp.field_display_name} <span style={{ color: C.dim, fontSize: 12 }}>{dp.field_key}</span></h3>
+                <h3 style={{ margin: 0, fontSize: 16, display: 'flex', alignItems: 'center', gap: '6px' }}><MapPin size={18} className="brand-text-accent" /> {dp.field_display_name} <span style={{ color: C.dim, fontSize: 12, marginLeft: 4 }}>{dp.field_key}</span></h3>
                 <code style={{ fontSize: 11, color: C.dim }}>{dp.aggregation}{dp.field_unit ? ` · ${dp.field_unit}` : ''}</code>
               </div>
               <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', justifyContent: 'space-around' }}>
@@ -428,7 +436,7 @@ const inp: React.CSSProperties = { flex: 1, padding: '9px 12px', borderRadius: 8
 
 function btn(kind: 'accent' | 'ghost' | 'danger'): React.CSSProperties {
   const base: React.CSSProperties = { padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: '1px solid transparent', fontFamily: 'inherit' };
-  if (kind === 'accent') return { ...base, background: C.accent, color: '#fff' };
+  if (kind === 'accent') return { ...base, background: 'linear-gradient(135deg, var(--brand-accent), var(--brand-accent-hover))', color: '#fff' };
   if (kind === 'danger') return { ...base, background: 'rgba(239,68,68,0.12)', color: C.danger, borderColor: 'rgba(239,68,68,0.3)' };
   return { ...base, background: 'transparent', color: C.muted, borderColor: C.border };
 }

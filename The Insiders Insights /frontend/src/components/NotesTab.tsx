@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
-  bg: '#0f0e12', card: '#151218', border: 'rgba(255,255,255,0.08)',
-  accent: '#b14ef4', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
+  bg: 'var(--brand-bg)', card: 'var(--brand-surface)', border: 'rgba(255,255,255,0.08)',
+  accent: 'var(--brand-accent)', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
   text: '#f8fafc', muted: 'rgba(255,255,255,0.5)', dim: 'rgba(255,255,255,0.3)',
 };
 
@@ -124,6 +124,6 @@ const inputStyle: React.CSSProperties = {
 
 function btnStyle(kind: 'accent' | 'ghost'): React.CSSProperties {
   const base: React.CSSProperties = { padding: '6px 14px', borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: '1px solid transparent', fontFamily: 'inherit' };
-  if (kind === 'accent') return { ...base, background: '#b14ef4', color: '#fff' };
+  if (kind === 'accent') return { ...base, background: 'var(--brand-accent)', color: '#fff' };
   return { ...base, background: 'transparent', color: 'rgba(255,255,255,0.5)', borderColor: 'rgba(255,255,255,0.08)' };
 }

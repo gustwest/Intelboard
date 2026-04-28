@@ -1,10 +1,11 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import { Database, Plus, Trash2 } from 'lucide-react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
-  bg: '#0f0e12', card: '#151218', border: 'rgba(255,255,255,0.08)',
-  accent: '#b14ef4', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
+  bg: 'var(--brand-bg)', card: 'var(--brand-surface)', border: 'rgba(255,255,255,0.08)',
+  accent: 'var(--brand-accent)', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
   text: '#f8fafc', muted: 'rgba(255,255,255,0.5)', dim: 'rgba(255,255,255,0.3)',
 };
 
@@ -39,12 +40,14 @@ export default function SourcesPage() {
     <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px 60px', fontFamily: "var(--brand-font-sans)", color: C.text }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 600, letterSpacing: '-0.02em', margin: 0 }}>📥 Datakällor</h1>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 600, letterSpacing: '-0.02em', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Database size={24} className="brand-text-accent" /> Datakällor
+          </h1>
           <p style={{ fontSize: '0.8125rem', color: C.muted, margin: '4px 0 0' }}>
             Definiera rapporter som kan laddas upp (t.ex. Campaign Manager, Recruiter). Moduler binder mot fälten här.
           </p>
         </div>
-        <button onClick={() => setShowCreate(true)} style={btn('accent')}>+ Ny källa</button>
+        <button onClick={() => setShowCreate(true)} className="brand-btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Plus size={16} /> Ny källa</button>
       </div>
 
       {showCreate && <CreateSourceForm onClose={() => setShowCreate(false)} onCreated={() => { setShowCreate(false); refresh(); }} />}
@@ -62,8 +65,8 @@ export default function SourcesPage() {
             sources.map(s => (
               <div key={s.id} onClick={() => setSelected(s.id)} style={{
                 padding: '12px 14px', borderRadius: 10, cursor: 'pointer',
-                background: selected === s.id ? 'rgba(177,78,244,0.12)' : 'transparent',
-                border: selected === s.id ? '1px solid rgba(177,78,244,0.3)' : '1px solid transparent',
+                background: selected === s.id ? 'rgba(0,212,255,0.12)' : 'transparent',
+                border: selected === s.id ? '1px solid rgba(0,212,255,0.3)' : '1px solid transparent',
                 marginBottom: 4,
               }}>
                 <div style={{ fontWeight: 700, fontSize: 14 }}>{s.name}</div>
@@ -125,7 +128,7 @@ function SourceDetail({ source, onChange }: { source: Source; onChange: () => vo
             <h2 style={{ margin: 0, fontSize: '1.25rem' }}>{source.name}</h2>
             <div style={{ color: C.dim, fontSize: 12 }}>key: <code>{source.key}</code></div>
           </div>
-          <button onClick={deleteSource} style={btn('danger')}>Ta bort källa</button>
+          <button onClick={deleteSource} style={{ ...btn('danger'), display: 'flex', alignItems: 'center', gap: '6px' }}><Trash2 size={16} /> Ta bort källa</button>
         </div>
         {source.description && <p style={{ color: C.muted, fontSize: 13, marginTop: 6 }}>{source.description}</p>}
 
@@ -150,7 +153,7 @@ function SourceDetail({ source, onChange }: { source: Source; onChange: () => vo
               <div>{f.display_name} <div style={{ fontSize: 10, color: C.dim }}>⇒ kolumn: <code>{mapping?.column_name || '—'}</code></div></div>
               <div style={{ color: C.muted }}>{f.data_type}</div>
               <div style={{ color: C.muted }}>{f.unit || '—'}</div>
-              <button onClick={() => deleteField(f.id)} style={btn('ghost')}>Ta bort</button>
+              <button onClick={() => deleteField(f.id)} style={btn('ghost')}><Trash2 size={14} /></button>
             </div>
           );
         })}
@@ -163,7 +166,7 @@ function SourceDetail({ source, onChange }: { source: Source; onChange: () => vo
             <option value="str">str</option><option value="int">int</option><option value="float">float</option><option value="date">date</option><option value="bool">bool</option>
           </select>
           <input placeholder="enhet" value={newField.unit} onChange={e => setNewField({ ...newField, unit: e.target.value })} style={inp} />
-          <button onClick={addField} style={btn('accent')}>+ Lägg till</button>
+          <button onClick={addField} className="brand-btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 14px' }}><Plus size={16} /></button>
         </div>
       </div>
 
@@ -174,7 +177,7 @@ function SourceDetail({ source, onChange }: { source: Source; onChange: () => vo
             <h3 style={{ margin: '0 0 6px', fontSize: '1rem' }}>Versioner</h3>
             <p style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Varje version mappar fält → kolumnnamn i tidens format. Skapa ny version när rapporten ändrar kolumner.</p>
           </div>
-          {!bumping && <button onClick={() => setBumping(true)} style={btn('accent')}>+ Ny version</button>}
+          {!bumping && <button onClick={() => setBumping(true)} className="brand-btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Plus size={16} /> Ny version</button>}
         </div>
         {source.versions.map(v => (
           <div key={v.id} style={{ padding: '10px 12px', border: `1px solid ${v.is_current ? 'rgba(34,197,94,0.25)' : C.border}`, borderRadius: 10, marginBottom: 8, background: v.is_current ? 'rgba(34,197,94,0.05)' : 'transparent' }}>
@@ -231,7 +234,7 @@ function VersionBumpForm({ source, onClose, onCreated }: { source: Source; onClo
   }
 
   return (
-    <div style={{ marginTop: 12, padding: 16, background: 'rgba(177,78,244,0.06)', border: '1px solid rgba(177,78,244,0.3)', borderRadius: 12 }}>
+    <div style={{ marginTop: 12, padding: 16, background: 'rgba(0,212,255,0.06)', border: '1px solid rgba(0,212,255,0.3)', borderRadius: 12 }}>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Ny version (blir ny aktuell)</div>
       <label style={lbl}>Anteckningar</label>
       <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="t.ex. 'LinkedIn lade till Click Type-kolumnen 2026-04'" style={{ ...inp, marginBottom: 12 }} />
@@ -250,7 +253,7 @@ function VersionBumpForm({ source, onClose, onCreated }: { source: Source; onClo
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-        <button onClick={submit} disabled={saving} style={btn('accent')}>{saving ? 'Skapar…' : 'Skapa ny version'}</button>
+        <button onClick={submit} disabled={saving} className="brand-btn-primary" style={{ padding: '8px 16px' }}>{saving ? 'Skapar…' : 'Skapa ny version'}</button>
         <button onClick={onClose} style={btn('ghost')}>Avbryt</button>
       </div>
     </div>
@@ -313,7 +316,7 @@ function CreateSourceForm({ onClose, onCreated }: { onClose: () => void; onCreat
         </div>
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-        <button onClick={submit} disabled={saving || !name} style={btn('accent')}>{saving ? 'Skapar…' : 'Skapa källa'}</button>
+        <button onClick={submit} disabled={saving || !name} className="brand-btn-primary" style={{ padding: '8px 16px' }}>{saving ? 'Skapar…' : 'Skapa källa'}</button>
         <button onClick={onClose} style={btn('ghost')}>Avbryt</button>
       </div>
     </div>
@@ -325,7 +328,7 @@ const inp: React.CSSProperties = { width: '100%', padding: '9px 12px', borderRad
 
 function btn(kind: 'accent' | 'ghost' | 'danger'): React.CSSProperties {
   const base: React.CSSProperties = { padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: '1px solid transparent', fontFamily: 'inherit' };
-  if (kind === 'accent') return { ...base, background: C.accent, color: '#fff' };
+  if (kind === 'accent') return { ...base, background: 'linear-gradient(135deg, var(--brand-accent), var(--brand-accent-hover))', color: '#fff' };
   if (kind === 'danger') return { ...base, background: 'rgba(239,68,68,0.12)', color: C.danger, borderColor: 'rgba(239,68,68,0.3)' };
   return { ...base, background: 'transparent', color: C.muted, borderColor: C.border };
 }

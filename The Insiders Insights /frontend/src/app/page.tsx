@@ -35,7 +35,7 @@ function MetricCard({ title, value, p10, p90, icon: Icon, highlight }: {
   return (
     <div className={`p-6 rounded-2xl border relative overflow-hidden transition-all ${
       highlight
-        ? "bg-purple-500/10 border-purple-500/30 shadow-[0_0_30px_rgba(177,78,244,0.15)]"
+        ? "bg-purple-500/10 border-purple-500/30 shadow-[0_0_30px_rgba(0,212,255,0.15)]"
         : "bg-white/[0.03] border-white/[0.06]"
     }`}>
       {highlight && <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent"></div>}
@@ -121,10 +121,10 @@ export default function Dashboard() {
   };
 
   const currentHistogram = result ? result[activeTab].histogram : [];
-  const chartColor = activeTab === 'sales' ? '#b14ef4' : activeTab === 'recruiting' ? '#22c55e' : '#ec4899';
+  const chartColor = activeTab === 'sales' ? 'var(--brand-accent)' : activeTab === 'recruiting' ? '#22c55e' : '#ec4899';
 
   return (
-    <div className="h-[calc(100vh-56px)] bg-[#0f0e12] text-slate-100 flex flex-col overflow-hidden" style={{ fontFamily: "var(--brand-font-sans)" }}>
+    <div className="h-[calc(100vh-56px)] bg-[var(--brand-bg)] text-slate-100 flex flex-col overflow-hidden" style={{ fontFamily: "var(--brand-font-sans)" }}>
 
       {/* Header is now in the global Navbar */}
 
@@ -231,7 +231,7 @@ export default function Dashboard() {
             <button
               onClick={runSimulation}
               disabled={loading}
-              className="brand-btn-primary w-full flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(177,78,244,0.25)] hover:shadow-[0_0_40px_rgba(177,78,244,0.45)]"
+              className="brand-btn-primary w-full flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(0,212,255,0.25)] hover:shadow-[0_0_40px_rgba(0,212,255,0.45)]"
             >
               {loading ? (
                 <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
@@ -244,7 +244,7 @@ export default function Dashboard() {
         </aside>
 
         {/* RIGHT CONTENT — VISUALIZATION */}
-        <section className="flex-1 relative flex flex-col bg-[#0f0e12]">
+        <section className="flex-1 relative flex flex-col bg-[var(--brand-bg)]">
 
           {!result ? (
             <div className="flex-1 flex flex-col items-center justify-center relative z-10 p-12">

@@ -8,8 +8,8 @@ import DashboardCharts from '@/components/DashboardCharts';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
-  bg: '#0f0e12', card: '#151218', border: 'rgba(255,255,255,0.08)',
-  accent: '#b14ef4', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
+  bg: 'var(--brand-bg)', card: 'var(--brand-surface)', border: 'rgba(255,255,255,0.08)',
+  accent: 'var(--brand-accent)', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
   text: '#f8fafc', muted: 'rgba(255,255,255,0.5)', dim: 'rgba(255,255,255,0.3)',
 };
 
@@ -156,9 +156,9 @@ export default function CustomerDetailPage() {
             flex: 1, padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600,
             cursor: 'pointer', border: '1px solid transparent', fontFamily: 'inherit',
             transition: 'all 0.15s',
-            background: activeTab === tab.key ? 'rgba(177,78,244,0.12)' : 'transparent',
+            background: activeTab === tab.key ? 'rgba(0,212,255,0.12)' : 'transparent',
             color: activeTab === tab.key ? C.accent : C.muted,
-            borderColor: activeTab === tab.key ? 'rgba(177,78,244,0.25)' : 'transparent',
+            borderColor: activeTab === tab.key ? 'rgba(0,212,255,0.25)' : 'transparent',
           }}>{tab.label}</button>
         ))}
       </div>
@@ -192,7 +192,7 @@ export default function CustomerDetailPage() {
         }}
         onClick={() => fileInput.current?.click()}
         style={{
-          background: dragOver ? 'rgba(177,78,244,0.1)' : C.card,
+          background: dragOver ? 'rgba(0,212,255,0.1)' : C.card,
           border: `2px dashed ${dragOver ? C.accent : C.border}`,
           borderRadius: 16, padding: 28, marginBottom: 20, textAlign: 'center',
           cursor: 'pointer', transition: 'all 0.15s',
@@ -261,7 +261,7 @@ export default function CustomerDetailPage() {
                   {d.ai_summary && (
                     <tr>
                       <td colSpan={7} style={{ padding: '4px 12px 14px', borderBottom: `1px solid ${C.border}` }}>
-                        <div style={{ background: 'rgba(177, 78, 244, 0.08)', border: '1px solid rgba(177, 78, 244, 0.2)', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
+                        <div style={{ background: 'rgba(0,212,255, 0.08)', border: '1px solid rgba(0,212,255, 0.2)', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
                           <span style={{ color: C.accent, marginRight: 6 }}>✨ AI</span>
                           {d.ai_summary}
                         </div>

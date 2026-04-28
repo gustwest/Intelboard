@@ -28,6 +28,10 @@ export default function LoginScreen() {
     clientId: GOOGLE_WEB_CLIENT_ID,
   });
 
+  useEffect(() => {
+    console.log('Redirect URI is:', request?.redirectUri);
+  }, [request]);
+
   // Handle Google OAuth response
   useEffect(() => {
     if (response?.type === 'success') {

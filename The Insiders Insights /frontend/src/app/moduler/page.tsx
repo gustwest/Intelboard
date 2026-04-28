@@ -1,11 +1,12 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import { Ruler, Plus, Lightbulb } from 'lucide-react';
 import Gauge from '../../components/Gauge';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
-  bg: '#0f0e12', card: '#151218', border: 'rgba(255,255,255,0.08)',
-  accent: '#b14ef4', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
+  bg: 'var(--brand-bg)', card: 'var(--brand-surface)', border: 'rgba(255,255,255,0.08)',
+  accent: 'var(--brand-accent)', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
   text: '#f8fafc', muted: 'rgba(255,255,255,0.5)', dim: 'rgba(255,255,255,0.3)',
 };
 
@@ -49,13 +50,15 @@ export default function ModulesPage() {
     <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px 60px', fontFamily: "var(--brand-font-sans)", color: C.text }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 600, letterSpacing: '-0.02em', margin: 0 }}>📐 Moduler</h1>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 600, letterSpacing: '-0.02em', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Ruler size={24} className="brand-text-accent" /> Moduler
+          </h1>
           <p style={{ fontSize: '0.8125rem', color: C.muted, margin: '4px 0 0' }}>
             Globala mallar som kan klonas per kund, eller direkt kund-specifika moduler.
           </p>
         </div>
-        <button onClick={() => setCreating(true)} style={btn('accent')} disabled={sources.length === 0}>
-          + Ny modul
+        <button onClick={() => setCreating(true)} className="brand-btn-primary" disabled={sources.length === 0} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Plus size={16} /> Ny modul
         </button>
       </div>
 
@@ -65,9 +68,9 @@ export default function ModulesPage() {
         {(['all', 'global', 'customer'] as Filter[]).map(f => (
           <button key={f} onClick={() => setFilter(f)} style={{
             padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-            background: filter === f ? 'rgba(177,78,244,0.15)' : 'transparent',
+            background: filter === f ? 'rgba(0,212,255,0.15)' : 'transparent',
             color: filter === f ? C.accent : C.muted,
-            border: `1px solid ${filter === f ? 'rgba(177,78,244,0.3)' : C.border}`,
+            border: `1px solid ${filter === f ? 'rgba(0,212,255,0.3)' : C.border}`,
           }}>
             {f === 'all' ? 'Alla' : f === 'global' ? 'Globala mallar' : 'Kund-specifika'}
           </button>
@@ -82,8 +85,9 @@ export default function ModulesPage() {
       </div>
 
       {sources.length === 0 && (
-        <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 12, padding: 16, marginBottom: 20, fontSize: 13 }}>
-          💡 Du behöver minst en datakälla innan du kan skapa moduler. <a href="/sources" style={{ color: C.accent }}>Gå till Källor →</a>
+        <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 12, padding: 16, marginBottom: 20, fontSize: 13, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Lightbulb size={16} color="#f59e0b" /> 
+          <span>Du behöver minst en datakälla innan du kan skapa moduler. <a href="/sources" style={{ color: C.accent }}>Gå till Källor →</a></span>
         </div>
       )}
 
@@ -128,7 +132,7 @@ function ModuleCard({ module: m, customers, onOpen, onChanged }: { module: Modul
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 18, position: 'relative' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
         <h3 style={{ margin: 0, fontSize: 15, cursor: 'pointer' }} onClick={onOpen}>{m.name}</h3>
-        <span style={{ fontSize: 11, color: C.accent, fontWeight: 700, padding: '2px 8px', borderRadius: 12, background: 'rgba(177,78,244,0.1)' }}>{m.abbr}</span>
+        <span style={{ fontSize: 11, color: C.accent, fontWeight: 700, padding: '2px 8px', borderRadius: 12, background: 'rgba(0,212,255,0.1)' }}>{m.abbr}</span>
       </div>
       <div style={{ fontSize: 11, color: C.dim, marginBottom: 10 }}>
         {isGlobal ? <span style={{ color: C.muted, fontWeight: 600 }}>GLOBAL MALL</span>
@@ -141,7 +145,7 @@ function ModuleCard({ module: m, customers, onOpen, onChanged }: { module: Modul
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
         {m.field_refs.map(ref => (
-          <span key={ref.id} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 10, background: 'rgba(177,78,244,0.08)', color: C.accent }}>
+          <span key={ref.id} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 10, background: 'rgba(0,212,255,0.08)', color: C.accent }}>
             {ref.alias}={ref.field_key}
           </span>
         ))}
@@ -411,7 +415,7 @@ function ModuleEditor({ module, sources, customers, onClose, onSaved }: { module
         </div>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-          <button onClick={save} style={btn('accent')}>{isNew ? 'Skapa modul' : 'Spara ändringar'}</button>
+          <button onClick={save} className="brand-btn-primary" style={{ padding: '8px 16px', fontSize: '13px' }}>{isNew ? 'Skapa modul' : 'Spara ändringar'}</button>
           {!isNew && <button onClick={testEval} style={btn('ghost')}>Testa mot kunder</button>}
         </div>
 
@@ -447,7 +451,7 @@ const inp: React.CSSProperties = { width: '100%', padding: '9px 12px', borderRad
 
 function btn(kind: 'accent' | 'ghost' | 'danger'): React.CSSProperties {
   const base: React.CSSProperties = { padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: '1px solid transparent', fontFamily: 'inherit' };
-  if (kind === 'accent') return { ...base, background: C.accent, color: '#fff' };
+  if (kind === 'accent') return { ...base, background: 'linear-gradient(135deg, var(--brand-accent), var(--brand-accent-hover))', color: '#fff' };
   if (kind === 'danger') return { ...base, background: 'rgba(239,68,68,0.12)', color: C.danger, borderColor: 'rgba(239,68,68,0.3)' };
   return { ...base, background: 'transparent', color: C.muted, borderColor: C.border };
 }

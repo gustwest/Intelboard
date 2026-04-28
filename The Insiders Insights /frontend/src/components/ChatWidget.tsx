@@ -352,10 +352,10 @@ export default function ChatWidget() {
           style={{
             position: 'fixed', bottom: '88px', left: '24px',
             width: '52px', height: '52px', borderRadius: '50%',
-            background: 'linear-gradient(135deg, #b14ef4, #9500b3)',
+            background: 'linear-gradient(135deg, var(--brand-accent), var(--brand-accent-hover))',
             border: 'none', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 24px rgba(177,78,244,0.4)',
+            boxShadow: '0 4px 24px rgba(0,212,255,0.4)',
             zIndex: 100000, transition: 'all 0.2s',
             fontSize: '1.375rem', color: '#fff',
           }}
@@ -368,7 +368,7 @@ export default function ChatWidget() {
               background: '#ef4444', fontSize: '0.6875rem',
               fontWeight: 700, color: '#fff',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              border: '2px solid #151218',
+              border: '2px solid var(--brand-surface)',
             }}>
               {totalUnread > 99 ? '99+' : totalUnread}
             </span>
@@ -383,7 +383,7 @@ export default function ChatWidget() {
     width: '380px', height: '540px',
     borderRadius: '20px', overflow: 'hidden',
     display: 'flex', flexDirection: 'column',
-    background: '#151218',
+    background: 'var(--brand-surface)',
     border: '1px solid rgba(255,255,255,0.08)',
     boxShadow: '0 12px 60px rgba(0,0,0,0.6)',
     zIndex: 100000,
@@ -420,7 +420,7 @@ export default function ChatWidget() {
                 onClick={() => setView('create')}
                 style={{
                   marginTop: '16px', padding: '10px 20px', borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #b14ef4, #9500b3)',
+                  background: 'linear-gradient(135deg, var(--brand-accent), var(--brand-accent-hover))',
                   border: 'none', color: '#fff', fontWeight: 600, fontSize: '0.8125rem',
                   cursor: 'pointer',
                 }}
@@ -446,7 +446,7 @@ export default function ChatWidget() {
                 >
                   <span style={{
                     width: '42px', height: '42px', borderRadius: '50%',
-                    background: 'rgba(177,78,244,0.15)',
+                    background: 'rgba(0,212,255,0.15)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: '1.25rem', flexShrink: 0,
                   }}>
@@ -518,8 +518,8 @@ export default function ChatWidget() {
                 onClick={() => setNewGroupEmoji(e)}
                 style={{
                   width: '40px', height: '40px', borderRadius: '10px', fontSize: '1.125rem',
-                  border: newGroupEmoji === e ? '2px solid #b14ef4' : '1px solid rgba(255,255,255,0.06)',
-                  background: newGroupEmoji === e ? 'rgba(177,78,244,0.15)' : 'rgba(255,255,255,0.03)',
+                  border: newGroupEmoji === e ? '2px solid var(--brand-accent)' : '1px solid rgba(255,255,255,0.06)',
+                  background: newGroupEmoji === e ? 'rgba(0,212,255,0.15)' : 'rgba(255,255,255,0.03)',
                   cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}
               >
@@ -553,8 +553,8 @@ export default function ChatWidget() {
                   style={{
                     display: 'flex', alignItems: 'center', gap: '10px',
                     padding: '10px 14px', borderRadius: '12px',
-                    border: selected ? '1px solid rgba(177,78,244,0.3)' : '1px solid rgba(255,255,255,0.06)',
-                    background: selected ? 'rgba(177,78,244,0.12)' : 'rgba(255,255,255,0.03)',
+                    border: selected ? '1px solid rgba(0,212,255,0.3)' : '1px solid rgba(255,255,255,0.06)',
+                    background: selected ? 'rgba(0,212,255,0.12)' : 'rgba(255,255,255,0.03)',
                     cursor: 'pointer', color: '#e2e8f0', fontSize: '0.8125rem',
                     width: '100%', textAlign: 'left', fontFamily: 'inherit',
                   }}
@@ -567,7 +567,7 @@ export default function ChatWidget() {
                     {u.name[0]}
                   </span>
                   <span style={{ flex: 1, fontWeight: 600 }}>{u.name}</span>
-                  {selected && <span style={{ color: '#b14ef4' }}>✓</span>}
+                  {selected && <span style={{ color: 'var(--brand-accent)' }}>✓</span>}
                 </button>
               );
             })}
@@ -582,7 +582,7 @@ export default function ChatWidget() {
             style={{
               width: '100%', padding: '12px', borderRadius: '12px',
               background: newGroupName.trim() && newGroupMembers.length > 0
-                ? 'linear-gradient(135deg, #b14ef4, #9500b3)' : 'rgba(255,255,255,0.05)',
+                ? 'linear-gradient(135deg, var(--brand-accent), var(--brand-accent-hover))' : 'rgba(255,255,255,0.05)',
               border: 'none', color: '#fff', fontWeight: 600, fontSize: '0.875rem',
               cursor: 'pointer', transition: 'all 0.15s',
               opacity: !newGroupName.trim() || newGroupMembers.length === 0 ? 0.4 : 1,
@@ -651,9 +651,9 @@ export default function ChatWidget() {
                       padding: '8px 12px',
                       borderRadius: isMe ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
                       background: isMe
-                        ? 'linear-gradient(135deg, rgba(177,78,244,0.25), rgba(124,58,237,0.2))'
+                        ? 'linear-gradient(135deg, rgba(0,212,255,0.25), rgba(124,58,237,0.2))'
                         : 'rgba(255,255,255,0.05)',
-                      border: isMe ? '1px solid rgba(177,78,244,0.2)' : '1px solid rgba(255,255,255,0.04)',
+                      border: isMe ? '1px solid rgba(0,212,255,0.2)' : '1px solid rgba(255,255,255,0.04)',
                     }}>
                       {msg.body && (
                         <div style={{ fontSize: '0.8125rem', lineHeight: 1.5, color: '#e2e8f0', whiteSpace: 'pre-wrap' }}>
@@ -700,9 +700,9 @@ export default function ChatWidget() {
                             style={{
                               padding: '2px 6px', borderRadius: '10px', fontSize: '0.6875rem',
                               border: currentUser && users.includes(currentUser.name)
-                                ? '1px solid rgba(177,78,244,0.4)' : '1px solid rgba(255,255,255,0.08)',
+                                ? '1px solid rgba(0,212,255,0.4)' : '1px solid rgba(255,255,255,0.08)',
                               background: currentUser && users.includes(currentUser.name)
-                                ? 'rgba(177,78,244,0.15)' : 'rgba(255,255,255,0.04)',
+                                ? 'rgba(0,212,255,0.15)' : 'rgba(255,255,255,0.04)',
                               cursor: 'pointer', color: '#e2e8f0',
                               display: 'flex', alignItems: 'center', gap: '3px',
                             }}
@@ -782,7 +782,7 @@ export default function ChatWidget() {
             disabled={!input.trim() || sending}
             style={{
               ...actionBtnStyle,
-              background: input.trim() ? 'linear-gradient(135deg, #b14ef4, #9500b3)' : 'rgba(255,255,255,0.05)',
+              background: input.trim() ? 'linear-gradient(135deg, var(--brand-accent), var(--brand-accent-hover))' : 'rgba(255,255,255,0.05)',
               opacity: !input.trim() || sending ? 0.4 : 1,
             }}
           >

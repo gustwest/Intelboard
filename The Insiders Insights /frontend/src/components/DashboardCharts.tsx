@@ -4,16 +4,17 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, Legend, PieChart, Pie, Cell,
 } from 'recharts';
+import { Eye, MousePointerClick, MessageCircle, Heart, MessageSquare, Repeat, Calendar, TrendingUp, BarChart2, PieChart as PieChartIcon, Sparkles, Loader2 } from 'lucide-react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 const C = {
-  bg: '#0f0e12', card: '#151218', border: 'rgba(255,255,255,0.08)',
-  accent: '#b14ef4', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
+  bg: 'var(--brand-bg)', card: 'var(--brand-surface)', border: 'rgba(255,255,255,0.08)',
+  accent: 'var(--brand-accent)', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
   text: '#f8fafc', muted: 'rgba(255,255,255,0.5)', dim: 'rgba(255,255,255,0.3)',
 };
 
-const CHART_COLORS = ['#b14ef4', '#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#ec4899', '#06b6d4', '#a855f7'];
+const CHART_COLORS = ['var(--brand-accent)', '#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#ec4899', '#06b6d4', '#a855f7'];
 
 type DashboardData = {
   customer_id: string;
@@ -33,7 +34,7 @@ function formatNumber(n: number): string {
   return n.toFixed(0);
 }
 
-function StatCard({ label, value, icon, color }: { label: string; value: string; icon: string; color: string }) {
+function StatCard({ label, value, icon, color }: { label: string; value: string; icon: React.ReactNode; color: string }) {
   return (
     <div style={{
       background: `linear-gradient(135deg, ${color}12, ${color}06)`,
@@ -46,7 +47,7 @@ function StatCard({ label, value, icon, color }: { label: string; value: string;
       onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 18 }}>{icon}</span>
+        <span style={{ display: 'flex', alignItems: 'center', color: color }}>{icon}</span>
         <span style={{ fontSize: 11, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>{label}</span>
       </div>
       <div style={{ fontSize: 24, fontWeight: 800, color, letterSpacing: '-0.03em' }}>{value}</div>
@@ -113,7 +114,9 @@ export default function DashboardCharts({ customerId }: { customerId: string }) 
         background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 40,
         textAlign: 'center', color: C.muted, marginBottom: 20,
       }}>
-        <div style={{ fontSize: 28, marginBottom: 8, animation: 'pulse 1.5s infinite' }}>📊</div>
+        <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}>
+          <Loader2 size={32} className="brand-text-accent" style={{ animation: 'spin 2s linear infinite' }} />
+        </div>
         <div>Laddar dashboard-data...</div>
       </div>
     );
@@ -132,7 +135,7 @@ export default function DashboardCharts({ customerId }: { customerId: string }) 
     },
     engagement: {
       keys: ['reactions', 'comments', 'shares'],
-      colors: ['#b14ef4', '#f59e0b', '#ec4899'],
+      colors: ['var(--brand-accent)', '#f59e0b', '#ec4899'],
       labels: ['Reaktioner', 'Kommentarer', 'Delningar'],
     },
     spend: {
@@ -151,7 +154,9 @@ export default function DashboardCharts({ customerId }: { customerId: string }) 
         background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '14px 18px',
         display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
       }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>📅 Datumfilter</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: C.text, display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Calendar size={16} className="brand-text-accent" /> Datumfilter
+        </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <label style={{ fontSize: 11, color: C.muted }}>Från:</label>
           <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
@@ -178,12 +183,12 @@ export default function DashboardCharts({ customerId }: { customerId: string }) 
 
       {/* KPI stat cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}>
-        <StatCard label="Impressions" value={formatNumber(stats.impressions || 0)} icon="👁️" color="#3b82f6" />
-        <StatCard label="Klick" value={formatNumber(stats.clicks || 0)} icon="🖱️" color="#22c55e" />
-        <StatCard label="Engagemang" value={formatNumber(stats['total-engagements'] || 0)} icon="💬" color="#b14ef4" />
-        <StatCard label="Reaktioner" value={formatNumber(stats.reactions || 0)} icon="❤️" color="#ec4899" />
-        <StatCard label="Kommentarer" value={formatNumber(stats.comments || 0)} icon="💭" color="#f59e0b" />
-        <StatCard label="Delningar" value={formatNumber(stats.shares || 0)} icon="🔄" color="#06b6d4" />
+        <StatCard label="Impressions" value={formatNumber(stats.impressions || 0)} icon={<Eye size={18} />} color="#3b82f6" />
+        <StatCard label="Klick" value={formatNumber(stats.clicks || 0)} icon={<MousePointerClick size={18} />} color="#22c55e" />
+        <StatCard label="Engagemang" value={formatNumber(stats['total-engagements'] || 0)} icon={<MessageCircle size={18} />} color="var(--brand-accent)" />
+        <StatCard label="Reaktioner" value={formatNumber(stats.reactions || 0)} icon={<Heart size={18} />} color="#ec4899" />
+        <StatCard label="Kommentarer" value={formatNumber(stats.comments || 0)} icon={<MessageSquare size={18} />} color="#f59e0b" />
+        <StatCard label="Delningar" value={formatNumber(stats.shares || 0)} icon={<Repeat size={18} />} color="#06b6d4" />
       </div>
 
       {/* Charts area */}
@@ -191,7 +196,9 @@ export default function DashboardCharts({ customerId }: { customerId: string }) 
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20 }}>
           {/* Chart toggle */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>📈 Trender per månad</h3>
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <TrendingUp size={16} className="brand-text-accent" /> Trender per månad
+            </h3>
             <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: 3 }}>
               {[
                 { key: 'impressions' as const, label: 'Räckvidd' },
@@ -202,9 +209,9 @@ export default function DashboardCharts({ customerId }: { customerId: string }) 
                   padding: '6px 14px', borderRadius: 8, fontSize: 11, fontWeight: 600,
                   cursor: 'pointer', border: '1px solid transparent', fontFamily: 'inherit',
                   transition: 'all 0.15s',
-                  background: activeChart === tab.key ? 'rgba(177,78,244,0.15)' : 'transparent',
+                  background: activeChart === tab.key ? 'rgba(0,212,255,0.15)' : 'transparent',
                   color: activeChart === tab.key ? C.accent : C.muted,
-                  borderColor: activeChart === tab.key ? 'rgba(177,78,244,0.3)' : 'transparent',
+                  borderColor: activeChart === tab.key ? 'rgba(0,212,255,0.3)' : 'transparent',
                 }}>{tab.label}</button>
               ))}
             </div>
@@ -253,7 +260,9 @@ export default function DashboardCharts({ customerId }: { customerId: string }) 
         {/* Bar chart - source breakdown */}
         {data.source_breakdown.length > 0 && (
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20 }}>
-            <h3 style={{ margin: '0 0 16px 0', fontSize: 14, fontWeight: 700 }}>📊 Per källa</h3>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <BarChart2 size={16} className="brand-text-accent" /> Per källa
+            </h3>
             <ResponsiveContainer width="100%" height={Math.max(200, data.source_breakdown.length * 35)}>
               <BarChart data={data.source_breakdown} layout="vertical" margin={{ left: 120, right: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
@@ -270,7 +279,9 @@ export default function DashboardCharts({ customerId }: { customerId: string }) 
         {/* Pie chart */}
         {pieData.length > 0 && (
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20 }}>
-            <h3 style={{ margin: '0 0 16px 0', fontSize: 14, fontWeight: 700 }}>🎯 Impressions-fördelning</h3>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <PieChartIcon size={16} className="brand-text-accent" /> Impressions-fördelning
+            </h3>
             <ResponsiveContainer width="100%" height={220}>
               <PieChart>
                 <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80}
@@ -292,17 +303,19 @@ export default function DashboardCharts({ customerId }: { customerId: string }) 
       {/* AI Insights summary */}
       {data.ai_summaries.length > 0 && (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20 }}>
-          <h3 style={{ margin: '0 0 16px 0', fontSize: 14, fontWeight: 700 }}>✨ AI-insikter</h3>
+          <h3 style={{ margin: '0 0 16px 0', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Sparkles size={16} className="brand-text-accent" /> AI-insikter
+          </h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: 12 }}>
             {data.ai_summaries.slice(0, 6).map((s, i) => (
               <div key={i} style={{
-                background: 'rgba(177,78,244,0.04)', border: '1px solid rgba(177,78,244,0.12)',
+                background: 'rgba(0,212,255,0.04)', border: '1px solid rgba(0,212,255,0.12)',
                 borderRadius: 12, padding: 14,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                   <span style={{
                     fontSize: 10, padding: '2px 8px', borderRadius: 6,
-                    background: 'rgba(177,78,244,0.15)', color: C.accent, fontWeight: 700,
+                    background: 'rgba(0,212,255,0.15)', color: C.accent, fontWeight: 700,
                   }}>{s.source_name}</span>
                   <span style={{ fontSize: 11, color: C.dim }}>{s.row_count} rader</span>
                 </div>

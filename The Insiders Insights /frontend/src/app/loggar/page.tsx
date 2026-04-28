@@ -1,10 +1,11 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { Terminal, RefreshCw, Trash2 } from 'lucide-react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
-  bg: '#0f0e12', card: '#151218', border: 'rgba(255,255,255,0.08)',
-  accent: '#b14ef4', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
+  bg: 'var(--brand-bg)', card: 'var(--brand-surface)', border: 'rgba(255,255,255,0.08)',
+  accent: 'var(--brand-accent)', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444',
   text: '#f8fafc', muted: 'rgba(255,255,255,0.5)', dim: 'rgba(255,255,255,0.3)',
 };
 
@@ -59,7 +60,9 @@ export default function LogsPage() {
   return (
     <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 24px 60px', fontFamily: "var(--brand-font-sans)", color: C.text }}>
       <div style={{ marginBottom: 16 }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 600, letterSpacing: '-0.02em', margin: 0 }}>🪵 Loggar</h1>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 600, letterSpacing: '-0.02em', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Terminal size={24} className="brand-text-accent" /> Loggar
+        </h1>
         <p style={{ fontSize: '0.8125rem', color: C.muted, margin: '4px 0 0' }}>
           Senaste händelser från backend (in-memory, senaste 1000). Varje rad är ett strukturerat event.
         </p>
@@ -76,8 +79,8 @@ export default function LogsPage() {
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.muted }}>
           <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} /> Auto (2.5s)
         </label>
-        <button onClick={fetchLogs} style={btn('ghost')}>↻</button>
-        <button onClick={clearLogs} style={btn('danger')}>Rensa</button>
+        <button onClick={fetchLogs} style={{ ...btn('ghost'), display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Uppdatera"><RefreshCw size={16} /></button>
+        <button onClick={clearLogs} style={{ ...btn('danger'), display: 'flex', alignItems: 'center', gap: '6px' }}><Trash2 size={16} /> Rensa</button>
       </div>
 
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
@@ -119,7 +122,7 @@ const inp: React.CSSProperties = { padding: '8px 12px', borderRadius: 8, backgro
 
 function btn(kind: 'accent' | 'ghost' | 'danger'): React.CSSProperties {
   const base: React.CSSProperties = { padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: '1px solid transparent', fontFamily: 'inherit' };
-  if (kind === 'accent') return { ...base, background: C.accent, color: '#fff' };
+  if (kind === 'accent') return { ...base, background: 'linear-gradient(135deg, var(--brand-accent), var(--brand-accent-hover))', color: '#fff' };
   if (kind === 'danger') return { ...base, background: 'rgba(239,68,68,0.12)', color: C.danger, borderColor: 'rgba(239,68,68,0.3)' };
   return { ...base, background: 'transparent', color: C.muted, borderColor: C.border };
 }

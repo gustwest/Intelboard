@@ -11,7 +11,7 @@ type Props = {
   label?: string;
 };
 
-const ACCENT = '#b14ef4';
+const ACCENT = 'var(--brand-accent)';
 const RED = '#ef4444';
 const YELLOW = '#f59e0b';
 const GREEN = '#22c55e';
@@ -88,7 +88,7 @@ export default function Gauge({ value, thresholds = {}, inverted = false, unit =
     // final segment (to end of arc)
     segments.push({ from: prev, to: end, color: inverted ? RED : GREEN });
   } else {
-    segments.push({ from: start, to: end, color: 'rgba(177,78,244,0.25)' });
+    segments.push({ from: start, to: end, color: 'rgba(0,212,255,0.25)' });
   }
 
   const needleAngle = start + (end - start) * pct;

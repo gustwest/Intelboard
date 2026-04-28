@@ -24,12 +24,12 @@ function LoginContent() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #0f0e12 0%, #16141c 50%, #0f0e12 100%)',
+        background: 'linear-gradient(135deg, var(--brand-bg) 0%, var(--brand-surface) 50%, var(--brand-bg) 100%)',
       }}>
         <div style={{
           width: '32px', height: '32px',
-          border: '3px solid rgba(177,78,244,0.2)',
-          borderTop: '3px solid #b14ef4',
+          border: '3px solid rgba(0,212,255,0.2)',
+          borderTop: '3px solid var(--brand-accent)',
           borderRadius: '50%',
           animation: 'spin 0.8s linear infinite',
         }} />
@@ -43,7 +43,7 @@ function LoginContent() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'linear-gradient(135deg, #0f0e12 0%, #16141c 50%, #0f0e12 100%)',
+      background: 'linear-gradient(135deg, var(--brand-bg) 0%, var(--brand-surface) 50%, var(--brand-bg) 100%)',
       fontFamily: "var(--brand-font-sans)",
     }}>
       {/* Ambient glow */}
@@ -54,7 +54,7 @@ function LoginContent() {
         transform: 'translateX(-50%)',
         width: '500px',
         height: '400px',
-        background: 'radial-gradient(ellipse, rgba(177,78,244,0.08) 0%, transparent 70%)',
+        background: 'radial-gradient(ellipse, rgba(0,212,255,0.08) 0%, transparent 70%)',
         pointerEvents: 'none',
       }} />
 
@@ -73,7 +73,7 @@ function LoginContent() {
         <div style={{ marginBottom: '32px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.1 }}>
             <span style={{ fontSize: '1.5rem', fontWeight: 600, color: '#fff', letterSpacing: '-0.02em' }}>THE</span>
-            <span style={{ fontSize: '1.5rem', fontWeight: 600, color: '#b14ef4', letterSpacing: '-0.02em' }}>INSIDERS.</span>
+            <span style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--brand-accent)', letterSpacing: '-0.02em' }}>INSIDERS.</span>
           </div>
           <p style={{
             marginTop: '12px',
@@ -123,8 +123,8 @@ function LoginContent() {
             fontFamily: 'inherit',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(177,78,244,0.15)';
-            e.currentTarget.style.borderColor = 'rgba(177,78,244,0.3)';
+            e.currentTarget.style.background = 'rgba(0,212,255,0.15)';
+            e.currentTarget.style.borderColor = 'rgba(0,212,255,0.3)';
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
@@ -168,12 +168,12 @@ export default function LoginPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #0f0e12 0%, #16141c 50%, #0f0e12 100%)',
+        background: 'linear-gradient(135deg, var(--brand-bg) 0%, var(--brand-surface) 50%, var(--brand-bg) 100%)',
       }}>
         <div style={{
           width: '32px', height: '32px',
-          border: '3px solid rgba(177,78,244,0.2)',
-          borderTop: '3px solid #b14ef4',
+          border: '3px solid rgba(0,212,255,0.2)',
+          borderTop: '3px solid var(--brand-accent)',
           borderRadius: '50%',
           animation: 'spin 0.8s linear infinite',
         }} />

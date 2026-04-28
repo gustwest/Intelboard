@@ -15,7 +15,7 @@ type Props = {
   unit?: string;
 };
 
-const PALETTE = ['#b14ef4', '#22c55e', '#f59e0b', '#ef4444', '#3b82f6', '#ec4899', '#14b8a6', '#a855f7'];
+const PALETTE = ['var(--brand-accent)', '#22c55e', '#f59e0b', '#ef4444', '#3b82f6', '#ec4899', '#14b8a6', '#a855f7'];
 const BORDER = 'rgba(255,255,255,0.08)';
 const MUTED = 'rgba(255,255,255,0.5)';
 const DIM = 'rgba(255,255,255,0.25)';

@@ -1,6 +1,11 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { 
+  ClipboardList, Folder, Bot, Search, Plus, X, Image as ImageIcon, 
+  MessageSquare, Download, Trash2, CheckCircle2, CircleDashed, 
+  ArrowUpCircle, PlayCircle, Loader2, Send, Upload, Info
+} from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -39,11 +44,11 @@ interface UploadedFile {
 }
 
 const COLUMNS = [
-  { key: 'NY', label: 'Ny', emoji: '🆕', color: '#58a6ff' },
-  { key: 'PRIORITERAD', label: 'Prioriterad', emoji: '⭐', color: '#f97316' },
-  { key: 'PAGAR', label: 'Pågår', emoji: '🔨', color: '#eab308' },
-  { key: 'VERIFIERING', label: 'Verifiering', emoji: '🔍', color: '#b14ef4' },
-  { key: 'KLAR', label: 'Klar', emoji: '🎉', color: '#22c55e' },
+  { key: 'NY', label: 'Ny', icon: CircleDashed, color: '#58a6ff' },
+  { key: 'PRIORITERAD', label: 'Prioriterad', icon: ArrowUpCircle, color: '#f97316' },
+  { key: 'PAGAR', label: 'Pågår', icon: PlayCircle, color: '#eab308' },
+  { key: 'VERIFIERING', label: 'Verifiering', icon: Search, color: 'var(--brand-accent)' },
+  { key: 'KLAR', label: 'Klar', icon: CheckCircle2, color: '#22c55e' },
 ] as const;
 
 const FILE_CATEGORIES = [
@@ -66,7 +71,7 @@ export default function AdminPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #0f0e12 0%, #16141c 50%, #0f0e12 100%)',
+      background: 'linear-gradient(135deg, var(--brand-bg) 0%, var(--brand-surface) 50%, var(--brand-bg) 100%)',
       color: '#e2e8f0',
       fontFamily: "var(--brand-font-sans)",
     }}>
@@ -77,9 +82,9 @@ export default function AdminPage() {
         display: 'flex',
         gap: '4px',
       }}>
-        <TabButton active={activeTab === 'kanban'} onClick={() => setActiveTab('kanban')} emoji="📋" label="Ärenden" />
-        <TabButton active={activeTab === 'files'} onClick={() => setActiveTab('files')} emoji="📁" label="Filer" />
-        <TabButton active={activeTab === 'agent'} onClick={() => setActiveTab('agent')} emoji="🤖" label="AI Agent" />
+        <TabButton active={activeTab === 'kanban'} onClick={() => setActiveTab('kanban')} icon={ClipboardList} label="Ärenden" />
+        <TabButton active={activeTab === 'files'} onClick={() => setActiveTab('files')} icon={Folder} label="Filer" />
+        <TabButton active={activeTab === 'agent'} onClick={() => setActiveTab('agent')} icon={Bot} label="AI Agent" />
       </div>
 
       <main style={{ padding: '24px 32px' }}>
@@ -91,23 +96,23 @@ export default function AdminPage() {
   );
 }
 
-function TabButton({ active, onClick, emoji, label }: { active: boolean; onClick: () => void; emoji: string; label: string }) {
+function TabButton({ active, onClick, icon: Icon, label }: { active: boolean; onClick: () => void; icon: any; label: string }) {
   return (
     <button
       onClick={onClick}
       style={{
         padding: '8px 16px',
         borderRadius: '10px',
-        border: active ? '1px solid rgba(177,78,244,0.4)' : '1px solid transparent',
-        background: active ? 'rgba(177,78,244,0.15)' : 'transparent',
-        color: active ? '#b14ef4' : 'rgba(255,255,255,0.5)',
+        border: active ? '1px solid rgba(0,212,255,0.4)' : '1px solid transparent',
+        background: active ? 'rgba(0,212,255,0.15)' : 'transparent',
+        color: active ? 'var(--brand-accent)' : 'rgba(255,255,255,0.5)',
         cursor: 'pointer',
         fontSize: '0.8125rem',
         fontWeight: 600,
         transition: 'all 0.2s',
       }}
     >
-      {emoji} {label}
+      <Icon size={16} /> {label}
     </button>
   );
 }
@@ -166,7 +171,7 @@ function KanbanTab() {
       {/* Header row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>📋 Ärendehantering</h2>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}><ClipboardList size={20} className="brand-text-accent" /> Ärendehantering</h2>
           <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: '999px' }}>
             {issues.length} ärenden
           </span>
@@ -183,11 +188,9 @@ function KanbanTab() {
               borderRadius: '10px', color: '#e2e8f0', outline: 'none',
             }}
           />
-          <button onClick={() => setShowNew(true)} style={{
-            padding: '8px 18px', background: 'linear-gradient(135deg, #b14ef4, #9500b3)',
-            color: 'white', border: 'none', borderRadius: '10px', fontWeight: 600,
-            fontSize: '0.8125rem', cursor: 'pointer',
-          }}>+ Nytt ärende</button>
+          <button onClick={() => setShowNew(true)} className="brand-btn-primary" style={{ padding: '8px 18px', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Plus size={16} /> Nytt ärende
+          </button>
         </div>
       </div>
 
@@ -205,8 +208,8 @@ function KanbanTab() {
             onDragLeave={() => setDropTarget(null)}
             onDrop={e => { e.preventDefault(); handleDrop(col.key); }}
             style={{
-              background: dropTarget === col.key ? 'rgba(177,78,244,0.08)' : 'rgba(255,255,255,0.02)',
-              border: `1px solid ${dropTarget === col.key ? 'rgba(177,78,244,0.3)' : 'rgba(255,255,255,0.04)'}`,
+              background: dropTarget === col.key ? 'rgba(0,212,255,0.08)' : 'rgba(255,255,255,0.02)',
+              border: `1px solid ${dropTarget === col.key ? 'rgba(0,212,255,0.3)' : 'rgba(255,255,255,0.04)'}`,
               borderRadius: '16px', padding: '12px', transition: 'all 0.2s',
             }}
           >
@@ -214,7 +217,7 @@ function KanbanTab() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', padding: '0 4px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: col.color }} />
-                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{col.emoji} {col.label}</span>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}><col.icon size={14} /> {col.label}</span>
               </div>
               <span style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.04)', padding: '2px 8px', borderRadius: '999px' }}>
                 {grouped[col.key]?.length || 0}
@@ -231,7 +234,7 @@ function KanbanTab() {
                   onDragEnd={() => { setDraggedId(null); setDropTarget(null); }}
                   onClick={() => setSelectedIssue(issue)}
                   style={{
-                    background: draggedId === issue.id ? 'rgba(177,78,244,0.1)' : 'rgba(0,0,0,0.2)',
+                    background: draggedId === issue.id ? 'rgba(0,212,255,0.1)' : 'rgba(0,0,0,0.2)',
                     border: '1px solid rgba(255,255,255,0.06)',
                     borderRadius: '12px', padding: '12px', cursor: 'grab',
                     opacity: draggedId === issue.id ? 0.5 : 1,
@@ -251,12 +254,12 @@ function KanbanTab() {
                     <div style={{ display: 'flex', gap: '6px' }}>
                       {issue.images.length > 0 && (
                         <span style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', color: 'rgba(255,255,255,0.3)' }}>
-                          🖼 {issue.images.length}
+                          <ImageIcon size={12} /> {issue.images.length}
                         </span>
                       )}
                       {issue.comments.length > 0 && (
                         <span style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', color: 'rgba(255,255,255,0.3)' }}>
-                          💬 {issue.comments.length}
+                          <MessageSquare size={12} /> {issue.comments.length}
                         </span>
                       )}
                     </div>
@@ -312,9 +315,9 @@ function NewIssueModal({ onClose, onCreated }: { onClose: () => void; onCreated:
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#151218', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', width: '460px', maxWidth: '90vw', padding: '24px' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--brand-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', width: '460px', maxWidth: '90vw', padding: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-          <h2 style={{ fontSize: '1.125rem', margin: 0 }}>🆕 Nytt ärende</h2>
+          <h2 style={{ fontSize: '1.125rem', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}><Plus size={20} className="brand-text-accent"/> Nytt ärende</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1.125rem' }}>✕</button>
         </div>
         <input type="text" placeholder="Titel *" value={title} onChange={e => setTitle(e.target.value)} autoFocus
@@ -325,9 +328,8 @@ function NewIssueModal({ onClose, onCreated }: { onClose: () => void; onCreated:
         />
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
           <button onClick={onClose} style={{ padding: '8px 18px', background: 'rgba(255,255,255,0.05)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', cursor: 'pointer' }}>Avbryt</button>
-          <button onClick={handleSubmit} disabled={isSubmitting || !title.trim() || !description.trim()}
-            style={{ padding: '8px 18px', background: 'linear-gradient(135deg, #b14ef4, #9500b3)', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 600, cursor: 'pointer', opacity: isSubmitting || !title.trim() || !description.trim() ? 0.5 : 1 }}>
-            {isSubmitting ? 'Skapar...' : '🚀 Skapa ärende'}
+          <button onClick={handleSubmit} disabled={isSubmitting || !title.trim() || !description.trim()} className="brand-btn-primary" style={{ padding: '8px 18px', display: 'flex', alignItems: 'center', gap: '6px', opacity: isSubmitting || !title.trim() || !description.trim() ? 0.5 : 1 }}>
+            {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} {isSubmitting ? 'Skapar...' : 'Skapa ärende'}
           </button>
         </div>
       </div>
@@ -385,7 +387,7 @@ function IssueDetailModal({ issue, onClose, onDeleted }: { issue: KanbanIssue; o
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-        <div onClick={e => e.stopPropagation()} style={{ background: '#151218', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', width: '680px', maxWidth: '90vw', maxHeight: '85vh', overflow: 'auto', padding: '24px' }}>
+        <div onClick={e => e.stopPropagation()} style={{ background: 'var(--brand-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', width: '680px', maxWidth: '90vw', maxHeight: '85vh', overflow: 'auto', padding: '24px' }}>
           {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
             <h2 style={{ fontSize: '1.125rem', margin: 0, lineHeight: 1.3 }}>{currentIssue.title}</h2>
@@ -396,12 +398,12 @@ function IssueDetailModal({ issue, onClose, onDeleted }: { issue: KanbanIssue; o
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
             <select value={currentIssue.status} onChange={e => handleStatusChange(e.target.value)}
               style={{ padding: '6px 12px', background: 'rgba(0,0,0,0.3)', border: `1px solid ${currentCol?.color || '#58a6ff'}`, borderRadius: '8px', color: currentCol?.color || '#e2e8f0', fontSize: '0.8125rem', cursor: 'pointer', outline: 'none' }}>
-              {COLUMNS.map(col => <option key={col.key} value={col.key}>{col.emoji} {col.label}</option>)}
+              {COLUMNS.map(col => <option key={col.key} value={col.key}>{col.label}</option>)}
             </select>
             <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)' }}>
               Skapad {new Date(currentIssue.createdAt).toLocaleString('sv-SE')}
             </span>
-            <button onClick={handleDelete} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#f85149', cursor: 'pointer', fontSize: '0.75rem' }}>🗑 Radera</button>
+            <button onClick={handleDelete} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#f85149', cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}><Trash2 size={14} /> Radera</button>
           </div>
 
           {/* Description */}
@@ -436,7 +438,7 @@ function IssueDetailModal({ issue, onClose, onDeleted }: { issue: KanbanIssue; o
               {currentIssue.comments.map(c => (
                 <div key={c.id} style={{ background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.04)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#b14ef4' }}>{c.author}</span>
+                    <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--brand-accent)' }}>{c.author}</span>
                     <span style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.25)' }}>{new Date(c.createdAt).toLocaleString('sv-SE')}</span>
                   </div>
                   <div style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.7)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{c.body}</div>
@@ -456,9 +458,8 @@ function IssueDetailModal({ issue, onClose, onDeleted }: { issue: KanbanIssue; o
               />
               <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.2)' }}>⌘+Enter</span>
-                <button onClick={handleComment} disabled={isSubmitting || !commentText.trim()}
-                  style={{ padding: '6px 14px', background: 'linear-gradient(135deg, #b14ef4, #9500b3)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, fontSize: '0.8125rem', cursor: 'pointer', opacity: isSubmitting || !commentText.trim() ? 0.5 : 1 }}>
-                  {isSubmitting ? 'Skickar...' : 'Kommentera'}
+                <button onClick={handleComment} disabled={isSubmitting || !commentText.trim()} className="brand-btn-primary" style={{ padding: '6px 14px', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '6px', opacity: isSubmitting || !commentText.trim() ? 0.5 : 1 }}>
+                  {isSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} {isSubmitting ? 'Skickar...' : 'Kommentera'}
                 </button>
               </div>
             </div>
@@ -541,7 +542,7 @@ function FilesTab() {
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', gap: '24px', flexWrap: 'wrap' }}>
         <div>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '0 0 4px' }}>📁 LinkedIn Data-filer</h2>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: '8px' }}><Folder size={20} className="brand-text-accent" /> LinkedIn Data-filer</h2>
           <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.8125rem', margin: 0 }}>
             Ladda upp CSV/Excel-exporter från LinkedIn. Filer kan laddas ned och köras i AntiGravity.
           </p>
@@ -550,7 +551,7 @@ function FilesTab() {
 
       {/* Upload zone */}
       <div style={{
-        background: 'rgba(177,78,244,0.04)', border: '2px dashed rgba(177,78,244,0.2)',
+        background: 'rgba(0,212,255,0.04)', border: '2px dashed rgba(0,212,255,0.2)',
         borderRadius: '16px', padding: '24px', marginBottom: '24px',
       }}>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
@@ -577,9 +578,8 @@ function FilesTab() {
               {FILE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
             </select>
           </div>
-          <button onClick={handleUpload} disabled={!selectedFile || uploading}
-            style={{ padding: '8px 20px', background: 'linear-gradient(135deg, #b14ef4, #9500b3)', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 600, fontSize: '0.8125rem', cursor: 'pointer', opacity: !selectedFile || uploading ? 0.5 : 1, whiteSpace: 'nowrap' }}>
-            {uploading ? 'Laddar upp...' : '📤 Ladda upp'}
+          <button onClick={handleUpload} disabled={!selectedFile || uploading} className="brand-btn-primary" style={{ padding: '8px 20px', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '6px', opacity: !selectedFile || uploading ? 0.5 : 1, whiteSpace: 'nowrap' }}>
+            {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />} {uploading ? 'Laddar upp...' : 'Ladda upp'}
           </button>
         </div>
       </div>
@@ -588,12 +588,12 @@ function FilesTab() {
       {categories.length > 0 && (
         <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', flexWrap: 'wrap' }}>
           <button onClick={() => setFilterCategory('')}
-            style={{ padding: '4px 12px', borderRadius: '999px', border: !filterCategory ? '1px solid rgba(177,78,244,0.4)' : '1px solid rgba(255,255,255,0.06)', background: !filterCategory ? 'rgba(177,78,244,0.1)' : 'rgba(255,255,255,0.03)', color: !filterCategory ? '#b14ef4' : 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: '0.75rem' }}>
+            style={{ padding: '4px 12px', borderRadius: '999px', border: !filterCategory ? '1px solid rgba(0,212,255,0.4)' : '1px solid rgba(255,255,255,0.06)', background: !filterCategory ? 'rgba(0,212,255,0.1)' : 'rgba(255,255,255,0.03)', color: !filterCategory ? 'var(--brand-accent)' : 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: '0.75rem' }}>
             Alla ({files.length})
           </button>
           {categories.map(cat => (
             <button key={cat} onClick={() => setFilterCategory(cat)}
-              style={{ padding: '4px 12px', borderRadius: '999px', border: filterCategory === cat ? '1px solid rgba(177,78,244,0.4)' : '1px solid rgba(255,255,255,0.06)', background: filterCategory === cat ? 'rgba(177,78,244,0.1)' : 'rgba(255,255,255,0.03)', color: filterCategory === cat ? '#b14ef4' : 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: '0.75rem' }}>
+              style={{ padding: '4px 12px', borderRadius: '999px', border: filterCategory === cat ? '1px solid rgba(0,212,255,0.4)' : '1px solid rgba(255,255,255,0.06)', background: filterCategory === cat ? 'rgba(0,212,255,0.1)' : 'rgba(255,255,255,0.03)', color: filterCategory === cat ? 'var(--brand-accent)' : 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: '0.75rem' }}>
               {cat} ({files.filter(f => f.category === cat).length})
             </button>
           ))}
@@ -626,16 +626,16 @@ function FilesTab() {
                   <span style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.2)' }}>{formatSize(f.size)}</span>
                 </div>
               </div>
-              <span style={{ padding: '3px 10px', borderRadius: '999px', background: 'rgba(177,78,244,0.1)', color: '#b14ef4', fontSize: '0.6875rem', fontWeight: 500 }}>
+              <span style={{ padding: '3px 10px', borderRadius: '999px', background: 'rgba(0,212,255,0.1)', color: 'var(--brand-accent)', fontSize: '0.6875rem', fontWeight: 500 }}>
                 {f.category}
               </span>
               <span style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.2)' }}>
                 {new Date(f.uploadedAt).toLocaleDateString('sv-SE')}
               </span>
               <a href={`${API_URL}/api/files/${f.id}/download`} download style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', color: '#e2e8f0', textDecoration: 'none', fontSize: '0.75rem', cursor: 'pointer' }}>
-                ⬇ Ladda ned
+                <Download size={14} style={{ marginRight: '4px', display: 'inline-block', verticalAlign: 'middle' }} /> Ladda ned
               </a>
-              <button onClick={() => handleDelete(f.id)} style={{ background: 'none', border: 'none', color: '#f85149', cursor: 'pointer', fontSize: '0.8125rem' }}>🗑</button>
+              <button onClick={() => handleDelete(f.id)} style={{ background: 'none', border: 'none', color: '#f85149', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><Trash2 size={16} /></button>
             </div>
           ))
         )}
@@ -791,16 +791,16 @@ function AgentTab() {
           style={{
             margin: '12px 12px 8px',
             padding: '10px',
-            background: 'linear-gradient(135deg, rgba(177,78,244,0.2), rgba(139,92,246,0.2))',
-            border: '1px solid rgba(177,78,244,0.3)',
+            background: 'linear-gradient(135deg, rgba(0,212,255,0.2), rgba(139,92,246,0.2))',
+            border: '1px solid rgba(0,212,255,0.3)',
             borderRadius: '10px',
-            color: '#b14ef4',
+            color: 'var(--brand-accent)',
             cursor: 'pointer',
             fontSize: '0.8125rem',
             fontWeight: 600,
           }}
         >
-          ➕ Ny session
+          <Plus size={16} /> Ny session
         </button>
 
         {/* Session list */}
@@ -814,8 +814,8 @@ function AgentTab() {
                 marginBottom: '4px',
                 borderRadius: '10px',
                 cursor: 'pointer',
-                background: activeSession === session.id ? 'rgba(177,78,244,0.15)' : 'transparent',
-                border: activeSession === session.id ? '1px solid rgba(177,78,244,0.3)' : '1px solid transparent',
+                background: activeSession === session.id ? 'rgba(0,212,255,0.15)' : 'transparent',
+                border: activeSession === session.id ? '1px solid rgba(0,212,255,0.3)' : '1px solid transparent',
                 transition: 'all 0.15s',
               }}
             >
@@ -870,8 +870,8 @@ function AgentTab() {
                   <div style={{
                     maxWidth: '80%',
                     padding: '12px 16px',
-                    background: 'linear-gradient(135deg, rgba(177,78,244,0.2), rgba(139,92,246,0.15))',
-                    border: '1px solid rgba(177,78,244,0.25)',
+                    background: 'linear-gradient(135deg, rgba(0,212,255,0.2), rgba(139,92,246,0.15))',
+                    border: '1px solid rgba(0,212,255,0.25)',
                     borderRadius: '16px 16px 4px 16px',
                     fontSize: '0.875rem',
                     lineHeight: 1.5,
@@ -893,7 +893,7 @@ function AgentTab() {
                     marginBottom: '8px',
                     maxWidth: '80%',
                   }}>
-                    <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⚙️</span>
+                    <Loader2 size={14} className="animate-spin" />
                     Agenten arbetar...
                     {task.model && <span style={{ fontSize: '0.6875rem', color: 'rgba(234,179,8,0.6)', marginLeft: 'auto' }}>{task.model}</span>}
                   </div>
@@ -910,7 +910,7 @@ function AgentTab() {
                     marginBottom: '8px',
                     maxWidth: '80%',
                   }}>
-                    ⏳ Väntar på agent...
+                    <CircleDashed size={14} className="animate-spin" style={{ marginRight: '6px', display: 'inline-block', verticalAlign: 'middle' }} /> Väntar på agent...
                   </div>
                 )}
 
@@ -942,14 +942,14 @@ function AgentTab() {
                     fontSize: '0.8125rem',
                     color: '#f85149',
                   }}>
-                    ❌ {task.error}
+                    <X size={14} style={{ marginRight: '6px', display: 'inline-block', verticalAlign: 'middle' }} /> {task.error}
                   </div>
                 )}
 
                 {/* Logs */}
                 {task.logs.length > 0 && (
                   <details style={{ marginTop: '6px', maxWidth: '80%' }}>
-                    <summary style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.3)', cursor: 'pointer' }}>📋 {task.logs.length} loggar</summary>
+                    <summary style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.3)', cursor: 'pointer' }}><Info size={12} style={{ marginRight: '4px', display: 'inline-block', verticalAlign: 'middle' }} /> {task.logs.length} loggar</summary>
                     <div style={{ padding: '8px', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', marginTop: '4px', fontSize: '0.6875rem', color: 'rgba(255,255,255,0.5)', maxHeight: '150px', overflowY: 'auto' }}>
                       {task.logs.map(l => (
                         <div key={l.id} style={{ marginBottom: '2px' }}>{l.message}</div>
@@ -965,7 +965,7 @@ function AgentTab() {
               alignItems: 'center', justifyContent: 'center',
               color: 'rgba(255,255,255,0.3)', gap: '12px',
             }}>
-              <span style={{ fontSize: '3rem' }}>🤖</span>
+              <Bot size={48} className="brand-text-accent" />
               <span style={{ fontSize: '1rem', fontWeight: 600 }}>Insiders AI Agent</span>
               <span style={{ fontSize: '0.8125rem' }}>Skriv en uppgift nedan för att starta en ny session</span>
             </div>
@@ -1024,7 +1024,7 @@ function AgentTab() {
             style={{
               padding: '10px 20px',
               background: prompt.trim() && !sending
-                ? 'linear-gradient(135deg, #b14ef4, #8b5cf6)'
+                ? 'linear-gradient(135deg, var(--brand-accent), #8b5cf6)'
                 : 'rgba(255,255,255,0.05)',
               border: 'none',
               borderRadius: '12px',
@@ -1036,7 +1036,7 @@ function AgentTab() {
               transition: 'all 0.15s',
             }}
           >
-            {sending ? '⏳' : '🚀'} Skicka
+            {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} Skicka
           </button>
         </div>
       </div>
