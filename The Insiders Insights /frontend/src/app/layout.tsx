@@ -5,6 +5,7 @@ import FeedbackBubble from "@/components/FeedbackBubble";
 import Navbar from "@/components/Navbar";
 import { UserProvider } from "@/components/UserProvider";
 import ChatWidget from "@/components/ChatWidget";
+import AIAssistant from "@/components/AIAssistant";
 import AuthSessionProvider from "@/components/AuthSessionProvider";
 
 const interTight = Inter_Tight({
@@ -39,6 +40,7 @@ export default function RootLayout({
             {children}
             <FeedbackBubble />
             <ChatWidget />
+            <AIAssistant />
           </UserProvider>
         </AuthSessionProvider>
       </body>

@@ -362,3 +362,19 @@ class AdminFile(Base):
     size = Column(Integer, default=0)
     content_type = Column(String, default="application/octet-stream")
     uploaded_at = Column(DateTime, default=datetime.utcnow)
+
+
+# ======================================================================
+# AI ASSISTANT CHAT
+# ======================================================================
+class AIChatMessage(Base):
+    """Persisted AI assistant conversation messages."""
+    __tablename__ = "ai_chat_messages"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    session_id = Column(String, nullable=False, index=True)
+    role = Column(String, nullable=False)  # "user" | "assistant"
+    content = Column(Text, nullable=False, default="")
+    customer_id = Column(String, nullable=True)  # optional context
+    page_context = Column(String, nullable=True)  # which page the user was on
+    created_at = Column(DateTime, default=datetime.utcnow)
