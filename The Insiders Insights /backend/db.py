@@ -4,6 +4,7 @@ Set DATABASE_URL env var for production. When unset, falls back to local SQLite
 at data/insiders.db for development.
 """
 import os
+import sqlalchemy
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
@@ -41,4 +42,23 @@ def get_db():
 
 def init_db():
     import models  # noqa: F401 — register models
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=engine)  # creates new tables but won't add columns
+
+    # Auto-migrate: add missing columns to existing tables
+    if not DATABASE_URL.startswith("sqlite"):
+        _pg_auto_migrate()
+
+
+def _pg_auto_migrate():
+    """Add columns that exist in models but not in PostgreSQL.
+    Safe to call repeatedly — each ALTER uses IF NOT EXISTS."""
+    migrations = [
+        "ALTER TABLE sources ADD COLUMN IF NOT EXISTS platform VARCHAR DEFAULT ''",
+        "ALTER TABLE sources ADD COLUMN IF NOT EXISTS category VARCHAR DEFAULT ''",
+    ]
+    with engine.begin() as conn:
+        for sql in migrations:
+            try:
+                conn.execute(sqlalchemy.text(sql))
+            except Exception:
+                pass  # column already exists or other non-critical issue
