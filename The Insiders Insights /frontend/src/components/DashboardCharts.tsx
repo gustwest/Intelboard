@@ -282,7 +282,7 @@ export default function DashboardCharts({ customerId }: { customerId: string }) 
                     <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(v: number) => formatNumber(v)} />
+                <Tooltip formatter={(v: any) => formatNumber(Number(v))} />
               </PieChart>
             </ResponsiveContainer>
           </div>
