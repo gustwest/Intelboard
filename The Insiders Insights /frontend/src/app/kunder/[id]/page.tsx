@@ -329,19 +329,19 @@ export default function CustomerDetailPage() {
                 <div style={{ overflow: 'auto', border: `1px solid ${C.border}`, borderRadius: 10 }}>
                   <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr style={{ position: 'sticky', top: 0, background: C.card }}>
+                      <tr style={{ position: 'sticky', top: 0, background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(10px)', zIndex: 10 }}>
                         {dsDetail.columns.map(c => (
-                          <th key={c.key} style={{ ...th, padding: '10px 12px', borderBottom: `1px solid ${C.border}` }}>
-                            {c.display_name} {c.unit && <span style={{ color: C.dim }}>({c.unit})</span>}
+                          <th key={c.key} style={{ textAlign: 'left', padding: '12px 14px', borderBottom: `1px solid ${C.border}`, fontWeight: 600, color: '#fff' }}>
+                            {c.display_name} {c.unit && <span style={{ color: C.dim, fontWeight: 400 }}>({c.unit})</span>}
                           </th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {dsDetail.rows.map((r, i) => (
-                        <tr key={i}>
+                        <tr key={i} style={{ background: i % 2 === 0 ? 'rgba(255,255,255,0.015)' : 'transparent', borderBottom: `1px solid rgba(255,255,255,0.03)` }}>
                           {dsDetail.columns.map(c => (
-                            <td key={c.key} style={{ ...td, padding: '8px 12px' }}>{String(r[c.key] ?? '')}</td>
+                            <td key={c.key} style={{ padding: '10px 14px', color: 'rgba(255,255,255,0.8)' }}>{String(r[c.key] ?? '')}</td>
                           ))}
                         </tr>
                       ))}

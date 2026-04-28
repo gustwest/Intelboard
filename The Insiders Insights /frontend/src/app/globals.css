@@ -35,6 +35,7 @@
   --brand-muted: #94a3b8; /* Slate-400 */
   --brand-dim: rgba(255, 255, 255, 0.25);
   --brand-border: rgba(255, 255, 255, 0.08);
+  --brand-surface: var(--brand-panel);
 
   --brand-font-sans: var(--font-inter-tight), "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --brand-font-button: var(--brand-font-sans);

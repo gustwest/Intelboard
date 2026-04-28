@@ -74,18 +74,10 @@ export default function GoalsTab({ customerId }: { customerId: string }) {
 
       {showForm && (
         <div style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-          <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Mål (t.ex. 'Nå 10 000 followers')" style={inputStyle} />
-          <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Beskrivning..." rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 10, color: C.dim, marginBottom: 2, display: 'block' }}>Målvärde</label>
-              <input value={form.target_value} onChange={e => setForm({ ...form, target_value: e.target.value })} placeholder="10000" type="number" style={inputStyle} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 10, color: C.dim, marginBottom: 2, display: 'block' }}>Nuvarande värde</label>
-              <input value={form.current_value} onChange={e => setForm({ ...form, current_value: e.target.value })} placeholder="7500" type="number" style={inputStyle} />
-            </div>
-            <button onClick={save} style={{ ...btnStyle('accent'), alignSelf: 'flex-end', marginBottom: 8 }}>{editId ? 'Spara' : 'Skapa'}</button>
+          <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Mål (t.ex. 'Öka målgruppen med 10%')" style={inputStyle} />
+          <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Ytterligare anteckningar eller kontext kring målet..." rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+            <button onClick={save} style={{ ...btnStyle('accent') }}>{editId ? 'Spara' : 'Skapa'}</button>
           </div>
         </div>
       )}
@@ -97,7 +89,6 @@ export default function GoalsTab({ customerId }: { customerId: string }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {goals.map(g => {
-            const pct = g.target_value && g.current_value ? Math.min(100, Math.round((g.current_value / g.target_value) * 100)) : null;
             const si = STATUS_MAP[g.status] || STATUS_MAP.active;
             return (
               <div key={g.id} style={{ background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
@@ -107,25 +98,15 @@ export default function GoalsTab({ customerId }: { customerId: string }) {
                       <button onClick={() => toggleStatus(g)} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: `${si.color}18`, color: si.color, fontWeight: 600, border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
                         {si.label}
                       </button>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{g.title}</span>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{g.title}</span>
                     </div>
-                    {g.description && <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{g.description}</div>}
-                    {pct !== null && (
-                      <div style={{ marginTop: 8 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: C.dim, marginBottom: 4 }}>
-                          <span>{g.current_value?.toLocaleString()} / {g.target_value?.toLocaleString()}</span>
-                          <span style={{ fontWeight: 700, color: pct >= 100 ? C.success : pct >= 70 ? C.warning : C.accent }}>{pct}%</span>
-                        </div>
-                        <div style={{ height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${pct}%`, background: pct >= 100 ? C.success : pct >= 70 ? C.warning : C.accent, borderRadius: 3, transition: 'width 0.3s' }} />
-                        </div>
-                      </div>
-                    )}
-                    <div style={{ fontSize: 10, color: C.dim, marginTop: 6 }}>
+                    {g.description && <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 8, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{g.description}</div>}
+                    
+                    <div style={{ fontSize: 10, color: C.dim, marginTop: 12 }}>
                       Skapad {new Date(g.created_at).toLocaleDateString('sv-SE')}
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 4 }}>
+                  <div style={{ display: 'flex', gap: 4, marginLeft: 16 }}>
                     <button onClick={() => startEdit(g)} style={btnStyle('ghost')}>✏️</button>
                     <button onClick={() => deleteGoal(g.id)} style={btnStyle('ghost')}>🗑️</button>
                   </div>
