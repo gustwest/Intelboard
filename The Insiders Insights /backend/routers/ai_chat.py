@@ -168,7 +168,7 @@ def _build_context(db: Session, customer_id: Optional[str], page_context: Option
                     sections.append(f"- **{g.label}** ({mod_name}): mål={g.target_value}, nuvarande={g.current_value}, status={g.status}")
 
             # Notes
-            notes = db.query(models.Note).filter_by(customer_id=customer.id).order_by(models.Note.updated_at.desc()).limit(10).all()
+            notes = db.query(models.CustomerNote).filter_by(customer_id=customer.id).order_by(models.CustomerNote.created_at.desc()).limit(10).all()
             if notes:
                 context_labels.append(f"notes:{len(notes)}")
                 sections.append(f"\n### Anteckningar ({len(notes)} st)")
