@@ -112,8 +112,6 @@ def _build_context(db: Session, customer_id: Optional[str], page_context: Option
             sections.append(f"\n## Aktuell kund: {customer.name}")
             sections.append(f"- ID: {customer.id}")
             sections.append(f"- Slug: {customer.slug}")
-            if customer.tags:
-                sections.append(f"- Taggar: {', '.join(customer.tags or [])}")
 
             # Datasets
             datasets = (
