@@ -5,7 +5,7 @@ goals, notes) and sends it to Gemini alongside the user's question.
 """
 import uuid
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -96,7 +96,7 @@ den finaste granulariteten för att undvika dubbelräkning.
 # ------------------------------------------------------------------
 # Context builder — assembles relevant data from DB
 # ------------------------------------------------------------------
-def _build_context(db: Session, customer_id: Optional[str], page_context: Optional[str]) -> tuple[str, list[str]]:
+def _build_context(db: Session, customer_id: Optional[str], page_context: Optional[str]) -> Tuple[str, List[str]]:
     """Build contextual information for the AI based on current page and customer."""
     sections = []
     context_labels = []
@@ -201,7 +201,7 @@ def _build_context(db: Session, customer_id: Optional[str], page_context: Option
 # ------------------------------------------------------------------
 # Build conversation history for Gemini
 # ------------------------------------------------------------------
-def _get_history(db: Session, session_id: str, limit: int = 20) -> list[dict]:
+def _get_history(db: Session, session_id: str, limit: int = 20) -> List[Dict]:
     """Load recent messages from this session for multi-turn context."""
     msgs = (
         db.query(models.AIChatMessage)
