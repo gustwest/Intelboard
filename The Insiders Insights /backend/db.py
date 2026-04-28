@@ -55,6 +55,7 @@ def _pg_auto_migrate():
     migrations = [
         "ALTER TABLE sources ADD COLUMN IF NOT EXISTS platform VARCHAR DEFAULT ''",
         "ALTER TABLE sources ADD COLUMN IF NOT EXISTS category VARCHAR DEFAULT ''",
+        "ALTER TABLE datasets ADD COLUMN IF NOT EXISTS ai_summary TEXT DEFAULT ''",
     ]
     with engine.begin() as conn:
         for sql in migrations:

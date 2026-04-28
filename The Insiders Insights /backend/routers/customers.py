@@ -100,6 +100,7 @@ def get_customer(customer_id: str, db: Session = Depends(get_db)):
             "source_version": d.source_version.version,
             "original_filename": d.original_filename,
             "row_count": d.row_count,
+            "ai_summary": d.ai_summary or "",
             "uploaded_at": d.uploaded_at.isoformat(),
         }
         for d in sorted(c.datasets, key=lambda x: x.uploaded_at, reverse=True)

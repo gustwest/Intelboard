@@ -120,6 +120,7 @@ class Dataset(Base):
     original_filename = Column(String, nullable=False)
     sha256 = Column(String, nullable=False, index=True)
     row_count = Column(Integer, default=0)
+    ai_summary = Column(Text, default="")  # Gemini 3 Flash generated summary
     uploaded_at = Column(DateTime, default=datetime.utcnow)
 
     customer = relationship("Customer", back_populates="datasets")

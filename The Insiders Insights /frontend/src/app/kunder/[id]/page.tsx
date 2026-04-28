@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Gauge from '@/components/Gauge';
 import NotesTab from '@/components/NotesTab';
@@ -12,7 +12,7 @@ const C = {
   text: '#f8fafc', muted: 'rgba(255,255,255,0.5)', dim: 'rgba(255,255,255,0.3)',
 };
 
-type Dataset = { id: string; source_id: string; source_key: string; source_name: string; source_version: number; original_filename: string; row_count: number; uploaded_at: string };
+type Dataset = { id: string; source_id: string; source_key: string; source_name: string; source_version: number; original_filename: string; row_count: number; ai_summary?: string; uploaded_at: string };
 type Customer = { id: string; slug: string; name: string; logo_emoji: string; tags: string[]; icp: any; datasets?: Dataset[] };
 type DatasetDetail = { dataset_id: string; source_name: string; source_version: number; original_filename: string; row_count: number; columns: { field_id: string; key: string; display_name: string; unit: string }[]; rows: Record<string, any>[]; page: number; total_pages: number; total: number };
 type Module = { id: string; name: string; abbr: string; category: string; description: string; customer_id: string | null; field_refs: any[]; formula: any; thresholds: any; visualization: string; inverted: boolean };
@@ -224,14 +224,26 @@ export default function CustomerDetailPage() {
             </thead>
             <tbody>
               {customer.datasets.map(d => (
-                <tr key={d.id} style={{ cursor: 'pointer' }} onClick={() => openDs(d.id)}>
-                  <td style={td}>{d.original_filename}</td>
-                  <td style={td}>{d.source_name}</td>
-                  <td style={td}>v{d.source_version}</td>
-                  <td style={{ ...td, textAlign: 'right', fontFamily: 'monospace' }}>{d.row_count}</td>
-                  <td style={{ ...td, color: C.muted }}>{new Date(d.uploaded_at).toLocaleString()}</td>
-                  <td style={td}><button onClick={e => { e.stopPropagation(); deleteDs(d.id); }} style={btn('ghost')}>Ta bort</button></td>
-                </tr>
+                <React.Fragment key={d.id}>
+                  <tr style={{ cursor: 'pointer' }} onClick={() => openDs(d.id)}>
+                    <td style={td}>{d.original_filename}</td>
+                    <td style={td}>{d.source_name}</td>
+                    <td style={td}>v{d.source_version}</td>
+                    <td style={{ ...td, textAlign: 'right', fontFamily: 'monospace' }}>{d.row_count}</td>
+                    <td style={{ ...td, color: C.muted }}>{new Date(d.uploaded_at).toLocaleString()}</td>
+                    <td style={td}><button onClick={e => { e.stopPropagation(); deleteDs(d.id); }} style={btn('ghost')}>Ta bort</button></td>
+                  </tr>
+                  {d.ai_summary && (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '4px 12px 14px', borderBottom: `1px solid ${C.border}` }}>
+                        <div style={{ background: 'rgba(177, 78, 244, 0.08)', border: '1px solid rgba(177, 78, 244, 0.2)', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
+                          <span style={{ color: C.accent, marginRight: 6 }}>✨ AI</span>
+                          {d.ai_summary}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>

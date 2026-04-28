@@ -1,4 +1,5 @@
 """Upload, detect, and dataset endpoints — with SQL pagination."""
+import threading
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -8,10 +9,46 @@ from sqlalchemy.orm import Session, joinedload
 
 import models
 import sources as src_engine
-from db import get_db
+import ai as ai_engine
+from db import get_db, SessionLocal
 from logging_config import log
 
 router = APIRouter(tags=["datasets"])
+
+
+def _generate_summary_async(dataset_id: str, df_json: str, filename: str, source_name: str):
+    """Generate AI summary in background thread to avoid blocking the upload response."""
+    import pandas as pd
+    try:
+        df = pd.read_json(df_json)
+        summary = ai_engine.summarize_dataset(df, filename, source_name)
+        if summary:
+            db = SessionLocal()
+            try:
+                d = db.query(models.Dataset).filter_by(id=dataset_id).first()
+                if d:
+                    d.ai_summary = summary
+                    db.commit()
+                    log.info("ai.summary_saved", dataset_id=dataset_id, length=len(summary))
+            finally:
+                db.close()
+    except Exception as e:
+        log.warning("ai.summary_background_error", dataset_id=dataset_id, error=str(e))
+
+
+def _trigger_ai_summary(dataset_id: str, df, filename: str, source_name: str):
+    """Kick off background AI summary generation."""
+    try:
+        # Serialize df to JSON for the background thread (limit to 500 rows)
+        df_json = df.head(500).to_json()
+        t = threading.Thread(
+            target=_generate_summary_async,
+            args=(dataset_id, df_json, filename, source_name),
+            daemon=True,
+        )
+        t.start()
+    except Exception as e:
+        log.warning("ai.trigger_failed", error=str(e))
 
 
 # ------------------------------------------------------------------
@@ -50,6 +87,7 @@ async def upload_to_customer(customer_id: str, file: UploadFile = File(...), db:
         source, version = src_engine.auto_create_source(db, df, file.filename or "upload.csv")
         dataset = src_engine.ingest_dataset(db, c, source, version, df, file.filename or "upload", raw)
         log.info("upload.auto_created", customer=c.slug, source=source.key, fields=len(source.fields), rows=dataset.row_count)
+        _trigger_ai_summary(dataset.id, df, file.filename or "upload.csv", source.name)
         return {
             "status": "auto_created",
             "message": f"Ny Source '{source.name}' skapades automatiskt med {len(source.fields)} fält.",
@@ -69,6 +107,7 @@ async def upload_to_customer(customer_id: str, file: UploadFile = File(...), db:
         new_version = src_engine.auto_create_version(db, source, version, df, file.filename or "upload.csv")
         dataset = src_engine.ingest_dataset(db, c, source, new_version, df, file.filename or "upload", raw)
         log.info("upload.version_bumped", customer=c.slug, source=source.key, new_version=new_version.version, rows=dataset.row_count)
+        _trigger_ai_summary(dataset.id, df, file.filename or "upload.csv", source.name)
         return {
             "status": "version_bumped",
             "message": f"Ny version (v{new_version.version}) av '{source.name}' skapades automatiskt.",
@@ -84,6 +123,7 @@ async def upload_to_customer(customer_id: str, file: UploadFile = File(...), db:
     # matched → ingest
     dataset = src_engine.ingest_dataset(db, c, source, version, df, file.filename or "upload", raw)
     log.info("upload.ingested", customer=c.slug, source=source.key, version=version.version, rows=dataset.row_count, dataset_id=dataset.id)
+    _trigger_ai_summary(dataset.id, df, file.filename or "upload", source.name)
     return {
         "status": "matched",
         "dataset_id": dataset.id,
