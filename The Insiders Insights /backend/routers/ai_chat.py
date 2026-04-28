@@ -283,6 +283,11 @@ def ai_chat(req: ChatRequest, db: Session = Depends(get_db)):
     # Build dynamic context
     dynamic_context, context_labels = _build_context(db, req.customer_id, req.page_context)
 
+    # If there's a file attached, append the system analysis to the message for the AI
+    actual_message_for_ai = req.message
+    if req.temp_file_id and req.file_analysis:
+        actual_message_for_ai += f"\n\n[SYSTEM_FILE_ANALYSIS: temp_id={req.temp_file_id}]\nAnalys:\n{req.file_analysis}\nFråga användaren om de vill spara detta dataset."
+
     system_prompt = f"""{PLATFORM_KNOWLEDGE}
 
 {dynamic_context}
@@ -308,15 +313,19 @@ När en användare laddar upp en fil i chatten kommer systemet att infoga intern
 - När du ser denna information, sammanfatta kort för användaren vad du ser (t.ex. "Jag ser att du har laddat upp en fil som matchar LinkedIn Campaign Manager...").
 - Fråga ALLTID om användaren vill spara den som ett nytt dataset.
 - NÄR användaren svarar "Ja" eller på annat sätt bekräftar att de vill spara den senaste filen, MÅSTE du svara med den exakta strängen `[EXECUTE_SAVE:temp_id]` (byt ut temp_id mot det id du fick tidigare). Systemet kommer då att spara filen automatiskt och meddela användaren. Skriv ingen annan text i det svaret om du använder taggen.
+
+## Skapande av Moduler och Mål
+Om en användare bekräftar att de vill att du ska skapa en KPI/Modul, använd följande syntax exakt:
+`[EXECUTE_CREATE_MODULE: {{"name": "...", "abbr": "...", "description": "...", "category": "custom"}}]`
+
+Om användaren vill skapa ett nytt mål för kunden, använd:
+`[EXECUTE_CREATE_GOAL: {{"title": "...", "description": "..."}}]`
+
+(byt ut med relevant JSON). Om kunden är vald läggs de in på kunden automatiskt. Skriv ingen annan text i svaret om du använder en tagg.
 """
 
     # Get conversation history
     history = _get_history(db, session_id)
-
-    # If there's a file attached, append the system analysis to the message for the AI
-    actual_message_for_ai = req.message
-    if req.temp_file_id and req.file_analysis:
-        actual_message_for_ai += f"\n\n[SYSTEM_FILE_ANALYSIS: temp_id={req.temp_file_id}]\nAnalys:\n{req.file_analysis}\nFråga användaren om de vill spara detta dataset."
 
     # Save user message
     user_msg = models.AIChatMessage(
@@ -395,6 +404,47 @@ När en användare laddar upp en fil i chatten kommer systemet att infoga intern
                     else:
                         reply = "⚠️ Det verkar som att filen har försvunnit eller att vi saknar kund-kontext."
             
+            elif "[EXECUTE_CREATE_MODULE:" in reply:
+                import re
+                import json
+                match = re.search(r"\[EXECUTE_CREATE_MODULE:\s*({.*?})\s*\]", reply, re.DOTALL)
+                if match:
+                    try:
+                        mod_data = json.loads(match.group(1))
+                        new_mod = models.Module(
+                            customer_id=req.customer_id, # Can be None for global
+                            name=mod_data.get("name", "Ny Modul"),
+                            abbr=mod_data.get("abbr", "MOD"),
+                            description=mod_data.get("description", ""),
+                            category=mod_data.get("category", "custom")
+                        )
+                        db.add(new_mod)
+                        db.commit()
+                        reply = f"✅ Jag har nu skapat modulen **{new_mod.name}** ({new_mod.abbr}). Du kan hitta den under Moduler-fliken!"
+                    except Exception as mod_err:
+                        reply = f"⚠️ Jag försökte skapa modulen men något gick snett med formatet: {mod_err}"
+
+            elif "[EXECUTE_CREATE_GOAL:" in reply:
+                import re
+                import json
+                match = re.search(r"\[EXECUTE_CREATE_GOAL:\s*({.*?})\s*\]", reply, re.DOTALL)
+                if match:
+                    if not req.customer_id:
+                        reply = "⚠️ Jag kan tyvärr inte skapa ett mål utan att vi befinner oss på en specifik kund."
+                    else:
+                        try:
+                            goal_data = json.loads(match.group(1))
+                            new_goal = models.CustomerGoal(
+                                customer_id=req.customer_id,
+                                title=goal_data.get("title", "Nytt mål"),
+                                description=goal_data.get("description", "")
+                            )
+                            db.add(new_goal)
+                            db.commit()
+                            reply = f"✅ Jag har nu lagt till målet **{new_goal.title}** för kunden. Du ser det under fliken 'Mål & Anteckningar'."
+                        except Exception as goal_err:
+                            reply = f"⚠️ Jag försökte skapa målet men något gick snett med formatet: {goal_err}"
+
             log.info("ai_chat.response", session_id=session_id, length=len(reply), context=context_labels)
 
         except Exception as e:

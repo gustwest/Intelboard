@@ -107,9 +107,38 @@ export default function AIAssistant() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [hasLoadedHistory, setHasLoadedHistory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Initialize session from sessionStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !hasLoadedHistory) {
+      const storedSession = sessionStorage.getItem('insiders_ai_session');
+      if (storedSession) {
+        setSessionId(storedSession);
+        
+        // Fetch history
+        fetch(`${API_URL}/api/ai/chat/${storedSession}`)
+          .then(res => res.json())
+          .then(data => {
+            if (Array.isArray(data) && data.length > 0) {
+              setMessages(data.map((m: any) => ({
+                id: m.id || m.created_at,
+                role: m.role,
+                content: m.content,
+                timestamp: new Date(m.created_at)
+              })));
+            }
+          })
+          .catch(err => console.error("Could not load chat history", err))
+          .finally(() => setHasLoadedHistory(true));
+      } else {
+        setHasLoadedHistory(true);
+      }
+    }
+  }, [hasLoadedHistory]);
 
   // Detect context from URL
   const getContext = useCallback((): { customerId: string | null; pageContext: string } => {
@@ -200,7 +229,10 @@ export default function AIAssistant() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
 
-      if (!sessionId) setSessionId(data.session_id);
+      if (!sessionId) {
+        setSessionId(data.session_id);
+        sessionStorage.setItem('insiders_ai_session', data.session_id);
+      }
 
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
