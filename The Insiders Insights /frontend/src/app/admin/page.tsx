@@ -522,9 +522,11 @@ function FilesTab() {
   };
 
   const handleDelete = async (fileId: string) => {
-    if (!confirm('Ta bort denna fil?')) return;
-    await fetch(`${API_URL}/api/files/${fileId}`, { method: 'DELETE' });
-    setFiles(prev => prev.filter(f => f.id !== fileId));
+    setTimeout(async () => {
+      if (!confirm('Ta bort denna fil?')) return;
+      await fetch(`${API_URL}/api/files/${fileId}`, { method: 'DELETE' });
+      setFiles(prev => prev.filter(f => f.id !== fileId));
+    }, 10);
   };
 
   const formatSize = (bytes: number) => {
@@ -578,7 +580,7 @@ function FilesTab() {
               {FILE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
             </select>
           </div>
-          <button onClick={handleUpload} disabled={!selectedFile || uploading} className="brand-btn-primary" style={{ padding: '8px 20px', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '6px', opacity: !selectedFile || uploading ? 0.5 : 1, whiteSpace: 'nowrap' }}>
+          <button type="button" onClick={handleUpload} disabled={!selectedFile || uploading} className="brand-btn-primary" style={{ padding: '8px 20px', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '6px', opacity: !selectedFile || uploading ? 0.5 : 1, whiteSpace: 'nowrap' }}>
             {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />} {uploading ? 'Laddar upp...' : 'Ladda upp'}
           </button>
         </div>
@@ -587,12 +589,12 @@ function FilesTab() {
       {/* Filter */}
       {categories.length > 0 && (
         <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', flexWrap: 'wrap' }}>
-          <button onClick={() => setFilterCategory('')}
+          <button type="button" onClick={() => setFilterCategory('')}
             style={{ padding: '4px 12px', borderRadius: '999px', border: !filterCategory ? '1px solid rgba(0,212,255,0.4)' : '1px solid rgba(255,255,255,0.06)', background: !filterCategory ? 'rgba(0,212,255,0.1)' : 'rgba(255,255,255,0.03)', color: !filterCategory ? 'var(--brand-accent)' : 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: '0.75rem' }}>
             Alla ({files.length})
           </button>
           {categories.map(cat => (
-            <button key={cat} onClick={() => setFilterCategory(cat)}
+            <button type="button" key={cat} onClick={() => setFilterCategory(cat)}
               style={{ padding: '4px 12px', borderRadius: '999px', border: filterCategory === cat ? '1px solid rgba(0,212,255,0.4)' : '1px solid rgba(255,255,255,0.06)', background: filterCategory === cat ? 'rgba(0,212,255,0.1)' : 'rgba(255,255,255,0.03)', color: filterCategory === cat ? 'var(--brand-accent)' : 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: '0.75rem' }}>
               {cat} ({files.filter(f => f.category === cat).length})
             </button>
@@ -635,7 +637,7 @@ function FilesTab() {
               <a href={`${API_URL}/api/files/${f.id}/download`} download style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', color: '#e2e8f0', textDecoration: 'none', fontSize: '0.75rem', cursor: 'pointer' }}>
                 <Download size={14} style={{ marginRight: '4px', display: 'inline-block', verticalAlign: 'middle' }} /> Ladda ned
               </a>
-              <button onClick={() => handleDelete(f.id)} style={{ background: 'none', border: 'none', color: '#f85149', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><Trash2 size={16} /></button>
+              <button type="button" onClick={() => handleDelete(f.id)} style={{ background: 'none', border: 'none', color: '#f85149', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><Trash2 size={16} /></button>
             </div>
           ))
         )}
@@ -744,10 +746,12 @@ function AgentTab() {
   };
 
   const deleteSession = async (id: string) => {
-    if (!confirm('Ta bort denna session?')) return;
-    await fetch(`/api/admin/agent/${id}`, { method: 'DELETE' });
-    if (activeSession === id) setActiveSession(null);
-    loadSessions();
+    setTimeout(async () => {
+      if (!confirm('Ta bort denna session?')) return;
+      await fetch(`/api/admin/agent/${id}`, { method: 'DELETE' });
+      if (activeSession === id) setActiveSession(null);
+      loadSessions();
+    }, 10);
   };
 
   const currentSession = sessions.find(s => s.id === activeSession);

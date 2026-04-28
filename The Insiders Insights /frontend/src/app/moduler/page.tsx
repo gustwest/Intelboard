@@ -263,11 +263,13 @@ function ModuleEditor({ module, sources, customers, onClose, onSaved }: { module
     onSaved();
   }
 
-  async function remove() {
+  function remove() {
     if (!module) return;
-    if (!confirm(`Radera modulen "${module.name}"?`)) return;
-    await fetch(`${API}/api/modules/${module.id}`, { method: 'DELETE' });
-    onSaved();
+    setTimeout(async () => {
+      if (!confirm(`Radera modulen "${module.name}"?`)) return;
+      await fetch(`${API}/api/modules/${module.id}`, { method: 'DELETE' });
+      onSaved();
+    }, 10);
   }
 
   async function testEval() {
@@ -287,7 +289,7 @@ function ModuleEditor({ module, sources, customers, onClose, onSaved }: { module
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
           <h2 style={{ margin: 0 }}>{isNew ? 'Ny modul' : module!.name}</h2>
           <div style={{ display: 'flex', gap: 8 }}>
-            {!isNew && <button onClick={remove} style={btn('danger')}>Ta bort</button>}
+            {!isNew && <button type="button" onClick={(e) => { e.preventDefault(); remove(); }} style={btn('danger')}>Ta bort</button>}
             <button onClick={onClose} style={btn('ghost')}>Stäng</button>
           </div>
         </div>

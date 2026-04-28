@@ -113,17 +113,21 @@ export default function CustomerDetailPage() {
     if (res.ok) setDsDetail(await res.json());
   }
 
-  async function deleteDs(id: string) {
-    if (!confirm('Ta bort datasetet?')) return;
-    await fetch(`${API}/api/datasets/${id}`, { method: 'DELETE' });
-    setOpenDataset(null); setDsDetail(null);
-    refresh();
+  function deleteDs(id: string) {
+    setTimeout(async () => {
+      if (!confirm('Ta bort datasetet?')) return;
+      await fetch(`${API}/api/datasets/${id}`, { method: 'DELETE' });
+      setOpenDataset(null); setDsDetail(null);
+      refresh();
+    }, 10);
   }
 
-  async function deleteCustomer() {
-    if (!confirm(`Radera kund "${customer?.name}"? Alla dataset och moduler för kunden raderas också.`)) return;
-    await fetch(`${API}/api/customers/${params.id}`, { method: 'DELETE' });
-    router.push('/kunder');
+  function deleteCustomer() {
+    setTimeout(async () => {
+      if (!confirm(`Radera kund "${customer?.name}"? Alla dataset och moduler för kunden raderas också.`)) return;
+      await fetch(`${API}/api/customers/${params.id}`, { method: 'DELETE' });
+      router.push('/kunder');
+    }, 10);
   }
 
   if (!customer) return <main style={{ padding: 40, color: C.muted }}>Laddar…</main>;
@@ -142,7 +146,7 @@ export default function CustomerDetailPage() {
             <div style={{ fontSize: 12, color: C.dim, marginTop: 4 }}>slug: <code>{customer.slug}</code> · {customer.datasets?.length || 0} dataset · {modules.length} moduler</div>
           </div>
         </div>
-        <button onClick={deleteCustomer} style={btn('danger')}>Ta bort kund</button>
+        <button type="button" onClick={(e) => { e.preventDefault(); deleteCustomer(); }} style={btn('danger')}>Ta bort kund</button>
       </div>
 
       {/* Tab navigation */}
@@ -256,7 +260,7 @@ export default function CustomerDetailPage() {
                     <td style={{ ...td, color: C.muted, fontSize: 11 }}>
                       {d.period_start && d.period_end ? `${d.period_start.slice(0,7)} → ${d.period_end.slice(0,7)}` : '—'}
                     </td>
-                    <td style={td}><button onClick={e => { e.stopPropagation(); deleteDs(d.id); }} style={btn('ghost')}>Ta bort</button></td>
+                    <td style={td}><button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); deleteDs(d.id); }} style={btn('ghost')}>Ta bort</button></td>
                   </tr>
                   {d.ai_summary && (
                     <tr>

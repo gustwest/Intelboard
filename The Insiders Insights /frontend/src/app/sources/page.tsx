@@ -106,16 +106,20 @@ function SourceDetail({ source, onChange }: { source: Source; onChange: () => vo
     else alert('Kunde inte lägga till fält: ' + (await res.text()));
   }
 
-  async function deleteField(fieldId: string) {
-    if (!confirm('Ta bort fältet? Moduler som refererar till det går sönder.')) return;
-    await fetch(`${API}/api/sources/${source.id}/fields/${fieldId}`, { method: 'DELETE' });
-    onChange();
+  function deleteField(fieldId: string) {
+    setTimeout(async () => {
+      if (!confirm('Ta bort fältet? Moduler som refererar till det går sönder.')) return;
+      await fetch(`${API}/api/sources/${source.id}/fields/${fieldId}`, { method: 'DELETE' });
+      onChange();
+    }, 10);
   }
 
-  async function deleteSource() {
-    if (!confirm(`Radera källan "${source.name}" och alla dataset som använder den?`)) return;
-    await fetch(`${API}/api/sources/${source.id}`, { method: 'DELETE' });
-    onChange();
+  function deleteSource() {
+    setTimeout(async () => {
+      if (!confirm(`Radera källan "${source.name}" och alla dataset som använder den?`)) return;
+      await fetch(`${API}/api/sources/${source.id}`, { method: 'DELETE' });
+      onChange();
+    }, 10);
   }
 
   const currentVersion = source.versions.find(v => v.is_current);
@@ -128,7 +132,7 @@ function SourceDetail({ source, onChange }: { source: Source; onChange: () => vo
             <h2 style={{ margin: 0, fontSize: '1.25rem' }}>{source.name}</h2>
             <div style={{ color: C.dim, fontSize: 12 }}>key: <code>{source.key}</code></div>
           </div>
-          <button onClick={deleteSource} style={{ ...btn('danger'), display: 'flex', alignItems: 'center', gap: '6px' }}><Trash2 size={16} /> Ta bort källa</button>
+          <button type="button" onClick={(e) => { e.preventDefault(); deleteSource(); }} style={{ ...btn('danger'), display: 'flex', alignItems: 'center', gap: '6px' }}><Trash2 size={16} /> Ta bort källa</button>
         </div>
         {source.description && <p style={{ color: C.muted, fontSize: 13, marginTop: 6 }}>{source.description}</p>}
 
@@ -153,7 +157,7 @@ function SourceDetail({ source, onChange }: { source: Source; onChange: () => vo
               <div>{f.display_name} <div style={{ fontSize: 10, color: C.dim }}>⇒ kolumn: <code>{mapping?.column_name || '—'}</code></div></div>
               <div style={{ color: C.muted }}>{f.data_type}</div>
               <div style={{ color: C.muted }}>{f.unit || '—'}</div>
-              <button onClick={() => deleteField(f.id)} style={btn('ghost')}><Trash2 size={14} /></button>
+              <button type="button" onClick={() => deleteField(f.id)} style={btn('ghost')}><Trash2 size={14} /></button>
             </div>
           );
         })}
