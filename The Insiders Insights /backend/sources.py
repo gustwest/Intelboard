@@ -200,6 +200,43 @@ def _source_name_from_filename(filename: str) -> str:
     return name.strip().title()
 
 
+def _infer_platform_category(filename: str) -> Tuple[str, str]:
+    """Infer platform and category from filename patterns."""
+    fn = filename.lower()
+
+    # LinkedIn Campaign Manager patterns
+    if "account_" in fn and any(kw in fn for kw in (
+        "campaign_performance", "campaign_placement", "creative_performance",
+        "creative_placement", "creative_conversion", "conversion_performance",
+        "lan_creative", "conversation_ads",
+    )):
+        return "LinkedIn Campaign Manager", "Campaign"
+    if "demographics_report" in fn:
+        return "LinkedIn Campaign Manager", "Demographics"
+    if "companies-export" in fn or "companies_export" in fn:
+        return "LinkedIn Campaign Manager", "Companies"
+
+    # LinkedIn Page Analytics
+    if any(kw in fn for kw in ("_content_", "_followers_", "_visitors_")):
+        return "LinkedIn Page Analytics", fn.split("_")[-1].split(".")[0].title() if "_" in fn else "Content"
+    if "competitor_analytics" in fn:
+        return "LinkedIn Page Analytics", "Competitors"
+
+    # LinkedIn Recruiter
+    if any(kw in fn for kw in ("recruiter_usage", "funnel_report", "inmail_report", "pipeline_report", "custom_report_user")):
+        return "LinkedIn Recruiter", "Recruiter"
+
+    # LinkedIn Talent Insights
+    if "talent_insights" in fn or "talent insights" in fn:
+        return "LinkedIn Talent Insights", "Talent"
+
+    # LinkedIn Personal Profile
+    if any(kw in fn for kw in ("aggregateanalytics", "singlepostanalytics", "connections", "reactions", "comments", "messages", "profile")):
+        return "LinkedIn Personal Profile", "Personal"
+
+    return "", ""
+
+
 def auto_create_source(
     db: Session,
     df: pd.DataFrame,
@@ -210,6 +247,7 @@ def auto_create_source(
 
     source_name = _source_name_from_filename(filename)
     source_key = slugify(source_name)
+    platform, category = _infer_platform_category(filename)
 
     # If a source with this key already exists, append a short hash
     existing = db.query(models.Source).filter_by(key=source_key).first()
@@ -221,6 +259,8 @@ def auto_create_source(
         key=source_key,
         name=source_name,
         description=f"Auto-skapad från {filename}",
+        platform=platform,
+        category=category,
         detect_rules_json={"filename_patterns": [], "required_columns": []},
     )
     db.add(source)

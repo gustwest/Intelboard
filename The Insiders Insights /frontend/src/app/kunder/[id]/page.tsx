@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Gauge from '@/components/Gauge';
+import NotesTab from '@/components/NotesTab';
+import GoalsTab from '@/components/GoalsTab';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
@@ -30,6 +32,7 @@ export default function CustomerDetailPage() {
   // Module state
   const [modules, setModules] = useState<Module[]>([]);
   const [evalResults, setEvalResults] = useState<Record<string, EvalResult | 'loading'>>({});
+  const [activeTab, setActiveTab] = useState<'overview' | 'notes' | 'goals'>('overview');
 
   async function refresh() {
     const res = await fetch(`${API}/api/customers/${params.id}`);
@@ -141,6 +144,40 @@ export default function CustomerDetailPage() {
         <button onClick={deleteCustomer} style={btn('danger')}>Ta bort kund</button>
       </div>
 
+      {/* Tab navigation */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: C.card, borderRadius: 12, padding: 4, border: `1px solid ${C.border}` }}>
+        {[
+          { key: 'overview' as const, label: '📊 Översikt' },
+          { key: 'notes' as const, label: '📝 Anteckningar' },
+          { key: 'goals' as const, label: '🎯 Mål' },
+        ].map(tab => (
+          <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
+            flex: 1, padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+            cursor: 'pointer', border: '1px solid transparent', fontFamily: 'inherit',
+            transition: 'all 0.15s',
+            background: activeTab === tab.key ? 'rgba(177,78,244,0.12)' : 'transparent',
+            color: activeTab === tab.key ? C.accent : C.muted,
+            borderColor: activeTab === tab.key ? 'rgba(177,78,244,0.25)' : 'transparent',
+          }}>{tab.label}</button>
+        ))}
+      </div>
+
+      {/* Notes tab */}
+      {activeTab === 'notes' && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20 }}>
+          <NotesTab customerId={params.id} />
+        </div>
+      )}
+
+      {/* Goals tab */}
+      {activeTab === 'goals' && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20 }}>
+          <GoalsTab customerId={params.id} />
+        </div>
+      )}
+
+      {/* Overview tab */}
+      {activeTab === 'overview' && <>
       {/* Upload zone */}
       <div
         onDragOver={e => { e.preventDefault(); setDragOver(true); }}
@@ -236,6 +273,8 @@ export default function CustomerDetailPage() {
           </>
         )}
       </div>
+
+      </>}
 
       {/* Dataset detail modal */}
       {openDataset && (

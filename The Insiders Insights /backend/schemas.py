@@ -82,6 +82,8 @@ class SourceCreate(BaseModel):
     key: str
     name: str
     description: str = ""
+    platform: str = ""
+    category: str = ""
     detect_rules: Dict[str, Any] = Field(default_factory=dict)
     fields: List[SourceFieldIn] = Field(default_factory=list)
     # Initial version column-mapping: { field_key: column_name }
@@ -91,6 +93,8 @@ class SourceCreate(BaseModel):
 class SourceUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    platform: Optional[str] = None
+    category: Optional[str] = None
     detect_rules: Optional[Dict[str, Any]] = None
 
 
@@ -99,6 +103,8 @@ class SourceOut(BaseModel):
     key: str
     name: str
     description: str
+    platform: str
+    category: str
     detect_rules: Dict[str, Any]
     fields: List[SourceFieldOut]
     versions: List[SourceVersionOut]
@@ -230,6 +236,72 @@ class ReportOut(BaseModel):
     description: str
     config: Dict[str, Any]
     created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ---------- Customer Notes ----------
+class NoteCreate(BaseModel):
+    title: str
+    body: str = ""
+    note_type: str = "note"  # "note", "insight", "meeting"
+    author: str = ""
+
+
+class NoteUpdate(BaseModel):
+    title: Optional[str] = None
+    body: Optional[str] = None
+    note_type: Optional[str] = None
+
+
+class NoteOut(BaseModel):
+    id: str
+    customer_id: str
+    title: str
+    body: str
+    note_type: str
+    author: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ---------- Customer Goals ----------
+class GoalCreate(BaseModel):
+    title: str
+    description: str = ""
+    metric_type: str = "manual"  # "manual" | "module"
+    module_id: Optional[str] = None
+    target_value: Optional[float] = None
+    target_date: Optional[datetime] = None
+    current_value: Optional[float] = None
+
+
+class GoalUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    target_value: Optional[float] = None
+    target_date: Optional[datetime] = None
+    current_value: Optional[float] = None
+    status: Optional[str] = None  # "active", "completed", "paused"
+
+
+class GoalOut(BaseModel):
+    id: str
+    customer_id: str
+    title: str
+    description: str
+    metric_type: str
+    module_id: Optional[str]
+    target_value: Optional[float]
+    target_date: Optional[datetime]
+    current_value: Optional[float]
+    status: str
+    created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True

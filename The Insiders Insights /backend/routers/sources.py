@@ -22,6 +22,8 @@ def _source_to_out(s: models.Source) -> Dict[str, Any]:
         "key": s.key,
         "name": s.name,
         "description": s.description or "",
+        "platform": s.platform or "",
+        "category": s.category or "",
         "detect_rules": s.detect_rules_json or {},
         "fields": [
             {
@@ -68,6 +70,8 @@ def create_source(req: schemas.SourceCreate, db: Session = Depends(get_db)):
         key=key,
         name=req.name.strip(),
         description=req.description,
+        platform=req.platform,
+        category=req.category,
         detect_rules_json=req.detect_rules or {},
     )
     db.add(source)
@@ -133,6 +137,10 @@ def update_source(source_id: str, req: schemas.SourceUpdate, db: Session = Depen
         s.name = req.name.strip()
     if req.description is not None:
         s.description = req.description
+    if req.platform is not None:
+        s.platform = req.platform
+    if req.category is not None:
+        s.category = req.category
     if req.detect_rules is not None:
         s.detect_rules_json = req.detect_rules
     db.commit()

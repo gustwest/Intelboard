@@ -32,6 +32,10 @@ class Customer(Base):
 
     datasets = relationship("Dataset", back_populates="customer", cascade="all, delete-orphan")
     modules = relationship("Module", back_populates="customer", cascade="all, delete-orphan")
+    notes = relationship("CustomerNote", back_populates="customer", cascade="all, delete-orphan",
+                         order_by="CustomerNote.created_at.desc()")
+    goals = relationship("CustomerGoal", back_populates="customer", cascade="all, delete-orphan",
+                         order_by="CustomerGoal.created_at.desc()")
 
 
 class Source(Base):
@@ -42,6 +46,8 @@ class Source(Base):
     key = Column(String, unique=True, nullable=False, index=True)  # stable slug
     name = Column(String, nullable=False)
     description = Column(Text, default="")
+    platform = Column(String, default="")     # e.g. "LinkedIn Campaign Manager", "LinkedIn Page Analytics"
+    category = Column(String, default="")     # e.g. "Campaign", "Content", "Recruiter"
     # Detection rules: { "filename_patterns": ["*campaign_performance*"], "required_columns": [...], "encoding_hint": "utf-16" }
     detect_rules_json = Column(JSON, default=dict)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -294,6 +300,46 @@ class AgentMeta(Base):
     agent_model = Column(String, nullable=True)
     agent_version = Column(String, nullable=True)
     agent_project = Column(String, nullable=True)
+
+
+# ======================================================================
+# CUSTOMER NOTES & GOALS
+# ======================================================================
+class CustomerNote(Base):
+    """Free-form notes per customer (meeting notes, insights, observations)."""
+    __tablename__ = "customer_notes"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    customer_id = Column(String, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String, nullable=False)
+    body = Column(Text, default="")
+    note_type = Column(String, default="note")  # "note", "goal", "insight", "meeting"
+    author = Column(String, default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    customer = relationship("Customer", back_populates="notes")
+
+
+class CustomerGoal(Base):
+    """Measurable goals/targets per customer. Can optionally link to a Module KPI."""
+    __tablename__ = "customer_goals"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    customer_id = Column(String, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String, nullable=False)
+    description = Column(Text, default="")
+    metric_type = Column(String, default="manual")  # "manual" | "module"
+    module_id = Column(String, ForeignKey("modules.id", ondelete="SET NULL"), nullable=True)
+    target_value = Column(Float, nullable=True)
+    target_date = Column(DateTime, nullable=True)
+    current_value = Column(Float, nullable=True)
+    status = Column(String, default="active")  # "active", "completed", "paused"
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    customer = relationship("Customer", back_populates="goals")
+    module = relationship("Module", foreign_keys=[module_id])
 
 
 # ======================================================================
