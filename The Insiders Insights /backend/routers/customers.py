@@ -101,6 +101,9 @@ def get_customer(customer_id: str, db: Session = Depends(get_db)):
             "original_filename": d.original_filename,
             "row_count": d.row_count,
             "ai_summary": d.ai_summary or "",
+            "granularity": d.granularity or "unknown",
+            "period_start": str(d.period_start) if d.period_start else None,
+            "period_end": str(d.period_end) if d.period_end else None,
             "uploaded_at": d.uploaded_at.isoformat(),
         }
         for d in sorted(c.datasets, key=lambda x: x.uploaded_at, reverse=True)

@@ -404,6 +404,99 @@ def _cast(value: Any, data_type: str) -> Any:
     return str(value).strip()
 
 
+def detect_granularity(df: pd.DataFrame) -> Tuple[str, Optional[str], Optional[str]]:
+    """Auto-detect granularity and period range from a DataFrame.
+    
+    Returns (granularity, period_start, period_end) where:
+      - granularity: 'daily' | 'monthly' | 'aggregated' | 'unknown'
+      - period_start/end: ISO date strings or None
+    """
+    DATE_COLS = {
+        "start-date-in-utc", "date", "day", "created-date", "start date (in utc)",
+        "datum", "period", "month", "månad", "start_date", "end_date",
+    }
+    
+    # Find date columns
+    date_col = None
+    for col in df.columns:
+        if col.strip().lower().replace("_", "-") in DATE_COLS:
+            date_col = col
+            break
+    
+    if date_col is None:
+        # Try to find any column that looks like dates
+        for col in df.columns:
+            sample = df[col].dropna().head(10)
+            date_count = 0
+            for val in sample:
+                s = str(val).strip()
+                if len(s) >= 10:
+                    try:
+                        pd.Timestamp(s)
+                        date_count += 1
+                    except (ValueError, TypeError):
+                        pass
+            if date_count >= 3:
+                date_col = col
+                break
+    
+    if date_col is None:
+        # No date column found — likely aggregated data
+        if len(df) <= 5:
+            return ("aggregated", None, None)
+        return ("unknown", None, None)
+    
+    # Parse dates
+    try:
+        dates = pd.to_datetime(df[date_col], errors="coerce", utc=True)
+    except Exception:
+        try:
+            dates = pd.to_datetime(df[date_col], errors="coerce")
+        except Exception:
+            return ("unknown", None, None)
+    
+    valid_dates = dates.dropna()
+    if len(valid_dates) == 0:
+        return ("unknown", None, None)
+    
+    period_start = valid_dates.min().strftime("%Y-%m-%d")
+    period_end = valid_dates.max().strftime("%Y-%m-%d")
+    
+    if len(valid_dates) <= 1:
+        return ("aggregated", period_start, period_end)
+    
+    # Determine granularity by looking at date intervals
+    sorted_dates = valid_dates.sort_values()
+    # Get unique dates (some rows may share a date if grouped by other dims)
+    unique_dates = sorted_dates.dt.date.unique()
+    
+    if len(unique_dates) <= 1:
+        return ("aggregated", period_start, period_end)
+    
+    # Calculate median gap between consecutive unique dates
+    gaps = []
+    for i in range(1, min(len(unique_dates), 50)):
+        gap = (unique_dates[i] - unique_dates[i - 1]).days
+        if gap > 0:
+            gaps.append(gap)
+    
+    if not gaps:
+        return ("unknown", period_start, period_end)
+    
+    median_gap = sorted(gaps)[len(gaps) // 2]
+    
+    if median_gap <= 2:
+        return ("daily", period_start, period_end)
+    elif median_gap <= 10:
+        return ("weekly", period_start, period_end)
+    elif median_gap <= 45:
+        return ("monthly", period_start, period_end)
+    elif median_gap <= 100:
+        return ("quarterly", period_start, period_end)
+    else:
+        return ("yearly", period_start, period_end)
+
+
 def ingest_dataset(
     db: Session,
     customer: models.Customer,
@@ -421,6 +514,10 @@ def ingest_dataset(
         col_to_field[_norm(m.column_name)] = (field.id, field.data_type)
 
     sha = hashlib.sha256(raw_bytes).hexdigest()
+
+    # Auto-detect granularity and period
+    granularity, period_start, period_end = detect_granularity(df)
+
     dataset = models.Dataset(
         customer_id=customer.id,
         source_id=source.id,
@@ -428,6 +525,9 @@ def ingest_dataset(
         original_filename=filename,
         sha256=sha,
         row_count=0,
+        granularity=granularity,
+        period_start=period_start,
+        period_end=period_end,
     )
     db.add(dataset)
     db.flush()
@@ -453,3 +553,4 @@ def ingest_dataset(
     db.commit()
     db.refresh(dataset)
     return dataset
+

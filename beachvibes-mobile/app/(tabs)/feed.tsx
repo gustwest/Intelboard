@@ -10,6 +10,7 @@ import { Colors } from '../../src/theme/colors';
 import { api } from '../../src/api/client';
 import { useAuth } from '../../src/auth/AuthProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 
 interface FeedComment {
   id: string;
@@ -39,7 +40,21 @@ interface FeedPost {
 }
 
 export default function FeedScreen() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+
+  const handleAvatarPress = () => {
+    Alert.alert(
+      user?.name || 'Profil',
+      user?.email || '',
+      [
+        { text: 'Avbryt', style: 'cancel' },
+        { text: 'Logga ut', style: 'destructive', onPress: async () => {
+          await logout();
+          router.replace('/login');
+        }},
+      ]
+    );
+  };
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -156,7 +171,7 @@ export default function FeedScreen() {
           <TouchableOpacity style={s.iconBtn}>
             <Ionicons name="chatbubble-outline" size={22} color={Colors.textSecondary} />
           </TouchableOpacity>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={handleAvatarPress}>
             {user?.image ? (
               <Image source={{ uri: user.image }} style={s.headerAvatar} />
             ) : (

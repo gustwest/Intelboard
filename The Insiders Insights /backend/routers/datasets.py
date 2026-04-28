@@ -205,6 +205,77 @@ def regenerate_summaries(db: Session = Depends(get_db)):
     return {"processed": len(results), "results": results}
 
 
+@router.post("/api/datasets/backfill-granularity")
+def backfill_granularity(db: Session = Depends(get_db)):
+    """Detect and save granularity + period_start/end for all datasets missing it."""
+    import pandas as pd
+
+    datasets = (
+        db.query(models.Dataset)
+        .options(
+            joinedload(models.Dataset.source),
+            joinedload(models.Dataset.source_version)
+            .joinedload(models.SourceVersion.mappings)
+            .joinedload(models.SourceFieldMapping.source_field),
+        )
+        .filter(
+            (models.Dataset.granularity == None) |  # noqa: E711
+            (models.Dataset.granularity == "") |
+            (models.Dataset.granularity == "unknown")
+        )
+        .all()
+    )
+
+    results = []
+    for d in datasets:
+        try:
+            fields = [m.source_field for m in d.source_version.mappings]
+            field_id_to_key = {f.id: f.key for f in fields}
+
+            rows = (
+                db.query(models.DatasetRow)
+                .filter_by(dataset_id=d.id)
+                .order_by(models.DatasetRow.row_index)
+                .limit(500)
+                .all()
+            )
+            out_rows = []
+            for r in rows:
+                out = {}
+                for fid, val in (r.values_json or {}).items():
+                    key = field_id_to_key.get(fid)
+                    if key:
+                        out[key] = val
+                out_rows.append(out)
+
+            if not out_rows:
+                results.append({"dataset_id": d.id, "filename": d.original_filename, "status": "no_rows"})
+                continue
+
+            df = pd.DataFrame(out_rows)
+            granularity, period_start, period_end = src_engine.detect_granularity(df)
+
+            d.granularity = granularity
+            d.period_start = period_start
+            d.period_end = period_end
+            db.commit()
+
+            results.append({
+                "dataset_id": d.id,
+                "filename": d.original_filename,
+                "status": "ok",
+                "granularity": granularity,
+                "period_start": period_start,
+                "period_end": period_end,
+            })
+            log.info("granularity.backfill_ok", dataset_id=d.id, granularity=granularity,
+                     period_start=period_start, period_end=period_end)
+        except Exception as e:
+            log.warn("granularity.backfill_error", dataset_id=d.id, error=str(e))
+            results.append({"dataset_id": d.id, "filename": d.original_filename, "status": "error", "error": str(e)})
+
+    return {"processed": len(results), "results": results}
+
 # ------------------------------------------------------------------
 # Datasets — SQL OFFSET/LIMIT pagination
 # ------------------------------------------------------------------

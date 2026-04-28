@@ -8,7 +8,7 @@ because they reference the stable SourceField.id.
 import uuid
 from datetime import datetime
 from sqlalchemy import (
-    Column, String, Integer, Float, Boolean, DateTime, ForeignKey, JSON, Text, UniqueConstraint
+    Column, String, Integer, Float, Boolean, Date, DateTime, ForeignKey, JSON, Text, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from db import Base
@@ -121,6 +121,10 @@ class Dataset(Base):
     sha256 = Column(String, nullable=False, index=True)
     row_count = Column(Integer, default=0)
     ai_summary = Column(Text, default="")  # Gemini 3 Flash generated summary
+    # Granularity & period — prevent double-counting overlapping reports
+    granularity = Column(String, default="unknown")    # daily | monthly | aggregated | unknown
+    period_start = Column(Date, nullable=True)          # earliest date in the dataset
+    period_end = Column(Date, nullable=True)            # latest date in the dataset
     uploaded_at = Column(DateTime, default=datetime.utcnow)
 
     customer = relationship("Customer", back_populates="datasets")

@@ -60,7 +60,7 @@ export default function LoginScreen() {
         user: { id: string; name: string; email: string; image: string | null };
       }>('/api/auth/mobile-token', {
         method: 'POST',
-        body: { provider: 'demo', email: 'gustav@beachvibes.test' },
+        body: { provider: 'demo', email: 'guswes@gmail.com' },
         skipAuth: true,
       });
 

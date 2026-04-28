@@ -13,7 +13,7 @@ const C = {
   text: '#f8fafc', muted: 'rgba(255,255,255,0.5)', dim: 'rgba(255,255,255,0.3)',
 };
 
-type Dataset = { id: string; source_id: string; source_key: string; source_name: string; source_version: number; original_filename: string; row_count: number; ai_summary?: string; uploaded_at: string };
+type Dataset = { id: string; source_id: string; source_key: string; source_name: string; source_version: number; original_filename: string; row_count: number; ai_summary?: string; granularity?: string; period_start?: string; period_end?: string; uploaded_at: string };
 type Customer = { id: string; slug: string; name: string; logo_emoji: string; tags: string[]; icp: any; datasets?: Dataset[] };
 type DatasetDetail = { dataset_id: string; source_name: string; source_version: number; original_filename: string; row_count: number; columns: { field_id: string; key: string; display_name: string; unit: string }[]; rows: Record<string, any>[]; page: number; total_pages: number; total: number };
 type Module = { id: string; name: string; abbr: string; category: string; description: string; customer_id: string | null; field_refs: any[]; formula: any; thresholds: any; visualization: string; inverted: boolean };
@@ -222,8 +222,8 @@ export default function CustomerDetailPage() {
           <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ color: C.dim, fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>
-                <th style={th}>Fil</th><th style={th}>Källa</th><th style={th}>Version</th>
-                <th style={{ ...th, textAlign: 'right' }}>Rader</th><th style={th}>Uppladdad</th><th></th>
+                <th style={th}>Fil</th><th style={th}>Källa</th><th style={th}>Version</th><th style={th}>Kornighet</th>
+                <th style={{ ...th, textAlign: 'right' }}>Rader</th><th style={th}>Period</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -233,13 +233,34 @@ export default function CustomerDetailPage() {
                     <td style={td}>{d.original_filename}</td>
                     <td style={td}>{d.source_name}</td>
                     <td style={td}>v{d.source_version}</td>
+                    <td style={td}>
+                      <span style={{
+                        fontSize: 10, padding: '2px 8px', borderRadius: 6, fontWeight: 700,
+                        background: d.granularity === 'daily' ? 'rgba(34,197,94,0.15)' :
+                                    d.granularity === 'monthly' ? 'rgba(59,130,246,0.15)' :
+                                    d.granularity === 'aggregated' ? 'rgba(245,158,11,0.15)' :
+                                    'rgba(255,255,255,0.05)',
+                        color: d.granularity === 'daily' ? '#22c55e' :
+                               d.granularity === 'monthly' ? '#3b82f6' :
+                               d.granularity === 'aggregated' ? '#f59e0b' : C.dim,
+                      }}>
+                        {d.granularity === 'daily' ? '📅 Daglig' :
+                         d.granularity === 'weekly' ? '📆 Veckovis' :
+                         d.granularity === 'monthly' ? '🗓️ Månatlig' :
+                         d.granularity === 'quarterly' ? '📊 Kvartalsvis' :
+                         d.granularity === 'yearly' ? '📈 Årsvis' :
+                         d.granularity === 'aggregated' ? '∑ Aggregerad' : '❓ Okänd'}
+                      </span>
+                    </td>
                     <td style={{ ...td, textAlign: 'right', fontFamily: 'monospace' }}>{d.row_count}</td>
-                    <td style={{ ...td, color: C.muted }}>{new Date(d.uploaded_at).toLocaleString()}</td>
+                    <td style={{ ...td, color: C.muted, fontSize: 11 }}>
+                      {d.period_start && d.period_end ? `${d.period_start.slice(0,7)} → ${d.period_end.slice(0,7)}` : '—'}
+                    </td>
                     <td style={td}><button onClick={e => { e.stopPropagation(); deleteDs(d.id); }} style={btn('ghost')}>Ta bort</button></td>
                   </tr>
                   {d.ai_summary && (
                     <tr>
-                      <td colSpan={6} style={{ padding: '4px 12px 14px', borderBottom: `1px solid ${C.border}` }}>
+                      <td colSpan={7} style={{ padding: '4px 12px 14px', borderBottom: `1px solid ${C.border}` }}>
                         <div style={{ background: 'rgba(177, 78, 244, 0.08)', border: '1px solid rgba(177, 78, 244, 0.2)', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
                           <span style={{ color: C.accent, marginRight: 6 }}>✨ AI</span>
                           {d.ai_summary}
