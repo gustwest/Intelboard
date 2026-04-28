@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Gauge from '@/components/Gauge';
 import NotesTab from '@/components/NotesTab';
 import GoalsTab from '@/components/GoalsTab';
+import DashboardCharts from '@/components/DashboardCharts';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
@@ -178,6 +179,9 @@ export default function CustomerDetailPage() {
 
       {/* Overview tab */}
       {activeTab === 'overview' && <>
+      {/* Dashboard Charts */}
+      <DashboardCharts customerId={params.id} />
+
       {/* Upload zone */}
       <div
         onDragOver={e => { e.preventDefault(); setDragOver(true); }}
