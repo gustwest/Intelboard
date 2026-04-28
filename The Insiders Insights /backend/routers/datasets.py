@@ -214,3 +214,64 @@ def delete_dataset(dataset_id: str, db: Session = Depends(get_db)):
     db.delete(d)
     db.commit()
     return {"deleted": True}
+
+
+@router.post("/api/datasets/regenerate-summaries")
+def regenerate_summaries(db: Session = Depends(get_db)):
+    """Regenerate AI summaries for all datasets that don't have one yet."""
+    import pandas as pd
+
+    datasets = (
+        db.query(models.Dataset)
+        .options(
+            joinedload(models.Dataset.source),
+            joinedload(models.Dataset.source_version)
+            .joinedload(models.SourceVersion.mappings)
+            .joinedload(models.SourceFieldMapping.source_field),
+        )
+        .filter(
+            (models.Dataset.ai_summary == None) | (models.Dataset.ai_summary == "")  # noqa: E711
+        )
+        .all()
+    )
+
+    results = []
+    for d in datasets:
+        try:
+            # Rebuild DataFrame from stored rows (limit 500)
+            fields = [m.source_field for m in d.source_version.mappings]
+            field_id_to_key = {f.id: f.key for f in fields}
+
+            rows = (
+                db.query(models.DatasetRow)
+                .filter_by(dataset_id=d.id)
+                .order_by(models.DatasetRow.row_index)
+                .limit(500)
+                .all()
+            )
+            out_rows = []
+            for r in rows:
+                out = {}
+                for fid, val in (r.values_json or {}).items():
+                    key = field_id_to_key.get(fid)
+                    if key:
+                        out[key] = val
+                out_rows.append(out)
+
+            if not out_rows:
+                continue
+
+            df = pd.DataFrame(out_rows)
+            summary = ai_engine.summarize_dataset(df, d.original_filename, d.source.name)
+            if summary:
+                d.ai_summary = summary
+                db.commit()
+                results.append({"dataset_id": d.id, "filename": d.original_filename, "status": "ok", "length": len(summary)})
+                log.info("ai.regenerate_ok", dataset_id=d.id, filename=d.original_filename)
+            else:
+                results.append({"dataset_id": d.id, "filename": d.original_filename, "status": "skipped"})
+        except Exception as e:
+            log.warn("ai.regenerate_error", dataset_id=d.id, error=str(e))
+            results.append({"dataset_id": d.id, "filename": d.original_filename, "status": "error", "error": str(e)})
+
+    return {"processed": len(results), "results": results}
