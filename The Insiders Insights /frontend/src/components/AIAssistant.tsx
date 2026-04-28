@@ -157,12 +157,16 @@ export default function AIAssistant() {
     let fileAnalysis = undefined;
 
     // Upload temp file if attached
-    if (pendingFile && customerId) {
+    if (pendingFile) {
       try {
         const formData = new FormData();
         formData.append('file', pendingFile);
         
-        const uploadRes = await fetch(`${API_URL}/api/ai/upload-temp?customer_id=${customerId}`, {
+        const uploadUrl = customerId 
+          ? `${API_URL}/api/ai/upload-temp?customer_id=${customerId}`
+          : `${API_URL}/api/ai/upload-temp`;
+          
+        const uploadRes = await fetch(uploadUrl, {
           method: 'POST',
           body: formData,
         });
@@ -272,9 +276,13 @@ export default function AIAssistant() {
   return (
     <div id="ai-assistant-root">
       <div 
+        onDragEnter={(e) => {
+          e.preventDefault();
+          setIsDragging(true);
+        }}
         onDragOver={(e) => {
           e.preventDefault();
-          if (getContext().customerId) setIsDragging(true);
+          setIsDragging(true);
         }}
         onDragLeave={(e) => {
           e.preventDefault();
@@ -284,7 +292,7 @@ export default function AIAssistant() {
           e.preventDefault();
           setIsDragging(false);
           const file = e.dataTransfer.files?.[0];
-          if (file && getContext().customerId) {
+          if (file) {
             setPendingFile(file);
           }
         }}
@@ -513,40 +521,36 @@ export default function AIAssistant() {
             </div>
           )}
           <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
-            {getContext().customerId && (
-              <>
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  style={{ display: 'none' }} 
-                  accept=".csv,.tsv,.xlsx"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) setPendingFile(file);
-                  }}
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  style={{
-                    width: '40px', height: '40px', borderRadius: '12px',
-                    border: 'none', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: 'rgba(255,255,255,0.04)',
-                    color: C.dim, transition: 'all 0.2s',
-                  }}
-                  onMouseEnter={e => {
-                    (e.target as HTMLElement).style.color = C.accent;
-                    (e.target as HTMLElement).style.background = 'rgba(0,212,255,0.1)';
-                  }}
-                  onMouseLeave={e => {
-                    (e.target as HTMLElement).style.color = C.dim;
-                    (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.04)';
-                  }}
-                >
-                  <Paperclip size={18} />
-                </button>
-              </>
-            )}
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              style={{ display: 'none' }} 
+              accept=".csv,.tsv,.xlsx,.xls"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) setPendingFile(file);
+              }}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                width: '40px', height: '40px', borderRadius: '12px',
+                border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(255,255,255,0.04)',
+                color: C.dim, transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => {
+                (e.target as HTMLElement).style.color = C.accent;
+                (e.target as HTMLElement).style.background = 'rgba(0,212,255,0.1)';
+              }}
+              onMouseLeave={e => {
+                (e.target as HTMLElement).style.color = C.dim;
+                (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.04)';
+              }}
+            >
+              <Paperclip size={18} />
+            </button>
             <textarea
               ref={inputRef}
               value={input}

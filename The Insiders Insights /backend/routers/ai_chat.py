@@ -48,13 +48,14 @@ os.makedirs(TEMP_UPLOAD_DIR, exist_ok=True)
 
 
 @router.post("/api/ai/upload-temp")
-async def ai_upload_temp(customer_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def ai_upload_temp(customer_id: Optional[str] = None, file: UploadFile = File(...), db: Session = Depends(get_db)):
     """Upload a file temporarily for AI analysis."""
-    c = db.query(models.Customer).filter(
-        (models.Customer.id == customer_id) | (models.Customer.slug == customer_id)
-    ).first()
-    if not c:
-        raise HTTPException(404, "Customer not found")
+    if customer_id:
+        c = db.query(models.Customer).filter(
+            (models.Customer.id == customer_id) | (models.Customer.slug == customer_id)
+        ).first()
+        if not c:
+            raise HTTPException(404, "Customer not found")
 
     temp_id = str(uuid.uuid4())
     temp_path = os.path.join(TEMP_UPLOAD_DIR, f"{temp_id}.csv")
