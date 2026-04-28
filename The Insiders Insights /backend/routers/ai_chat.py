@@ -231,6 +231,15 @@ def _build_context(db: Session, customer_id: Optional[str], page_context: Option
                 sections.append(f"\n### Anteckningar ({len(notes)} st)")
                 for n in notes:
                     sections.append(f"- **{n.title}**: {(n.body or '')[:150]}")
+    else:
+        # Not in a specific customer context
+        all_customers = db.query(models.Customer).all()
+        if all_customers:
+            context_labels.append("all_customers")
+            sections.append(f"\n## Tillgängliga Kunder ({len(all_customers)} st)")
+            sections.append("Eftersom du inte är på en specifik kundsida just nu, här är de tillgängliga kunderna:")
+            for c in all_customers:
+                sections.append(f"- **{c.name}** (ID: {c.id})")
 
     # Page-specific context
     if page_context == "sources":
@@ -311,8 +320,8 @@ Regler:
 ## Hantering av Uppladdade Filer
 När en användare laddar upp en fil i chatten kommer systemet att infoga intern information i meddelandet, t.ex. "[SYSTEM_FILE_ANALYSIS: temp_id=... ...]".
 - När du ser denna information, sammanfatta kort för användaren vad du ser (t.ex. "Jag ser att du har laddat upp en fil som matchar LinkedIn Campaign Manager...").
-- Fråga ALLTID om användaren vill spara den som ett nytt dataset.
-- NÄR användaren svarar "Ja" eller på annat sätt bekräftar att de vill spara den senaste filen, MÅSTE du svara med den exakta strängen `[EXECUTE_SAVE:temp_id]` (byt ut temp_id mot det id du fick tidigare). Systemet kommer då att spara filen automatiskt och meddela användaren. Skriv ingen annan text i det svaret om du använder taggen.
+- Om du vet vilken kund vi befinner oss på, fråga om användaren vill spara den. Om du INTE vet vilken kund filen tillhör (för att vi inte är på en kundsida), be användaren specificera vilken kund filen tillhör från listan av tillgängliga kunder.
+- NÄR användaren svarar "Ja" (om kund redan är känd) ELLER har angett vilken kund de vill spara på, MÅSTE du svara med den exakta strängen `[EXECUTE_SAVE:temp_id:customer_id]` (byt ut temp_id mot det id du fick tidigare, och customer_id mot kundens ID. Om kunden redan var angiven i kontexten "Aktuell kund" kan du lämna customer_id tomt, t.ex. `[EXECUTE_SAVE:temp_id]`). Systemet kommer då att spara filen automatiskt. Skriv ingen annan text i det svaret.
 
 ## Skapande av Moduler och Mål
 Om en användare bekräftar att de vill att du ska skapa en KPI/Modul, använd följande syntax exakt:
@@ -374,13 +383,16 @@ Om användaren vill skapa ett nytt mål för kunden, använd:
             # --- AGENT INTERCEPTION FOR EXECUTE_SAVE ---
             if "[EXECUTE_SAVE:" in reply:
                 import re
-                match = re.search(r"\[EXECUTE_SAVE:(.*?)\]", reply)
+                match = re.search(r"\[EXECUTE_SAVE:([^\]]+)\]", reply)
                 if match:
-                    temp_id = match.group(1).strip()
+                    parts = match.group(1).split(":")
+                    temp_id = parts[0].strip()
+                    target_customer_id = parts[1].strip() if len(parts) > 1 else req.customer_id
+                    
                     temp_path = os.path.join(TEMP_UPLOAD_DIR, f"{temp_id}.csv")
                     
-                    if os.path.exists(temp_path) and req.customer_id:
-                        c = db.query(models.Customer).filter_by(id=req.customer_id).first()
+                    if os.path.exists(temp_path) and target_customer_id:
+                        c = db.query(models.Customer).filter_by(id=target_customer_id).first()
                         if c:
                             # Run the ingestion
                             with open(temp_path, "rb") as f:
@@ -397,10 +409,12 @@ Om användaren vill skapa ett nytt mål för kunden, använd:
                                 dataset = src_engine.ingest_dataset(db, c, source, version, df, "Bifogad_via_AI.csv", raw)
                                 datasets_router._generate_and_save_summary(db, dataset, df, "Bifogad_via_AI.csv", source.name)
                                 
-                                reply = f"✅ Klart! Datasetet är uppladdat och sparat under {source.name} med {dataset.row_count} rader. AI-sammanfattningen är också klar och datan är nu tillgänglig i dina moduler."
+                                reply = f"✅ Klart! Datasetet är uppladdat och sparat under kunden **{c.name}** och källan {source.name} med {dataset.row_count} rader. AI-sammanfattningen är också klar och datan är nu tillgänglig i dina moduler."
                                 os.remove(temp_path)
                             else:
                                 reply = "⚠️ Jag försökte spara filen, men kunde inte tolka innehållet."
+                        else:
+                            reply = "⚠️ Jag kunde inte hitta den angivna kunden i systemet."
                     else:
                         reply = "⚠️ Det verkar som att filen har försvunnit eller att vi saknar kund-kontext."
             
