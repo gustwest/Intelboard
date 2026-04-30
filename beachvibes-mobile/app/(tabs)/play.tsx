@@ -376,7 +376,7 @@ const s = StyleSheet.create({
   commentBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 4 },
   commentText: { fontSize: 13, color: Colors.textSecondary },
   lastCommentText: { fontSize: 12, color: Colors.textTertiary, flex: 1 },
-  fab: { position: 'absolute', bottom: 90, right: 16, borderRadius: 26, shadowColor: '#ea580c', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 8 },
+  fab: { position: 'absolute', bottom: 45, right: 16, borderRadius: 26, shadowColor: '#ea580c', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 8 },
   fabGradient: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 14, borderRadius: 26 },
   fabText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 });
