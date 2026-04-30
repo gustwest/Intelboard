@@ -122,12 +122,15 @@ export default function PlayScreen() {
           <View style={s.section}>
             <Text style={s.sectionLabel}>GRUPPER</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.storiesRow}>
-              <TouchableOpacity style={s.storyItem}>
-                <View style={[s.storyRing, { backgroundColor: 'transparent', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1, borderStyle: 'dashed' }]}>
-                  <View style={[s.storyInner, { backgroundColor: 'transparent', borderWidth: 0 }]}>
-                    <Ionicons name="add" size={28} color={Colors.brandPrimary} />
-                  </View>
-                </View>
+              <TouchableOpacity style={s.storyItem} onPress={() => Alert.alert('Ny grupp', 'Funktionen byggs just nu')}>
+                <LinearGradient
+                  colors={['#f97316', '#ef4444', '#ec4899', '#a855f7']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[s.storyRing, { borderWidth: 0 }]}
+                >
+                  <Ionicons name="add" size={32} color="#fff" style={{ opacity: 0.9 }} />
+                </LinearGradient>
                 <Text style={s.storyName} numberOfLines={1}>Ny grupp</Text>
               </TouchableOpacity>
               {groups.map((g) => {
@@ -142,7 +145,7 @@ export default function PlayScreen() {
                       >
                       <View style={s.storyInner}>
                         {g.imageUrl ? <Image source={{ uri: getAbsoluteUrl(g.imageUrl) }} style={s.storyImage} /> : <Text style={s.storyEmoji}>{g.emoji || '🏐'}</Text>}
-                        {g.isPinned && <View style={s.pinIcon}><Ionicons name="pin" size={10} color="#fff" /></View>}
+                        {g.isPinned && <View style={s.pinIcon}><Text style={{ fontSize: 12 }}>📌</Text></View>}
                       </View>
                     </LinearGradient>
                     {(g.unreadCount || 0) > 0 && (
@@ -322,12 +325,12 @@ const s = StyleSheet.create({
   sectionLabel: { color: Colors.textTertiary, fontSize: 12, fontWeight: '600', paddingHorizontal: 16, marginBottom: 8, letterSpacing: 0.5 },
   storiesRow: { paddingHorizontal: 12, gap: 14, paddingBottom: 12, paddingTop: 6 },
   storyItem: { alignItems: 'center', width: 68, position: 'relative' },
-  storyRing: { width: 66, height: 66, borderRadius: 33, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
-  storyInner: { width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.bgTertiary, justifyContent: 'center', alignItems: 'center', overflow: 'hidden', borderWidth: 2, borderColor: Colors.bgPrimary },
-  storyImage: { width: '100%', height: '100%', borderRadius: 28 },
-  storyEmoji: { fontSize: 24 },
+  storyRing: { width: 66, height: 66, borderRadius: 33, justifyContent: 'center', alignItems: 'center', marginBottom: 6, shadowColor: Colors.brandPrimary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4 },
+  storyInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: Colors.bgTertiary, justifyContent: 'center', alignItems: 'center', overflow: 'hidden', borderWidth: 2, borderColor: Colors.bgPrimary },
+  storyImage: { width: '100%', height: '100%', borderRadius: 30 },
+  storyEmoji: { fontSize: 28 },
   storyName: { fontSize: 11, color: Colors.textSecondary, marginTop: 4, textAlign: 'center' },
-  pinIcon: { position: 'absolute', top: -2, right: -2, backgroundColor: Colors.brandPrimary, borderRadius: 8, width: 16, height: 16, justifyContent: 'center', alignItems: 'center' },
+  pinIcon: { position: 'absolute', top: -4, right: -4, zIndex: 5 },
   storyBadge: { position: 'absolute', top: -4, right: -2, backgroundColor: Colors.error, borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: Colors.bgPrimary, zIndex: 10, elevation: 4 },
   storyBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
   searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.bgSecondary, marginHorizontal: 16, marginVertical: 8, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, borderWidth: 1, borderColor: Colors.borderSubtle },
