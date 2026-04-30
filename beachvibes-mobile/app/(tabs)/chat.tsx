@@ -2,13 +2,14 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, FlatList, StyleSheet, Image,
   TouchableOpacity, RefreshControl, ActivityIndicator,
-  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../src/theme/colors';
 import { api } from '../../src/api/client';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppHeader } from '../../src/components/AppHeader';
+import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
 
 interface Conversation {
   id: string;
@@ -51,17 +52,20 @@ export default function ChatScreen() {
   };
 
   const renderConversation = ({ item }: { item: Conversation }) => (
-    <TouchableOpacity style={[s.convRow, item.unreadCount > 0 && s.convUnread]} activeOpacity={0.7}>
+    <TouchableOpacity style={[s.convRow, item.unreadCount > 0 && s.convUnread]} activeOpacity={0.7} onPress={() => router.push(`/chat/${item.id}`)}>
       {item.image ? (
         <Image source={{ uri: item.image }} style={s.convAvatar} />
       ) : (
-        <View style={[s.convAvatar, { backgroundColor: Colors.bgTertiary, justifyContent: 'center', alignItems: 'center' }]}>
+        <LinearGradient
+          colors={item.isGroup ? ['#06b6d4', '#3b82f6'] : ['#ea580c', '#db2777']}
+          style={[s.convAvatar, { justifyContent: 'center', alignItems: 'center' }]}
+        >
           {item.isGroup ? (
-            <Ionicons name="people" size={20} color={Colors.textTertiary} />
+            <Ionicons name="people" size={20} color="#fff" />
           ) : (
-            <Text style={{ color: Colors.textSecondary, fontSize: 16, fontWeight: '700' }}>{item.name?.charAt(0)}</Text>
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>{item.name?.charAt(0)}</Text>
           )}
-        </View>
+        </LinearGradient>
       )}
       <View style={s.convContent}>
         <View style={s.convTopRow}>
@@ -73,9 +77,9 @@ export default function ChatScreen() {
         </Text>
       </View>
       {item.unreadCount > 0 && (
-        <View style={s.unreadBadge}>
+        <LinearGradient colors={['#ea580c', '#db2777']} start={{x:0,y:0}} end={{x:1,y:0}} style={s.unreadBadge}>
           <Text style={s.unreadText}>{item.unreadCount}</Text>
-        </View>
+        </LinearGradient>
       )}
     </TouchableOpacity>
   );
@@ -88,7 +92,9 @@ export default function ChatScreen() {
         <View style={s.center}><ActivityIndicator size="large" color={Colors.brandPrimary} /></View>
       ) : conversations.length === 0 ? (
         <View style={s.center}>
-          <Ionicons name="chatbubbles-outline" size={64} color={Colors.textTertiary} />
+          <View style={s.emptyIconWrap}>
+            <Ionicons name="chatbubbles-outline" size={48} color={Colors.brandPrimary} />
+          </View>
           <Text style={s.emptyTitle}>Inga meddelanden</Text>
           <Text style={s.emptyText}>Starta en konversation via en spelares profil</Text>
         </View>
@@ -108,9 +114,14 @@ export default function ChatScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bgPrimary },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 10 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary },
-  emptyText: { fontSize: 14, color: Colors.textSecondary },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 14 },
+  emptyIconWrap: {
+    width: 80, height: 80, borderRadius: 40,
+    backgroundColor: 'rgba(249,115,22,0.08)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  emptyTitle: { fontSize: 20, fontWeight: '700', color: Colors.textPrimary },
+  emptyText: { fontSize: 14, color: Colors.textSecondary, textAlign: 'center', paddingHorizontal: 40 },
   convRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle },
   convUnread: { backgroundColor: 'rgba(249,115,22,0.04)' },
   convAvatar: { width: 48, height: 48, borderRadius: 24, overflow: 'hidden' },
@@ -119,6 +130,6 @@ const s = StyleSheet.create({
   convName: { fontSize: 15, fontWeight: '600', color: Colors.textPrimary, flex: 1, marginRight: 8 },
   convTime: { fontSize: 12, color: Colors.textTertiary },
   convMessage: { fontSize: 13, color: Colors.textSecondary },
-  unreadBadge: { backgroundColor: Colors.brandPrimary, borderRadius: 12, minWidth: 22, height: 22, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6 },
+  unreadBadge: { borderRadius: 12, minWidth: 22, height: 22, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6 },
   unreadText: { color: '#fff', fontSize: 11, fontWeight: '800' },
 });

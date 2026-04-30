@@ -1,144 +1,224 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ActivityIndicator,
+  ActivityIndicator, Image, Dimensions, Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../src/theme/colors';
 import { useAuth } from '../src/auth/AuthProvider';
-import { apiRequest } from '../src/api/client';
 import * as WebBrowser from 'expo-web-browser';
-import * as Google from 'expo-auth-session/providers/google';
+import * as Linking from 'expo-linking';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 
-WebBrowser.maybeCompleteAuthSession();
-
-// Web client ID from Google Cloud Console (same as web app)
-const GOOGLE_WEB_CLIENT_ID = '815335042776-7p9osbj1e8ktr96j627a2bqqfc0bcvj3.apps.googleusercontent.com';
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const API_BASE = 'https://dvoucher-app-815335042776.europe-north1.run.app';
 
 export default function LoginScreen() {
   const { login } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Google Auth Session — uses web client ID (works in Expo Go)
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    clientId: GOOGLE_WEB_CLIENT_ID,
-  });
+  const fadeAnim = useState(new Animated.Value(0))[0];
+  const slideAnim = useState(new Animated.Value(30))[0];
 
   useEffect(() => {
-    console.log('Redirect URI is:', request?.redirectUri);
-  }, [request]);
+    // Entrance animation
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
-  // Handle Google OAuth response
+  // Listen for deep link callback from server-side OAuth
   useEffect(() => {
-    if (response?.type === 'success') {
-      const idToken = response.params.id_token;
-      if (idToken) {
-        handleGoogleToken(idToken);
-      }
-    } else if (response?.type === 'error') {
-      setError('Google-inloggning avbröts. Försök igen.');
-      setLoading(false);
-    } else if (response?.type === 'dismiss') {
-      setLoading(false);
-    }
-  }, [response]);
+    const handleDeepLink = (event: { url: string }) => {
+      const url = new URL(event.url);
+      
+      if (url.hostname === 'auth-callback') {
+        const token = url.searchParams.get('token');
+        const userJson = url.searchParams.get('user');
+        const oauthError = url.searchParams.get('error');
 
-  const handleGoogleToken = async (idToken: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await apiRequest<{
-        token: string;
-        user: { id: string; name: string; email: string; image: string | null };
-      }>('/api/auth/mobile-token', {
-        method: 'POST',
-        body: { provider: 'google', id_token: idToken },
-        skipAuth: true,
-      });
+        if (oauthError) {
+          setError(`Inloggning misslyckades: ${oauthError}`);
+          setLoading(false);
+          return;
+        }
 
-      if (result.token && result.user) {
-        await login(result.token, result.user);
-        router.replace('/(tabs)/feed');
+        if (token && userJson) {
+          try {
+            const user = JSON.parse(userJson);
+            login(token, user).then(() => {
+              router.replace('/(tabs)/feed');
+            });
+          } catch (err) {
+            setError('Kunde inte bearbeta inloggningsdata.');
+            setLoading(false);
+          }
+        } else {
+          setError('Ingen autentiseringsdata mottagen.');
+          setLoading(false);
+        }
       }
-    } catch (err: any) {
-      console.error('Google login failed:', err);
-      setError('Inloggningen misslyckades. Kontrollera din internetanslutning.');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+
+    Linking.getInitialURL().then((url) => {
+      if (url) handleDeepLink({ url });
+    });
+
+    return () => subscription.remove();
+  }, []);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError(null);
     try {
-      await promptAsync();
-    } catch (err) {
-      setError('Kunde inte starta Google-inloggningen.');
+      const oauthUrl = `${API_BASE}/api/auth/mobile-oauth?scheme=beachvibes`;
+      
+      const result = await WebBrowser.openAuthSessionAsync(
+        oauthUrl,
+        'beachvibes://auth-callback'
+      );
+
+      if (result.type === 'cancel' || result.type === 'dismiss') {
+        setLoading(false);
+      }
+    } catch (err: any) {
+      console.error('OAuth error:', err);
+      setError('Kunde inte öppna inloggningen.');
       setLoading(false);
     }
   };
 
+  const features = [
+    { icon: '⚡', title: 'Snabba Matcher', desc: 'Hitta och skapa events på sekunder' },
+    { icon: '🤝', title: 'Ditt Gäng', desc: 'Hitta spelare som matchar din nivå' },
+    { icon: '🏆', title: 'Tävla & Rankas', desc: 'Turneringar, ligor och ranking' },
+    { icon: '🗺️', title: 'Hitta Banor', desc: 'Interaktiv karta med alla banor' },
+  ];
+
   return (
     <View style={styles.container}>
+      {/* Background gradient matching web */}
       <LinearGradient
-        colors={['#0f1117', '#1a1127', '#1a2744']}
+        colors={['#0a0a12', '#0f1028', '#0d1a2e', '#0a0a12']}
         style={StyleSheet.absoluteFill}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
       />
 
+      {/* Blue glow effects like the web */}
+      <View style={styles.glowLeft} />
+      <View style={styles.glowRight} />
+
       <SafeAreaView style={styles.safeArea}>
-        {/* Logo */}
-        <View style={styles.logoSection}>
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoEmoji}>🏐</Text>
+        <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+          
+          {/* Badge like web's "Beach Volleyball Community" */}
+          <View style={styles.badge}>
+            <Text style={styles.badgeEmoji}>🏐</Text>
+            <Text style={styles.badgeText}>Beach Volleyball Community</Text>
           </View>
-          <Text style={styles.appName}>BeachVibes</Text>
-          <Text style={styles.tagline}>Where Sand Binds Souls</Text>
-        </View>
 
-        {/* Features */}
-        <View style={styles.features}>
-          {[
-            { icon: 'tennisball-outline', text: 'Hitta och skapa events' },
-            { icon: 'people-outline', text: 'Träffa andra spelare' },
-            { icon: 'trophy-outline', text: 'Tävla och följ ranking' },
-            { icon: 'map-outline', text: 'Upptäck banor nära dig' },
-          ].map((f, i) => (
-            <View key={i} style={styles.featureRow}>
-              <Ionicons name={f.icon as any} size={20} color={Colors.brandPrimary} />
-              <Text style={styles.featureText}>{f.text}</Text>
+          {/* Logo */}
+          <View style={styles.logoSection}>
+            <Image 
+              source={require('../assets/logo.png')} 
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+            <View style={styles.brandRow}>
+              <Text style={styles.brandBeach}>Beach</Text>
+              <Text style={styles.brandVibes}>Vibes</Text>
             </View>
-          ))}
-        </View>
+            <Text style={styles.tagline}>Where Sand Binds Souls</Text>
+          </View>
 
-        {/* Login buttons */}
+          {/* Feature cards in a glassmorphic container */}
+          <View style={styles.featuresCard}>
+            {features.map((f, i) => (
+              <View key={i} style={[styles.featureRow, i < features.length - 1 && styles.featureBorder]}>
+                <Text style={styles.featureIcon}>{f.icon}</Text>
+                <View style={styles.featureTextCol}>
+                  <Text style={styles.featureTitle}>{f.title}</Text>
+                  <Text style={styles.featureDesc}>{f.desc}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </Animated.View>
+
+        {/* Login section */}
         <View style={styles.loginSection}>
           {error && (
             <View style={styles.errorBox}>
+              <Ionicons name="alert-circle" size={16} color="#ef4444" />
               <Text style={styles.errorText}>{error}</Text>
             </View>
           )}
 
           <TouchableOpacity
-            style={[styles.googleButton, !request && { opacity: 0.6 }]}
+            style={styles.googleButton}
             onPress={handleGoogleLogin}
-            disabled={loading || !request}
+            disabled={loading}
+            activeOpacity={0.85}
           >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <Ionicons name="logo-google" size={20} color="#fff" />
-                <Text style={styles.googleButtonText}>Fortsätt med Google</Text>
-              </>
-            )}
+            <LinearGradient
+              colors={['#ea580c', '#db2777']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.googleGradient}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="logo-google" size={20} color="#fff" />
+                  <Text style={styles.googleButtonText}>Fortsätt med Google</Text>
+                </>
+              )}
+            </LinearGradient>
           </TouchableOpacity>
+
+          {/* DEV BYPASS — remove before production */}
+          {__DEV__ && (
+            <TouchableOpacity
+              style={styles.devButton}
+              onPress={async () => {
+                setLoading(true);
+                setError(null);
+                try {
+                  const res = await fetch(
+                    `${API_BASE}/api/auth/mobile-dev-token?email=guswes@gmail.com&key=beachvibes-dev-2026`
+                  );
+                  const data = await res.json();
+                  if (!res.ok || !data.token) {
+                    throw new Error(data.error || 'Dev token failed');
+                  }
+                  await login(data.token, data.user);
+                  router.replace('/(tabs)/feed');
+                } catch (err: any) {
+                  setError(err.message || 'Dev login failed');
+                  setLoading(false);
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="code-slash-outline" size={16} color="rgba(255,255,255,0.5)" />
+              <Text style={styles.devButtonText}>Dev Login (simulator)</Text>
+            </TouchableOpacity>
+          )}
 
           <Text style={styles.terms}>
             Genom att fortsätta godkänner du våra villkor
@@ -150,31 +230,198 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  safeArea: { flex: 1, justifyContent: 'space-between', paddingHorizontal: 32 },
-  logoSection: { alignItems: 'center', marginTop: 60, gap: 8 },
-  logoCircle: {
-    width: 100, height: 100, borderRadius: 50,
-    backgroundColor: 'rgba(249,115,22,0.15)',
-    justifyContent: 'center', alignItems: 'center', marginBottom: 8,
+  container: { 
+    flex: 1, 
+    backgroundColor: '#0a0a12',
   },
-  logoEmoji: { fontSize: 48 },
-  appName: { fontSize: 36, fontWeight: '800', color: Colors.textPrimary, letterSpacing: -1 },
-  tagline: { fontSize: 15, color: Colors.textSecondary, fontStyle: 'italic' },
-  features: { gap: 14, paddingHorizontal: 8 },
-  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  featureText: { fontSize: 15, color: Colors.textSecondary, fontWeight: '500' },
-  loginSection: { gap: 14, marginBottom: 24 },
+  safeArea: { 
+    flex: 1, 
+    justifyContent: 'space-between',
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 28,
+    justifyContent: 'center',
+    gap: 24,
+  },
+  
+  // Blue glow effects (matching web's edge glows)
+  glowLeft: {
+    position: 'absolute',
+    left: -60,
+    top: '30%',
+    width: 120,
+    height: 300,
+    backgroundColor: '#1e40af',
+    borderRadius: 150,
+    opacity: 0.15,
+  },
+  glowRight: {
+    position: 'absolute',
+    right: -60,
+    top: '20%',
+    width: 120,
+    height: 300,
+    backgroundColor: '#3b82f6',
+    borderRadius: 150,
+    opacity: 0.1,
+  },
+
+  // Badge
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  badgeEmoji: { fontSize: 14 },
+  badgeText: { 
+    fontSize: 13, 
+    color: 'rgba(255,255,255,0.7)', 
+    fontWeight: '500',
+    letterSpacing: 0.3,
+  },
+
+  // Logo
+  logoSection: { 
+    alignItems: 'center', 
+    gap: 6,
+  },
+  logoImage: {
+    width: 100,
+    height: 100,
+    marginBottom: 4,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  brandBeach: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#22d3ee', // cyan like web
+    letterSpacing: -0.5,
+  },
+  brandVibes: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#e879f9', // magenta/pink like web
+    letterSpacing: -0.5,
+  },
+  tagline: { 
+    fontSize: 15, 
+    color: 'rgba(255,255,255,0.5)', 
+    fontStyle: 'italic',
+    letterSpacing: 0.5,
+    marginTop: 2,
+  },
+
+  // Feature card (glassmorphic)
+  featuresCard: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 20,
+    padding: 16,
+    gap: 0,
+  },
+  featureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+  },
+  featureBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+  },
+  featureIcon: {
+    fontSize: 22,
+    width: 36,
+    textAlign: 'center',
+  },
+  featureTextCol: {
+    flex: 1,
+    gap: 2,
+  },
+  featureTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.92)',
+    letterSpacing: -0.2,
+  },
+  featureDesc: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.45)',
+    fontWeight: '400',
+  },
+
+  // Login section
+  loginSection: { 
+    paddingHorizontal: 28,
+    paddingBottom: 16,
+    gap: 12,
+  },
   errorBox: {
-    backgroundColor: 'rgba(239,68,68,0.12)', borderRadius: 12,
-    padding: 12, borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(239,68,68,0.1)', 
+    borderRadius: 14,
+    padding: 14, 
+    borderWidth: 1, 
+    borderColor: 'rgba(239,68,68,0.25)',
   },
-  errorText: { color: Colors.errorLight, fontSize: 13, textAlign: 'center' },
+  errorText: { 
+    color: '#fca5a5', 
+    fontSize: 13, 
+    flex: 1,
+  },
   googleButton: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 10, backgroundColor: Colors.brandPrimary, borderRadius: 16,
-    paddingVertical: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
   },
-  googleButtonText: { fontSize: 16, fontWeight: '700', color: '#fff' },
-  terms: { fontSize: 11, color: Colors.textTertiary, textAlign: 'center', marginTop: 4 },
+  googleGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 17,
+    borderRadius: 16,
+  },
+  googleButtonText: { 
+    fontSize: 16, 
+    fontWeight: '700', 
+    color: '#fff',
+    letterSpacing: 0.3,
+  },
+  terms: { 
+    fontSize: 11, 
+    color: 'rgba(255,255,255,0.3)', 
+    textAlign: 'center', 
+    marginTop: 2,
+  },
+  devButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  devButtonText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.4)',
+    fontWeight: '500',
+  },
 });

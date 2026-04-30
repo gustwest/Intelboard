@@ -94,6 +94,7 @@ export async function apiRequest<T = unknown>(
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => 'Unknown error');
+    console.error(`[API Error] ${method} ${path} -> ${response.status}: ${errorText}`);
     throw new Error(`API Error ${response.status}: ${errorText}`);
   }
 

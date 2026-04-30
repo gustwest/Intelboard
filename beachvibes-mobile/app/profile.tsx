@@ -9,6 +9,7 @@ import { api } from '../src/api/client';
 import { useAuth } from '../src/auth/AuthProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppHeader } from '../src/components/AppHeader';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface ProfileData {
   id: string;
@@ -85,62 +86,61 @@ export default function ProfileScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadProfile(); }} tintColor={Colors.brandPrimary} />
         }
       >
-        {/* Hero section */}
-        <View style={s.hero}>
-          {p?.image ? (
-            <Image source={{ uri: p.image }} style={s.avatar} />
-          ) : (
-            <View style={[s.avatar, { backgroundColor: Colors.brandPrimary, justifyContent: 'center', alignItems: 'center' }]}>
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 32 }}>
-                {p?.name?.charAt(0) || user?.name?.charAt(0) || '?'}
-              </Text>
-            </View>
-          )}
-          <Text style={s.name}>{p?.name || user?.name}</Text>
-          {p?.city && (
-            <View style={s.locationRow}>
-              <Ionicons name="location" size={14} color={Colors.brandPrimary} />
-              <Text style={s.locationText}>{p.city}{p.region ? `, ${p.region}` : ''}</Text>
-            </View>
-          )}
-          {p?.skillLevel && (
-            <View style={s.skillBadge}>
-              <Text style={s.skillText}>{skillLabels[p.skillLevel] || p.skillLevel}</Text>
-            </View>
-          )}
-          {p?.bio && <Text style={s.bio}>{p.bio}</Text>}
-          <Text style={s.memberSince}>
-            Medlem sedan {p?.memberSince ? new Date(p.memberSince).toLocaleDateString('sv-SE', { month: 'long', year: 'numeric' }) : '–'}
-          </Text>
-        </View>
+        {/* Hero section with gradient background */}
+        <LinearGradient
+          colors={['rgba(249,115,22,0.12)', 'rgba(236,72,153,0.08)', 'transparent']}
+          style={s.heroGradient}
+        >
+          <View style={s.hero}>
+            {p?.image ? (
+              <View style={s.avatarBorder}>
+                <Image source={{ uri: p.image }} style={s.avatar} />
+              </View>
+            ) : (
+              <LinearGradient colors={['#ea580c', '#db2777']} style={s.avatarBorder}>
+                <View style={s.avatar}>
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 32 }}>
+                    {p?.name?.charAt(0) || user?.name?.charAt(0) || '?'}
+                  </Text>
+                </View>
+              </LinearGradient>
+            )}
+            <Text style={s.name}>{p?.name || user?.name}</Text>
+            {p?.city && (
+              <View style={s.locationRow}>
+                <Ionicons name="location" size={14} color={Colors.brandPrimary} />
+                <Text style={s.locationText}>{p.city}{p.region ? `, ${p.region}` : ''}</Text>
+              </View>
+            )}
+            {p?.skillLevel && (
+              <LinearGradient colors={['rgba(249,115,22,0.15)', 'rgba(236,72,153,0.15)']} start={{x:0,y:0}} end={{x:1,y:0}} style={s.skillBadge}>
+                <Text style={s.skillText}>{skillLabels[p.skillLevel] || p.skillLevel}</Text>
+              </LinearGradient>
+            )}
+            {p?.bio && <Text style={s.bio}>{p.bio}</Text>}
+            <Text style={s.memberSince}>
+              Medlem sedan {p?.memberSince ? new Date(p.memberSince).toLocaleDateString('sv-SE', { month: 'long', year: 'numeric' }) : '–'}
+            </Text>
+          </View>
+        </LinearGradient>
 
         {/* Stats grid */}
         {p?.stats && (
           <View style={s.statsGrid}>
-            <View style={s.statItem}>
-              <Text style={s.statNumber}>{p.stats.eventsJoined}</Text>
-              <Text style={s.statLabel}>Events</Text>
-            </View>
-            <View style={s.statItem}>
-              <Text style={s.statNumber}>{p.stats.matchesPlayed}</Text>
-              <Text style={s.statLabel}>Matcher</Text>
-            </View>
-            <View style={s.statItem}>
-              <Text style={s.statNumber}>{p.stats.wins}</Text>
-              <Text style={s.statLabel}>Vinster</Text>
-            </View>
-            <View style={s.statItem}>
-              <Text style={s.statNumber}>{p.stats.losses}</Text>
-              <Text style={s.statLabel}>Förluster</Text>
-            </View>
-            <View style={s.statItem}>
-              <Text style={s.statNumber}>{p.stats.connections}</Text>
-              <Text style={s.statLabel}>Kontakter</Text>
-            </View>
-            <View style={s.statItem}>
-              <Text style={s.statNumber}>{p.stats.eventsCreated}</Text>
-              <Text style={s.statLabel}>Skapade</Text>
-            </View>
+            {[
+              { value: p.stats.eventsJoined, label: 'Events', icon: 'calendar', color: Colors.brandPrimary },
+              { value: p.stats.matchesPlayed, label: 'Matcher', icon: 'tennisball', color: Colors.brandAccent },
+              { value: p.stats.wins, label: 'Vinster', icon: 'trophy', color: Colors.success },
+              { value: p.stats.losses, label: 'Förluster', icon: 'close-circle', color: Colors.error },
+              { value: p.stats.connections, label: 'Kontakter', icon: 'people', color: Colors.brandPink },
+              { value: p.stats.eventsCreated, label: 'Skapade', icon: 'add-circle', color: Colors.warning },
+            ].map((stat, i) => (
+              <View key={i} style={s.statItem}>
+                <Ionicons name={stat.icon as any} size={18} color={stat.color} />
+                <Text style={[s.statNumber, { color: stat.color }]}>{stat.value}</Text>
+                <Text style={s.statLabel}>{stat.label}</Text>
+              </View>
+            ))}
           </View>
         )}
 
@@ -149,14 +149,18 @@ export default function ProfileScreen() {
           <Text style={s.sectionTitle}>Detaljer</Text>
 
           <View style={s.detailRow}>
-            <Ionicons name="mail-outline" size={18} color={Colors.textTertiary} />
+            <View style={[s.detailIcon, { backgroundColor: 'rgba(249,115,22,0.1)' }]}>
+              <Ionicons name="mail-outline" size={16} color={Colors.brandPrimary} />
+            </View>
             <Text style={s.detailLabel}>Email</Text>
             <Text style={s.detailValue}>{p?.email || user?.email}</Text>
           </View>
 
           {p?.beachinfoClass && (
             <View style={s.detailRow}>
-              <Ionicons name="ribbon-outline" size={18} color={Colors.textTertiary} />
+              <View style={[s.detailIcon, { backgroundColor: 'rgba(6,182,212,0.1)' }]}>
+                <Ionicons name="ribbon-outline" size={16} color={Colors.brandAccent} />
+              </View>
               <Text style={s.detailLabel}>Klass</Text>
               <Text style={s.detailValue}>{p.beachinfoClass}</Text>
             </View>
@@ -164,7 +168,9 @@ export default function ProfileScreen() {
 
           {p?.courtName && (
             <View style={s.detailRow}>
-              <Ionicons name="location-outline" size={18} color={Colors.textTertiary} />
+              <View style={[s.detailIcon, { backgroundColor: 'rgba(236,72,153,0.1)' }]}>
+                <Ionicons name="location-outline" size={16} color={Colors.brandPink} />
+              </View>
               <Text style={s.detailLabel}>Hembana</Text>
               <Text style={s.detailValue}>{p.courtName}</Text>
             </View>
@@ -172,7 +178,9 @@ export default function ProfileScreen() {
 
           {p?.selfRating !== null && p?.selfRating !== undefined && (
             <View style={s.detailRow}>
-              <Ionicons name="star-outline" size={18} color={Colors.textTertiary} />
+              <View style={[s.detailIcon, { backgroundColor: 'rgba(251,191,36,0.1)' }]}>
+                <Ionicons name="star-outline" size={16} color={Colors.warning} />
+              </View>
               <Text style={s.detailLabel}>Self-rating</Text>
               <Text style={s.detailValue}>{'⭐'.repeat(p.selfRating)}</Text>
             </View>
@@ -190,13 +198,22 @@ const s = StyleSheet.create({
   scroll: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
+  heroGradient: { paddingTop: 8 },
   hero: { alignItems: 'center', paddingVertical: 24, paddingHorizontal: 16, gap: 8 },
-  avatar: { width: 88, height: 88, borderRadius: 44, overflow: 'hidden', marginBottom: 4 },
+  avatarBorder: { 
+    width: 96, height: 96, borderRadius: 48, 
+    justifyContent: 'center', alignItems: 'center',
+    padding: 3,
+  },
+  avatar: { 
+    width: 90, height: 90, borderRadius: 45, overflow: 'hidden',
+    backgroundColor: Colors.bgPrimary, justifyContent: 'center', alignItems: 'center',
+  },
   name: { fontSize: 24, fontWeight: '800', color: Colors.textPrimary },
   locationRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   locationText: { fontSize: 14, color: Colors.textSecondary },
   skillBadge: {
-    backgroundColor: 'rgba(249,115,22,0.12)', paddingHorizontal: 12, paddingVertical: 4,
+    paddingHorizontal: 14, paddingVertical: 6,
     borderRadius: 100, marginTop: 4,
   },
   skillText: { fontSize: 13, color: Colors.brandPrimary, fontWeight: '600' },
@@ -205,14 +222,14 @@ const s = StyleSheet.create({
 
   statsGrid: {
     flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center',
-    paddingHorizontal: 16, paddingBottom: 16, gap: 4,
+    paddingHorizontal: 16, paddingBottom: 16, gap: 8,
   },
   statItem: {
     width: '30%', backgroundColor: Colors.bgSecondary,
-    borderRadius: 14, padding: 14, alignItems: 'center',
+    borderRadius: 16, padding: 14, alignItems: 'center', gap: 4,
     borderWidth: 1, borderColor: Colors.borderSubtle,
   },
-  statNumber: { fontSize: 22, fontWeight: '800', color: Colors.brandPrimary },
+  statNumber: { fontSize: 22, fontWeight: '800' },
   statLabel: { fontSize: 11, color: Colors.textTertiary, fontWeight: '600', marginTop: 2 },
 
   section: {
@@ -221,8 +238,12 @@ const s = StyleSheet.create({
   },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary, marginBottom: 12 },
   detailRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle,
+  },
+  detailIcon: {
+    width: 32, height: 32, borderRadius: 10,
+    justifyContent: 'center', alignItems: 'center',
   },
   detailLabel: { fontSize: 14, color: Colors.textSecondary, width: 80 },
   detailValue: { flex: 1, fontSize: 14, color: Colors.textPrimary, fontWeight: '500' },

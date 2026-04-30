@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../src/theme/colors';
 import { useAuth } from '../../src/auth/AuthProvider';
 import { ActivityIndicator, View } from 'react-native';
+import { BlurView } from 'expo-blur';
 
 export default function TabLayout() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -26,8 +27,8 @@ export default function TabLayout() {
         tabBarActiveTintColor: Colors.tabActive,
         tabBarInactiveTintColor: Colors.tabInactive,
         tabBarStyle: {
-          backgroundColor: Colors.tabBarBg,
-          borderTopColor: Colors.tabBarBorder,
+          backgroundColor: 'rgba(15, 17, 23, 0.92)',
+          borderTopColor: 'rgba(255, 255, 255, 0.06)',
           borderTopWidth: 1,
           paddingBottom: 4,
           paddingTop: 8,
@@ -44,8 +45,8 @@ export default function TabLayout() {
         name="feed"
         options={{
           title: 'Feed',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} />
           ),
         }}
       />
@@ -53,8 +54,8 @@ export default function TabLayout() {
         name="play"
         options={{
           title: 'Play',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="tennisball-outline" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'tennisball' : 'tennisball-outline'} size={24} color={color} />
           ),
         }}
       />
@@ -62,8 +63,17 @@ export default function TabLayout() {
         name="compete"
         options={{
           title: 'Compete',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="trophy-outline" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'trophy' : 'trophy-outline'} size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="calendar"
+        options={{
+          title: 'Kalender',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={24} color={color} />
           ),
         }}
       />
@@ -71,8 +81,8 @@ export default function TabLayout() {
         name="map"
         options={{
           title: 'Map',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="map-outline" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'map' : 'map-outline'} size={24} color={color} />
           ),
         }}
       />
@@ -80,8 +90,8 @@ export default function TabLayout() {
         name="chat"
         options={{
           title: 'Chat',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="chatbubble-outline" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'chatbubble' : 'chatbubble-outline'} size={24} color={color} />
           ),
         }}
       />

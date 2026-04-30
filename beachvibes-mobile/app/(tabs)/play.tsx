@@ -8,7 +8,16 @@ import { Colors } from '../../src/theme/colors';
 import { api } from '../../src/api/client';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppHeader } from '../../src/components/AppHeader';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+
+const API_BASE = 'https://dvoucher-app-815335042776.europe-north1.run.app';
+const getAbsoluteUrl = (url: string | null | undefined) => {
+  if (!url) return undefined;
+  if (url.startsWith('//')) return `https:${url}`;
+  if (url.startsWith('/')) return `${API_BASE}${url}`;
+  return url;
+};
 
 interface GroupItem {
   id: string; name: string; emoji: string | null; imageUrl: string | null;
@@ -31,11 +40,11 @@ interface EventItem {
 interface TabCounts { my_games: number; respond: number; find: number; paused: number; history: number; }
 
 const TABS = [
-  { key: 'my_games', label: 'Mina spel' },
-  { key: 'respond', label: 'Svara' },
-  { key: 'find', label: 'Hitta spel' },
-  { key: 'paused', label: 'Pausat' },
-  { key: 'history', label: 'Historik' },
+  { key: 'my_games', label: 'Mina spel', icon: 'tennisball' as const },
+  { key: 'respond', label: 'Svara', icon: 'mail' as const },
+  { key: 'find', label: 'Hitta spel', icon: 'search' as const },
+  { key: 'paused', label: 'Pausat', icon: 'pause-circle' as const },
+  { key: 'history', label: 'Historik', icon: 'time' as const },
 ] as const;
 
 const skillStars: Record<string, string> = {
@@ -66,7 +75,12 @@ export default function PlayScreen() {
     finally { setLoading(false); setRefreshing(false); }
   }, [tab]);
 
-  useEffect(() => { setLoading(true); loadData(); }, [loadData]);
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      loadData();
+    }, [loadData])
+  );
 
   const handleInviteResponse = async (eventId: string, response: 'YES' | 'MAYBE' | 'NO') => {
     try {
@@ -109,21 +123,35 @@ export default function PlayScreen() {
             <Text style={s.sectionLabel}>GRUPPER</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.storiesRow}>
               <TouchableOpacity style={s.storyItem}>
-                <View style={s.storyAddCircle}><Ionicons name="add" size={28} color={Colors.brandPrimary} /></View>
+                <View style={[s.storyRing, { backgroundColor: 'transparent', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1, borderStyle: 'dashed' }]}>
+                  <View style={[s.storyInner, { backgroundColor: 'transparent', borderWidth: 0 }]}>
+                    <Ionicons name="add" size={28} color={Colors.brandPrimary} />
+                  </View>
+                </View>
                 <Text style={s.storyName} numberOfLines={1}>Ny grupp</Text>
               </TouchableOpacity>
-              {groups.map((g) => (
-                <TouchableOpacity key={g.id} style={s.storyItem}>
-                  <View style={s.storyCircle}>
-                    {g.imageUrl ? <Image source={{ uri: g.imageUrl }} style={s.storyImage} /> : <Text style={s.storyEmoji}>{g.emoji || '🏐'}</Text>}
-                    {g.isPinned && <View style={s.pinIcon}><Ionicons name="pin" size={10} color="#fff" /></View>}
-                  </View>
-                  {(g.unreadCount || 0) > 0 && (
-                    <View style={s.storyBadge}><Text style={s.storyBadgeText}>{g.unreadCount}</Text></View>
-                  )}
-                  <Text style={s.storyName} numberOfLines={1}>{g.name}</Text>
-                </TouchableOpacity>
-              ))}
+              {groups.map((g) => {
+                const hasActivity = (g.unreadCount || 0) > 0;
+                return (
+                  <TouchableOpacity key={g.id} style={s.storyItem} onPress={() => router.push(`/group/${g.id}`)}>
+                      <LinearGradient
+                        colors={(g.isPinned && !hasActivity) ? [Colors.brandPrimary, Colors.brandPrimary] : ['#f97316', '#ef4444', '#ec4899', '#a855f7']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={[s.storyRing, !hasActivity && { opacity: 0.85 }]}
+                      >
+                      <View style={s.storyInner}>
+                        {g.imageUrl ? <Image source={{ uri: getAbsoluteUrl(g.imageUrl) }} style={s.storyImage} /> : <Text style={s.storyEmoji}>{g.emoji || '🏐'}</Text>}
+                        {g.isPinned && <View style={s.pinIcon}><Ionicons name="pin" size={10} color="#fff" /></View>}
+                      </View>
+                    </LinearGradient>
+                    {(g.unreadCount || 0) > 0 && (
+                      <View style={s.storyBadge}><Text style={s.storyBadgeText}>{(g.unreadCount || 0) > 9 ? '9+' : g.unreadCount}</Text></View>
+                    )}
+                    <Text style={s.storyName} numberOfLines={1}>{g.name}</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
           </View>
         )}
@@ -142,8 +170,9 @@ export default function PlayScreen() {
             const count = tabCounts[t.key as keyof TabCounts] || 0;
             const isActive = tab === t.key;
             const isPaused = t.key === 'paused';
+            const isRespond = t.key === 'respond' && count > 0;
             return (
-              <TouchableOpacity key={t.key} style={[s.tabPill, isActive && s.tabPillActive]} onPress={() => setTab(t.key)}>
+              <TouchableOpacity key={t.key} style={[s.tabPill, isActive && s.tabPillActive, isRespond && !isActive && s.tabPillNotify]} onPress={() => setTab(t.key)}>
                 <Text style={[s.tabPillText, isActive && s.tabPillTextActive]}>
                   {t.label}{count > 0 ? ` ${count}` : ''}
                 </Text>
@@ -158,7 +187,9 @@ export default function PlayScreen() {
           <View style={s.center}><ActivityIndicator size="large" color={Colors.brandPrimary} /></View>
         ) : events.length === 0 ? (
           <View style={s.center}>
-            <Ionicons name="calendar-outline" size={52} color={Colors.brandPrimary} />
+            <View style={s.emptyIconWrap}>
+              <Ionicons name="calendar-outline" size={40} color={Colors.brandPrimary} />
+            </View>
             <Text style={s.emptyTitle}>Inga spel</Text>
             <Text style={s.emptyText}>{tab === 'find' ? 'Inga öppna spel just nu' : 'Du har inga kommande spel'}</Text>
           </View>
@@ -177,13 +208,13 @@ export default function PlayScreen() {
                 {/* Event header */}
                 <View style={s.eventHeader}>
                   {event.imageUrl ? (
-                    <Image source={{ uri: event.imageUrl }} style={s.eventThumb} />
+                    <Image source={{ uri: getAbsoluteUrl(event.imageUrl) }} style={s.eventThumb} />
                   ) : event.creator?.image ? (
-                    <Image source={{ uri: event.creator.image }} style={s.eventCreatorImg} />
+                    <Image source={{ uri: getAbsoluteUrl(event.creator.image) }} style={s.eventCreatorImg} />
                   ) : (
-                    <View style={[s.eventCreatorImg, { backgroundColor: Colors.bgTertiary, justifyContent: 'center', alignItems: 'center' }]}>
-                      <Ionicons name="person" size={16} color={Colors.textTertiary} />
-                    </View>
+                    <LinearGradient colors={['#ea580c', '#db2777']} style={[s.eventCreatorImg, { justifyContent: 'center', alignItems: 'center' }]}>
+                      <Ionicons name="person" size={16} color="#fff" />
+                    </LinearGradient>
                   )}
                   <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -204,7 +235,7 @@ export default function PlayScreen() {
                 </View>
                 {event.location && (
                   <View style={s.eventMeta}>
-                    <Ionicons name="location-outline" size={14} color={Colors.brandPrimary} />
+                    <Ionicons name="location-outline" size={14} color={Colors.brandPink} />
                     <Text style={s.eventMetaText}>{event.courtName || event.location}</Text>
                   </View>
                 )}
@@ -214,7 +245,7 @@ export default function PlayScreen() {
                   <View style={s.avatarStack}>
                     {event.participants.slice(0, 4).map((p, i) => (
                       <View key={i} style={[s.stackAvatar, { marginLeft: i > 0 ? -8 : 0 }]}>
-                        {p.image ? <Image source={{ uri: p.image }} style={s.stackAvatarImg} /> : (
+                        {p.image ? <Image source={{ uri: getAbsoluteUrl(p.image) }} style={s.stackAvatarImg} /> : (
                           <View style={[s.stackAvatarImg, { backgroundColor: Colors.bgTertiary, justifyContent: 'center', alignItems: 'center' }]}>
                             <Text style={{ color: Colors.textSecondary, fontSize: 10 }}>{p.name?.charAt(0)}</Text>
                           </View>
@@ -265,10 +296,12 @@ export default function PlayScreen() {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* FAB */}
-      <TouchableOpacity style={s.fab} activeOpacity={0.85}>
-        <Ionicons name="add" size={22} color="#fff" />
-        <Text style={s.fabText}>Skapa speltid</Text>
+      {/* FAB with gradient */}
+      <TouchableOpacity style={s.fab} activeOpacity={0.85} onPress={() => router.push('/create-event')}>
+        <LinearGradient colors={['#ea580c', '#db2777']} start={{x:0,y:0}} end={{x:1,y:0}} style={s.fabGradient}>
+          <Ionicons name="add" size={22} color="#fff" />
+          <Text style={s.fabText}>Skapa speltid</Text>
+        </LinearGradient>
       </TouchableOpacity>
     </SafeAreaView>
   );
@@ -277,36 +310,42 @@ export default function PlayScreen() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bgPrimary },
   scroll: { flex: 1 },
-  center: { paddingTop: 100, alignItems: 'center', gap: 10 },
+  center: { paddingTop: 80, alignItems: 'center', gap: 12 },
+  emptyIconWrap: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: 'rgba(249,115,22,0.08)',
+    justifyContent: 'center', alignItems: 'center',
+  },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary },
-  emptyText: { fontSize: 14, color: Colors.textSecondary },
+  emptyText: { fontSize: 14, color: Colors.textSecondary, textAlign: 'center', paddingHorizontal: 40 },
   section: { paddingTop: 12 },
   sectionLabel: { color: Colors.textTertiary, fontSize: 12, fontWeight: '600', paddingHorizontal: 16, marginBottom: 8, letterSpacing: 0.5 },
-  storiesRow: { paddingHorizontal: 12, gap: 14, paddingBottom: 12 },
+  storiesRow: { paddingHorizontal: 12, gap: 14, paddingBottom: 12, paddingTop: 6 },
   storyItem: { alignItems: 'center', width: 68, position: 'relative' },
-  storyAddCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(249,115,22,0.1)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: Colors.brandPrimary, borderStyle: 'dashed' },
-  storyCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.bgTertiary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(249,115,22,0.4)', overflow: 'hidden' },
-  storyImage: { width: 56, height: 56 },
+  storyRing: { width: 66, height: 66, borderRadius: 33, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
+  storyInner: { width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.bgTertiary, justifyContent: 'center', alignItems: 'center', overflow: 'hidden', borderWidth: 2, borderColor: Colors.bgPrimary },
+  storyImage: { width: '100%', height: '100%', borderRadius: 28 },
   storyEmoji: { fontSize: 24 },
   storyName: { fontSize: 11, color: Colors.textSecondary, marginTop: 4, textAlign: 'center' },
   pinIcon: { position: 'absolute', top: -2, right: -2, backgroundColor: Colors.brandPrimary, borderRadius: 8, width: 16, height: 16, justifyContent: 'center', alignItems: 'center' },
-  storyBadge: { position: 'absolute', top: -4, right: 2, backgroundColor: Colors.error, borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: Colors.bgPrimary },
+  storyBadge: { position: 'absolute', top: -4, right: -2, backgroundColor: Colors.error, borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: Colors.bgPrimary, zIndex: 10, elevation: 4 },
   storyBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
-  searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.bgSecondary, marginHorizontal: 16, marginVertical: 8, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: Colors.borderSubtle },
+  searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.bgSecondary, marginHorizontal: 16, marginVertical: 8, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, borderWidth: 1, borderColor: Colors.borderSubtle },
   searchText: { fontSize: 14, color: Colors.textSecondary },
   tabsRow: { paddingHorizontal: 16, gap: 8, paddingVertical: 8 },
   tabPill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 100, backgroundColor: Colors.bgTertiary, position: 'relative' },
   tabPillActive: { backgroundColor: Colors.brandPrimary },
+  tabPillNotify: { borderWidth: 1, borderColor: 'rgba(249,115,22,0.4)' },
   tabPillText: { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
   tabPillTextActive: { color: '#fff' },
   pausedDot: { position: 'absolute', top: 4, right: 4, width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.error },
   eventsList: { gap: 2, paddingTop: 8 },
-  eventCard: { backgroundColor: Colors.bgSecondary, marginHorizontal: 12, borderRadius: 14, padding: 16, gap: 8, marginBottom: 10, borderWidth: 1, borderColor: Colors.borderSubtle },
+  eventCard: { backgroundColor: Colors.bgSecondary, marginHorizontal: 12, borderRadius: 16, padding: 16, gap: 8, marginBottom: 10, borderWidth: 1, borderColor: Colors.borderSubtle },
   groupNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
   groupNameText: { fontSize: 11, fontWeight: '800', color: Colors.textTertiary, letterSpacing: 0.8 },
   eventHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   eventCreatorImg: { width: 36, height: 36, borderRadius: 18, overflow: 'hidden' },
-  eventThumb: { width: 48, height: 48, borderRadius: 10, overflow: 'hidden' },
+  eventThumb: { width: 48, height: 48, borderRadius: 12, overflow: 'hidden' },
   eventTitle: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
   eventSkill: { fontSize: 12, color: Colors.textSecondary, marginTop: 1 },
   eventMeta: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -321,19 +360,20 @@ const s = StyleSheet.create({
   statusText: { fontSize: 10, fontWeight: '700', color: Colors.success, letterSpacing: 0.5 },
   // Invite response
   inviteRow: { flexDirection: 'row', gap: 8, paddingTop: 4 },
-  inviteNo: { flex: 1, backgroundColor: 'rgba(239,68,68,0.1)', paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+  inviteNo: { flex: 1, backgroundColor: 'rgba(239,68,68,0.1)', paddingVertical: 10, borderRadius: 12, alignItems: 'center' },
   inviteNoText: { color: Colors.error, fontWeight: '700', fontSize: 14 },
-  inviteMaybe: { flex: 1, backgroundColor: 'rgba(234,179,8,0.1)', paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+  inviteMaybe: { flex: 1, backgroundColor: 'rgba(234,179,8,0.1)', paddingVertical: 10, borderRadius: 12, alignItems: 'center' },
   inviteMaybeText: { color: '#eab308', fontWeight: '700', fontSize: 14 },
-  inviteYes: { flex: 1, backgroundColor: 'rgba(34,197,94,0.1)', paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+  inviteYes: { flex: 1, backgroundColor: 'rgba(34,197,94,0.1)', paddingVertical: 10, borderRadius: 12, alignItems: 'center' },
   inviteYesText: { color: Colors.success, fontWeight: '700', fontSize: 14 },
   // Leave button
-  leaveBtn: { backgroundColor: 'rgba(120,53,15,0.1)', paddingVertical: 10, borderRadius: 10, alignItems: 'center', marginTop: 4 },
+  leaveBtn: { backgroundColor: 'rgba(120,53,15,0.1)', paddingVertical: 10, borderRadius: 12, alignItems: 'center', marginTop: 4 },
   leaveBtnText: { color: '#92400e', fontWeight: '600', fontSize: 13 },
   // Comments
   commentBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 4 },
   commentText: { fontSize: 13, color: Colors.textSecondary },
   lastCommentText: { fontSize: 12, color: Colors.textTertiary, flex: 1 },
-  fab: { position: 'absolute', bottom: 90, right: 16, backgroundColor: Colors.brandPrimary, borderRadius: 26, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 14, shadowColor: Colors.brandPrimary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 8 },
+  fab: { position: 'absolute', bottom: 90, right: 16, borderRadius: 26, shadowColor: '#ea580c', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 8 },
+  fabGradient: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 14, borderRadius: 26 },
   fabText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 });

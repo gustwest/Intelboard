@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, StyleSheet, Image,
   TouchableOpacity, RefreshControl, ActivityIndicator,
   TextInput, KeyboardAvoidingView, Platform, Alert,
-  ActionSheetIOS, Share,
+  ActionSheetIOS, Share, Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../src/theme/colors';
@@ -11,7 +11,16 @@ import { api } from '../../src/api/client';
 import { useAuth } from '../../src/auth/AuthProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppHeader } from '../../src/components/AppHeader';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+
+const API_BASE = 'https://dvoucher-app-815335042776.europe-north1.run.app';
+const getAbsoluteUrl = (url: string | null | undefined) => {
+  if (!url) return undefined;
+  if (url.startsWith('//')) return `https:${url}`;
+  if (url.startsWith('/')) return `${API_BASE}${url}`;
+  return url;
+};
 
 interface FeedComment {
   id: string;
@@ -41,6 +50,12 @@ interface FeedPost {
   comments: FeedComment[];
 }
 
+const FEED_TABS = [
+  { key: 'all', label: 'Allt' },
+  { key: 'friends', label: 'Vänner' },
+  { key: 'groups', label: 'Mina grupper' },
+];
+
 export default function FeedScreen() {
   const { user } = useAuth();
   const [posts, setPosts] = useState<FeedPost[]>([]);
@@ -52,6 +67,7 @@ export default function FeedScreen() {
   const [newPostText, setNewPostText] = useState('');
   const [posting, setPosting] = useState(false);
   const [notifCount, setNotifCount] = useState(0);
+  const [activeTab, setActiveTab] = useState('all');
 
   const loadFeed = useCallback(async () => {
     try {
@@ -69,7 +85,11 @@ export default function FeedScreen() {
     }
   }, []);
 
-  useEffect(() => { loadFeed(); }, [loadFeed]);
+  useFocusEffect(
+    useCallback(() => {
+      loadFeed();
+    }, [loadFeed])
+  );
 
   const handleLike = async (postId: string) => {
     setPosts(prev => prev.map(p => {
@@ -130,7 +150,9 @@ export default function FeedScreen() {
       ActionSheetIOS.showActionSheetWithOptions(
         { options, destructiveButtonIndex: destructiveIndex, cancelButtonIndex: cancelIndex },
         (idx) => {
-          if (isOwner && idx === 1) {
+          if (isOwner && idx === 0) {
+            router.push(`/edit-post?id=${post.id}&initialBody=${encodeURIComponent(post.body)}`);
+          } else if (isOwner && idx === 1) {
             Alert.alert('Ta bort inlägg?', 'Denna åtgärd kan inte ångras.', [
               { text: 'Avbryt', style: 'cancel' },
               { text: 'Ta bort', style: 'destructive', onPress: async () => {
@@ -144,11 +166,13 @@ export default function FeedScreen() {
         }
       );
     } else {
-      // Android fallback
       Alert.alert('Alternativ', undefined, [
-        ...(isOwner ? [{ text: 'Ta bort', style: 'destructive' as const, onPress: async () => {
-          try { await api.post('/api/mobile/feed/delete', { postId: post.id }); setPosts(prev => prev.filter(p => p.id !== post.id)); } catch {}
-        }}] : []),
+        ...(isOwner ? [
+          { text: 'Redigera', onPress: () => router.push(`/edit-post?id=${post.id}&initialBody=${encodeURIComponent(post.body)}`) },
+          { text: 'Ta bort', style: 'destructive' as const, onPress: async () => {
+            try { await api.post('/api/mobile/feed/delete', { postId: post.id }); setPosts(prev => prev.filter(p => p.id !== post.id)); } catch {}
+          }}
+        ] : []),
         { text: 'Avbryt', style: 'cancel' },
       ]);
     }
@@ -170,10 +194,12 @@ export default function FeedScreen() {
     return `${Math.floor(hours / 24)}d`;
   };
 
-  const parseImages = (imageUrl: string | null): string[] => {
+  const parseImages = (imageUrl: string | null) => {
     if (!imageUrl) return [];
-    try { const p = JSON.parse(imageUrl); return Array.isArray(p) ? p : [imageUrl]; }
-    catch { return [imageUrl]; }
+    let parsed: string[] = [];
+    try { const p = JSON.parse(imageUrl); parsed = Array.isArray(p) ? p : [imageUrl]; }
+    catch { parsed = [imageUrl]; }
+    return parsed.map(url => getAbsoluteUrl(url) as string);
   };
 
   return (
@@ -188,15 +214,34 @@ export default function FeedScreen() {
           keyboardShouldPersistTaps="handled"
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadFeed(); }} tintColor={Colors.brandPrimary} />}
         >
+          {/* Feed filter tabs */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterRow}>
+            {FEED_TABS.map(tab => (
+              <TouchableOpacity
+                key={tab.key}
+                style={[s.filterTab, activeTab === tab.key && s.filterTabActive]}
+                onPress={() => setActiveTab(tab.key)}
+              >
+                {activeTab === tab.key ? (
+                  <LinearGradient colors={['#ea580c', '#db2777']} start={{x:0,y:0}} end={{x:1,y:0}} style={s.filterTabGradient}>
+                    <Text style={s.filterTabTextActive}>{tab.label}</Text>
+                  </LinearGradient>
+                ) : (
+                  <Text style={s.filterTabText}>{tab.label}</Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
           {/* Create Post Card */}
           <View style={s.createCard}>
             <View style={s.createRow}>
               {user?.image ? (
-                <Image source={{ uri: user.image }} style={s.createAvatar} />
+                <Image source={{ uri: getAbsoluteUrl(user.image) }} style={s.createAvatar} />
               ) : (
-                <View style={[s.createAvatar, { backgroundColor: Colors.brandPrimary, justifyContent: 'center', alignItems: 'center' }]}>
+                <LinearGradient colors={['#ea580c', '#db2777']} style={s.createAvatar}>
                   <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>{user?.name?.charAt(0)}</Text>
-                </View>
+                </LinearGradient>
               )}
               <TextInput
                 style={s.createInput}
@@ -223,7 +268,13 @@ export default function FeedScreen() {
                 onPress={handleCreatePost}
                 disabled={posting || !newPostText.trim()}
               >
-                {posting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.postBtnText}>Posta</Text>}
+                {posting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <LinearGradient colors={['#ea580c', '#db2777']} start={{x:0,y:0}} end={{x:1,y:0}} style={s.postBtnGradient}>
+                    <Text style={s.postBtnText}>Posta</Text>
+                  </LinearGradient>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -231,34 +282,55 @@ export default function FeedScreen() {
           {/* Quick shortcuts */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.shortcutsRow}>
             <TouchableOpacity style={s.shortcut} onPress={() => router.push('/(tabs)/play')}>
-              <Ionicons name="calendar-outline" size={18} color={Colors.brandPrimary} />
+              <View style={[s.shortcutIcon, { backgroundColor: 'rgba(249,115,22,0.12)' }]}>
+                <Ionicons name="calendar-outline" size={16} color={Colors.brandPrimary} />
+              </View>
               <Text style={s.shortcutText}>Bläddra event</Text>
             </TouchableOpacity>
             <TouchableOpacity style={s.shortcut} onPress={() => router.push('/(tabs)/compete')}>
-              <Ionicons name="trophy-outline" size={18} color={Colors.brandAccent} />
+              <View style={[s.shortcutIcon, { backgroundColor: 'rgba(6,182,212,0.12)' }]}>
+                <Ionicons name="trophy-outline" size={16} color={Colors.brandAccent} />
+              </View>
               <Text style={s.shortcutText}>Match Center</Text>
             </TouchableOpacity>
             <TouchableOpacity style={s.shortcut} onPress={() => router.push('/(tabs)/map')}>
-              <Ionicons name="map-outline" size={18} color={Colors.brandPink} />
+              <View style={[s.shortcutIcon, { backgroundColor: 'rgba(236,72,153,0.12)' }]}>
+                <Ionicons name="map-outline" size={16} color={Colors.brandPink} />
+              </View>
               <Text style={s.shortcutText}>Karta</Text>
             </TouchableOpacity>
             <TouchableOpacity style={s.shortcut} onPress={() => router.push('/profile')}>
-              <Ionicons name="person-outline" size={18} color={Colors.success} />
+              <View style={[s.shortcutIcon, { backgroundColor: 'rgba(34,197,94,0.12)' }]}>
+                <Ionicons name="person-outline" size={16} color={Colors.success} />
+              </View>
               <Text style={s.shortcutText}>Min profil</Text>
             </TouchableOpacity>
           </ScrollView>
 
           {/* Feed posts */}
-          {loading ? (
-            <View style={s.center}><ActivityIndicator size="large" color={Colors.brandPrimary} /></View>
-          ) : posts.length === 0 ? (
-            <View style={s.center}>
-              <Ionicons name="sunny-outline" size={64} color={Colors.brandPrimary} />
-              <Text style={s.emptyTitle}>Tomt i feeden</Text>
-              <Text style={s.emptyText}>Dra ner för att uppdatera</Text>
-            </View>
-          ) : (
-            posts.map((post) => {
+          {(() => {
+            const filteredPosts = posts.filter(p => {
+              if (activeTab === 'groups') return !!p.circleName;
+              if (activeTab === 'friends') return p.type === 'FRIENDS';
+              return true;
+            });
+
+            if (loading) {
+              return <View style={s.center}><ActivityIndicator size="large" color={Colors.brandPrimary} /></View>;
+            }
+            if (filteredPosts.length === 0) {
+              return (
+                <View style={s.center}>
+                  <View style={s.emptyIconWrap}>
+                    <Ionicons name="sunny-outline" size={48} color={Colors.brandPrimary} />
+                  </View>
+                  <Text style={s.emptyTitle}>Tomt i feeden</Text>
+                  <Text style={s.emptyText}>Dra ner för att uppdatera eller skapa ett inlägg!</Text>
+                </View>
+              );
+            }
+            
+            return filteredPosts.map((post) => {
               const images = parseImages(post.imageUrl);
               const isExpanded = expandedComments.has(post.id);
               const isSending = sendingComment.has(post.id);
@@ -267,7 +339,7 @@ export default function FeedScreen() {
                 <View key={post.id} style={s.postCard}>
                   <View style={s.postHeader}>
                     {post.authorImage ? (
-                      <Image source={{ uri: post.authorImage }} style={s.postAvatar} />
+                      <Image source={{ uri: getAbsoluteUrl(post.authorImage) }} style={s.postAvatar} />
                     ) : (
                       <View style={[s.postAvatar, { backgroundColor: post.authorColor, justifyContent: 'center', alignItems: 'center' }]}>
                         <Text style={s.postAvatarText}>{post.authorName?.charAt(0)}</Text>
@@ -275,7 +347,14 @@ export default function FeedScreen() {
                     )}
                     <View style={s.postMeta}>
                       <Text style={s.postAuthor}>{post.authorName}</Text>
-                      <Text style={s.postTime}>{timeAgo(post.createdAt)}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={s.postTime}>{timeAgo(post.createdAt)}</Text>
+                        <Text style={s.postTime}>·</Text>
+                        <View style={s.visibilityBadge}>
+                          <Ionicons name={post.type === 'FRIENDS' ? 'people-outline' : 'globe-outline'} size={11} color={Colors.textTertiary} />
+                          <Text style={s.visibilityText}>{post.type === 'FRIENDS' ? 'Vänner' : 'Alla'}</Text>
+                        </View>
+                      </View>
                     </View>
                     {post.circleName && (
                       <View style={s.circleBadge}>
@@ -290,22 +369,38 @@ export default function FeedScreen() {
                   <Text style={s.postBody}>{post.body}</Text>
 
                   {images.length > 0 && (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.imageScroll}>
-                      {images.map((url, i) => <Image key={i} source={{ uri: url }} style={s.postImage} />)}
-                    </ScrollView>
+                    <View style={s.imageWrapper}>
+                      {images.length === 1 ? (
+                        <Image source={{ uri: images[0] }} style={s.postImageFull} resizeMode="cover" />
+                      ) : (
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.imageScroll} contentContainerStyle={s.imageScrollContent}>
+                          {images.map((url, i) => <Image key={i} source={{ uri: url }} style={s.postImageMulti} />)}
+                        </ScrollView>
+                      )}
+                    </View>
                   )}
 
+                  {/* Like count row */}
+                  {post.likeCount > 0 && (
+                    <View style={s.likeCountRow}>
+                      <Ionicons name="heart" size={14} color={Colors.brandHeart} />
+                      <Text style={s.likeCountText}>{post.likeCount}</Text>
+                    </View>
+                  )}
+
+                  {/* 3-column action bar */}
                   <View style={s.postActions}>
                     <TouchableOpacity style={s.actionBtn} onPress={() => handleLike(post.id)}>
-                      <Ionicons name={post.isLiked ? 'heart' : 'heart-outline'} size={22} color={post.isLiked ? Colors.brandHeart : Colors.textSecondary} />
-                      {post.likeCount > 0 && <Text style={[s.actionText, post.isLiked && { color: Colors.brandHeart }]}>{post.likeCount}</Text>}
+                      <Ionicons name={post.isLiked ? 'heart' : 'happy-outline'} size={18} color={post.isLiked ? Colors.brandHeart : Colors.textSecondary} />
+                      <Text style={[s.actionText, post.isLiked && { color: Colors.brandHeart }]}>{post.isLiked ? 'Reagerade' : 'Reagera'}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={s.actionBtn} onPress={() => toggleComments(post.id)}>
-                      <Ionicons name="chatbubble-outline" size={19} color={Colors.textSecondary} />
+                      <Ionicons name="chatbubble-outline" size={17} color={Colors.textSecondary} />
                       <Text style={s.actionText}>{post.commentCount > 0 ? `${post.commentCount}` : 'Kommentera'}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={s.actionBtn} onPress={() => handleShare(post)}>
-                      <Ionicons name="share-outline" size={19} color={Colors.textSecondary} />
+                      <Ionicons name="share-social-outline" size={17} color={Colors.textSecondary} />
+                      <Text style={s.actionText}>Dela</Text>
                     </TouchableOpacity>
                   </View>
 
@@ -314,7 +409,7 @@ export default function FeedScreen() {
                       {post.comments.map(c => (
                         <View key={c.id} style={s.commentRow}>
                           {c.authorImage ? (
-                            <Image source={{ uri: c.authorImage }} style={s.commentAvatar} />
+                            <Image source={{ uri: getAbsoluteUrl(c.authorImage) }} style={s.commentAvatar} />
                           ) : (
                             <View style={[s.commentAvatar, { backgroundColor: c.authorColor, justifyContent: 'center', alignItems: 'center' }]}>
                               <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{c.authorName?.charAt(0)}</Text>
@@ -349,8 +444,8 @@ export default function FeedScreen() {
                   )}
                 </View>
               );
-            })
-          )}
+            });
+          })()}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -361,56 +456,91 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bgPrimary },
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: 100 },
-  center: { paddingTop: 100, alignItems: 'center', gap: 12 },
+  center: { paddingTop: 80, alignItems: 'center', gap: 14 },
+  emptyIconWrap: {
+    width: 80, height: 80, borderRadius: 40,
+    backgroundColor: 'rgba(249,115,22,0.08)',
+    justifyContent: 'center', alignItems: 'center',
+  },
   emptyTitle: { fontSize: 20, fontWeight: '700', color: Colors.textPrimary },
-  emptyText: { fontSize: 14, color: Colors.textSecondary },
+  emptyText: { fontSize: 14, color: Colors.textSecondary, textAlign: 'center', paddingHorizontal: 40 },
+
+  // Feed filter tabs
+  filterRow: { paddingHorizontal: 12, gap: 8, paddingVertical: 10 },
+  filterTab: {
+    borderRadius: 20, overflow: 'hidden',
+    backgroundColor: Colors.bgSecondary,
+    borderWidth: 1, borderColor: Colors.borderSubtle,
+  },
+  filterTabActive: { borderColor: 'transparent' },
+  filterTabGradient: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20 },
+  filterTabText: { paddingHorizontal: 18, paddingVertical: 8, fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
+  filterTabTextActive: { fontSize: 13, fontWeight: '700', color: '#fff' },
 
   // Create post
   createCard: {
-    backgroundColor: Colors.bgSecondary, margin: 12, borderRadius: 16,
+    backgroundColor: Colors.bgSecondary, margin: 12, borderRadius: 18,
     padding: 14, gap: 10, borderWidth: 1, borderColor: Colors.borderSubtle,
   },
   createRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
-  createAvatar: { width: 36, height: 36, borderRadius: 18, overflow: 'hidden' },
+  createAvatar: { width: 38, height: 38, borderRadius: 19, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
   createInput: { flex: 1, fontSize: 15, color: Colors.textPrimary, minHeight: 40, textAlignVertical: 'top' },
   createActions: { flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 1, borderTopColor: Colors.borderSubtle, paddingTop: 10 },
   createMediaBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   createMediaText: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' },
-  postBtn: { backgroundColor: Colors.brandPrimary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
+  postBtn: { borderRadius: 20, overflow: 'hidden' },
+  postBtnGradient: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
   postBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
   // Shortcuts
   shortcutsRow: { paddingHorizontal: 12, gap: 8, paddingBottom: 8 },
   shortcut: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: Colors.bgSecondary, paddingHorizontal: 12, paddingVertical: 8,
-    borderRadius: 20, borderWidth: 1, borderColor: Colors.borderSubtle,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.bgSecondary, paddingHorizontal: 14, paddingVertical: 10,
+    borderRadius: 14, borderWidth: 1, borderColor: Colors.borderSubtle,
   },
-  shortcutText: { fontSize: 12, color: Colors.textSecondary, fontWeight: '600' },
+  shortcutIcon: {
+    width: 28, height: 28, borderRadius: 8,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  shortcutText: { fontSize: 13, color: Colors.textSecondary, fontWeight: '600' },
 
   // Post card
-  postCard: { backgroundColor: Colors.bgSecondary, borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle, paddingVertical: 14, paddingHorizontal: 16, gap: 10 },
-  postHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  postCard: { backgroundColor: Colors.bgSecondary, borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle, paddingTop: 14, gap: 10 },
+  postHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16 },
   postAvatar: { width: 40, height: 40, borderRadius: 20, overflow: 'hidden' },
   postAvatarText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   postMeta: { flex: 1 },
   postAuthor: { fontSize: 15, fontWeight: '600', color: Colors.textPrimary },
   postTime: { fontSize: 12, color: Colors.textTertiary },
+  visibilityBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(255,255,255,0.06)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 },
+  visibilityText: { fontSize: 11, color: Colors.textTertiary, fontWeight: '500' },
   circleBadge: { backgroundColor: 'rgba(249,115,22,0.12)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 100 },
   circleBadgeText: { fontSize: 11, color: Colors.brandPrimaryLight, fontWeight: '600' },
   optionsBtn: { padding: 4 },
-  postBody: { fontSize: 15, color: Colors.textPrimary, lineHeight: 21 },
-  imageScroll: { marginTop: 4 },
-  postImage: { width: 280, height: 200, borderRadius: 12, marginRight: 8, backgroundColor: Colors.bgTertiary },
-  postActions: { flexDirection: 'row', alignItems: 'center', gap: 24, paddingTop: 8, borderTopWidth: 1, borderTopColor: Colors.borderSubtle },
-  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
+  postBody: { fontSize: 15, color: Colors.textPrimary, lineHeight: 21, paddingHorizontal: 16 },
+
+  // Images — edge-to-edge for single, scrollable for multi
+  imageWrapper: { width: '100%', marginTop: 8 },
+  postImageFull: { width: '100%', aspectRatio: 16 / 10, backgroundColor: Colors.bgTertiary },
+  imageScroll: {},
+  imageScrollContent: { paddingHorizontal: 16, gap: 4 },
+  postImageMulti: { width: 300, height: 220, backgroundColor: Colors.bgTertiary, borderRadius: 12 },
+
+  // Like count row
+  likeCountRow: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 16, paddingBottom: 2 },
+  likeCountText: { fontSize: 13, color: Colors.textSecondary },
+
+  // 3-column action bar
+  postActions: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: Colors.borderSubtle, paddingHorizontal: 4 },
+  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 10 },
   actionText: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' },
 
   // Comments
-  commentsSection: { gap: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: Colors.borderSubtle },
+  commentsSection: { gap: 8, paddingTop: 8, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: Colors.borderSubtle },
   commentRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
   commentAvatar: { width: 28, height: 28, borderRadius: 14, overflow: 'hidden' },
-  commentBubble: { flex: 1, backgroundColor: Colors.bgTertiary, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 },
+  commentBubble: { flex: 1, backgroundColor: Colors.bgTertiary, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8 },
   commentAuthor: { fontSize: 12, fontWeight: '700', color: Colors.textPrimary, marginBottom: 2 },
   commentBody: { fontSize: 13, color: Colors.textSecondary, lineHeight: 18 },
   commentInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.bgTertiary, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6, marginTop: 4 },

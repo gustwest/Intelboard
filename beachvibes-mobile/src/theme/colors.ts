@@ -54,7 +54,7 @@ export const Colors = {
   // Tab bar
   tabBarBg: '#0f1117',
   tabBarBorder: 'rgba(255, 255, 255, 0.08)',
-  tabActive: '#f97316',
+  tabActive: '#ec4899', // Matches the web app's brandPink for active tabs
   tabInactive: '#64748b',
 } as const;
 

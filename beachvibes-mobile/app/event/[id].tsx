@@ -8,6 +8,7 @@ import { Colors } from '../../src/theme/colors';
 import { api } from '../../src/api/client';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface EventDetail {
   id: string;
@@ -131,7 +132,13 @@ export default function EventDetailScreen() {
           <Ionicons name="chevron-back" size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
         <Text style={s.headerTitle} numberOfLines={1}>{event.title}</Text>
-        <View style={{ width: 32 }} />
+        {event.isCreator ? (
+          <TouchableOpacity onPress={() => router.push(`/edit-event?id=${event.id}`)} style={{ width: 32, alignItems: 'center' }}>
+            <Ionicons name="pencil" size={20} color={Colors.textPrimary} />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 32 }} />
+        )}
       </View>
 
       <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
@@ -271,15 +278,18 @@ export default function EventDetailScreen() {
             style={s.joinBtn}
             onPress={handleJoin}
             disabled={joining}
+            activeOpacity={0.85}
           >
-            {joining ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <Ionicons name="add-circle-outline" size={20} color="#fff" />
-                <Text style={s.joinBtnText}>Gå med</Text>
-              </>
-            )}
+            <LinearGradient colors={['#ea580c', '#db2777']} start={{x:0,y:0}} end={{x:1,y:0}} style={s.joinBtnGradient}>
+              {joining ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="add-circle-outline" size={20} color="#fff" />
+                  <Text style={s.joinBtnText}>Gå med</Text>
+                </>
+              )}
+            </LinearGradient>
           </TouchableOpacity>
         )}
       </View>
@@ -345,9 +355,11 @@ const s = StyleSheet.create({
   },
   bottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   joinBtn: {
-    backgroundColor: Colors.brandPrimary, borderRadius: 14,
+    borderRadius: 16, overflow: 'hidden',
+  },
+  joinBtnGradient: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, paddingVertical: 16,
+    gap: 8, paddingVertical: 16, borderRadius: 16,
   },
   joinBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   joinedBadge: { flexDirection: 'row', alignItems: 'center', gap: 8 },

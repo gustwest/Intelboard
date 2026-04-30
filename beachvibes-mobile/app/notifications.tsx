@@ -9,6 +9,7 @@ import { api } from '../src/api/client';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppHeader } from '../src/components/AppHeader';
 import { router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface Notification {
   id: string;
@@ -21,14 +22,14 @@ interface Notification {
   icon: string;
 }
 
-const typeIcons: Record<string, string> = {
-  event_invite: '🎟️',
-  event_update: '📅',
-  event_reminder: '⏰',
-  comment: '💬',
-  like: '❤️',
-  connection: '🤝',
-  system: '🔔',
+const typeIcons: Record<string, { icon: string; bgColor: string }> = {
+  event_invite: { icon: '🎟️', bgColor: 'rgba(249,115,22,0.12)' },
+  event_update: { icon: '📅', bgColor: 'rgba(6,182,212,0.12)' },
+  event_reminder: { icon: '⏰', bgColor: 'rgba(251,191,36,0.12)' },
+  comment: { icon: '💬', bgColor: 'rgba(236,72,153,0.12)' },
+  like: { icon: '❤️', bgColor: 'rgba(239,68,68,0.12)' },
+  connection: { icon: '🤝', bgColor: 'rgba(34,197,94,0.12)' },
+  system: { icon: '🔔', bgColor: 'rgba(100,116,139,0.12)' },
 };
 
 export default function NotificationsScreen() {
@@ -82,8 +83,10 @@ export default function NotificationsScreen() {
           {unreadCount > 0 ? `${unreadCount} olästa` : 'Alla lästa ✓'}
         </Text>
         {unreadCount > 0 && (
-          <TouchableOpacity onPress={markAllRead}>
-            <Text style={s.markAllText}>Markera alla som lästa</Text>
+          <TouchableOpacity onPress={markAllRead} style={s.markAllBtn}>
+            <LinearGradient colors={['#ea580c', '#db2777']} start={{x:0,y:0}} end={{x:1,y:0}} style={s.markAllGradient}>
+              <Text style={s.markAllText}>Markera alla som lästa</Text>
+            </LinearGradient>
           </TouchableOpacity>
         )}
       </View>
@@ -101,36 +104,42 @@ export default function NotificationsScreen() {
           </View>
         ) : notifications.length === 0 ? (
           <View style={s.center}>
-            <Ionicons name="notifications-off-outline" size={64} color={Colors.textTertiary} />
+            <View style={s.emptyIconWrap}>
+              <Ionicons name="notifications-off-outline" size={48} color={Colors.brandPrimary} />
+            </View>
             <Text style={s.emptyTitle}>Inga notiser</Text>
             <Text style={s.emptyText}>Du har inga notifieringar ännu</Text>
           </View>
         ) : (
-          notifications.map(n => (
-            <TouchableOpacity
-              key={n.id}
-              style={[s.notifCard, !n.isRead && s.notifUnread]}
-              activeOpacity={0.7}
-              onPress={() => {
-                if (n.link) {
-                  // Navigate based on link type
-                  if (n.link.includes('/events/')) {
-                    const eventId = n.link.split('/events/')[1]?.split('?')[0];
-                    if (eventId) router.push(`/event/${eventId}`);
+          notifications.map(n => {
+            const typeInfo = typeIcons[n.type] || { icon: n.icon || '🔔', bgColor: 'rgba(100,116,139,0.12)' };
+            return (
+              <TouchableOpacity
+                key={n.id}
+                style={[s.notifCard, !n.isRead && s.notifUnread]}
+                activeOpacity={0.7}
+                onPress={() => {
+                  if (n.link) {
+                    if (n.link.includes('/events/')) {
+                      const eventId = n.link.split('/events/')[1]?.split('?')[0];
+                      if (eventId) router.push(`/event/${eventId}`);
+                    }
                   }
-                }
-              }}
-            >
-              {!n.isRead && <View style={s.unreadDot} />}
-              <Text style={s.notifIcon}>{typeIcons[n.type] || n.icon || '🔔'}</Text>
-              <View style={s.notifContent}>
-                <Text style={[s.notifTitle, !n.isRead && { fontWeight: '700' }]}>{n.title}</Text>
-                {n.body ? <Text style={s.notifBody} numberOfLines={2}>{n.body}</Text> : null}
-                <Text style={s.notifTime}>{timeAgo(n.createdAt)}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
-            </TouchableOpacity>
-          ))
+                }}
+              >
+                {!n.isRead && <View style={s.unreadDot} />}
+                <View style={[s.notifIconWrap, { backgroundColor: typeInfo.bgColor }]}>
+                  <Text style={s.notifIcon}>{typeInfo.icon}</Text>
+                </View>
+                <View style={s.notifContent}>
+                  <Text style={[s.notifTitle, !n.isRead && { fontWeight: '700' }]}>{n.title}</Text>
+                  {n.body ? <Text style={s.notifBody} numberOfLines={2}>{n.body}</Text> : null}
+                  <Text style={s.notifTime}>{timeAgo(n.createdAt)}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+              </TouchableOpacity>
+            );
+          })
         )}
         <View style={{ height: 100 }} />
       </ScrollView>
@@ -146,23 +155,34 @@ const s = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle,
   },
   subBarText: { fontSize: 14, color: Colors.textSecondary, fontWeight: '600' },
-  markAllText: { fontSize: 13, color: Colors.brandPrimary, fontWeight: '600' },
+  markAllBtn: { borderRadius: 20, overflow: 'hidden' },
+  markAllGradient: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  markAllText: { fontSize: 12, color: '#fff', fontWeight: '600' },
   scroll: { flex: 1 },
-  center: { paddingTop: 100, alignItems: 'center', gap: 10 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary },
+  center: { paddingTop: 100, alignItems: 'center', gap: 14 },
+  emptyIconWrap: {
+    width: 80, height: 80, borderRadius: 40,
+    backgroundColor: 'rgba(249,115,22,0.08)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  emptyTitle: { fontSize: 20, fontWeight: '700', color: Colors.textPrimary },
   emptyText: { fontSize: 14, color: Colors.textSecondary },
   notifCard: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingHorizontal: 16, paddingVertical: 14,
     borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle,
   },
-  notifUnread: { backgroundColor: 'rgba(249,115,22,0.06)' },
+  notifUnread: { backgroundColor: 'rgba(249,115,22,0.04)' },
   unreadDot: {
     position: 'absolute', left: 6, top: '50%',
     width: 8, height: 8, borderRadius: 4,
     backgroundColor: Colors.brandPrimary,
   },
-  notifIcon: { fontSize: 24 },
+  notifIconWrap: {
+    width: 40, height: 40, borderRadius: 12,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  notifIcon: { fontSize: 20 },
   notifContent: { flex: 1, gap: 2 },
   notifTitle: { fontSize: 14, color: Colors.textPrimary, fontWeight: '500' },
   notifBody: { fontSize: 13, color: Colors.textSecondary, lineHeight: 18 },

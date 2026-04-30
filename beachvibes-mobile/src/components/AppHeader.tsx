@@ -11,7 +11,7 @@ interface AppHeaderProps {
   showBack?: boolean;
 }
 
-export function AppHeader({ title = 'BeachVibes', notificationCount = 0, showBack = false }: AppHeaderProps) {
+export function AppHeader({ title, notificationCount = 0, showBack = false }: AppHeaderProps) {
   const { user, logout } = useAuth();
 
   const handleAvatarPress = () => {
@@ -21,6 +21,7 @@ export function AppHeader({ title = 'BeachVibes', notificationCount = 0, showBac
       [
         { text: 'Min profil', onPress: () => router.push('/profile') },
         { text: 'Notiser', onPress: () => router.push('/notifications') },
+        { text: 'Inställningar', onPress: () => router.push('/settings') },
         { text: 'Avbryt', style: 'cancel' },
         {
           text: 'Logga ut', style: 'destructive',
@@ -37,7 +38,21 @@ export function AppHeader({ title = 'BeachVibes', notificationCount = 0, showBac
           <Ionicons name="chevron-back" size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
       ) : (
-        <Text style={s.logo}>{title}</Text>
+        <View style={s.brandRow}>
+          <Image 
+            source={require('../../assets/logo.png')} 
+            style={s.logoIcon} 
+            resizeMode="contain" 
+          />
+          {title ? (
+            <Text style={s.headerTitleCustom}>{title}</Text>
+          ) : (
+            <View style={s.brandTextRow}>
+              <Text style={s.brandBeach}>Beach</Text>
+              <Text style={s.brandVibes}>Vibes</Text>
+            </View>
+          )}
+        </View>
       )}
       {showBack && <Text style={s.headerTitle} numberOfLines={1}>{title}</Text>}
 
@@ -76,7 +91,36 @@ const s = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: Colors.borderSubtle,
     backgroundColor: Colors.bgPrimary,
   },
-  logo: { fontSize: 22, fontWeight: '800', color: Colors.brandPrimary, letterSpacing: -0.5 },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  logoIcon: {
+    width: 28,
+    height: 28,
+  },
+  brandTextRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  brandBeach: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#22d3ee',
+    letterSpacing: -0.5,
+  },
+  brandVibes: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#e879f9',
+    letterSpacing: -0.5,
+  },
+  headerTitleCustom: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
   backBtn: { padding: 4 },
   headerTitle: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary, flex: 1, textAlign: 'center' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
