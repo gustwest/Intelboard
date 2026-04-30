@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, Image,
-  TouchableOpacity, RefreshControl, ActivityIndicator, Alert,
+  TouchableOpacity, RefreshControl, ActivityIndicator, Alert, Pressable
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../src/theme/colors';
@@ -122,37 +122,45 @@ export default function PlayScreen() {
           <View style={s.section}>
             <Text style={s.sectionLabel}>GRUPPER</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.storiesRow}>
-              <TouchableOpacity style={s.storyItem} onPress={() => Alert.alert('Ny grupp', 'Funktionen byggs just nu')}>
-                <LinearGradient
-                  colors={['#f97316', '#ef4444', '#ec4899', '#a855f7']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={[s.storyRing, { borderWidth: 0 }]}
-                >
-                  <Ionicons name="add" size={32} color="#fff" style={{ opacity: 0.9 }} />
-                </LinearGradient>
-                <Text style={s.storyName} numberOfLines={1}>Ny grupp</Text>
-              </TouchableOpacity>
+              <Pressable style={s.storyItem} onPress={() => Alert.alert('Ny grupp', 'Funktionen byggs just nu')}>
+                {({ pressed }) => (
+                  <>
+                    <LinearGradient
+                      colors={['#f97316', '#ef4444', '#ec4899', '#a855f7']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={[s.storyRing, { borderWidth: 0 }, pressed && s.storyRingPressed]}
+                    >
+                      <Ionicons name="add" size={32} color="#fff" style={{ opacity: 0.9 }} />
+                    </LinearGradient>
+                    <Text style={s.storyName} numberOfLines={1}>Ny grupp</Text>
+                  </>
+                )}
+              </Pressable>
               {groups.map((g) => {
                 const hasActivity = (g.unreadCount || 0) > 0;
                 return (
-                  <TouchableOpacity key={g.id} style={s.storyItem} onPress={() => router.push(`/group/${g.id}`)}>
-                      <LinearGradient
-                        colors={(g.isPinned && !hasActivity) ? [Colors.brandPrimary, Colors.brandPrimary] : ['#f97316', '#ef4444', '#ec4899', '#a855f7']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={[s.storyRing, !hasActivity && { opacity: 0.85 }]}
-                      >
-                      <View style={s.storyInner}>
-                        {g.imageUrl ? <Image source={{ uri: getAbsoluteUrl(g.imageUrl) }} style={s.storyImage} /> : <Text style={s.storyEmoji}>{g.emoji || '🏐'}</Text>}
-                        {g.isPinned && <View style={s.pinIcon}><Text style={{ fontSize: 12 }}>📌</Text></View>}
-                      </View>
-                    </LinearGradient>
-                    {(g.unreadCount || 0) > 0 && (
-                      <View style={s.storyBadge}><Text style={s.storyBadgeText}>{(g.unreadCount || 0) > 9 ? '9+' : g.unreadCount}</Text></View>
+                  <Pressable key={g.id} style={s.storyItem} onPress={() => router.push(`/group/${g.id}`)}>
+                    {({ pressed }) => (
+                      <>
+                        <LinearGradient
+                          colors={(g.isPinned && !hasActivity) ? [Colors.brandPrimary, Colors.brandPrimary] : ['#f97316', '#ef4444', '#ec4899', '#a855f7']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={[s.storyRing, !hasActivity && { opacity: 0.85 }, pressed && s.storyRingPressed]}
+                        >
+                          <View style={s.storyInner}>
+                            {g.imageUrl ? <Image source={{ uri: getAbsoluteUrl(g.imageUrl) }} style={s.storyImage} /> : <Text style={s.storyEmoji}>{g.emoji || '🏐'}</Text>}
+                            {g.isPinned && <View style={s.pinIcon}><Text style={{ fontSize: 12 }}>📌</Text></View>}
+                          </View>
+                        </LinearGradient>
+                        {(g.unreadCount || 0) > 0 && (
+                          <View style={s.storyBadge}><Text style={s.storyBadgeText}>{(g.unreadCount || 0) > 9 ? '9+' : g.unreadCount}</Text></View>
+                        )}
+                        <Text style={s.storyName} numberOfLines={1}>{g.name}</Text>
+                      </>
                     )}
-                    <Text style={s.storyName} numberOfLines={1}>{g.name}</Text>
-                  </TouchableOpacity>
+                  </Pressable>
                 );
               })}
             </ScrollView>
@@ -325,7 +333,8 @@ const s = StyleSheet.create({
   sectionLabel: { color: Colors.textTertiary, fontSize: 12, fontWeight: '600', paddingHorizontal: 16, marginBottom: 8, letterSpacing: 0.5 },
   storiesRow: { paddingHorizontal: 12, gap: 14, paddingBottom: 12, paddingTop: 6 },
   storyItem: { alignItems: 'center', width: 68, position: 'relative' },
-  storyRing: { width: 66, height: 66, borderRadius: 33, justifyContent: 'center', alignItems: 'center', marginBottom: 6, shadowColor: Colors.brandPrimary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4 },
+  storyRing: { width: 66, height: 66, borderRadius: 33, justifyContent: 'center', alignItems: 'center', marginBottom: 6, shadowColor: '#ea580c', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 4 },
+  storyRingPressed: { shadowOpacity: 0.8, shadowRadius: 16, elevation: 12 },
   storyInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: Colors.bgTertiary, justifyContent: 'center', alignItems: 'center', overflow: 'hidden', borderWidth: 2, borderColor: Colors.bgPrimary },
   storyImage: { width: '100%', height: '100%', borderRadius: 30 },
   storyEmoji: { fontSize: 28 },
