@@ -681,6 +681,20 @@ interface AgentStatus {
   stats: { total: number; completed: number; failed: number; successRate: number };
 }
 
+function fmtTs(iso: string) {
+  const d = new Date(iso);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) return d.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleString('sv-SE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+function fmtElapsed(start: string, end: string) {
+  const s = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 1000);
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
 function AgentTab() {
   const [sessions, setSessions] = useState<AgentSession[]>([]);
   const [activeSession, setActiveSession] = useState<string | null>(null);
@@ -899,9 +913,7 @@ function AgentTab() {
             currentSession.tasks.map(task => (
               <div key={task.id} style={{ marginBottom: '20px' }}>
                 {/* User prompt */}
-                <div style={{
-                  display: 'flex', justifyContent: 'flex-end', marginBottom: '8px',
-                }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginBottom: '8px', gap: '3px' }}>
                   <div style={{
                     maxWidth: '80%',
                     padding: '12px 16px',
@@ -913,6 +925,9 @@ function AgentTab() {
                   }}>
                     {task.prompt}
                   </div>
+                  <span style={{ fontSize: '0.625rem', color: 'rgba(255,255,255,0.25)', paddingRight: '4px' }}>
+                    {fmtTs(task.createdAt)}
+                  </span>
                 </div>
 
                 {/* Status */}
@@ -951,18 +966,23 @@ function AgentTab() {
 
                 {/* Response */}
                 {task.response && (
-                  <div style={{
-                    maxWidth: '85%',
-                    padding: '14px 16px',
-                    background: 'rgba(255,255,255,0.03)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    borderRadius: '16px 16px 16px 4px',
-                    fontSize: '0.8125rem',
-                    lineHeight: 1.6,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                  }}>
-                    {task.response}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '3px' }}>
+                    <div style={{
+                      maxWidth: '85%',
+                      padding: '14px 16px',
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: '16px 16px 16px 4px',
+                      fontSize: '0.8125rem',
+                      lineHeight: 1.6,
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                    }}>
+                      {task.response}
+                    </div>
+                    <span style={{ fontSize: '0.625rem', color: 'rgba(255,255,255,0.25)', paddingLeft: '4px' }}>
+                      {fmtTs(task.updatedAt)} · {fmtElapsed(task.createdAt, task.updatedAt)}
+                    </span>
                   </div>
                 )}
 
