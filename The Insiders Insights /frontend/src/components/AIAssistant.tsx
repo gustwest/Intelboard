@@ -109,6 +109,8 @@ export default function AIAssistant() {
   const [isDragging, setIsDragging] = useState(false);
   const [hasLoadedHistory, setHasLoadedHistory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -155,10 +157,29 @@ export default function AIAssistant() {
   // Get quick actions for current page
   const quickActions = PAGE_QUICK_ACTIONS[getContext().pageContext] || PAGE_QUICK_ACTIONS['default'];
 
-  // Scroll to bottom on new messages
+  // Track whether user is pinned to bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const c = messagesScrollRef.current;
+    if (!c) return;
+    const onScroll = () => {
+      const distance = c.scrollHeight - c.scrollTop - c.clientHeight;
+      isAtBottomRef.current = distance < 80;
+    };
+    c.addEventListener('scroll', onScroll, { passive: true });
+    return () => c.removeEventListener('scroll', onScroll);
+  }, [isOpen]);
+
+  // Scroll to bottom on new messages — only if user hasn't scrolled up
+  useEffect(() => {
+    if (isAtBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
+
+  // Reset pin state when panel is opened
+  useEffect(() => {
+    if (isOpen) isAtBottomRef.current = true;
+  }, [isOpen]);
 
   // Focus input when opened
   useEffect(() => {
@@ -393,7 +414,7 @@ export default function AIAssistant() {
         </div>
 
         {/* Messages */}
-        <div style={{
+        <div ref={messagesScrollRef} style={{
           flex: 1, overflowY: 'auto', padding: '14px',
           display: 'flex', flexDirection: 'column', gap: '10px',
         }}>

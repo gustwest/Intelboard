@@ -689,6 +689,8 @@ function AgentTab() {
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [sending, setSending] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef(true);
 
   // Poll status every 5s
   useEffect(() => {
@@ -718,10 +720,30 @@ function AgentTab() {
     return () => clearInterval(iv);
   }, [loadSessions]);
 
-  // Auto-scroll to bottom on new messages
+  // Track whether user is pinned to the bottom of the chat
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [sessions, activeSession]);
+    const c = chatScrollRef.current;
+    if (!c) return;
+    const onScroll = () => {
+      const distance = c.scrollHeight - c.scrollTop - c.clientHeight;
+      isAtBottomRef.current = distance < 80;
+    };
+    c.addEventListener('scroll', onScroll, { passive: true });
+    return () => c.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Auto-scroll to bottom — only if user hasn't scrolled up
+  useEffect(() => {
+    if (isAtBottomRef.current) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [sessions]);
+
+  // When switching conversation, jump to bottom and reset pin state
+  useEffect(() => {
+    isAtBottomRef.current = true;
+    chatEndRef.current?.scrollIntoView({ behavior: 'auto' });
+  }, [activeSession]);
 
   const sendTask = async () => {
     if (!prompt.trim() || sending) return;
@@ -872,7 +894,7 @@ function AgentTab() {
         overflow: 'hidden',
       }}>
         {/* Chat messages */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+        <div ref={chatScrollRef} style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
           {currentSession ? (
             currentSession.tasks.map(task => (
               <div key={task.id} style={{ marginBottom: '20px' }}>
