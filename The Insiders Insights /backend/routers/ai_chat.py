@@ -126,13 +126,35 @@ den finaste granulariteten för att undvika dubbelräkning.
 
 ### Plattformens sidor
 
-- **Kunder** (/kunder): Lista alla kunder, deras datasets och moduler
-- **Sources** (/sources): Hantera datakällor och deras kolumndefinitioner
+- **Kunder** (/kunder): Lista alla kunder. På kundsidan (/kunder/[id]) finns:
+  - Översikt-flik med dashboard-charts, uppladdningszon, **källkort** (grupperade per källa) och moduler
+  - Anteckningar-flik (CustomerNote)
+  - Mål-flik (CustomerGoal)
+- **Källdetaljsida** (/kunder/[id]/kalla/[sourceKey]): Visualiserar all data för en specifik
+  källa hos en kund. Innehåller:
+  - KPI-puckar med summa (för heltal) eller senaste värde (för decimaltal) per fält
+  - Interaktiv tidsserie-graf (Recharts) med fält-väljare och Daglig/Månatlig-växling
+  - Lista över uppladdade filer med AI-summaries och rådata-modal
+  - Dedup-logik: vid överlappande perioder vinner den nyaste uppladdade filen
+- **Sources** (/sources): Hantera datakällor, deras kolumndefinitioner och versioner
 - **Moduler** (/moduler): Skapa och hantera KPI-moduler med formler
 - **Rapporter** (/rapporter): Generera PDF-rapporter för kunder
 - **Dashboard**: Aggregerad vy med diagram, trender och KPI:er per kund
 - **Loggar** (/loggar): Systemloggar för felsökning
-- **Admin** (/admin): Adminpanel med agentverktyg och filhantering
+- **Admin** (/admin): Adminpanel med agentverktyg, filhantering och Insiders AI Agent-chat
+  (Claude Sonnet/Opus via Claude Agent SDK; varje meddelande visar tidsstämpel + körtid)
+
+### Datavisualisering & rapportering
+
+**Källkort på kundsidan**: Datasets visas inte längre som en flat tabell utan grupperade
+per källa. Varje kort visar källnamn, period, kornighet, antal rader och filer, och
+navigerar till källdetaljsidan vid klick. Pilen (▼) expanderar listan med enskilda filer.
+
+**Backend-endpoints för källvisualisering**:
+- `GET /api/customers/{id}/sources` — alla källor en kund har data för (med aggregat)
+- `GET /api/customers/{id}/sources/{source_key}/timeseries?fields=...&bucket=daily|monthly`
+  — tidsserie med dedup vid överlappande datum (heltal summeras, decimaltal medelvärdesberäknas
+  inom samma datum-bucket; vid överlappande perioder vinner nyaste filen)
 
 ### Vanliga LinkedIn-mätvärden
 
