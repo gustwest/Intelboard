@@ -215,69 +215,13 @@ export default function CustomerDetailPage() {
         <UploadStatusPanel status={uploadStatus} onDismiss={() => setUploadStatus(null)} onForceIngest={forceIngest} />
       )}
 
-      {/* Datasets */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, marginBottom: 20 }}>
-        <h3 style={{ margin: '0 0 12px', fontSize: 14 }}>Dataset ({customer.datasets?.length || 0})</h3>
-        {!customer.datasets?.length ? (
-          <div style={{ color: C.muted, fontSize: 13, padding: 20, textAlign: 'center' }}>
-            Inga dataset ännu. Ladda upp en fil för att komma igång.
-          </div>
-        ) : (
-          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ color: C.dim, fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>
-                <th style={th}>Fil</th><th style={th}>Källa</th><th style={th}>Version</th><th style={th}>Kornighet</th>
-                <th style={{ ...th, textAlign: 'right' }}>Rader</th><th style={th}>Period</th><th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {customer.datasets.map(d => (
-                <React.Fragment key={d.id}>
-                  <tr style={{ cursor: 'pointer' }} onClick={() => openDs(d.id)}>
-                    <td style={td}>{d.original_filename}</td>
-                    <td style={td}>{d.source_name}</td>
-                    <td style={td}>v{d.source_version}</td>
-                    <td style={td}>
-                      <span style={{
-                        fontSize: 10, padding: '2px 8px', borderRadius: 6, fontWeight: 700,
-                        background: d.granularity === 'daily' ? 'rgba(34,197,94,0.15)' :
-                                    d.granularity === 'monthly' ? 'rgba(59,130,246,0.15)' :
-                                    d.granularity === 'aggregated' ? 'rgba(245,158,11,0.15)' :
-                                    'rgba(255,255,255,0.05)',
-                        color: d.granularity === 'daily' ? '#22c55e' :
-                               d.granularity === 'monthly' ? '#3b82f6' :
-                               d.granularity === 'aggregated' ? '#f59e0b' : C.dim,
-                      }}>
-                        {d.granularity === 'daily' ? '📅 Daglig' :
-                         d.granularity === 'weekly' ? '📆 Veckovis' :
-                         d.granularity === 'monthly' ? '🗓️ Månatlig' :
-                         d.granularity === 'quarterly' ? '📊 Kvartalsvis' :
-                         d.granularity === 'yearly' ? '📈 Årsvis' :
-                         d.granularity === 'aggregated' ? '∑ Aggregerad' : '❓ Okänd'}
-                      </span>
-                    </td>
-                    <td style={{ ...td, textAlign: 'right', fontFamily: 'monospace' }}>{d.row_count}</td>
-                    <td style={{ ...td, color: C.muted, fontSize: 11 }}>
-                      {d.period_start && d.period_end ? `${d.period_start.slice(0,7)} → ${d.period_end.slice(0,7)}` : '—'}
-                    </td>
-                    <td style={td}><button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); deleteDs(d.id); }} style={btn('ghost')}>Ta bort</button></td>
-                  </tr>
-                  {d.ai_summary && (
-                    <tr>
-                      <td colSpan={7} style={{ padding: '4px 12px 14px', borderBottom: `1px solid ${C.border}` }}>
-                        <div style={{ background: 'rgba(0,212,255, 0.08)', border: '1px solid rgba(0,212,255, 0.2)', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
-                          <span style={{ color: C.accent, marginRight: 6 }}>✨ AI</span>
-                          {d.ai_summary}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {/* Källkort — grupperade per källa */}
+      <SourceCards
+        datasets={customer.datasets || []}
+        customerId={params.id}
+        onOpenDataset={openDs}
+        onDeleteDataset={deleteDs}
+      />
 
       {/* Module overview */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20 }}>
@@ -358,6 +302,159 @@ export default function CustomerDetailPage() {
         </div>
       )}
     </main>
+  );
+}
+
+// ─── Source cards ────────────────────────────────────────────────────────────
+
+function granLabel(g?: string) {
+  if (g === 'daily')      return { label: '📅 Daglig',      bg: 'rgba(34,197,94,0.15)',  color: '#22c55e' };
+  if (g === 'weekly')     return { label: '📆 Veckovis',    bg: 'rgba(34,197,94,0.1)',   color: '#86efac' };
+  if (g === 'monthly')    return { label: '🗓️ Månatlig',   bg: 'rgba(59,130,246,0.15)', color: '#3b82f6' };
+  if (g === 'quarterly')  return { label: '📊 Kvartalsvis', bg: 'rgba(59,130,246,0.1)', color: '#93c5fd' };
+  if (g === 'yearly')     return { label: '📈 Årsvis',      bg: 'rgba(139,92,246,0.15)', color: '#a78bfa' };
+  if (g === 'aggregated') return { label: '∑ Aggregerad',   bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' };
+  return { label: '❓ Okänd', bg: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.3)' };
+}
+
+type SourceGroup = {
+  source_key: string; source_name: string;
+  total_rows: number; period_start?: string; period_end?: string;
+  granularity: string; datasets: Dataset[];
+};
+
+function groupBySource(datasets: Dataset[]): SourceGroup[] {
+  const map = new Map<string, SourceGroup>();
+  for (const d of datasets) {
+    if (!map.has(d.source_key)) {
+      map.set(d.source_key, {
+        source_key: d.source_key, source_name: d.source_name,
+        total_rows: 0, granularity: d.granularity || 'unknown', datasets: [],
+      });
+    }
+    const g = map.get(d.source_key)!;
+    g.total_rows += d.row_count;
+    g.datasets.push(d);
+    if (d.period_start && (!g.period_start || d.period_start < g.period_start)) g.period_start = d.period_start;
+    if (d.period_end   && (!g.period_end   || d.period_end   > g.period_end))   g.period_end   = d.period_end;
+  }
+  return [...map.values()].sort((a, b) => a.source_name.localeCompare(b.source_name));
+}
+
+function SourceCards({ datasets, customerId, onOpenDataset, onDeleteDataset }: {
+  datasets: Dataset[];
+  customerId: string;
+  onOpenDataset: (id: string) => void;
+  onDeleteDataset: (id: string) => void;
+}) {
+  const router = useRouter();
+  const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
+  const groups = groupBySource(datasets);
+
+  if (!groups.length) {
+    return (
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 32, marginBottom: 20, textAlign: 'center', color: C.muted, fontSize: 13 }}>
+        Inga dataset ännu. Ladda upp en fil för att komma igång.
+      </div>
+    );
+  }
+
+  const toggle = (key: string) => setExpanded(prev => {
+    const next = new Set(prev);
+    next.has(key) ? next.delete(key) : next.add(key);
+    return next;
+  });
+
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ fontSize: 11, color: C.dim, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, marginBottom: 10 }}>
+        Källor ({groups.length})
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
+        {groups.map(g => {
+          const { label, bg, color } = granLabel(g.granularity);
+          const isExpanded = expanded.has(g.source_key);
+          return (
+            <div key={g.source_key} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+              {/* Card header — clickable → detail page */}
+              <div
+                onClick={() => router.push(`/kunder/${customerId}/kalla/${g.source_key}`)}
+                style={{ padding: '16px 18px', cursor: 'pointer', transition: 'background 0.15s' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,212,255,0.04)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, flex: 1, paddingRight: 8 }}>{g.source_name}</div>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: bg, color, whiteSpace: 'nowrap' }}>{label}</span>
+                </div>
+                <div style={{ display: 'flex', gap: 16, fontSize: 12, color: C.muted }}>
+                  <span>{g.total_rows.toLocaleString('sv-SE')} rader</span>
+                  <span>{g.datasets.length} fil{g.datasets.length !== 1 ? 'er' : ''}</span>
+                  {g.period_start && g.period_end && (
+                    <span>{g.period_start.slice(0,7)} → {g.period_end.slice(0,7)}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer: action bar */}
+              <div style={{ display: 'flex', gap: 0, borderTop: `1px solid ${C.border}` }}>
+                <button
+                  onClick={() => router.push(`/kunder/${customerId}/kalla/${g.source_key}`)}
+                  style={{ flex: 1, padding: '10px 0', fontSize: 12, fontWeight: 600, background: 'transparent', border: 'none', color: C.accent, cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  Visa rapport →
+                </button>
+                <div style={{ width: 1, background: C.border }} />
+                <button
+                  onClick={() => toggle(g.source_key)}
+                  style={{ padding: '10px 16px', fontSize: 12, background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}
+                  title="Visa filer"
+                >
+                  {isExpanded ? '▲' : '▼'} {g.datasets.length}
+                </button>
+              </div>
+
+              {/* Expandable file list */}
+              {isExpanded && (
+                <div style={{ borderTop: `1px solid ${C.border}` }}>
+                  {g.datasets.map(d => (
+                    <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 18px', borderBottom: `1px solid rgba(255,255,255,0.03)`, fontSize: 12 }}>
+                      <span
+                        onClick={() => onOpenDataset(d.id)}
+                        style={{ flex: 1, cursor: 'pointer', color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        title={d.original_filename}
+                      >
+                        {d.original_filename}
+                      </span>
+                      <span style={{ color: C.dim, whiteSpace: 'nowrap', fontSize: 11 }}>
+                        {d.period_start?.slice(0,7) || '—'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); onDeleteDataset(d.id); }}
+                        style={{ ...btn('ghost'), padding: '2px 8px', fontSize: 11 }}
+                      >
+                        Ta bort
+                      </button>
+                    </div>
+                  ))}
+                  {g.datasets.some(d => d.ai_summary) && (
+                    <div style={{ padding: '8px 18px 12px' }}>
+                      {g.datasets.filter(d => d.ai_summary).slice(0, 1).map(d => (
+                        <div key={d.id} style={{ background: 'rgba(0,212,255,0.06)', border: '1px solid rgba(0,212,255,0.15)', borderRadius: 8, padding: '8px 12px', fontSize: 11, color: C.muted, lineHeight: 1.5 }}>
+                          <span style={{ color: C.accent, marginRight: 6 }}>✨ AI</span>
+                          {d.ai_summary}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
