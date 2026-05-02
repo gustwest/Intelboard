@@ -15,6 +15,7 @@ interface Conversation {
   id: string;
   name: string;
   image: string | null;
+  memberImages: string[];
   lastMessage: string;
   lastMessageAt: string;
   unreadCount: number;
@@ -55,6 +56,31 @@ export default function ChatScreen() {
     <TouchableOpacity style={[s.convRow, item.unreadCount > 0 && s.convUnread]} activeOpacity={0.7} onPress={() => router.push(`/chat/${item.id}`)}>
       {item.image ? (
         <Image source={{ uri: item.image }} style={s.convAvatar} />
+      ) : item.isGroup && item.memberImages?.length > 0 ? (
+        <View style={s.convAvatar}>
+          {item.memberImages.slice(0, 4).map((img, idx) => (
+            <Image
+              key={idx}
+              source={{ uri: img }}
+              style={[
+                s.collageImg,
+                item.memberImages.length === 1 ? { width: 48, height: 48, borderRadius: 24, top: 0, left: 0 } :
+                item.memberImages.length === 2 ? { top: idx === 0 ? 0 : 22, left: idx === 0 ? 0 : 22 } :
+                item.memberImages.length === 3 ? [
+                  { top: 0, left: 10 },
+                  { top: 22, left: 0 },
+                  { top: 22, left: 22 },
+                ][idx] :
+                [
+                  { top: 0, left: 0 },
+                  { top: 0, left: 22 },
+                  { top: 22, left: 0 },
+                  { top: 22, left: 22 },
+                ][idx],
+              ]}
+            />
+          ))}
+        </View>
       ) : (
         <LinearGradient
           colors={item.isGroup ? ['#06b6d4', '#3b82f6'] : ['#ea580c', '#db2777']}
@@ -132,4 +158,9 @@ const s = StyleSheet.create({
   convMessage: { fontSize: 13, color: Colors.textSecondary },
   unreadBadge: { borderRadius: 12, minWidth: 22, height: 22, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6 },
   unreadText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  collageImg: {
+    width: 26, height: 26, borderRadius: 13,
+    position: 'absolute',
+    borderWidth: 1.5, borderColor: Colors.bgPrimary,
+  },
 });
