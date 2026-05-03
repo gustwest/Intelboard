@@ -30,7 +30,7 @@
       "edgeToEdgeEnabled": true,
       "config": {
         "googleMaps": {
-          "apiKey": "PLACEHOLDER_ANDROID_MAPS_KEY"
+          "apiKey": "AIzaSyDntN4vVAq6njLBItXdGBLUZQvZzFopGWo"
         }
       },
       "permissions": [
