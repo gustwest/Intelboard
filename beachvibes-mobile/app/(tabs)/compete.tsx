@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, Image,
   TouchableOpacity, RefreshControl, ActivityIndicator,
-  TextInput, Linking,
+  TextInput, Linking, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../src/theme/colors';
@@ -11,8 +11,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppHeader } from '../../src/components/AppHeader';
 import { LinearGradient } from 'expo-linear-gradient';
 
-interface RankingPlayer { rank: number; name: string; points: number; level: string; image: string | null; }
-interface Tournament { id: string; name: string; category: string; date: string; location: string; classes: string[]; teamCount: number; deadline: string; externalUrl: string; }
+interface RankingPlayer { rank: number; name: string; points: number; level: string; club?: string; gender?: string; image: string | null; }
+interface Tournament { id: string; name: string; category: string; date: string; location: string; classes: string[]; teamCount: number; maxTeams?: number; deadline: string; externalUrl: string; organizerClub?: string; registrationOpen?: boolean; gender?: string | null; }
 interface EloEntry { rank: number; name: string; elo: number; wins: number; losses: number; image: string | null; }
 
 const TABS = [
@@ -35,7 +35,9 @@ export default function CompeteScreen() {
   const [loading, setLoading] = useState(true);
   const [notifCount, setNotifCount] = useState(0);
 
-  const loadData = useCallback(async () => {
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadData = useCallback(async (isRefresh = false) => {
     try {
       const [data, countData] = await Promise.all([
         api.get<{ rankings?: RankingPlayer[]; tournaments?: Tournament[]; elo?: EloEntry[] }>(
@@ -44,14 +46,29 @@ export default function CompeteScreen() {
         api.get<{ count: number }>('/api/mobile/notifications/count').catch(() => ({ count: 0 })),
       ]);
       if (data.rankings) setRankings(data.rankings);
-      if (data.tournaments) setTournaments(data.tournaments);
+      if (data.tournaments) {
+        // Ensure classes is always an array
+        const safeT = data.tournaments.map(t => ({
+          ...t,
+          classes: Array.isArray(t.classes) ? t.classes : (typeof t.classes === 'string' ? (t.classes as string).split(',').map(c => c.trim()).filter(Boolean) : []),
+        }));
+        setTournaments(safeT);
+      }
       if (data.elo) setElo(data.elo);
       setNotifCount(countData.count || 0);
-    } catch (err) { console.warn('Failed to load compete:', err); }
-    finally { setLoading(false); }
+    } catch (err: any) {
+      console.warn('Failed to load compete:', err);
+      if (!isRefresh) Alert.alert('Fel', 'Kunde inte ladda data. Kontrollera din anslutning.');
+    }
+    finally { setLoading(false); setRefreshing(false); }
   }, [tab, gender, level, search]);
 
   useEffect(() => { setLoading(true); loadData(); }, [loadData]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadData(true);
+  }, [loadData]);
 
   const renderMedal = (rank: number) => {
     if (rank === 1) return <Text style={s.medal}>🥇</Text>;
@@ -65,7 +82,7 @@ export default function CompeteScreen() {
       <AppHeader notificationCount={notifCount} />
 
       {/* Tabs */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabsRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={s.tabsRow}>
         {TABS.map(t => (
           <TouchableOpacity key={t.key} style={[s.tabPill, tab === t.key && s.tabPillActive]} onPress={() => setTab(t.key)}>
             {tab === t.key ? (
@@ -79,7 +96,7 @@ export default function CompeteScreen() {
         ))}
       </ScrollView>
 
-      <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={s.scroll} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.brandPrimary} />}>
         {loading ? (
           <View style={s.center}><ActivityIndicator size="large" color={Colors.brandPrimary} /></View>
         ) : tab === 'ranking' ? (
@@ -91,7 +108,7 @@ export default function CompeteScreen() {
             </View>
 
             {/* Gender filter */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterRow}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={s.filterRow}>
               {GENDER_FILTERS.map(g => (
                 <TouchableOpacity key={g} style={[s.filterChip, gender === g && s.filterChipActive]} onPress={() => setGender(g)}>
                   <Text style={[s.filterChipText, gender === g && s.filterChipTextActive]}>{g}</Text>
@@ -100,7 +117,7 @@ export default function CompeteScreen() {
             </ScrollView>
 
             {/* Level filter */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterRow}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={s.filterRow}>
               {LEVEL_FILTERS.map(l => (
                 <TouchableOpacity key={l} style={[s.filterChip, level === l && s.filterChipActive]} onPress={() => setLevel(l)}>
                   <Text style={[s.filterChipText, level === l && s.filterChipTextActive]}>{l}</Text>
@@ -124,7 +141,10 @@ export default function CompeteScreen() {
                       <Text style={{ fontSize: 10, color: '#fff', fontWeight: '700' }}>{p.name?.charAt(0)}</Text>
                     </LinearGradient>
                   )}
-                  <Text style={[s.cellText, p.rank <= 3 && { fontWeight: '700' }]} numberOfLines={1}>{p.name}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.cellText, p.rank <= 3 && { fontWeight: '700' }]} numberOfLines={1}>{p.name}</Text>
+                    {p.club ? <Text style={{ fontSize: 11, color: Colors.textTertiary }} numberOfLines={1}>{p.club}</Text> : null}
+                  </View>
                 </View>
                 <Text style={[s.cellText, { width: 60, textAlign: 'right', fontWeight: '700', color: Colors.brandPrimary }]}>{p.points}</Text>
                 <Text style={[s.cellLevel, { width: 80, textAlign: 'right' }]}>{p.level}</Text>
@@ -136,24 +156,32 @@ export default function CompeteScreen() {
           <View style={s.tournamentList}>
             {tournaments.map(t => (
               <TouchableOpacity key={t.id} style={s.tournCard} onPress={() => t.externalUrl && Linking.openURL(t.externalUrl)}>
-                <Text style={s.tournName}>{t.name}</Text>
-                <View style={s.tournCategoryBadge}>
-                  <Text style={s.tournCategory}>{t.category}</Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <Text style={[s.tournName, { flex: 1 }]}>{t.name}</Text>
+                  {t.registrationOpen && <View style={{ backgroundColor: 'rgba(34,197,94,0.15)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 100 }}><Text style={{ fontSize: 10, fontWeight: '700', color: '#22c55e' }}>Öppen</Text></View>}
                 </View>
+                {t.category ? (
+                  <View style={s.tournCategoryBadge}>
+                    <Text style={s.tournCategory}>{t.category}</Text>
+                  </View>
+                ) : null}
+                {t.organizerClub ? <Text style={{ fontSize: 12, color: Colors.textSecondary, marginBottom: 2 }}>{t.organizerClub}</Text> : null}
                 <View style={s.tournMeta}>
                   <Ionicons name="calendar-outline" size={14} color={Colors.brandPrimary} />
                   <Text style={s.tournMetaText}>{t.date}</Text>
                 </View>
-                <View style={s.tournMeta}>
+                {t.location ? <View style={s.tournMeta}>
                   <Ionicons name="location-outline" size={14} color={Colors.brandPink} />
                   <Text style={s.tournMetaText}>{t.location}</Text>
-                </View>
-                <View style={s.tournChips}>
-                  {t.classes.map((c, i) => <View key={i} style={s.classChip}><Text style={s.classChipText}>{c}</Text></View>)}
-                </View>
+                </View> : null}
+                {Array.isArray(t.classes) && t.classes.length > 0 && (
+                  <View style={s.tournChips}>
+                    {t.classes.map((c, i) => <View key={i} style={s.classChip}><Text style={s.classChipText}>{c}</Text></View>)}
+                  </View>
+                )}
                 <View style={s.tournFooter}>
-                  <Text style={s.tournTeams}>{t.teamCount} lag</Text>
-                  <Text style={s.tournDeadline}>Deadline: {t.deadline}</Text>
+                  <Text style={s.tournTeams}>{t.teamCount}{t.maxTeams ? `/${t.maxTeams}` : ''} lag</Text>
+                  {t.deadline ? <Text style={s.tournDeadline}>Deadline: {t.deadline}</Text> : null}
                 </View>
                 <View style={s.externalLink}>
                   <Ionicons name="open-outline" size={14} color={Colors.brandPrimary} />
@@ -193,8 +221,9 @@ export default function CompeteScreen() {
 
             {/* ELO Leaderboard */}
             <Text style={s.eloTitle}>🏆 BeachVibes ELO</Text>
+            {/* Table Header */}
             <View style={s.tableHeader}>
-              <Text style={[s.tableCol, { width: 36 }]}>#</Text>
+              <Text style={[s.tableCol, { width: 36 }]}></Text>
               <Text style={[s.tableCol, { flex: 1 }]}>Spelare</Text>
               <Text style={[s.tableCol, { width: 50, textAlign: 'right' }]}>ELO</Text>
               <Text style={[s.tableCol, { width: 50, textAlign: 'right' }]}>W-L</Text>

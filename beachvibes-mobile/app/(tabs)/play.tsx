@@ -118,42 +118,45 @@ export default function PlayScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} tintColor={Colors.brandPrimary} />}
       >
         {/* Groups stories row */}
-        {groups.length > 0 && (
-          <View style={s.section}>
-            <Text style={s.sectionLabel}>GRUPPER</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.storiesRow}>
-              <Pressable style={s.storyItem} onPress={() => Alert.alert('Ny grupp', 'Funktionen byggs just nu')}>
-                {({ pressed }) => (
-                  <>
-                    <LinearGradient
-                      colors={['#f97316', '#ef4444', '#ec4899', '#a855f7']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={[s.storyRing, { borderWidth: 0 }, pressed && s.storyRingPressed]}
-                    >
-                      <Ionicons name="add" size={32} color="#fff" style={{ opacity: 0.9 }} />
-                    </LinearGradient>
-                    <Text style={s.storyName} numberOfLines={1}>Ny grupp</Text>
-                  </>
-                )}
-              </Pressable>
-              {groups.map((g) => {
+        <View style={s.section}>
+          <Text style={s.sectionLabel}>GRUPPER</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.storiesRow}>
+            <Pressable style={s.storyItem} onPress={() => Alert.alert('Ny grupp', 'Funktionen byggs just nu')}>
+              {({ pressed }) => (
+                <>
+                  <View style={[s.storyShadow, pressed && s.storyShadowPressed]}>
+                    <View style={[s.storyRing, s.createRing]}>
+                      <Ionicons name="add" size={28} color={pressed ? Colors.brandPrimary : Colors.textSecondary} />
+                    </View>
+                  </View>
+                  <Text style={s.storyName} numberOfLines={1}>Ny grupp</Text>
+                </>
+              )}
+            </Pressable>
+            {groups.length === 0 ? (
+              <View style={{ justifyContent: 'center', paddingHorizontal: 16, maxWidth: 200 }}>
+                <Text style={s.emptyText}>Skapa en grupp för att organisera spel med dina vänner</Text>
+              </View>
+            ) : (
+              groups.map((g) => {
                 const hasActivity = (g.unreadCount || 0) > 0;
                 return (
                   <Pressable key={g.id} style={s.storyItem} onPress={() => router.push(`/group/${g.id}`)}>
                     {({ pressed }) => (
                       <>
-                        <LinearGradient
-                          colors={(g.isPinned && !hasActivity) ? [Colors.brandPrimary, Colors.brandPrimary] : ['#f97316', '#ef4444', '#ec4899', '#a855f7']}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 1 }}
-                          style={[s.storyRing, !hasActivity && { opacity: 0.85 }, pressed && s.storyRingPressed]}
-                        >
-                          <View style={s.storyInner}>
-                            {g.imageUrl ? <Image source={{ uri: getAbsoluteUrl(g.imageUrl) }} style={s.storyImage} /> : <Text style={s.storyEmoji}>{g.emoji || '🏐'}</Text>}
-                            {g.isPinned && <View style={s.pinIcon}><Text style={{ fontSize: 12 }}>📌</Text></View>}
-                          </View>
-                        </LinearGradient>
+                        <View style={[s.storyShadow, pressed && s.storyShadowPressed]}>
+                          <LinearGradient
+                            colors={(g.isPinned && !hasActivity) ? [Colors.brandPrimary, Colors.brandPrimary] : ['#f97316', '#ef4444', '#ec4899', '#a855f7']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={[s.storyRing, !hasActivity && { opacity: 0.85 }]}
+                          >
+                            <View style={s.storyInner}>
+                              {g.imageUrl ? <Image source={{ uri: getAbsoluteUrl(g.imageUrl) }} style={s.storyImage} /> : <Text style={s.storyEmoji}>{g.emoji || '🏐'}</Text>}
+                              {g.isPinned && <View style={s.pinIcon}><Text style={{ fontSize: 12 }}>📌</Text></View>}
+                            </View>
+                          </LinearGradient>
+                        </View>
                         {(g.unreadCount || 0) > 0 && (
                           <View style={s.storyBadge}><Text style={s.storyBadgeText}>{(g.unreadCount || 0) > 9 ? '9+' : g.unreadCount}</Text></View>
                         )}
@@ -162,10 +165,10 @@ export default function PlayScreen() {
                     )}
                   </Pressable>
                 );
-              })}
-            </ScrollView>
-          </View>
-        )}
+              })
+            )}
+          </ScrollView>
+        </View>
 
         {/* Search/filter bar */}
         <TouchableOpacity style={s.searchBar}>
@@ -333,14 +336,16 @@ const s = StyleSheet.create({
   sectionLabel: { color: Colors.textTertiary, fontSize: 12, fontWeight: '600', paddingHorizontal: 16, marginBottom: 8, letterSpacing: 0.5 },
   storiesRow: { paddingHorizontal: 12, gap: 14, paddingBottom: 12, paddingTop: 6 },
   storyItem: { alignItems: 'center', width: 68, position: 'relative' },
-  storyRing: { width: 66, height: 66, borderRadius: 33, justifyContent: 'center', alignItems: 'center', marginBottom: 6, shadowColor: '#ea580c', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 4 },
-  storyRingPressed: { shadowOpacity: 0.8, shadowRadius: 16, elevation: 12 },
-  storyInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: Colors.bgTertiary, justifyContent: 'center', alignItems: 'center', overflow: 'hidden', borderWidth: 2, borderColor: Colors.bgPrimary },
-  storyImage: { width: '100%', height: '100%', borderRadius: 30 },
+  storyShadow: { width: 64, height: 64, borderRadius: 32, marginBottom: 6, shadowColor: Colors.brandPrimary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 10, elevation: 8 },
+  storyShadowPressed: { shadowOpacity: 1, shadowRadius: 20, elevation: 16 },
+  storyRing: { width: '100%', height: '100%', borderRadius: 32, justifyContent: 'center', alignItems: 'center' },
+  createRing: { borderWidth: 2, borderColor: 'rgba(249,115,22,0.5)', borderStyle: 'dashed', backgroundColor: Colors.bgSecondary },
+  storyInner: { width: 62, height: 62, borderRadius: 31, backgroundColor: Colors.bgTertiary, justifyContent: 'center', alignItems: 'center', overflow: 'hidden', borderWidth: 1, borderColor: Colors.bgPrimary },
+  storyImage: { width: '100%', height: '100%', borderRadius: 31 },
   storyEmoji: { fontSize: 28 },
   storyName: { fontSize: 11, color: Colors.textSecondary, marginTop: 4, textAlign: 'center' },
   pinIcon: { position: 'absolute', top: -4, right: -4, zIndex: 5 },
-  storyBadge: { position: 'absolute', top: -4, right: -2, backgroundColor: Colors.error, borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: Colors.bgPrimary, zIndex: 10, elevation: 4 },
+  storyBadge: { position: 'absolute', top: -4, right: 0, backgroundColor: Colors.error, borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: Colors.bgPrimary, zIndex: 10, elevation: 4 },
   storyBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
   searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.bgSecondary, marginHorizontal: 16, marginVertical: 8, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, borderWidth: 1, borderColor: Colors.borderSubtle },
   searchText: { fontSize: 14, color: Colors.textSecondary },
@@ -385,7 +390,7 @@ const s = StyleSheet.create({
   commentBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 4 },
   commentText: { fontSize: 13, color: Colors.textSecondary },
   lastCommentText: { fontSize: 12, color: Colors.textTertiary, flex: 1 },
-  fab: { position: 'absolute', bottom: 45, right: 16, borderRadius: 26, shadowColor: '#ea580c', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 8 },
+  fab: { position: 'absolute', bottom: 12, right: 16, borderRadius: 26, shadowColor: Colors.brandPrimary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 12, elevation: 8 },
   fabGradient: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 14, borderRadius: 26 },
   fabText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 });

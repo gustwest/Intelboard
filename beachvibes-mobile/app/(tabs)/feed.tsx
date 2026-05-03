@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, Image,
+  View, Text, ScrollView, StyleSheet, Image, Dimensions,
   TouchableOpacity, RefreshControl, ActivityIndicator,
   TextInput, KeyboardAvoidingView, Platform, Alert,
   ActionSheetIOS, Share, Animated,
@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppHeader } from '../../src/components/AppHeader';
 import { router, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 
 const API_BASE = 'https://dvoucher-app-815335042776.europe-north1.run.app';
 const getAbsoluteUrl = (url: string | null | undefined) => {
@@ -39,6 +40,7 @@ interface FeedPost {
   authorId: string;
   body: string;
   imageUrl: string | null;
+  videoUrl: string | null;
   type: string;
   eventTitle: string | null;
   circleName: string | null;
@@ -55,6 +57,100 @@ const FEED_TABS = [
   { key: 'friends', label: 'Vänner' },
   { key: 'groups', label: 'Mina grupper' },
 ];
+
+const SCREEN_W = Dimensions.get('window').width;
+
+/** Inline video player for feed posts */
+function FeedVideo({ videoUrl }: { videoUrl: string }) {
+  const videoRef = useRef<Video>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const [showControls, setShowControls] = useState(true);
+  const [progress, setProgress] = useState(0);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  const handlePlaybackUpdate = (status: AVPlaybackStatus) => {
+    if (!status.isLoaded) return;
+    setIsPlaying(status.isPlaying);
+    if (status.durationMillis && status.durationMillis > 0) {
+      setProgress(status.positionMillis / status.durationMillis);
+    }
+  };
+
+  const togglePlayPause = async () => {
+    if (!videoRef.current) return;
+    if (isPlaying) {
+      await videoRef.current.pauseAsync();
+    } else {
+      await videoRef.current.playAsync();
+    }
+    // Briefly show controls then auto-hide
+    setShowControls(true);
+    setTimeout(() => setShowControls(false), 2500);
+  };
+
+  const toggleMute = async () => {
+    if (!videoRef.current) return;
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
+    await videoRef.current.setIsMutedAsync(newMuted);
+  };
+
+  return (
+    <View style={s.videoWrapper}>
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={() => {
+          if (!isPlaying) { togglePlayPause(); }
+          else { setShowControls(prev => !prev); }
+        }}
+        style={{ width: '100%' }}
+      >
+        <Video
+          ref={videoRef}
+          source={{ uri: videoUrl }}
+          style={s.postVideo}
+          resizeMode={ResizeMode.COVER}
+          isMuted={isMuted}
+          shouldPlay={false}
+          isLooping
+          onPlaybackStatusUpdate={handlePlaybackUpdate}
+          onLoad={() => setIsLoaded(true)}
+        />
+
+        {/* Play/Pause overlay */}
+        {(showControls || !isPlaying) && (
+          <View style={s.videoOverlay}>
+            <TouchableOpacity onPress={togglePlayPause} style={s.playBtn}>
+              <Ionicons name={isPlaying ? 'pause' : 'play'} size={32} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Mute button */}
+        {isLoaded && (
+          <TouchableOpacity onPress={toggleMute} style={s.muteBtn}>
+            <Ionicons name={isMuted ? 'volume-mute' : 'volume-high'} size={16} color="#fff" />
+          </TouchableOpacity>
+        )}
+
+        {/* Progress bar */}
+        {isLoaded && (
+          <View style={s.videoProgress}>
+            <View style={[s.videoProgressFill, { width: `${progress * 100}%` }]} />
+          </View>
+        )}
+
+        {/* Loading spinner */}
+        {!isLoaded && (
+          <View style={s.videoOverlay}>
+            <ActivityIndicator size="large" color="#fff" />
+          </View>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 export default function FeedScreen() {
   const { user } = useAuth();
@@ -200,6 +296,13 @@ export default function FeedScreen() {
     try { const p = JSON.parse(imageUrl); parsed = Array.isArray(p) ? p : [imageUrl]; }
     catch { parsed = [imageUrl]; }
     return parsed.map(url => getAbsoluteUrl(url) as string);
+  };
+
+  const isVideoUrl = (url: string | null | undefined): boolean => {
+    if (!url) return false;
+    const lower = url.toLowerCase();
+    return lower.endsWith('.mp4') || lower.endsWith('.mov') || lower.endsWith('.webm')
+      || lower.includes('video') || lower.includes('/upload/');
   };
 
   return (
@@ -380,6 +483,11 @@ export default function FeedScreen() {
                     </View>
                   )}
 
+                  {/* Video player */}
+                  {post.videoUrl && (
+                    <FeedVideo videoUrl={getAbsoluteUrl(post.videoUrl)!} />
+                  )}
+
                   {/* Like count row */}
                   {post.likeCount > 0 && (
                     <View style={s.likeCountRow}>
@@ -546,4 +654,39 @@ const s = StyleSheet.create({
   commentInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.bgTertiary, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6, marginTop: 4 },
   commentInput: { flex: 1, fontSize: 14, color: Colors.textPrimary, paddingVertical: 6 },
   sendBtn: { padding: 4 },
+
+  // Video player
+  videoWrapper: {
+    width: '100%', marginTop: 8, backgroundColor: '#000',
+    position: 'relative', overflow: 'hidden',
+  },
+  postVideo: {
+    width: '100%', aspectRatio: 16 / 9,
+    backgroundColor: '#000',
+  },
+  videoOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center', alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  playBtn: {
+    width: 60, height: 60, borderRadius: 30,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center', alignItems: 'center',
+    paddingLeft: 3,
+  },
+  muteBtn: {
+    position: 'absolute', bottom: 14, right: 14,
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  videoProgress: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    height: 3, backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  videoProgressFill: {
+    height: 3,
+    backgroundColor: Colors.brandPrimary,
+  },
 });
