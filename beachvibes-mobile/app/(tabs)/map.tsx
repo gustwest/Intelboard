@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, Linking, TextInput, Dimensions, Animated, KeyboardAvoidingView, Platform, Image, PanResponder } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../src/theme/colors';
@@ -6,7 +6,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '../../src/api/client';
 import { useRouter } from 'expo-router';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { BlurView } from 'expo-blur';
 
 // ─── Dark map style for Google Maps (Android) ──────────────────────────
@@ -41,8 +41,8 @@ const DARK_MAP_STYLE = [
 ];
 
 // ─── Image-aware Marker component ────────────────────────────────────────
-// tracksViewChanges must be true while the image loads, then false for perf.
-function ImageMarker({ coordinate, onPress, imgUrl, iconBg, emoji, isFocused, isCluster, clusterCount, children }: {
+// Matches web app's photo-circle markers with coloured border per type.
+function ImageMarker({ coordinate, onPress, imgUrl, iconBg, emoji, isFocused, isCluster, clusterCount, dateBadge }: {
   coordinate: { latitude: number; longitude: number };
   onPress: () => void;
   imgUrl: string | null | undefined;
@@ -51,9 +51,9 @@ function ImageMarker({ coordinate, onPress, imgUrl, iconBg, emoji, isFocused, is
   isFocused: boolean;
   isCluster: boolean;
   clusterCount: number;
-  children?: React.ReactNode;
+  dateBadge?: string;
 }) {
-  const [imageLoaded, setImageLoaded] = useState(!imgUrl); // if no image, consider it "loaded"
+  const [imageLoaded, setImageLoaded] = useState(!imgUrl);
 
   return (
     <Marker
@@ -62,7 +62,7 @@ function ImageMarker({ coordinate, onPress, imgUrl, iconBg, emoji, isFocused, is
       tracksViewChanges={!imageLoaded}
     >
       <View style={[s.customMarkerContainer, isFocused && s.customMarkerFocused]}>
-        <View style={[s.customMarker, { backgroundColor: imgUrl ? '#fff' : iconBg, overflow: 'hidden' }]}>
+        <View style={[s.customMarker, { borderColor: iconBg, backgroundColor: imgUrl ? 'rgba(15,15,30,0.85)' : 'rgba(15,15,30,0.85)', overflow: 'hidden' }]}>
           {imgUrl ? (
             <Image
               source={{ uri: imgUrl }}
@@ -79,6 +79,11 @@ function ImageMarker({ coordinate, onPress, imgUrl, iconBg, emoji, isFocused, is
             <Text style={s.clusterBadgeText}>{clusterCount}</Text>
           </View>
         )}
+        {dateBadge && (
+          <View style={[s.dateBadge, { backgroundColor: iconBg }]}>
+            <Text style={s.dateBadgeText}>{dateBadge}</Text>
+          </View>
+        )}
         <View style={[s.customMarkerTriangle, { borderTopColor: iconBg }]} />
       </View>
     </Marker>
@@ -89,6 +94,14 @@ const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
 const SHEET_HANDLE_HEIGHT = 40; 
 const PANEL_COLLAPSED = 200;
 const PANEL_EXPANDED = SCREEN_H * 0.7;
+
+/** Format "2025-05-10" → "10 maj" for marker date badges */
+function shortDate(dateStr: string): string {
+  try {
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
+  } catch { return ''; }
+}
 
 interface MapData {
   courts: any[];
@@ -114,6 +127,7 @@ export default function MapScreen() {
   const [error, setError] = useState<string | null>(null);
   const [mapData, setMapData] = useState<MapData>({ courts: [], clubs: [], events: [], tournaments: [], groups: [] });
   const [searchQuery, setSearchQuery] = useState('');
+  const [visibleRegion, setVisibleRegion] = useState<Region | null>(null);
   
   const mapRef = useRef<MapView>(null);
   const insets = useSafeAreaInsets();
@@ -121,6 +135,23 @@ export default function MapScreen() {
   const panelHeight = useRef(new Animated.Value(PANEL_COLLAPSED)).current;
   const [panelExpanded, setPanelExpanded] = useState(false);
   const [pinFocus, setPinFocus] = useState<any | null>(null);
+
+  // ─── Viewport filter: only show items visible on screen ─────────────
+  const handleRegionChange = useCallback((region: Region) => {
+    setVisibleRegion(region);
+  }, []);
+
+  const isInViewport = useCallback((lat: number | null, lng: number | null): boolean => {
+    if (!lat || !lng || !visibleRegion) return true; // show all if no region yet
+    const buffer = 0.15; // 15% padding so edge items don't pop
+    const latDelta = visibleRegion.latitudeDelta * (1 + buffer);
+    const lngDelta = visibleRegion.longitudeDelta * (1 + buffer);
+    const north = visibleRegion.latitude + latDelta / 2;
+    const south = visibleRegion.latitude - latDelta / 2;
+    const east = visibleRegion.longitude + lngDelta / 2;
+    const west = visibleRegion.longitude - lngDelta / 2;
+    return lat >= south && lat <= north && lng >= west && lng <= east;
+  }, [visibleRegion]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -235,6 +266,24 @@ export default function MapScreen() {
     groups: mapData.groups?.length || 0,
   };
 
+  /** Resolve lat/lng for any item (some use courtId as anchor). */
+  const getItemLatLng = useCallback((item: any): { lat: number; lng: number } | null => {
+    if (item.latitude && item.longitude) return { lat: item.latitude, lng: item.longitude };
+    if (item.courtId) {
+      const court = (mapData.courts || []).find((c: any) => c.id === item.courtId);
+      if (court?.latitude && court?.longitude) return { lat: court.latitude, lng: court.longitude };
+    }
+    if (item.homeCourtId) {
+      const court = (mapData.courts || []).find((c: any) => c.id === item.homeCourtId);
+      if (court?.latitude && court?.longitude) return { lat: court.latitude, lng: court.longitude };
+    }
+    if (item.anchorCourtId) {
+      const court = (mapData.courts || []).find((c: any) => c.id === item.anchorCourtId);
+      if (court?.latitude && court?.longitude) return { lat: court.latitude, lng: court.longitude };
+    }
+    return null;
+  }, [mapData.courts]);
+
   const getActiveItems = (): any[] => {
     const items = (() => {
       switch (activeFilter) {
@@ -248,13 +297,27 @@ export default function MapScreen() {
       }
     })();
 
-    if (!searchQuery.trim()) return items;
-    const q = searchQuery.toLowerCase();
-    return items.filter((item: any) => {
-      const name = (item.name || item.title || '').toLowerCase();
-      const sub = (item.courtName || item.clubName || item.region || item.organizerClub || '').toLowerCase();
-      return name.includes(q) || sub.includes(q);
-    });
+    // Filter by search query
+    let filtered = items;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter((item: any) => {
+        const name = (item.name || item.title || '').toLowerCase();
+        const sub = (item.courtName || item.clubName || item.region || item.organizerClub || '').toLowerCase();
+        return name.includes(q) || sub.includes(q);
+      });
+    }
+
+    // Filter to only items visible in current map viewport
+    if (visibleRegion) {
+      filtered = filtered.filter((item: any) => {
+        const pos = getItemLatLng(item);
+        if (!pos) return false;
+        return isInViewport(pos.lat, pos.lng);
+      });
+    }
+
+    return filtered;
   };
 
 
@@ -528,6 +591,7 @@ export default function MapScreen() {
                 isFocused={false}
                 isCluster={idx === visible.length - 1 && overflow > 0}
                 clusterCount={overflow}
+                dateBadge={sat.item.date ? shortDate(sat.item.date) : sat.item.startDate ? shortDate(sat.item.startDate) : undefined}
               />
             );
           });
@@ -586,6 +650,7 @@ export default function MapScreen() {
               isFocused={pinFocus?.id === item.id}
               isCluster={false}
               clusterCount={0}
+              dateBadge={item.date ? shortDate(item.date) : item.startDate ? shortDate(item.startDate) : undefined}
             />
           );
         } else {
@@ -612,6 +677,7 @@ export default function MapScreen() {
                 isFocused={pinFocus?.id === item.id}
                 isCluster={idx === visible.length - 1 && overflow > 0}
                 clusterCount={overflow}
+                dateBadge={item.date ? shortDate(item.date) : item.startDate ? shortDate(item.startDate) : undefined}
               />
             );
           });
@@ -665,6 +731,7 @@ export default function MapScreen() {
         showsUserLocation
         showsMyLocationButton={false}
         onPress={handleMapPress}
+        onRegionChangeComplete={handleRegionChange}
         {...(Platform.OS === 'android' ? {
           provider: PROVIDER_GOOGLE,
           customMapStyle: DARK_MAP_STYLE,
@@ -866,24 +933,33 @@ const s = StyleSheet.create({
       justifyContent: 'center', alignItems: 'center', 
       backgroundColor: 'rgba(10,10,10,0.6)', zIndex: 5 
   },
-  customMarkerContainer: { alignItems: 'center', justifyContent: 'center', width: 44, height: 48 },
-  customMarkerFocused: { transform: [{ scale: 1.15 }] },
+  customMarkerContainer: { alignItems: 'center', justifyContent: 'center', width: 48, height: 58 },
+  customMarkerFocused: { transform: [{ scale: 1.2 }] },
   customMarker: { 
-      width: 34, height: 34, borderRadius: 17, 
+      width: 38, height: 38, borderRadius: 19, 
       alignItems: 'center', justifyContent: 'center',
-      borderWidth: 2.5, borderColor: '#fff',
-      shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 3,
-      elevation: 4,
+      borderWidth: 3, borderColor: '#06b6d4',
+      shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.5, shadowRadius: 4,
+      elevation: 5,
   },
-  customMarkerEmoji: { fontSize: 16 },
+  customMarkerEmoji: { fontSize: 17 },
   customMarkerTriangle: {
       width: 0, height: 0, backgroundColor: 'transparent',
       borderStyle: 'solid', borderLeftWidth: 6, borderRightWidth: 6,
       borderTopWidth: 8, borderLeftColor: 'transparent', borderRightColor: 'transparent',
       marginTop: -1,
   },
+  dateBadge: {
+      position: 'absolute', bottom: 2, left: '50%',
+      transform: [{ translateX: -20 }],
+      borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1,
+      minWidth: 40, alignItems: 'center',
+      shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.4, shadowRadius: 2,
+      elevation: 3,
+  },
+  dateBadgeText: { color: '#fff', fontSize: 8, fontWeight: '800', letterSpacing: 0.3 },
   clusterBadge: {
-      position: 'absolute', top: 0, right: 0,
+      position: 'absolute', top: -2, right: -4,
       backgroundColor: '#ef4444', borderRadius: 10, width: 20, height: 20,
       alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#fff',
       shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.3, shadowRadius: 2,
