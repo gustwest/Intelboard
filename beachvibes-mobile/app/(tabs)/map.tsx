@@ -40,9 +40,12 @@ const DARK_MAP_STYLE = [
   { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4e6d70' }] },
 ];
 
-// ─── Image-aware Marker component ────────────────────────────────────────
-// Matches web app's photo-circle markers with coloured border per type.
-function ImageMarker({ coordinate, onPress, imgUrl, iconBg, emoji, isFocused, isCluster, clusterCount, dateBadge }: {
+// ─── Photo-circle Marker (matches web createPhotoMarker) ─────────────────
+// Circle with coloured border + photo/emoji inside. dateBadge sits below.
+// Container is deliberately oversized so badges & shadows don't clip.
+const MARKER_SZ = 40;  // matches web's 44px minus mobile density offset
+
+function ImageMarker({ coordinate, onPress, imgUrl, iconBg, emoji, isFocused, isCluster, clusterCount, dateBadge, size }: {
   coordinate: { latitude: number; longitude: number };
   onPress: () => void;
   imgUrl: string | null | undefined;
@@ -52,39 +55,66 @@ function ImageMarker({ coordinate, onPress, imgUrl, iconBg, emoji, isFocused, is
   isCluster: boolean;
   clusterCount: number;
   dateBadge?: string;
+  size?: number;
 }) {
   const [imageLoaded, setImageLoaded] = useState(!imgUrl);
+  const sz = size || MARKER_SZ;
+  const innerSz = sz - 4; // subtract border
 
   return (
     <Marker
       coordinate={coordinate}
       onPress={onPress}
       tracksViewChanges={!imageLoaded}
+      anchor={{ x: 0.5, y: 0.5 }}
     >
-      <View style={[s.customMarkerContainer, isFocused && s.customMarkerFocused]}>
-        <View style={[s.customMarker, { borderColor: iconBg, backgroundColor: imgUrl ? 'rgba(15,15,30,0.85)' : 'rgba(15,15,30,0.85)', overflow: 'hidden' }]}>
+      {/* Oversized container — prevents Android clipping */}
+      <View style={{ width: sz + 24, height: sz + 24, alignItems: 'center', justifyContent: 'center', overflow: 'visible' }}>
+        {/* Focus ring */}
+        {isFocused && (
+          <View style={{ position: 'absolute', width: sz + 8, height: sz + 8, borderRadius: (sz + 8) / 2, borderWidth: 2, borderColor: 'rgba(255,255,255,0.5)' }} />
+        )}
+        {/* Main circle */}
+        <View style={{
+          width: sz, height: sz, borderRadius: sz / 2,
+          borderWidth: 2.5, borderColor: iconBg,
+          backgroundColor: 'rgba(15,15,30,0.85)',
+          overflow: 'hidden',
+        }}>
           {imgUrl ? (
             <Image
               source={{ uri: imgUrl }}
-              style={{ width: 34, height: 34, borderRadius: 17 }}
+              style={{ width: innerSz, height: innerSz, borderRadius: innerSz / 2 }}
               onLoad={() => setImageLoaded(true)}
               onError={() => setImageLoaded(true)}
             />
           ) : (
-            <Text style={s.customMarkerEmoji}>{emoji}</Text>
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontSize: sz * 0.42 }}>{emoji}</Text>
+            </View>
           )}
         </View>
-        {isCluster && (
-          <View style={s.clusterBadge}>
-            <Text style={s.clusterBadgeText}>{clusterCount}</Text>
+        {/* Cluster badge — top right */}
+        {isCluster && clusterCount > 0 && (
+          <View style={{
+            position: 'absolute', top: 2, right: 2,
+            backgroundColor: '#ef4444', borderRadius: 9, minWidth: 18, height: 18,
+            paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center',
+            borderWidth: 1.5, borderColor: '#fff',
+          }}>
+            <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800' }}>{clusterCount}</Text>
           </View>
         )}
+        {/* Date badge — centered below circle */}
         {dateBadge && (
-          <View style={[s.dateBadge, { backgroundColor: iconBg }]}>
-            <Text style={s.dateBadgeText}>{dateBadge}</Text>
+          <View style={{
+            position: 'absolute', bottom: 0,
+            backgroundColor: iconBg, borderRadius: 6,
+            paddingHorizontal: 5, paddingVertical: 1,
+          }}>
+            <Text style={{ color: '#fff', fontSize: 8, fontWeight: '800', letterSpacing: 0.3 }}>{dateBadge}</Text>
           </View>
         )}
-        <View style={[s.customMarkerTriangle, { borderTopColor: iconBg }]} />
       </View>
     </Marker>
   );
@@ -545,19 +575,24 @@ export default function MapScreen() {
         if (rendered.has(key)) continue;
         rendered.add(key);
 
-        // Court anchor marker
+        // Court anchor marker — web uses 44px, orange for club courts, cyan for others
         const imgUrl = c.imageUrl || c.images?.[0]?.url;
+        const isClubCourt = !!c.clubName;
+        const bucket = fanBuckets.get(key);
+        const bucketCount = bucket?.satellites.length || 0;
         markers.push(
           <ImageMarker
             key={`court-${c.id}`}
             coordinate={{ latitude: c.latitude, longitude: c.longitude }}
             onPress={() => handleMarkerPress(c, 'court')}
             imgUrl={imgUrl}
-            iconBg={Colors.brandPrimary}
+            iconBg={isClubCourt ? '#f97316' : '#06b6d4'}
             emoji="🏐"
             isFocused={pinFocus?.id === c.id}
             isCluster={false}
             clusterCount={0}
+            size={44}
+            dateBadge={bucketCount > 0 ? `${bucketCount} event` : undefined}
           />
         );
 
@@ -569,12 +604,13 @@ export default function MapScreen() {
 
           visible.forEach((sat, idx) => {
             const { dLat, dLng } = getFanOffset(idx, visible.length);
-            let satIconBg = Colors.brandAccent;
-            let satEmoji = '📅';
+            // Match web's typeConfig colors exactly
+            let satIconBg = '#22c55e'; // spel = green
+            let satEmoji = '🏐';
             let satType = 'event';
-            if (sat.kind === 'tournament') { satIconBg = '#f59e0b'; satEmoji = '🏆'; satType = 'tournament'; }
-            else if (sat.kind === 'group') { satIconBg = '#a855f7'; satEmoji = '👥'; satType = 'group'; }
-            else if (sat.item.type === 'Träning') { satIconBg = '#8b5cf6'; satEmoji = '💪'; }
+            if (sat.kind === 'tournament') { satIconBg = '#fbbf24'; satEmoji = '🏆'; satType = 'tournament'; }
+            else if (sat.kind === 'group') { satIconBg = sat.item.color || '#a855f7'; satEmoji = sat.item.emoji || '👥'; satType = 'group'; }
+            else if (sat.item.type === 'Träning') { satIconBg = '#06b6d4'; satEmoji = '🎯'; }
 
             const satImgUrl = sat.item.imageUrl || sat.item.images?.[0]?.url || sat.item.logoUrl;
             markers.push(
@@ -591,6 +627,7 @@ export default function MapScreen() {
                 isFocused={false}
                 isCluster={idx === visible.length - 1 && overflow > 0}
                 clusterCount={overflow}
+                size={32}
                 dateBadge={sat.item.date ? shortDate(sat.item.date) : sat.item.startDate ? shortDate(sat.item.startDate) : undefined}
               />
             );
@@ -602,13 +639,13 @@ export default function MapScreen() {
     // ── Events / Training / Tournaments / Groups: fan by shared location ──
     if (showEvents || showTraining || showTournaments || showGroups) {
       let items: any[] = [];
-      let iconBg = Colors.brandAccent;
-      let emoji = '📅';
+      let iconBg = '#22c55e';
+      let emoji = '🏐';
       let type = 'event';
 
-      if (showEvents) { items = (mapData.events || []).filter(e => e.type !== 'Träning'); iconBg = Colors.brandAccent; emoji = '📅'; type = 'event'; }
-      else if (showTraining) { items = (mapData.events || []).filter(e => e.type === 'Träning'); iconBg = '#8b5cf6'; emoji = '💪'; type = 'event'; }
-      else if (showTournaments) { items = mapData.tournaments || []; iconBg = '#f59e0b'; emoji = '🏆'; type = 'tournament'; }
+      if (showEvents) { items = (mapData.events || []).filter(e => e.type !== 'Träning'); iconBg = '#22c55e'; emoji = '🏐'; type = 'event'; }
+      else if (showTraining) { items = (mapData.events || []).filter(e => e.type === 'Träning'); iconBg = '#06b6d4'; emoji = '🎯'; type = 'event'; }
+      else if (showTournaments) { items = mapData.tournaments || []; iconBg = '#fbbf24'; emoji = '🏆'; type = 'tournament'; }
       else if (showGroups) { items = mapData.groups || []; iconBg = '#a855f7'; emoji = '👥'; type = 'group'; }
 
       // Group by location
@@ -650,6 +687,7 @@ export default function MapScreen() {
               isFocused={pinFocus?.id === item.id}
               isCluster={false}
               clusterCount={0}
+              size={32}
               dateBadge={item.date ? shortDate(item.date) : item.startDate ? shortDate(item.startDate) : undefined}
             />
           );
@@ -677,6 +715,7 @@ export default function MapScreen() {
                 isFocused={pinFocus?.id === item.id}
                 isCluster={idx === visible.length - 1 && overflow > 0}
                 clusterCount={overflow}
+                size={32}
                 dateBadge={item.date ? shortDate(item.date) : item.startDate ? shortDate(item.startDate) : undefined}
               />
             );
@@ -685,7 +724,7 @@ export default function MapScreen() {
       }
     }
 
-    // ── Clubs: simple markers (no fan) ──
+    // ── Clubs: simple markers (no fan) — web uses size 42, purple border ──
     if (showClubs) {
       for (const club of mapData.clubs || []) {
         if (!club.latitude || !club.longitude) continue;
@@ -696,11 +735,13 @@ export default function MapScreen() {
             coordinate={{ latitude: club.latitude, longitude: club.longitude }}
             onPress={() => handleMarkerPress(club, 'club')}
             imgUrl={imgUrl}
-            iconBg="#3b82f6"
+            iconBg="#8b5cf6"
             emoji="🏢"
             isFocused={pinFocus?.id === club.id}
             isCluster={false}
             clusterCount={0}
+            size={42}
+            dateBadge={club.memberCount ? `${club.memberCount} mbr` : undefined}
           />
         );
       }
@@ -933,39 +974,7 @@ const s = StyleSheet.create({
       justifyContent: 'center', alignItems: 'center', 
       backgroundColor: 'rgba(10,10,10,0.6)', zIndex: 5 
   },
-  customMarkerContainer: { alignItems: 'center', justifyContent: 'center', width: 48, height: 58 },
-  customMarkerFocused: { transform: [{ scale: 1.2 }] },
-  customMarker: { 
-      width: 38, height: 38, borderRadius: 19, 
-      alignItems: 'center', justifyContent: 'center',
-      borderWidth: 3, borderColor: '#06b6d4',
-      shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.5, shadowRadius: 4,
-      elevation: 5,
-  },
-  customMarkerEmoji: { fontSize: 17 },
-  customMarkerTriangle: {
-      width: 0, height: 0, backgroundColor: 'transparent',
-      borderStyle: 'solid', borderLeftWidth: 6, borderRightWidth: 6,
-      borderTopWidth: 8, borderLeftColor: 'transparent', borderRightColor: 'transparent',
-      marginTop: -1,
-  },
-  dateBadge: {
-      position: 'absolute', bottom: 2, left: '50%',
-      transform: [{ translateX: -20 }],
-      borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1,
-      minWidth: 40, alignItems: 'center',
-      shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.4, shadowRadius: 2,
-      elevation: 3,
-  },
-  dateBadgeText: { color: '#fff', fontSize: 8, fontWeight: '800', letterSpacing: 0.3 },
-  clusterBadge: {
-      position: 'absolute', top: -2, right: -4,
-      backgroundColor: '#ef4444', borderRadius: 10, width: 20, height: 20,
-      alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#fff',
-      shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.3, shadowRadius: 2,
-      zIndex: 2,
-  },
-  clusterBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  // (marker styles are now inline in the ImageMarker component)
   bottomSheet: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     backgroundColor: 'rgba(15,15,30,0.85)',
