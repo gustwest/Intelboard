@@ -262,3 +262,68 @@
 ⚠️  Failed to reach server: fetch failed
 ⚠️  Failed to reach server: fetch failed
 ⚠️  Failed to reach server: fetch failed
+
+🚀 Executing task 94e1409c-8541-4674-a04a-476386a3ba2e
+   Prompt: Claude Opus ska alltid vara förvalt som modell i denna Claude CLI Agent, kan vi få till det. Just nu...
+   Project: /Users/gustavwestergren/Documents/AntiGravityRepo/The Insiders Insights 
+   CLI: /Users/gustavwestergren/.local/bin/claude
+   Model: claude-opus-4-7
+   Resume: 88176c29-6134-47fe-a584-946482c69157
+   Command: /Users/gustavwestergren/.local/bin/claude -p --dangerously-skip-permissions --output-format stream-json --verbose --model claude-opus-4-7 --resume 88176c29-6134-47fe-a584-946482c69157
+   🔌 Session started (88176c29)
+   🔧 Skill({"skill":"update-config","args":"Set Claude Opus as the default model so it persists across sessions instead of resettin)
+   ↳ Launching skill: update-config
+   Ska kolla din användarinställning först och lägga till model-överlagringen.
+   🔧 Read({"file_path":"/Users/gustavwestergren/.claude/settings.json"})
+   ↳ 1	{
+   2	  "syntaxHighlightingDisabled": false,
+   3	  "model": "claude-opus-4-7"
+   4	}
+   Intressant — globalt har du redan `"model": "claude-opus-4-7"` satt. Något överlagrar det. Låt mig kolla project- och local-inställningar.
+   🔧 Bash({"command":"ls -la \"/Users/gustavwestergren/Documents/AntiGravityRepo/The Insiders Insights /.claude/\" 2>/dev/null; ec)
+   ↳ ---
+   ---
+   total 40
+   drwxr-xr-x   20 gustavwestergren  staff   640 May  4 18:29 .
+   drwxr-xr-x+  43 gustavwestergren  staff  1376 May  4 18:29 ..
+   drwxr-xr-x    7 gustavwestergren  staff   224 May  4 18:29 b…
+   🔧 Bash({"command":"cat \"/Users/gustavwestergren/.claude/settings.json.bak.1777216801\" 2>/dev/null; echo \"===\"; find /Users/)
+   ↳    {
+        "syntaxHighlightingDisabled": false,
+        "model": "claude-opus-4-7"
+      }
+      EOF
+      ===
+   /Users/gustavwestergren/.claude/projects/-Users-gustavwestergren-Documents-AntiGravityRepo-The-Insider…
+   Vänta — jag tror jag missförstod. När du säger "Claude CLI Agent" — menar du AI-agenten i din egen app under `/admin` (Claude CLI-integrationen ni byggt), inte denna Claude Code-instans? Den globala Claude Code-settingen är redan satt till Opus 4.7.
+   Låt mig kolla admin-agentens kod för modellval.
+   🔧 Grep({"pattern":"sonnet|opus|claude-|model.*=|MODEL","path":"/Users/gustavwestergren/Documents/AntiGravityRepo/The Insiders I)
+   ↳ backend/sources.py:23:import models
+   backend/sources.py:95:) -> Tuple[str, Optional[models.Source], Optional[models.SourceVersion], Dict[str, Any]]:
+   backend/sources.py:103:    best: Optional[Tuple[floa…
+   🔧 Grep({"pattern":"sonnet|opus|claude-|--model","path":"/Users/gustavwestergren/Documents/AntiGravityRepo/The Insiders Insights)
+   ↳ frontend/src/app/admin/page.tsx:702:  const [model, setModel] = useState('claude-sonnet-4-6');
+   frontend/src/app/admin/page.tsx:1052:            <option value="claude-sonnet-4-6">Sonnet 4</option>
+   fron…
+   Hittat det. Admin-agentens default-modell är hårdkodad till Sonnet på rad 702. Jag ändrar default till Opus och lägger till localStorage-persistering så ditt val sparas.
+   🔧 Read({"file_path":"/Users/gustavwestergren/Documents/AntiGravityRepo/The Insiders Insights /frontend/src/app/admin/page.tsx",)
+   ↳ 695	  return `${Math.floor(s / 60)}m ${s % 60}s`;
+   696	}
+   697	
+   698	function AgentTab() {
+   699	  const [sessions, setSessions] = useState<AgentSession[]>([]);
+   700	  const [activeSession, setActiveSession]…
+   🔧 Edit({"replace_all":false,"file_path":"/Users/gustavwestergren/Documents/AntiGravityRepo/The Insiders Insights /frontend/src/)
+   ↳ The file /Users/gustavwestergren/Documents/AntiGravityRepo/The Insiders Insights /frontend/src/app/admin/page.tsx has been updated successfully.
+   Commit + push till staging.
+   🔧 Bash({"command":"git -C \"/Users/gustavwestergren/Documents/AntiGravityRepo/The Insiders Insights \" add frontend/src/app/adm)
+   ↳ [main d6f1148be] feat(admin-agent): default to Opus 4.7 and persist model choice
+    1 file changed, 7 insertions(+), 1 deletion(-)
+   To https://github.com/gustwest/Intelboard.git
+      dda705e49..d6f1148be  …
+   Klart och pushat. Två ändringar:
+   1. **Default ändrad** — admin-agentens dropdown öppnar nu med Opus 4.7 istället för Sonnet 4.6
+   2. **Val sparas** — `localStorage` minns ditt senaste val per browser, så även om du byter modell mitt i en session så är det det valet som ligger förinställt nästa gång du öppnar `/admin`
+   (Din globala Claude Code-setting var redan `claude-opus-4-7` — det var alltså admin-agenten i din egen app som fastnade på Sonnet, inte Claude Code.)
+✅ Task 94e1409c-8541-4674-a04a-476386a3ba2e completed via result event (83.8s) ($1.3563)
+   ✅ Done · 83.8s · $1.3563
