@@ -597,7 +597,6 @@ export default function MapScreen() {
         );
 
         // Fan satellites for this court's location
-        const bucket = fanBuckets.get(key);
         if (bucket && bucket.satellites.length > 0) {
           const visible = bucket.satellites.slice(0, FAN_MAX_VISIBLE);
           const overflow = bucket.satellites.length - FAN_MAX_VISIBLE;
