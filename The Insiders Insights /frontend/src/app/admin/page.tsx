@@ -699,7 +699,13 @@ function AgentTab() {
   const [sessions, setSessions] = useState<AgentSession[]>([]);
   const [activeSession, setActiveSession] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
-  const [model, setModel] = useState('claude-sonnet-4-6');
+  const [model, setModel] = useState(() => {
+    if (typeof window === 'undefined') return 'claude-opus-4-7';
+    return localStorage.getItem('admin-agent-model') || 'claude-opus-4-7';
+  });
+  useEffect(() => {
+    if (typeof window !== 'undefined') localStorage.setItem('admin-agent-model', model);
+  }, [model]);
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [sending, setSending] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
