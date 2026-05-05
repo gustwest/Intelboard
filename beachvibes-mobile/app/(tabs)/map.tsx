@@ -9,6 +9,15 @@ import { useRouter } from 'expo-router';
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { BlurView } from 'expo-blur';
 
+// ─── Map style types ──────────────────────────────────────────────────
+type MapStyleType = 'dark' | 'light' | 'satellite';
+
+const MAP_STYLES: { key: MapStyleType; label: string; icon: string }[] = [
+  { key: 'dark',      label: 'Mörk',      icon: 'moon' },
+  { key: 'light',     label: 'Ljus',      icon: 'sunny' },
+  { key: 'satellite', label: 'Satellit',  icon: 'earth' },
+];
+
 // ─── Dark map style for Google Maps (Android) ──────────────────────────
 // Mimics the CARTO dark_all tiles used in the web app.
 const DARK_MAP_STYLE = [
@@ -158,6 +167,8 @@ export default function MapScreen() {
   const [mapData, setMapData] = useState<MapData>({ courts: [], clubs: [], events: [], tournaments: [], groups: [] });
   const [searchQuery, setSearchQuery] = useState('');
   const [visibleRegion, setVisibleRegion] = useState<Region | null>(null);
+  const [mapStyle, setMapStyle] = useState<MapStyleType>('dark');
+  const [showMapStylePicker, setShowMapStylePicker] = useState(false);
   
   const mapRef = useRef<MapView>(null);
   const insets = useSafeAreaInsets();
@@ -287,14 +298,6 @@ export default function MapScreen() {
     longitudeDelta: 2,
   };
 
-  const counts: Record<string, number> = {
-    courts: mapData.courts?.length || 0,
-    clubs: mapData.clubs?.length || 0,
-    events: (mapData.events || []).filter(e => e.type !== 'Träning').length,
-    training: (mapData.events || []).filter(e => e.type === 'Träning').length,
-    tournaments: mapData.tournaments?.length || 0,
-    groups: mapData.groups?.length || 0,
-  };
 
   /** Resolve lat/lng for any item (some use courtId as anchor). */
   const getItemLatLng = useCallback((item: any): { lat: number; lng: number } | null => {
@@ -313,6 +316,24 @@ export default function MapScreen() {
     }
     return null;
   }, [mapData.courts]);
+
+  // Viewport-filtered counts — pills show only items visible on screen (matching web)
+  const viewportFilter = useCallback((arr: any[]) => {
+    if (!visibleRegion) return arr;
+    return arr.filter(item => {
+      const pos = getItemLatLng(item);
+      return pos ? isInViewport(pos.lat, pos.lng) : false;
+    });
+  }, [visibleRegion, getItemLatLng, isInViewport]);
+
+  const counts: Record<string, number> = {
+    courts: viewportFilter(mapData.courts || []).length,
+    clubs: viewportFilter(mapData.clubs || []).length,
+    events: viewportFilter((mapData.events || []).filter(e => e.type !== 'Träning')).length,
+    training: viewportFilter((mapData.events || []).filter(e => e.type === 'Träning')).length,
+    tournaments: viewportFilter(mapData.tournaments || []).length,
+    groups: viewportFilter(mapData.groups || []).length,
+  };
 
   const getActiveItems = (): any[] => {
     const items = (() => {
@@ -753,8 +774,9 @@ export default function MapScreen() {
   const activeEmoji = FILTERS.find(f => f.key === activeFilter)?.emoji || '';
 
   const handleMapPress = () => {
-    if (Date.now() - lastMarkerPressRef.current < 300) return; // Prevent map press from immediately clearing focus after marker press
+    if (Date.now() - lastMarkerPressRef.current < 300) return;
 
+    if (showMapStylePicker) setShowMapStylePicker(false);
     if (panelExpanded) {
       Animated.spring(panelHeight, { toValue: PANEL_COLLAPSED, useNativeDriver: false, friction: 8 }).start();
       setPanelExpanded(false);
@@ -772,12 +794,12 @@ export default function MapScreen() {
         showsMyLocationButton={false}
         onPress={handleMapPress}
         onRegionChangeComplete={handleRegionChange}
+        mapType={mapStyle === 'satellite' ? 'hybrid' : 'standard'}
         {...(Platform.OS === 'android' ? {
           provider: PROVIDER_GOOGLE,
-          customMapStyle: DARK_MAP_STYLE,
+          customMapStyle: mapStyle === 'dark' ? DARK_MAP_STYLE : mapStyle === 'light' ? [] : [],
         } : {
-          // iOS: Apple Maps follows system dark mode automatically
-          userInterfaceStyle: 'dark' as const,
+          userInterfaceStyle: mapStyle === 'satellite' ? 'dark' as const : mapStyle as 'dark' | 'light',
         })}
       >
         {renderMarkers()}
@@ -840,6 +862,72 @@ export default function MapScreen() {
            <Text style={{ color: Colors.textSecondary, marginTop: 12 }}>{error}</Text>
         </View>
       )}
+
+      {/* ── Map Style Toggle ─────────────────────────────────────── */}
+      <View style={{
+        position: 'absolute', right: 12, bottom: PANEL_COLLAPSED + 16,
+        zIndex: 10, alignItems: 'flex-end',
+      }}>
+        {showMapStylePicker && (
+          <View style={{
+            backgroundColor: 'rgba(15, 15, 30, 0.92)',
+            borderRadius: 14, marginBottom: 8,
+            borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+            overflow: 'hidden',
+            ...Platform.select({
+              ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12 },
+              android: { elevation: 8 },
+            }),
+          }}>
+            {MAP_STYLES.map((ms, idx) => (
+              <TouchableOpacity
+                key={ms.key}
+                style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  paddingHorizontal: 16, paddingVertical: 12,
+                  backgroundColor: mapStyle === ms.key ? 'rgba(6, 182, 212, 0.15)' : 'transparent',
+                  borderBottomWidth: idx < MAP_STYLES.length - 1 ? 1 : 0,
+                  borderBottomColor: 'rgba(255,255,255,0.06)',
+                }}
+                onPress={() => { setMapStyle(ms.key); setShowMapStylePicker(false); }}
+              >
+                <Ionicons
+                  name={ms.icon as any}
+                  size={18}
+                  color={mapStyle === ms.key ? '#06b6d4' : 'rgba(255,255,255,0.6)'}
+                  style={{ marginRight: 10 }}
+                />
+                <Text style={{
+                  color: mapStyle === ms.key ? '#06b6d4' : 'rgba(255,255,255,0.8)',
+                  fontSize: 14, fontWeight: mapStyle === ms.key ? '700' : '500',
+                }}>{ms.label}</Text>
+                {mapStyle === ms.key && (
+                  <Ionicons name="checkmark" size={16} color="#06b6d4" style={{ marginLeft: 'auto' }} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+        <TouchableOpacity
+          onPress={() => setShowMapStylePicker(prev => !prev)}
+          style={{
+            width: 44, height: 44, borderRadius: 22,
+            backgroundColor: 'rgba(15, 15, 30, 0.85)',
+            alignItems: 'center', justifyContent: 'center',
+            borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
+            ...Platform.select({
+              ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 6 },
+              android: { elevation: 6 },
+            }),
+          }}
+        >
+          <Ionicons
+            name={mapStyle === 'dark' ? 'moon' : mapStyle === 'light' ? 'sunny' : 'earth'}
+            size={20}
+            color="#06b6d4"
+          />
+        </TouchableOpacity>
+      </View>
 
       {!loading && (
           <Animated.View style={[s.bottomSheet, { height: panelHeight }]}>  
