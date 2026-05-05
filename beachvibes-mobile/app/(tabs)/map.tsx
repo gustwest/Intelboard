@@ -806,13 +806,8 @@ export default function MapScreen() {
         onPress={handleMapPress}
         onRegionChangeComplete={handleRegionChange}
         mapType={mapStyle === 'satellite' ? 'hybrid' : 'standard'}
-        {...(Platform.OS === 'android' ? {
-          provider: PROVIDER_GOOGLE,
-          customMapStyle: mapStyle === 'dark' ? DARK_MAP_STYLE : [],
-        } : {
-          // Apple Maps: userInterfaceStyle controls dark/light appearance
-          userInterfaceStyle: mapStyle === 'light' ? 'light' as const : 'dark' as const,
-        })}
+        provider={PROVIDER_GOOGLE}
+        customMapStyle={mapStyle === 'dark' ? DARK_MAP_STYLE : []}
       >
         {renderMarkers()}
       </MapView>
