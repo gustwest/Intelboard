@@ -175,7 +175,9 @@ export default function MapScreen() {
   const [error, setError] = useState<string | null>(null);
   const [mapData, setMapData] = useState<MapData>({ courts: [], clubs: [], events: [], tournaments: [], groups: [] });
   const [searchQuery, setSearchQuery] = useState('');
-  const [visibleRegion, setVisibleRegion] = useState<Region | null>(null);
+  const [visibleRegion, setVisibleRegion] = useState<Region | null>({
+    latitude: 59.3293, longitude: 18.0686, latitudeDelta: 2, longitudeDelta: 2,
+  });
   const [mapStyle, setMapStyle] = useState<MapStyleType>('dark');
   const [showMapStylePicker, setShowMapStylePicker] = useState(false);
   
@@ -806,9 +808,10 @@ export default function MapScreen() {
         mapType={mapStyle === 'satellite' ? 'hybrid' : 'standard'}
         {...(Platform.OS === 'android' ? {
           provider: PROVIDER_GOOGLE,
-          customMapStyle: mapStyle === 'dark' ? DARK_MAP_STYLE : mapStyle === 'light' ? [] : [],
+          customMapStyle: mapStyle === 'dark' ? DARK_MAP_STYLE : [],
         } : {
-          userInterfaceStyle: mapStyle === 'satellite' ? 'dark' as const : mapStyle as 'dark' | 'light',
+          // Apple Maps: userInterfaceStyle controls dark/light appearance
+          userInterfaceStyle: mapStyle === 'light' ? 'light' as const : 'dark' as const,
         })}
       >
         {renderMarkers()}

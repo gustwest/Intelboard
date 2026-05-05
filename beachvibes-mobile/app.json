@@ -16,6 +16,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.beachvibes.mobile",
+      "config": {
+        "googleMapsApiKey": "AIzaSyDntN4vVAq6njLBItXdGBLUZQvZzFopGWo"
+      },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "BeachVibes visar banor och events nära dig på kartan.",
         "ITSAppUsesNonExemptEncryption": false
