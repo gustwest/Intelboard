@@ -13,7 +13,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppHeader } from '../../src/components/AppHeader';
 import { router, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+// Safe import: expo-av may not be linked in dev builds
+let Video: any = null;
+let ResizeMode: any = {};
+let AVPlaybackStatus: any = null;
+try {
+  const av = require('expo-av');
+  Video = av.Video;
+  ResizeMode = av.ResizeMode;
+  AVPlaybackStatus = av.AVPlaybackStatus;
+} catch (e) {
+  console.warn('expo-av not available — video playback disabled');
+}
 
 const API_BASE = 'https://dvoucher-app-815335042776.europe-north1.run.app';
 const getAbsoluteUrl = (url: string | null | undefined) => {
@@ -98,6 +109,16 @@ function FeedVideo({ videoUrl }: { videoUrl: string }) {
 
   return (
     <View style={s.videoWrapper}>
+      {!Video ? (
+        /* Fallback when expo-av native module is not linked */
+        <TouchableOpacity
+          style={[s.postVideo, { backgroundColor: 'rgba(20,20,40,0.8)', alignItems: 'center', justifyContent: 'center' }]}
+          onPress={() => {/* could open in browser */}}
+        >
+          <Ionicons name="play-circle-outline" size={48} color="rgba(255,255,255,0.6)" />
+          <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 8 }}>Video ej tillgänglig i dev-build</Text>
+        </TouchableOpacity>
+      ) : (
       <TouchableOpacity
         activeOpacity={1}
         onPress={() => {
@@ -148,6 +169,7 @@ function FeedVideo({ videoUrl }: { videoUrl: string }) {
           </View>
         )}
       </TouchableOpacity>
+      )}
     </View>
   );
 }
