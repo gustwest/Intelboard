@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { 
-  ClipboardList, Folder, Bot, Search, Plus, X, Image as ImageIcon, 
-  MessageSquare, Download, Trash2, CheckCircle2, CircleDashed, 
-  ArrowUpCircle, PlayCircle, Loader2, Send, Upload, Info
+import {
+  ClipboardList, Folder, Bot, Search, Plus, X, Image as ImageIcon,
+  MessageSquare, Download, Trash2, CheckCircle2, CircleDashed,
+  ArrowUpCircle, PlayCircle, Loader2, Send, Upload, Info, Paperclip
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -662,7 +662,7 @@ interface AgentSession {
 interface AgentTaskItem {
   id: string;
   prompt: string;
-  status: 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED';
+  status: 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED' | 'CANCELLED';
   model: string;
   response?: string | null;
   error?: string | null;
@@ -670,6 +670,8 @@ interface AgentTaskItem {
   createdAt: string;
   updatedAt: string;
   logs: { id: string; message: string; createdAt: string }[];
+  cancelRequested?: boolean;
+  imageUrl?: string | null;
 }
 
 interface AgentStatus {
@@ -995,7 +997,7 @@ function AgentTab() {
                     {task.imageUrl && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={task.imageUrl}
+                        src={task.imageUrl.startsWith('http') ? task.imageUrl : `${API_URL}${task.imageUrl}`}
                         alt="Bifogad bild"
                         style={{ display: 'block', maxWidth: '100%', maxHeight: '300px', borderRadius: '10px', marginBottom: task.prompt ? '8px' : '0' }}
                       />
@@ -1159,12 +1161,49 @@ function AgentTab() {
 
         {/* Input area */}
         <div style={{
-          padding: '16px 20px',
+          padding: '12px 20px 16px',
           borderTop: '1px solid rgba(255,255,255,0.06)',
           display: 'flex',
-          gap: '10px',
-          alignItems: 'flex-end',
+          flexDirection: 'column',
+          gap: '8px',
         }}>
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) attachImage(f);
+              e.target.value = '';
+            }}
+          />
+          {pendingImage && (
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: '10px',
+              padding: '6px 10px 6px 6px',
+              background: 'rgba(0,212,255,0.08)',
+              border: '1px solid rgba(0,212,255,0.25)',
+              borderRadius: '12px',
+              alignSelf: 'flex-start',
+              maxWidth: '100%',
+            }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={pendingImage.previewUrl} alt={pendingImage.name} style={{ width: '36px', height: '36px', borderRadius: '6px', objectFit: 'cover' }} />
+              <span style={{ fontSize: '0.75rem', color: 'var(--brand-accent)', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {pendingImage.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPendingImage(null)}
+                aria-label="Ta bort bild"
+                style={{ background: 'none', border: 'none', color: 'var(--brand-accent)', cursor: 'pointer', padding: '0 2px', display: 'flex', alignItems: 'center' }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
           <select
             value={model}
             onChange={e => setModel(e.target.value)}
@@ -1182,11 +1221,30 @@ function AgentTab() {
             <option value="claude-opus-4-7">Opus 4</option>
             <option value="claude-haiku-3-5">Haiku 3.5</option>
           </select>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            title="Bifoga skärmdump"
+            style={{
+              width: '40px', height: '40px',
+              padding: 0,
+              background: pendingImage ? 'rgba(0,212,255,0.15)' : 'rgba(255,255,255,0.05)',
+              border: pendingImage ? '1px solid rgba(0,212,255,0.35)' : '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '10px',
+              color: pendingImage ? 'var(--brand-accent)' : 'rgba(255,255,255,0.55)',
+              cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <Paperclip size={16} />
+          </button>
           <textarea
             value={prompt}
             onChange={e => setPrompt(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendTask(); } }}
-            placeholder={activeSession ? 'Följdfråga...' : 'Beskriv uppgiften för AI-agenten...'}
+            onPaste={handlePromptPaste}
+            placeholder={activeSession && !composingNew ? 'Följdfråga... (klistra in skärmdump direkt)' : 'Beskriv uppgiften för AI-agenten... (klistra in skärmdump direkt)'}
             rows={2}
             style={{
               flex: 1,
@@ -1222,6 +1280,7 @@ function AgentTab() {
           >
             {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} Skicka
           </button>
+          </div>
         </div>
       </div>
     </div>
