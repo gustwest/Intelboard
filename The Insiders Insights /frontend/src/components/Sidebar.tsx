@@ -19,11 +19,11 @@ export default function Sidebar() {
   if (pathname === '/login') return null;
 
   const navLinks = [
-    { href: '/', label: 'Engine', icon: Zap },
     { href: '/kunder', label: 'Kunder', icon: Building2 },
     { href: '/sources', label: 'Källor', icon: DownloadCloud },
     { href: '/moduler', label: 'Moduler', icon: Layers },
     { href: '/rapporter', label: 'Rapporter', icon: BarChart3 },
+    { href: '/engine', label: 'Engine', icon: Zap },
     { href: '/loggar', label: 'Loggar', icon: Terminal },
     { href: '/admin', label: 'Admin', icon: ShieldAlert },
   ];
