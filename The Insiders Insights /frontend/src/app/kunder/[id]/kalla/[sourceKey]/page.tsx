@@ -133,6 +133,13 @@ function ghostBtn(): React.CSSProperties {
   return { padding: '7px 14px', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, transition: 'all 0.15s' };
 }
 
+function openInsightInAssistant(text: string, source?: string) {
+  if (typeof window === 'undefined' || !text) return;
+  window.dispatchEvent(new CustomEvent('ai-assistant-open-with-insight', {
+    detail: { text, source },
+  }));
+}
+
 // ─── Shared styles ────────────────────────────────────────────────────────────
 const thStyle: React.CSSProperties = { textAlign: 'left', padding: '8px 6px', borderBottom: '1px solid rgba(255,255,255,0.08)' };
 const tdStyle: React.CSSProperties = { padding: '10px 6px', borderBottom: '1px solid rgba(255,255,255,0.04)' };
@@ -173,9 +180,16 @@ function FilesSection({ source, openDs }: { source: SourceSummary; openDs: (id: 
               {d.ai_summary && (
                 <tr>
                   <td colSpan={6} style={{ padding: '4px 8px 12px', borderBottom: `1px solid ${C.border}` }}>
-                    <div style={{ background: 'rgba(0,212,255,0.06)', border: '1px solid rgba(0,212,255,0.15)', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
+                    <div
+                      onClick={e => { e.stopPropagation(); openInsightInAssistant(d.ai_summary, `${source.source_name} · ${d.original_filename}`); }}
+                      title="Klicka för att diskutera med AI-assistenten"
+                      style={{ background: 'rgba(0,212,255,0.06)', border: '1px solid rgba(0,212,255,0.15)', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: C.muted, lineHeight: 1.6, cursor: 'pointer', transition: 'all 0.15s' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(0,212,255,0.1)'; (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(0,212,255,0.28)'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(0,212,255,0.06)'; (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(0,212,255,0.15)'; }}
+                    >
                       <span style={{ color: C.accent, marginRight: 6, fontWeight: 600 }}>✨ AI</span>
                       {d.ai_summary}
+                      <span style={{ color: C.dim, marginLeft: 6, fontSize: 10 }}>· fråga AI →</span>
                     </div>
                   </td>
                 </tr>
@@ -260,8 +274,20 @@ function OverviewView({ source, timeseries, period, setPeriod, kpiFields, chartF
 
       {/* AI-insikt hero */}
       {latestAISummary && (
-        <div style={{ background: 'rgba(0,212,255,0.04)', border: '1px solid rgba(0,212,255,0.15)', borderRadius: 16, padding: '20px 24px', marginBottom: 24 }}>
-          <div style={{ fontSize: 11, color: C.accent, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10 }}>✨ AI-insikt</div>
+        <div
+          onClick={() => openInsightInAssistant(latestAISummary, source.source_name)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') openInsightInAssistant(latestAISummary, source.source_name); }}
+          style={{ background: 'rgba(0,212,255,0.04)', border: '1px solid rgba(0,212,255,0.15)', borderRadius: 16, padding: '20px 24px', marginBottom: 24, cursor: 'pointer', transition: 'all 0.15s' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(0,212,255,0.07)'; (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(0,212,255,0.28)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(0,212,255,0.04)'; (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(0,212,255,0.15)'; }}
+          title="Klicka för att diskutera med AI-assistenten"
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div style={{ fontSize: 11, color: C.accent, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>✨ AI-insikt</div>
+            <div style={{ fontSize: 11, color: C.dim, fontWeight: 500 }}>Klicka för att fråga AI →</div>
+          </div>
           <p style={{ margin: 0, fontSize: 14, lineHeight: 1.75, color: 'rgba(255,255,255,0.85)' }}>{latestAISummary}</p>
         </div>
       )}

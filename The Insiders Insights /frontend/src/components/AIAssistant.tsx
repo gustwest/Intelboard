@@ -11,6 +11,18 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  insightContext?: string;
+}
+
+interface PinnedInsight {
+  text: string;
+  source?: string;
+}
+
+declare global {
+  interface WindowEventMap {
+    'ai-assistant-open-with-insight': CustomEvent<PinnedInsight>;
+  }
 }
 
 interface QuickAction {
@@ -106,6 +118,7 @@ export default function AIAssistant() {
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pinnedInsight, setPinnedInsight] = useState<PinnedInsight | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [hasLoadedHistory, setHasLoadedHistory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -188,18 +201,36 @@ export default function AIAssistant() {
     }
   }, [isOpen]);
 
+  // Listen for "open with insight" events dispatched from anywhere in the app
+  useEffect(() => {
+    const handler = (e: CustomEvent<PinnedInsight>) => {
+      setPinnedInsight(e.detail);
+      setIsOpen(true);
+      setTimeout(() => inputRef.current?.focus(), 200);
+    };
+    window.addEventListener('ai-assistant-open-with-insight', handler);
+    return () => window.removeEventListener('ai-assistant-open-with-insight', handler);
+  }, []);
+
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
 
+    const activeInsight = pinnedInsight;
     const userMsg: Message = {
       id: Date.now().toString(),
       role: 'user',
       content: text.trim(),
       timestamp: new Date(),
+      insightContext: activeInsight?.text,
     };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsLoading(true);
+    setPinnedInsight(null);
+
+    const messageForBackend = activeInsight
+      ? `Användaren tittar på följande AI-insikt${activeInsight.source ? ` (${activeInsight.source})` : ''} och vill diskutera den:\n\n"${activeInsight.text}"\n\nFråga: ${text.trim()}`
+      : text.trim();
 
     const { customerId, pageContext } = getContext();
 
@@ -238,7 +269,7 @@ export default function AIAssistant() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: text.trim(),
+          message: messageForBackend,
           session_id: sessionId,
           customer_id: customerId,
           page_context: pageContext,
@@ -495,6 +526,16 @@ export default function AIAssistant() {
                   <div>{renderMarkdown(msg.content)}</div>
                 ) : (
                   <div style={{ fontSize: '0.8125rem', lineHeight: 1.5, color: C.text }}>
+                    {msg.insightContext && (
+                      <div style={{
+                        fontSize: '0.6875rem', color: 'rgba(255,255,255,0.55)',
+                        borderLeft: '2px solid rgba(0,212,255,0.4)',
+                        paddingLeft: '8px', marginBottom: '6px',
+                        fontStyle: 'italic', lineHeight: 1.4,
+                      }}>
+                        ✨ AI-insikt: {msg.insightContext.length > 140 ? msg.insightContext.slice(0, 140) + '…' : msg.insightContext}
+                      </div>
+                    )}
                     {msg.content}
                   </div>
                 )}
@@ -554,6 +595,31 @@ export default function AIAssistant() {
           background: 'rgba(10,10,20,0.6)',
           position: 'relative',
         }}>
+          {pinnedInsight && (
+            <div style={{
+              display: 'flex', alignItems: 'flex-start', gap: '8px',
+              padding: '10px 12px', background: 'rgba(0,212,255,0.06)',
+              border: '1px solid rgba(0,212,255,0.18)', borderRadius: '12px',
+              marginBottom: '8px', fontSize: '0.75rem',
+            }}>
+              <span style={{ color: C.accent, fontWeight: 600, flexShrink: 0 }}>✨</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: C.accent, fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
+                  AI-insikt{pinnedInsight.source ? ` · ${pinnedInsight.source}` : ''}
+                </div>
+                <div style={{ color: 'rgba(255,255,255,0.75)', lineHeight: 1.5, maxHeight: '120px', overflow: 'auto' }}>
+                  {pinnedInsight.text}
+                </div>
+              </div>
+              <button
+                onClick={() => setPinnedInsight(null)}
+                aria-label="Ta bort insikt"
+                style={{ background: 'none', border: 'none', color: C.dim, cursor: 'pointer', padding: '0 2px', display: 'flex', alignItems: 'center', flexShrink: 0 }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
           {pendingFile && (
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: '6px',
@@ -614,7 +680,7 @@ export default function AIAssistant() {
                   sendMessage(input);
                 }
               }}
-              placeholder="Ställ en fråga..."
+              placeholder={pinnedInsight ? 'Vad vill du veta mer om denna insikt?' : 'Ställ en fråga...'}
               rows={1}
               style={{
                 flex: 1, padding: '10px 14px',

@@ -13,6 +13,13 @@ const C = {
   text: '#f8fafc', muted: 'rgba(255,255,255,0.5)', dim: 'rgba(255,255,255,0.3)',
 };
 
+function openInsightInAssistant(text: string, source?: string) {
+  if (typeof window === 'undefined' || !text) return;
+  window.dispatchEvent(new CustomEvent('ai-assistant-open-with-insight', {
+    detail: { text, source },
+  }));
+}
+
 type Dataset = { id: string; source_id: string; source_key: string; source_name: string; source_version: number; original_filename: string; row_count: number; ai_summary?: string; granularity?: string; period_start?: string; period_end?: string; uploaded_at: string };
 type Customer = { id: string; slug: string; name: string; logo_emoji: string; tags: string[]; icp: any; datasets?: Dataset[] };
 type DatasetDetail = { dataset_id: string; source_name: string; source_version: number; original_filename: string; row_count: number; columns: { field_id: string; key: string; display_name: string; unit: string }[]; rows: Record<string, any>[]; page: number; total_pages: number; total: number };
@@ -441,9 +448,17 @@ function SourceCards({ datasets, customerId, onOpenDataset, onDeleteDataset }: {
                   {g.datasets.some(d => d.ai_summary) && (
                     <div style={{ padding: '8px 18px 12px' }}>
                       {g.datasets.filter(d => d.ai_summary).slice(0, 1).map(d => (
-                        <div key={d.id} style={{ background: 'rgba(0,212,255,0.06)', border: '1px solid rgba(0,212,255,0.15)', borderRadius: 8, padding: '8px 12px', fontSize: 11, color: C.muted, lineHeight: 1.5 }}>
+                        <div
+                          key={d.id}
+                          onClick={e => { e.stopPropagation(); openInsightInAssistant(d.ai_summary!, `${g.source_name} · ${d.original_filename}`); }}
+                          title="Klicka för att diskutera med AI-assistenten"
+                          style={{ background: 'rgba(0,212,255,0.06)', border: '1px solid rgba(0,212,255,0.15)', borderRadius: 8, padding: '8px 12px', fontSize: 11, color: C.muted, lineHeight: 1.5, cursor: 'pointer', transition: 'all 0.15s' }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(0,212,255,0.1)'; (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(0,212,255,0.28)'; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(0,212,255,0.06)'; (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(0,212,255,0.15)'; }}
+                        >
                           <span style={{ color: C.accent, marginRight: 6 }}>✨ AI</span>
                           {d.ai_summary}
+                          <span style={{ color: C.dim, marginLeft: 6, fontSize: 10 }}>· fråga AI →</span>
                         </div>
                       ))}
                     </div>
