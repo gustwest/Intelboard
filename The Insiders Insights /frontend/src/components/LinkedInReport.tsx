@@ -12,7 +12,7 @@ const C = {
 type ReportData = {
   customer_id: string; customer_name: string; generated_at: string;
   sections: {
-    key_metrics: any; activity_index: any[];
+    key_metrics: any; activity_index: any;
     decision_funnel: Record<string, { label: string; strategy: string; groups: any[]; count: number }>;
     content_clusters: { clusters: any[]; anomalies: any[]; total_posts: number };
     campaign_recommendations: { avg_ctr: number | null; avg_cpc: number | null; total_spend: number; recommendations: any[]; has_campaign_data: boolean };
@@ -150,38 +150,75 @@ export default function LinkedInReport({ customerId, customerName }: { customerI
 
       {/* Section 3: Activity Index */}
       <Section icon={<TrendingUp size={18} />} title="Aktivitetsindex" onAI={() => generateInsight('activity_index', s.activity_index)} aiLoading={aiLoading['activity_index']} aiInsight={aiInsights['activity_index']}>
-        <div style={{ background: 'rgba(0,212,255,0.04)', borderRadius: 10, padding: 14, marginBottom: 16, fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
-          <strong style={{ color: C.text }}>Hur fungerar indexet?</strong> Aktivitetsindexet mäter besöksfrekvensen i relation till yrkesgruppens storlek. 
-          Index <span style={{ color: C.success }}>1.0</span> = normalvärde. Över 1.0 = överrepresenterad (hög aktivitet). Under 1.0 = underrepresenterad.
-        </div>
-        {s.activity_index.length > 0 ? (
+        {s.activity_index.type === 'job_function' && s.activity_index.groups?.length > 0 ? (<>
+          <div style={{ background: 'rgba(0,212,255,0.04)', borderRadius: 10, padding: 14, marginBottom: 16, fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
+            <strong style={{ color: C.text }}>Hur fungerar indexet?</strong> Aktivitetsindexet mäter besöksfrekvensen i relation till yrkesgruppens storlek. 
+            Index <span style={{ color: C.success }}>1.0</span> = normalvärde. Över 1.0 = överrepresenterad. Under 1.0 = underrepresenterad.
+          </div>
           <div style={{ overflow: 'auto', borderRadius: 10, border: `1px solid ${C.border}` }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: 'rgba(255,255,255,0.04)' }}>
-                  <th style={th}>Yrkesfunktion</th><th style={th}>Besökare</th><th style={th}>Följare</th>
-                  <th style={th}>Besöksandel</th><th style={th}>Benchmark</th><th style={th}>Index</th>
+              <thead><tr style={{ background: 'rgba(255,255,255,0.04)' }}>
+                <th style={th}>Yrkesfunktion</th><th style={th}>Besökare</th><th style={th}>Följare</th>
+                <th style={th}>Besöksandel</th><th style={th}>Benchmark</th><th style={th}>Index</th>
+              </tr></thead>
+              <tbody>{s.activity_index.groups.map((row: any, i: number) => (
+                <tr key={row.job_function} style={{ borderBottom: `1px solid rgba(255,255,255,0.04)`, background: i % 2 === 0 ? 'rgba(255,255,255,0.01)' : 'transparent' }}>
+                  <td style={td}><span style={{ fontWeight: 600 }}>{row.job_function}</span></td>
+                  <td style={{ ...td, fontFamily: 'monospace' }}>{row.visitors}</td>
+                  <td style={{ ...td, fontFamily: 'monospace' }}>{row.followers}</td>
+                  <td style={{ ...td, fontFamily: 'monospace' }}>{row.visitor_share}%</td>
+                  <td style={{ ...td, fontFamily: 'monospace', color: C.dim }}>{row.workforce_share}%</td>
+                  <td style={td}><span style={{ fontWeight: 700, color: indexColor(row.index), fontSize: 14, padding: '2px 10px', borderRadius: 6, background: `${indexColor(row.index)}18` }}>{row.index.toFixed(2)}</span></td>
                 </tr>
-              </thead>
-              <tbody>
-                {s.activity_index.map((row: any, i: number) => (
-                  <tr key={row.job_function} style={{ borderBottom: `1px solid rgba(255,255,255,0.04)`, background: i % 2 === 0 ? 'rgba(255,255,255,0.01)' : 'transparent' }}>
-                    <td style={td}><span style={{ fontWeight: 600 }}>{row.job_function}</span></td>
-                    <td style={{ ...td, fontFamily: 'monospace' }}>{row.visitors}</td>
-                    <td style={{ ...td, fontFamily: 'monospace' }}>{row.followers}</td>
-                    <td style={{ ...td, fontFamily: 'monospace' }}>{row.visitor_share}%</td>
-                    <td style={{ ...td, fontFamily: 'monospace', color: C.dim }}>{row.workforce_share}%</td>
-                    <td style={td}>
-                      <span style={{ fontWeight: 700, color: indexColor(row.index), fontSize: 14, padding: '2px 10px', borderRadius: 6, background: `${indexColor(row.index)}18` }}>
-                        {row.index.toFixed(2)}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
+              ))}</tbody>
             </table>
           </div>
-        ) : <div style={{ color: C.muted, fontSize: 13, textAlign: 'center', padding: 20 }}>Ingen besöksdata tillgänglig. Ladda upp LinkedIn Visitors-rapport.</div>}
+        </>) : s.activity_index.type === 'page_sections' ? (<>
+          <div style={{ background: 'rgba(245,158,11,0.06)', borderRadius: 10, padding: 14, marginBottom: 16, fontSize: 12, color: C.warning, lineHeight: 1.6 }}>
+            ⚠️ {s.activity_index.message}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 16 }}>
+            <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: 12, padding: 16, border: `1px solid ${C.border}`, textAlign: 'center' }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: C.accent }}>{(s.activity_index.total_page_views || 0).toLocaleString('sv-SE')}</div>
+              <div style={{ fontSize: 11, color: C.muted }}>Totala sidvisningar</div>
+            </div>
+            <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: 12, padding: 16, border: `1px solid ${C.border}`, textAlign: 'center' }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: C.accent }}>{(s.activity_index.total_unique_visitors || 0).toLocaleString('sv-SE')}</div>
+              <div style={{ fontSize: 11, color: C.muted }}>Unika besökare</div>
+            </div>
+          </div>
+          <div style={{ overflow: 'auto', borderRadius: 10, border: `1px solid ${C.border}`, marginBottom: 16 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead><tr style={{ background: 'rgba(255,255,255,0.04)' }}>
+                <th style={th}>Sidsektion</th><th style={th}>Sidvisningar</th><th style={th}>Unika besökare</th>
+                <th style={th}>Andel</th><th style={th}>Visn/besökare</th><th style={th}>Beskrivning</th>
+              </tr></thead>
+              <tbody>{(s.activity_index.sections || []).map((sec: any) => (
+                <tr key={sec.section} style={{ borderBottom: `1px solid rgba(255,255,255,0.04)` }}>
+                  <td style={{ ...td, fontWeight: 600 }}>{sec.section}</td>
+                  <td style={{ ...td, fontFamily: 'monospace' }}>{sec.page_views.toLocaleString('sv-SE')}</td>
+                  <td style={{ ...td, fontFamily: 'monospace' }}>{sec.unique_visitors.toLocaleString('sv-SE')}</td>
+                  <td style={td}><span style={{ color: C.accent, fontWeight: 600 }}>{sec.share_of_total}%</span></td>
+                  <td style={{ ...td, fontFamily: 'monospace' }}>{sec.views_per_visitor}</td>
+                  <td style={{ ...td, color: C.muted, fontSize: 11 }}>{sec.description}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+          {s.activity_index.device_split && (
+            <div style={{ display: 'flex', gap: 12 }}>
+              {['desktop', 'mobile'].map(d => (
+                <div key={d} style={{ flex: 1, background: 'rgba(255,255,255,0.02)', borderRadius: 10, padding: 12, border: `1px solid ${C.border}`, textAlign: 'center' }}>
+                  <div style={{ fontSize: 16, marginBottom: 4 }}>{d === 'desktop' ? '🖥️' : '📱'}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700 }}>{s.activity_index.device_split[`${d}_share`]}%</div>
+                  <div style={{ fontSize: 11, color: C.muted }}>{d === 'desktop' ? 'Desktop' : 'Mobil'} ({(s.activity_index.device_split[d] || 0).toLocaleString('sv-SE')})</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>) : (
+          <div style={{ color: C.muted, fontSize: 13, textAlign: 'center', padding: 20 }}>{s.activity_index.message || 'Ingen besöksdata tillgänglig.'}</div>
+        )}
       </Section>
 
       {/* Section 4: Decision Funnel */}
@@ -257,7 +294,7 @@ export default function LinkedInReport({ customerId, customerName }: { customerI
                 </div>
                 {s.content_clusters.anomalies.map((a: any, i: number) => (
                   <div key={i} style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)', borderRadius: 8, padding: 12, marginBottom: 8, fontSize: 12 }}>
-                    <span style={{ fontWeight: 600 }}>Inlägg #{a.index + 1}</span> ({a.type}) — <span style={{ fontFamily: 'monospace', color: C.accent }}>{a.impressions.toLocaleString('sv-SE')}</span> visningar 
+                    <span style={{ fontWeight: 600 }}>Inlägg #{a.index + 1}</span> ({a.date || 'Okänt datum'}) — <span style={{ fontFamily: 'monospace', color: C.accent }}>{a.impressions.toLocaleString('sv-SE')}</span> visningar 
                     <span style={{ color: C.warning, marginLeft: 8 }}>+{a.deviation}σ avvikelse</span>
                     <div style={{ color: C.muted, marginTop: 4 }}>{a.note}</div>
                   </div>
