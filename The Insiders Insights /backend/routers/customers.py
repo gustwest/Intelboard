@@ -325,6 +325,62 @@ def get_source_timeseries(
     }
 
 
+@router.get("/{customer_id}/linkedin-report")
+def generate_linkedin_report(customer_id: str, db: Session = Depends(get_db)):
+    """Generate full strategic LinkedIn report for a customer."""
+    from engine.linkedin_report import generate_full_report
+    result = generate_full_report(customer_id, db)
+    if "error" in result:
+        raise HTTPException(404, result["error"])
+    return result
+
+
+@router.post("/{customer_id}/linkedin-report/insights")
+def generate_report_insights(customer_id: str, req: Dict[str, Any] = {}, db: Session = Depends(get_db)):
+    """Generate AI-powered narrative insights for a report section."""
+    section = req.get("section", "")
+    section_data = req.get("data", {})
+
+    c = db.query(models.Customer).filter(
+        (models.Customer.id == customer_id) | (models.Customer.slug == customer_id)
+    ).first()
+    if not c:
+        raise HTTPException(404, "Customer not found")
+
+    try:
+        from ai import _get_client, MODEL
+        client = _get_client()
+        if client is None:
+            return {"insight": "AI-tjänsten är inte tillgänglig.", "section": section}
+
+        from google.genai import types
+
+        prompt = f"""Du är en expert inom employer branding och LinkedIn-strategi.
+Analysera följande data för {c.name} och skriv en kort, strategisk insikt (3-5 meningar) på svenska.
+
+Sektion: {section}
+Data: {str(section_data)[:2000]}
+
+Regler:
+- Var specifik och handlingsbar
+- Referera till konkreta siffror från datan
+- Ge en tydlig rekommendation
+- Max 150 ord"""
+
+        response = client.models.generate_content(
+            model=MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.7,
+                max_output_tokens=500,
+            ),
+        )
+        insight = response.text.strip() if response.text else "Kunde inte generera insikt."
+        return {"insight": insight, "section": section}
+    except Exception as e:
+        return {"insight": f"Fel vid generering: {str(e)[:200]}", "section": section}
+
+
 @router.delete("/{customer_id}")
 def delete_customer(customer_id: str, db: Session = Depends(get_db)):
     c = db.query(models.Customer).filter(

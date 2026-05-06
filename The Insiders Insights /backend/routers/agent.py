@@ -1,10 +1,12 @@
 """AI Agent — sessions, tasks, polling — PostgreSQL backed."""
+import base64
 import os
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 
@@ -12,6 +14,19 @@ import models
 from db import get_db
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
+
+# Where uploaded screenshots etc. land
+_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+AGENT_UPLOADS_DIR = os.path.join(_DATA_DIR, "uploads", "agent")
+os.makedirs(AGENT_UPLOADS_DIR, exist_ok=True)
+
+_EXT_BY_MIME = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+}
 
 
 # ------------------------------------------------------------------
@@ -32,6 +47,8 @@ class AgentTaskCreate(BaseModel):
     prompt: str
     sessionId: Optional[str] = None
     model: Optional[str] = None
+    imageBase64: Optional[str] = None       # raw base64 or "data:image/png;base64,..."
+    imageContentType: Optional[str] = None  # e.g. "image/png"
 
 
 class AgentSessionPatch(BaseModel):
@@ -52,6 +69,10 @@ class AgentPollPatch(BaseModel):
 # Helpers
 # ------------------------------------------------------------------
 def _task_to_out(t: models.AgentTask) -> dict:
+    image_url = None
+    if t.image_path:
+        # task.image_path stores the bare filename; expose a relative URL the worker can fetch
+        image_url = f"/api/agent/uploads/{t.image_path}"
     return {
         "id": t.id,
         "prompt": t.prompt,
@@ -64,7 +85,37 @@ def _task_to_out(t: models.AgentTask) -> dict:
         "createdAt": t.created_at.isoformat(),
         "updatedAt": t.updated_at.isoformat(),
         "logs": t.logs_json or [],
+        "cancelRequested": bool(t.cancel_requested),
+        "imageUrl": image_url,
     }
+
+
+def _save_image(image_b64: str, content_type: Optional[str]) -> str:
+    """Decode base64 image and save under AGENT_UPLOADS_DIR. Returns the bare filename."""
+    payload = image_b64
+    if payload.startswith("data:"):
+        # data:image/png;base64,XXXX — split off the prefix
+        try:
+            header, payload = payload.split(",", 1)
+            if not content_type and ";" in header:
+                content_type = header.split(":", 1)[1].split(";", 1)[0]
+        except ValueError:
+            raise HTTPException(400, "Invalid data URL for image")
+    try:
+        raw = base64.b64decode(payload)
+    except Exception:
+        raise HTTPException(400, "Could not decode image base64")
+    if len(raw) == 0:
+        raise HTTPException(400, "Empty image payload")
+    if len(raw) > 12 * 1024 * 1024:  # 12 MB cap
+        raise HTTPException(413, "Image too large (max 12 MB)")
+
+    ext = _EXT_BY_MIME.get((content_type or "").lower(), ".bin")
+    filename = f"{uuid.uuid4().hex}{ext}"
+    full_path = os.path.join(AGENT_UPLOADS_DIR, filename)
+    with open(full_path, "wb") as f:
+        f.write(raw)
+    return filename
 
 
 def _session_to_out(s: models.AgentSession) -> dict:
@@ -138,11 +189,16 @@ def agent_create_task(req: AgentTaskCreate, db: Session = Depends(get_db)):
         db.add(session)
         db.flush()
 
+    image_filename = None
+    if req.imageBase64:
+        image_filename = _save_image(req.imageBase64, req.imageContentType)
+
     task = models.AgentTask(
         session_id=session.id,
         prompt=req.prompt.strip(),
         status="PENDING",
         model=task_model,
+        image_path=image_filename,
         created_at=now,
         updated_at=now,
     )
@@ -152,6 +208,44 @@ def agent_create_task(req: AgentTaskCreate, db: Session = Depends(get_db)):
     db.refresh(session)
     db.refresh(task)
     return {"session": _session_to_out(session), "task": _task_to_out(task)}
+
+
+@router.post("/tasks/{task_id}/cancel")
+def agent_cancel_task(task_id: str, db: Session = Depends(get_db)):
+    """Mark a task as CANCELLED. Worker will see cancel_requested via /poll
+    response and may abort; even if it doesn't, its later PATCH is ignored
+    because the task is already in a terminal state."""
+    task = db.query(models.AgentTask).filter_by(id=task_id).first()
+    if not task:
+        raise HTTPException(404, "Task not found")
+    if task.status in ("DONE", "FAILED", "CANCELLED"):
+        return _task_to_out(task)  # already terminal, no-op
+
+    now = datetime.utcnow()
+    task.status = "CANCELLED"
+    task.cancel_requested = True
+    task.updated_at = now
+    if not task.error:
+        task.error = "Avbruten av användaren"
+
+    session = db.query(models.AgentSession).filter_by(id=task.session_id).first()
+    if session:
+        session.updated_at = now
+
+    db.commit()
+    db.refresh(task)
+    return _task_to_out(task)
+
+
+@router.get("/uploads/{filename}")
+def agent_serve_upload(filename: str):
+    """Serve a previously uploaded image. Filename is a UUID-based name we generated;
+    we still strip path separators defensively."""
+    safe = os.path.basename(filename)
+    full_path = os.path.join(AGENT_UPLOADS_DIR, safe)
+    if not os.path.isfile(full_path):
+        raise HTTPException(404, "Not found")
+    return FileResponse(full_path)
 
 
 @router.patch("/sessions/{session_id}")
@@ -225,6 +319,10 @@ def agent_poll_get(
 
     db.commit()
 
+    image_url = None
+    if pending_task.image_path:
+        image_url = f"/api/agent/uploads/{pending_task.image_path}"
+
     return {
         "task": {
             "id": pending_task.id,
@@ -232,6 +330,7 @@ def agent_poll_get(
             "model": pending_task.model,
             "sessionId": pending_task.session_id,
             "resumeSessionId": session.claude_session_id if session else None,
+            "imageUrl": image_url,
         },
         "timestamp": now.isoformat(),
     }
@@ -244,6 +343,11 @@ def agent_poll_patch(req: AgentPollPatch, authorization: Optional[str] = Header(
     task = db.query(models.AgentTask).filter_by(id=req.taskId).first()
     if not task:
         raise HTTPException(404, "Task not found")
+
+    # If the user already cancelled the task, ignore late updates from the worker
+    # so the UI/state stays consistent (the worker may finish anyway, but we don't care).
+    if task.status == "CANCELLED":
+        return {"ok": True, "ignored": "task is cancelled"}
 
     now = datetime.utcnow()
     if req.status:

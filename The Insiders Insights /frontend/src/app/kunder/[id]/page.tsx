@@ -5,6 +5,7 @@ import Gauge from '@/components/Gauge';
 import NotesTab from '@/components/NotesTab';
 import GoalsTab from '@/components/GoalsTab';
 import DashboardCharts from '@/components/DashboardCharts';
+import LinkedInReport from '@/components/LinkedInReport';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
@@ -40,7 +41,7 @@ export default function CustomerDetailPage() {
   // Module state
   const [modules, setModules] = useState<Module[]>([]);
   const [evalResults, setEvalResults] = useState<Record<string, EvalResult | 'loading'>>({});
-  const [activeTab, setActiveTab] = useState<'overview' | 'notes' | 'goals'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'notes' | 'goals' | 'rapport'>('overview');
 
   async function refresh() {
     const res = await fetch(`${API}/api/customers/${params.id}`);
@@ -160,6 +161,7 @@ export default function CustomerDetailPage() {
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: C.card, borderRadius: 12, padding: 4, border: `1px solid ${C.border}` }}>
         {[
           { key: 'overview' as const, label: '📊 Översikt' },
+          { key: 'rapport' as const, label: '📋 Strategisk Rapport' },
           { key: 'notes' as const, label: '📝 Anteckningar' },
           { key: 'goals' as const, label: '🎯 Mål' },
         ].map(tab => (
@@ -186,6 +188,11 @@ export default function CustomerDetailPage() {
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20 }}>
           <GoalsTab customerId={params.id} />
         </div>
+      )}
+
+      {/* Strategisk Rapport tab */}
+      {activeTab === 'rapport' && (
+        <LinkedInReport customerId={params.id} customerName={customer.name} />
       )}
 
       {/* Overview tab */}

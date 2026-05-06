@@ -327,3 +327,22 @@
    (Din globala Claude Code-setting var redan `claude-opus-4-7` — det var alltså admin-agenten i din egen app som fastnade på Sonnet, inte Claude Code.)
 ✅ Task 94e1409c-8541-4674-a04a-476386a3ba2e completed via result event (83.8s) ($1.3563)
    ✅ Done · 83.8s · $1.3563
+⚠️  Failed to reach server: fetch failed
+⚠️  Failed to reach server: fetch failed
+⚠️  Failed to reach server: fetch failed
+⚠️  Failed to reach server: fetch failed
+⚠️  Failed to reach server: fetch failed
+⚠️  Failed to reach server: fetch failed
+⚠️  Failed to reach server: fetch failed
+⚠️  Failed to reach server: fetch failed
+⚠️  Failed to reach server: fetch failed
+⚠️  Failed to reach server: fetch failed
+⚠️  Failed to reach server: fetch failed
+⚠️  Failed to reach server: fetch failed
+⚠️  Failed to reach server: fetch failed
+⚠️  Failed to reach server: fetch failed
+⚠️  Failed to reach server: fetch failed
+⚠️  Failed to reach server: fetch failed
+⚠️  Failed to reach server: fetch failed
+
+⏹ Agent shutting down...

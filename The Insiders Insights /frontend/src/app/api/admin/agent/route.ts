@@ -12,13 +12,14 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { prompt, sessionId, model } = await req.json();
+    const { prompt, sessionId, model, imageBase64, imageContentType } = await req.json();
 
     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
       return NextResponse.json({ error: 'prompt is required' }, { status: 400 });
     }
 
-    const result = await createTask(prompt.trim(), sessionId, model);
+    const image = imageBase64 ? { base64: imageBase64, contentType: imageContentType || 'image/png' } : null;
+    const result = await createTask(prompt.trim(), sessionId, model, image);
     return NextResponse.json(result);
   } catch (err) {
     console.error('Agent POST error:', err);

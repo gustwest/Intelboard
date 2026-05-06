@@ -22,18 +22,35 @@
       }
     },
     "preview": {
-      "distribution": "store",
+      "distribution": "internal",
       "ios": {
         "simulator": false
       },
       "android": {
         "buildType": "apk"
       },
-      "channel": "preview"
+      "channel": "preview",
+      "env": {
+        "API_BASE_URL": "https://dvoucher-app-815335042776.europe-north1.run.app"
+      }
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production"
+      "channel": "production",
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "API_BASE_URL": "https://dvoucher-app-815335042776.europe-north1.run.app"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "./google-play-service-account.json",
+        "track": "internal"
+      }
     }
   }
 }

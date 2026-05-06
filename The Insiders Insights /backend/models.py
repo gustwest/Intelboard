@@ -290,6 +290,8 @@ class AgentTask(Base):
     error = Column(Text, nullable=True)
     claude_session_id = Column(String, nullable=True)
     logs_json = Column(JSON, default=list)
+    cancel_requested = Column(Boolean, default=False, nullable=False)
+    image_path = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

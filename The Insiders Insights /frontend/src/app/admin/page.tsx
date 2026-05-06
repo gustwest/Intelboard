@@ -708,9 +708,12 @@ function AgentTab() {
   }, [model]);
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [sending, setSending] = useState(false);
+  const [composingNew, setComposingNew] = useState(false);
+  const [pendingImage, setPendingImage] = useState<{ base64: string; previewUrl: string; name: string; contentType: string } | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Poll status every 5s
   useEffect(() => {
@@ -727,12 +730,14 @@ function AgentTab() {
       .then(data => {
         setSessions(data);
         setActiveSession(prev => {
+          // Don't auto-select while user is composing a fresh session
+          if (composingNew) return prev;
           if (!prev && data.length > 0) return data[0].id;
           return prev;
         });
       })
       .catch(() => {});
-  }, []);
+  }, [composingNew]);
 
   useEffect(() => {
     loadSessions();
@@ -769,21 +774,72 @@ function AgentTab() {
     if (!prompt.trim() || sending) return;
     setSending(true);
     try {
+      const body: Record<string, unknown> = {
+        prompt: prompt.trim(),
+        sessionId: composingNew ? null : activeSession,
+        model,
+      };
+      if (pendingImage) {
+        body.imageBase64 = pendingImage.base64;
+        body.imageContentType = pendingImage.contentType;
+      }
       const res = await fetch('/api/admin/agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: prompt.trim(), sessionId: activeSession, model }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (data.session) {
         setActiveSession(data.session.id);
+        setComposingNew(false);
       }
       setPrompt('');
+      setPendingImage(null);
       loadSessions();
     } catch (err) {
       console.error('Send task error:', err);
     } finally {
       setSending(false);
+    }
+  };
+
+  const cancelTask = async (taskId: string) => {
+    try {
+      await fetch(`/api/admin/agent/tasks/${taskId}/cancel`, { method: 'POST' });
+      loadSessions();
+    } catch (err) {
+      console.error('Cancel task error:', err);
+    }
+  };
+
+  const attachImage = async (file: File) => {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      const base64 = dataUrl.includes(',') ? dataUrl.split(',', 2)[1] : dataUrl;
+      setPendingImage({
+        base64,
+        previewUrl: dataUrl,
+        name: file.name || 'screenshot.png',
+        contentType: file.type,
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handlePromptPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const it of items) {
+      if (it.kind === 'file' && it.type.startsWith('image/')) {
+        const file = it.getAsFile();
+        if (file) {
+          e.preventDefault();
+          attachImage(file);
+          return;
+        }
+      }
     }
   };
 
@@ -842,12 +898,19 @@ function AgentTab() {
 
         {/* New session button */}
         <button
-          onClick={() => setActiveSession(null)}
+          onClick={() => {
+            setComposingNew(true);
+            setActiveSession(null);
+            setPrompt('');
+            setPendingImage(null);
+          }}
           style={{
             margin: '12px 12px 8px',
             padding: '10px',
-            background: 'linear-gradient(135deg, rgba(0,212,255,0.2), rgba(139,92,246,0.2))',
-            border: '1px solid rgba(0,212,255,0.3)',
+            background: composingNew
+              ? 'linear-gradient(135deg, rgba(0,212,255,0.32), rgba(139,92,246,0.32))'
+              : 'linear-gradient(135deg, rgba(0,212,255,0.2), rgba(139,92,246,0.2))',
+            border: composingNew ? '1px solid rgba(0,212,255,0.55)' : '1px solid rgba(0,212,255,0.3)',
             borderRadius: '10px',
             color: 'var(--brand-accent)',
             cursor: 'pointer',
@@ -855,7 +918,7 @@ function AgentTab() {
             fontWeight: 600,
           }}
         >
-          <Plus size={16} /> Ny session
+          <Plus size={16} /> {composingNew ? 'Skriver ny session…' : 'Ny session'}
         </button>
 
         {/* Session list */}
@@ -863,7 +926,7 @@ function AgentTab() {
           {sessions.map(session => (
             <div
               key={session.id}
-              onClick={() => setActiveSession(session.id)}
+              onClick={() => { setComposingNew(false); setActiveSession(session.id); }}
               style={{
                 padding: '10px 12px',
                 marginBottom: '4px',
@@ -929,6 +992,14 @@ function AgentTab() {
                     fontSize: '0.875rem',
                     lineHeight: 1.5,
                   }}>
+                    {task.imageUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={task.imageUrl}
+                        alt="Bifogad bild"
+                        style={{ display: 'block', maxWidth: '100%', maxHeight: '300px', borderRadius: '10px', marginBottom: task.prompt ? '8px' : '0' }}
+                      />
+                    )}
                     {task.prompt}
                   </div>
                   <span style={{ fontSize: '0.625rem', color: 'rgba(255,255,255,0.25)', paddingRight: '4px' }}>
@@ -951,12 +1022,30 @@ function AgentTab() {
                   }}>
                     <Loader2 size={14} className="animate-spin" />
                     Agenten arbetar...
-                    {task.model && <span style={{ fontSize: '0.6875rem', color: 'rgba(234,179,8,0.6)', marginLeft: 'auto' }}>{task.model}</span>}
+                    {task.model && <span style={{ fontSize: '0.6875rem', color: 'rgba(234,179,8,0.6)', marginLeft: '8px' }}>{task.model}</span>}
+                    <button
+                      onClick={() => cancelTask(task.id)}
+                      style={{
+                        marginLeft: 'auto',
+                        padding: '3px 10px',
+                        background: 'rgba(239,68,68,0.15)',
+                        border: '1px solid rgba(239,68,68,0.35)',
+                        borderRadius: '8px',
+                        color: '#fca5a5',
+                        fontSize: '0.6875rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      Stoppa
+                    </button>
                   </div>
                 )}
 
                 {task.status === 'PENDING' && (
                   <div style={{
+                    display: 'flex', gap: '8px', alignItems: 'center',
                     padding: '8px 14px',
                     background: 'rgba(88,166,255,0.1)',
                     border: '1px solid rgba(88,166,255,0.2)',
@@ -966,7 +1055,41 @@ function AgentTab() {
                     marginBottom: '8px',
                     maxWidth: '80%',
                   }}>
-                    <CircleDashed size={14} className="animate-spin" style={{ marginRight: '6px', display: 'inline-block', verticalAlign: 'middle' }} /> Väntar på agent...
+                    <CircleDashed size={14} className="animate-spin" />
+                    Väntar på agent...
+                    <button
+                      onClick={() => cancelTask(task.id)}
+                      style={{
+                        marginLeft: 'auto',
+                        padding: '3px 10px',
+                        background: 'rgba(239,68,68,0.15)',
+                        border: '1px solid rgba(239,68,68,0.35)',
+                        borderRadius: '8px',
+                        color: '#fca5a5',
+                        fontSize: '0.6875rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      Stoppa
+                    </button>
+                  </div>
+                )}
+
+                {task.status === 'CANCELLED' && (
+                  <div style={{
+                    padding: '8px 14px',
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '12px',
+                    fontSize: '0.8125rem',
+                    color: 'rgba(255,255,255,0.55)',
+                    marginBottom: '8px',
+                    maxWidth: '80%',
+                    fontStyle: 'italic',
+                  }}>
+                    <X size={13} style={{ marginRight: '6px', display: 'inline-block', verticalAlign: 'middle' }} /> Avbruten av användaren
                   </div>
                 )}
 

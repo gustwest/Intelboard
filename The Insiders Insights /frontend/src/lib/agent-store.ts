@@ -12,7 +12,7 @@
 export interface AgentTask {
   id: string;
   prompt: string;
-  status: 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED';
+  status: 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED' | 'CANCELLED';
   model: string;
   response?: string | null;
   error?: string | null;
@@ -21,6 +21,8 @@ export interface AgentTask {
   createdAt: string;
   updatedAt: string;
   logs: AgentLog[];
+  cancelRequested?: boolean;
+  imageUrl?: string | null;
 }
 
 export interface AgentSession {
@@ -91,14 +93,31 @@ export async function createTask(
   prompt: string,
   sessionId?: string,
   model?: string,
+  image?: { base64: string; contentType: string } | null,
 ): Promise<{ session: AgentSession; task: AgentTask }> {
   return backend<{ session: AgentSession; task: AgentTask }>(
     '/api/agent/tasks',
     {
       method: 'POST',
-      body: JSON.stringify({ prompt, sessionId, model }),
+      body: JSON.stringify({
+        prompt,
+        sessionId,
+        model,
+        imageBase64: image?.base64,
+        imageContentType: image?.contentType,
+      }),
     },
   );
+}
+
+export async function cancelTask(taskId: string): Promise<AgentTask | null> {
+  try {
+    return await backend<AgentTask>(`/api/agent/tasks/${taskId}/cancel`, {
+      method: 'POST',
+    });
+  } catch {
+    return null;
+  }
 }
 
 export async function patchSession(

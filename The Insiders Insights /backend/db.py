@@ -59,6 +59,8 @@ def _pg_auto_migrate():
         "ALTER TABLE datasets ADD COLUMN IF NOT EXISTS granularity VARCHAR DEFAULT 'unknown'",
         "ALTER TABLE datasets ADD COLUMN IF NOT EXISTS period_start DATE",
         "ALTER TABLE datasets ADD COLUMN IF NOT EXISTS period_end DATE",
+        "ALTER TABLE agent_tasks ADD COLUMN IF NOT EXISTS cancel_requested BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE agent_tasks ADD COLUMN IF NOT EXISTS image_path VARCHAR",
     ]
     with engine.begin() as conn:
         for sql in migrations:
