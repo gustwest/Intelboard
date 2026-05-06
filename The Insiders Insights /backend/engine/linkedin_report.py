@@ -43,7 +43,7 @@ def _extract_field_values(db: Session, customer_id: str, source_key_prefix: str)
 
     for ds in datasets:
         field_map = {m.source_field_id: m.source_field for m in ds.source_version.mappings}
-        rows = db.query(models.DatasetRow).filter_by(dataset_id=ds.id).all()
+        rows = db.query(models.DatasetRow).filter_by(dataset_id=ds.id).limit(2000).all()
         for row in rows:
             vals = row.values_json or {}
             for fid, val in vals.items():
@@ -111,7 +111,7 @@ def compute_key_metrics(customer_id: str, db: Session) -> Dict[str, Any]:
 
     for ds in datasets:
         field_map = {m.source_field_id: m.source_field for m in ds.source_version.mappings}
-        rows = db.query(models.DatasetRow).filter_by(dataset_id=ds.id).limit(5000).all()
+        rows = db.query(models.DatasetRow).filter_by(dataset_id=ds.id).limit(2000).all()
         for row in rows:
             vals = row.values_json or {}
             for fid, val in vals.items():
