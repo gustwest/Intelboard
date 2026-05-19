@@ -13,14 +13,8 @@ def list_results(client_id: str, limit: int = 12) -> dict[str, Any]:
     if not fs.client_doc(client_id).get().exists:
         raise HTTPException(404, f"client not found: {client_id}")
 
-    snaps = (
-        fs.polling_results_col(client_id)
-        .order_by("__name__", direction="DESCENDING")
-        .limit(limit)
-        .stream()
-    )
     weeks = []
-    for snap in snaps:
+    for snap in fs.polling_results_col(client_id).stream():
         data = snap.to_dict() or {}
         weeks.append(
             {
@@ -34,7 +28,8 @@ def list_results(client_id: str, limit: int = 12) -> dict[str, Any]:
                 "models_used": data.get("models_used"),
             }
         )
-    return {"client_id": client_id, "weeks": weeks}
+    weeks.sort(key=lambda w: w["week_id"], reverse=True)
+    return {"client_id": client_id, "weeks": weeks[:limit]}
 
 
 @router.get("/{client_id}/{week_id}/raw")
