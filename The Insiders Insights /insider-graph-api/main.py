@@ -6,7 +6,7 @@ separate Cloud Run Jobs — see jobs/.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import health, onboard, polling, webhooks
+from routers import clients, health, onboard, polling, webhooks
 
 app = FastAPI(title="Insider Graph — API")
 
@@ -19,6 +19,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(clients.router)
 app.include_router(onboard.router)
 app.include_router(polling.router)
 app.include_router(webhooks.router)

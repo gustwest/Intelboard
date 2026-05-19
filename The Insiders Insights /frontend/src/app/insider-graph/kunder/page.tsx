@@ -1,11 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { Users, Upload, X, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Users, Upload, X, AlertCircle, CheckCircle2, ExternalLink, RefreshCw } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
-
-const GRAPH_API =
-  process.env.NEXT_PUBLIC_GRAPH_API_URL || 'https://insider-graph-api-6fqkbpmhrq-lz.a.run.app';
+import { GRAPH_API, graphFetch } from '../_lib/api';
 
 type ParsedEmployee = {
   name: string;
@@ -15,6 +13,17 @@ type ParsedEmployee = {
   gender: string | null;
 };
 
+type Client = {
+  client_id: string;
+  company_name: string | null;
+  company_linkedin_url: string | null;
+  employee_count: number;
+  node_types: { aktiv: number; episodisk: number; passiv: number };
+  cdn_url: string | null;
+  last_compiled: string | null;
+  active_connectors: string[];
+};
+
 const SAMPLE_CSV = `name,linkedin_url,title,node_type,gender
 Anna Andersson,https://www.linkedin.com/in/anna-andersson,VD,aktiv,kvinna
 Erik Eriksson,https://www.linkedin.com/in/erik-eriksson,CMO,aktiv,man
@@ -22,6 +31,23 @@ Linda Lindberg,https://www.linkedin.com/in/linda-lindberg,Senior Advisor,episodi
 
 export default function GraphKunderPage() {
   const [showModal, setShowModal] = useState(false);
+  const [clients, setClients] = useState<Client[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  async function loadClients() {
+    setLoadError(null);
+    try {
+      const data = await graphFetch<{ clients: Client[] }>('/api/clients');
+      setClients(data.clients);
+    } catch (e: any) {
+      setLoadError(e.message);
+      setClients([]);
+    }
+  }
+
+  useEffect(() => {
+    loadClients();
+  }, []);
 
   return (
     <GraphPageShell
@@ -45,47 +71,180 @@ export default function GraphKunderPage() {
         <div>
           <div style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>Onboarda ny kund</div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>
-            Välj en befintlig Insiders-kund och ladda upp CSV med namn + LinkedIn-URL. Discovery-agenten tar därefter över.
+            Ladda upp CSV med namn + LinkedIn-URL. Discovery-agenten skapar kund + medarbetare i Firestore.
           </div>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '8px 14px',
-            background: 'rgba(124,109,250,0.18)',
-            color: '#7c6dfa',
-            border: '1px solid rgba(124,109,250,0.3)',
-            borderRadius: 8,
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          <Upload size={14} /> Importera CSV
-        </button>
-      </div>
-
-      <div
-        style={{
-          background: C.card,
-          border: `1px solid ${C.border}`,
-          borderRadius: 12,
-          padding: '48px 24px',
-          textAlign: 'center',
-        }}
-      >
-        <Users size={32} color={C.dim} style={{ marginBottom: 12 }} />
-        <div style={{ fontSize: 14, color: '#fff', fontWeight: 600 }}>Inga Graph-kunder ännu</div>
-        <div style={{ fontSize: 12, color: C.muted, marginTop: 6, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto' }}>
-          Klicka på <strong>Importera CSV</strong> ovan för att onboarda din första kund. Discovery-agenten skapar kund + medarbetare i Firestore.
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={loadClients}
+            title="Uppdatera lista"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 12px',
+              background: 'transparent',
+              color: C.muted,
+              border: `1px solid ${C.border}`,
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            <RefreshCw size={14} />
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 14px',
+              background: 'rgba(124,109,250,0.18)',
+              color: '#7c6dfa',
+              border: '1px solid rgba(124,109,250,0.3)',
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            <Upload size={14} /> Importera CSV
+          </button>
         </div>
       </div>
 
-      {showModal && <OnboardModal onClose={() => setShowModal(false)} />}
+      {loadError && (
+        <div
+          style={{
+            background: 'rgba(239,68,68,0.1)',
+            border: '1px solid rgba(239,68,68,0.3)',
+            borderRadius: 8,
+            padding: '12px 16px',
+            color: '#fca5a5',
+            fontSize: 12,
+            marginBottom: 16,
+          }}
+        >
+          Kunde inte hämta kunder: {loadError}
+        </div>
+      )}
+
+      {clients === null ? (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 48, textAlign: 'center', color: C.muted, fontSize: 13 }}>
+          Laddar…
+        </div>
+      ) : clients.length === 0 ? (
+        <div
+          style={{
+            background: C.card,
+            border: `1px solid ${C.border}`,
+            borderRadius: 12,
+            padding: '48px 24px',
+            textAlign: 'center',
+          }}
+        >
+          <Users size={32} color={C.dim} style={{ marginBottom: 12 }} />
+          <div style={{ fontSize: 14, color: '#fff', fontWeight: 600 }}>Inga Graph-kunder ännu</div>
+          <div style={{ fontSize: 12, color: C.muted, marginTop: 6, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto' }}>
+            Klicka på <strong>Importera CSV</strong> för att onboarda din första kund.
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
+          {clients.map((c) => (
+            <ClientCard key={c.client_id} client={c} />
+          ))}
+        </div>
+      )}
+
+      {showModal && (
+        <OnboardModal
+          onClose={() => {
+            setShowModal(false);
+            loadClients();
+          }}
+        />
+      )}
     </GraphPageShell>
+  );
+}
+
+function ClientCard({ client }: { client: Client }) {
+  return (
+    <div
+      style={{
+        background: C.card,
+        border: `1px solid ${C.border}`,
+        borderRadius: 12,
+        padding: '18px 20px',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{client.company_name || client.client_id}</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 2, fontFamily: 'ui-monospace, monospace' }}>
+            {client.client_id}
+          </div>
+        </div>
+        {client.cdn_url && (
+          <a
+            href={client.cdn_url}
+            target="_blank"
+            rel="noreferrer"
+            title="Öppna JSON-LD i ny flik"
+            style={{ color: '#7c6dfa', textDecoration: 'none', display: 'flex' }}
+          >
+            <ExternalLink size={14} />
+          </a>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
+        <Badge color="#22c55e" label={`${client.node_types.aktiv} aktiv`} />
+        <Badge color="#f59e0b" label={`${client.node_types.episodisk} episodisk`} />
+        <Badge color={C.muted} label={`${client.node_types.passiv} passiv`} />
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 14, fontSize: 11, color: C.muted }}>
+        <Row label="Medarbetare" value={`${client.employee_count} st`} />
+        <Row label="Connectors" value={client.active_connectors.join(', ') || '—'} />
+        <Row
+          label="Senast kompilerad"
+          value={client.last_compiled ? new Date(client.last_compiled).toLocaleString('sv-SE') : 'Inte ännu'}
+        />
+      </div>
+    </div>
+  );
+}
+
+function Badge({ color, label }: { color: string; label: string }) {
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        fontSize: 10,
+        padding: '2px 8px',
+        borderRadius: 4,
+        background: `${color}22`,
+        color,
+        fontWeight: 600,
+        textTransform: 'uppercase',
+        letterSpacing: '0.06em',
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+      <span>{label}</span>
+      <span style={{ color: '#fff' }}>{value}</span>
+    </div>
   );
 }
 
@@ -100,24 +259,15 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
 
-  const apiConfigured = Boolean(GRAPH_API);
-
   async function handlePreview() {
     setPreviewError(null);
     setPreview(null);
-    if (!apiConfigured) {
-      const local = parseLocalCsv(csv);
-      setPreview(local);
-      return;
-    }
     try {
-      const resp = await fetch(`${GRAPH_API}/api/onboard/preview-csv`, {
+      const data = await graphFetch<{ employees: ParsedEmployee[] }>('/api/onboard/preview-csv', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ client_id: clientId, company_name: companyName, csv }),
       });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
       setPreview(data.employees);
     } catch (e: any) {
       setPreviewError(e.message || 'Kunde inte förhandsvisa');
@@ -126,17 +276,13 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
 
   async function handleSubmit() {
     setResult(null);
-    if (!apiConfigured) {
-      setResult({ ok: false, message: 'Graph-API:t är inte konfigurerat (NEXT_PUBLIC_GRAPH_API_URL saknas). UI:n är klar att kopplas in.' });
-      return;
-    }
     if (!clientId || !companyName) {
       setResult({ ok: false, message: 'client_id och company_name krävs' });
       return;
     }
     setSubmitting(true);
     try {
-      const resp = await fetch(`${GRAPH_API}/api/onboard/from-csv`, {
+      const data = await graphFetch<{ client_id: string; employees_created: number }>('/api/onboard/from-csv', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -147,8 +293,6 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
           csv,
         }),
       });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data?.detail || `HTTP ${resp.status}`);
       setResult({ ok: true, message: `Skapade kund ${data.client_id} med ${data.employees_created} medarbetare.` });
     } catch (e: any) {
       setResult({ ok: false, message: e.message || 'Onboarding misslyckades' });
@@ -191,13 +335,6 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
             <X size={20} />
           </button>
         </div>
-
-        {!apiConfigured && (
-          <Banner tone="warn">
-            Graph-API:t är inte konfigurerat ännu. Du kan förhandsgranska CSV lokalt men inte skapa kunder förrän
-            <code style={{ margin: '0 4px' }}>NEXT_PUBLIC_GRAPH_API_URL</code> är satt och tjänsten är deployad.
-          </Banner>
-        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
           <Field label="client_id (slug)" value={clientId} onChange={setClientId} placeholder="exempel-ab" />
@@ -275,9 +412,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
 
         {preview && (
           <div style={{ background: '#0a0a0f', border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>
-              {preview.length} medarbetare hittade {!apiConfigured && '(lokal parsning)'}
-            </div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>{preview.length} medarbetare hittade</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {preview.map((e, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12 }}>
@@ -326,10 +461,10 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
   );
 }
 
-function Banner({ tone, children }: { tone: 'warn' | 'error' | 'success'; children: React.ReactNode }) {
-  const bg = tone === 'error' ? 'rgba(239,68,68,0.1)' : tone === 'success' ? 'rgba(34,197,94,0.1)' : 'rgba(245,158,11,0.1)';
-  const border = tone === 'error' ? 'rgba(239,68,68,0.3)' : tone === 'success' ? 'rgba(34,197,94,0.3)' : 'rgba(245,158,11,0.3)';
-  const color = tone === 'error' ? '#fca5a5' : tone === 'success' ? '#86efac' : '#fcd34d';
+function Banner({ tone, children }: { tone: 'error' | 'success'; children: React.ReactNode }) {
+  const bg = tone === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)';
+  const border = tone === 'error' ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)';
+  const color = tone === 'error' ? '#fca5a5' : '#86efac';
   const Icon = tone === 'success' ? CheckCircle2 : AlertCircle;
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 14px', background: bg, border: `1px solid ${border}`, borderRadius: 8, color, fontSize: 12, marginBottom: 12, lineHeight: 1.55 }}>
@@ -337,25 +472,4 @@ function Banner({ tone, children }: { tone: 'warn' | 'error' | 'success'; childr
       <span>{children}</span>
     </div>
   );
-}
-
-function parseLocalCsv(text: string): ParsedEmployee[] {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim());
-  if (lines.length === 0) return [];
-  const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
-  const rows: ParsedEmployee[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const parts = lines[i].split(',').map((p) => p.trim());
-    const row: Record<string, string> = {};
-    headers.forEach((h, idx) => (row[h] = parts[idx] || ''));
-    if (!row.name || !row.linkedin_url) continue;
-    rows.push({
-      name: row.name,
-      linkedin_url: row.linkedin_url,
-      title: row.title || null,
-      node_type: ['aktiv', 'episodisk', 'passiv'].includes(row.node_type) ? row.node_type : 'aktiv',
-      gender: row.gender || null,
-    });
-  }
-  return rows;
 }
