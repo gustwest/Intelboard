@@ -1,0 +1,29 @@
+steps:
+  - name: 'gcr.io/kaniko-project/executor:latest'
+    args:
+      - '--dockerfile=The Insiders Insights /insider-graph-api/Dockerfile'
+      - '--context=dir://The Insiders Insights /insider-graph-api'
+      - '--destination=europe-north1-docker.pkg.dev/$PROJECT_ID/insider-graph-repo/insider-graph-api:$COMMIT_SHA'
+      - '--destination=europe-north1-docker.pkg.dev/$PROJECT_ID/insider-graph-repo/insider-graph-api:latest'
+      - '--cache=true'
+      - '--cache-ttl=720h'
+      - '--compressed-caching=false'
+      - '--snapshot-mode=redo'
+      - '--use-new-run'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'insider-graph-api'
+      - '--image=europe-north1-docker.pkg.dev/$PROJECT_ID/insider-graph-repo/insider-graph-api:$COMMIT_SHA'
+      - '--region=europe-north1'
+      - '--allow-unauthenticated'
+      - '--platform=managed'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+
+timeout: '1200s'

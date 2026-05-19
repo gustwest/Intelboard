@@ -2,31 +2,48 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { 
-  Zap, 
-  Building2, 
-  DownloadCloud, 
-  Layers, 
-  BarChart3, 
-  Terminal, 
-  ShieldAlert 
+import {
+  Zap,
+  Building2,
+  DownloadCloud,
+  Layers,
+  BarChart3,
+  Terminal,
+  ShieldAlert,
+  LayoutDashboard,
+  Users,
+  Plug,
+  FileJson,
+  Radar,
 } from 'lucide-react';
+import ProductSwitcher, { activeProductId } from './ProductSwitcher';
+
+const INSIDERS_LINKS = [
+  { href: '/kunder', label: 'Kunder', icon: Building2 },
+  { href: '/sources', label: 'Källor', icon: DownloadCloud },
+  { href: '/moduler', label: 'Moduler', icon: Layers },
+  { href: '/rapporter', label: 'Rapporter', icon: BarChart3 },
+  { href: '/engine', label: 'Engine', icon: Zap },
+  { href: '/loggar', label: 'Loggar', icon: Terminal },
+  { href: '/admin', label: 'Admin', icon: ShieldAlert },
+];
+
+const GRAPH_LINKS = [
+  { href: '/insider-graph', label: 'Översikt', icon: LayoutDashboard },
+  { href: '/insider-graph/kunder', label: 'Kunder', icon: Users },
+  { href: '/insider-graph/connectors', label: 'Connectors', icon: Plug },
+  { href: '/insider-graph/schema', label: 'JSON-LD', icon: FileJson },
+  { href: '/insider-graph/polling', label: 'AI-synlighet', icon: Radar },
+];
 
 export default function Sidebar() {
   const pathname = usePathname();
 
-  // Hide sidebar on login page
   if (pathname === '/login') return null;
 
-  const navLinks = [
-    { href: '/kunder', label: 'Kunder', icon: Building2 },
-    { href: '/sources', label: 'Källor', icon: DownloadCloud },
-    { href: '/moduler', label: 'Moduler', icon: Layers },
-    { href: '/rapporter', label: 'Rapporter', icon: BarChart3 },
-    { href: '/engine', label: 'Engine', icon: Zap },
-    { href: '/loggar', label: 'Loggar', icon: Terminal },
-    { href: '/admin', label: 'Admin', icon: ShieldAlert },
-  ];
+  const product = activeProductId(pathname);
+  const navLinks = product === 'graph' ? GRAPH_LINKS : INSIDERS_LINKS;
+  const productAccent = product === 'graph' ? '#7c6dfa' : 'var(--brand-accent)';
 
   return (
     <aside style={{
@@ -42,20 +59,15 @@ export default function Sidebar() {
       backdropFilter: 'blur(10px)',
       flexShrink: 0,
     }}>
-      {/* Logo */}
-      <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', padding: '0 8px', marginBottom: '40px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
-          <span style={{ fontSize: '1.25rem', fontWeight: 700, color: '#fff', letterSpacing: '-0.03em' }}>THE</span>
-          <span style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--brand-accent)', letterSpacing: '-0.03em' }}>INSIDERS.</span>
-        </div>
-      </Link>
+      {/* Product switcher */}
+      <ProductSwitcher />
 
       {/* Navigation */}
       <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
         {navLinks.map(link => {
-          const isActive = pathname === link.href;
+          const isActive = pathname === link.href || (link.href !== '/insider-graph' && pathname.startsWith(link.href + '/'));
           const Icon = link.icon;
-          
+
           return (
             <Link
               key={link.href}
@@ -71,11 +83,13 @@ export default function Sidebar() {
                 textDecoration: 'none',
                 transition: 'all 0.2s ease',
                 color: isActive ? '#fff' : 'var(--brand-muted)',
-                background: isActive ? 'linear-gradient(90deg, rgba(0, 212, 255, 0.15), transparent)' : 'transparent',
-                borderLeft: isActive ? '3px solid var(--brand-accent)' : '3px solid transparent',
+                background: isActive
+                  ? `linear-gradient(90deg, ${product === 'graph' ? 'rgba(124, 109, 250, 0.18)' : 'rgba(0, 212, 255, 0.15)'}, transparent)`
+                  : 'transparent',
+                borderLeft: isActive ? `3px solid ${productAccent}` : '3px solid transparent',
               }}
             >
-              <Icon size={18} style={{ color: isActive ? 'var(--brand-accent)' : 'inherit' }} />
+              <Icon size={18} style={{ color: isActive ? productAccent : 'inherit' }} />
               {link.label}
             </Link>
           );
