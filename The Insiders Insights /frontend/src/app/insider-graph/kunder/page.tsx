@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { Users, Upload, X, AlertCircle, CheckCircle2 } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 
-const GRAPH_API = process.env.NEXT_PUBLIC_GRAPH_API_URL || '';
+const GRAPH_API =
+  process.env.NEXT_PUBLIC_GRAPH_API_URL || 'https://insider-graph-api-6fqkbpmhrq-lz.a.run.app';
 
 type ParsedEmployee = {
   name: string;
