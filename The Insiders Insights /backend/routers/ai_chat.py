@@ -169,6 +169,89 @@ navigerar till källdetaljsidan vid klick. Pilen (▼) expanderar listan med ens
 - **Spend / Total Spent**: Annonskostnad
 - **CPC (Cost Per Click)**: Kostnad per klick
 - **CPM (Cost Per Mille)**: Kostnad per 1000 visningar
+
+---
+
+## Produkt 2: Insider Graph
+
+Insider Graph är en **separat tjänst** som lever bredvid The Insiders Insights i samma
+plattform. Användare växlar mellan produkterna via en ProductSwitcher högst upp i sidebar
+("THE INSIDERS." ↔ "INSIDER GRAPH"). När pathname börjar med `/insider-graph/` är användaren
+i Graph-läget och sidebarens nav-länkar ändras.
+
+**Kunder är samma bolag** i båda produkterna — `client_id` i Insider Graph är samma slug
+som `customer.slug` i Insiders Insights. Inloggning är delad via NextAuth.
+
+### Vad Insider Graph gör (Generative Engine Optimization)
+
+Insider Graph gör en kunds organisation **maskinläsbar för AI-sökmotorer** (ChatGPT,
+Perplexity, Gemini, Google AI Overviews). I stället för att optimera annonsering mot
+LinkedIn (vilket är Insiders Insights fokus) optimerar Insider Graph kundens *närvaro*
+i de AI-svar som ges till frågor som "Vilka är de ledande bolagen inom X i Sverige?"
+
+Pipeline i fem steg:
+1. **Samla** rådata om kundens medarbetare och företag från LinkedIn (via Bright Data),
+   Bolagsverket, pressrum, e-post m.fl.
+2. **Lagra** i Firestore (NB: separat databas — *inte* PostgreSQL som resten av plattformen).
+3. **Kompilera** all data till en JSON-LD-graf enligt Schema.org-standarden (Organization
+   som rotnod, Person/JobPosting/SocialMediaPosting/Event som barn).
+4. **Distribuera** filen via Google Cloud Storage publik URL (CDN). Kunden installerar en
+   liten Google Tag Manager-snippet en gång — den hämtar JSON-LD och injicerar i `<head>`.
+5. **Mäta** AI-synlighet veckovis genom att ställa frågor till GPT-4o + Gemini 1.5 Pro.
+
+### Sidor under /insider-graph/
+
+- **Översikt** (`/insider-graph`): Pipeline-status (insamling, lagring, schema-kompilator,
+  CDN-deploy, GTM-brygga, polling) och förklaring av mätningsdimensioner.
+- **Kunder** (`/insider-graph/kunder`): Onboarding-vy. Klicka "Importera CSV" för att
+  skapa en ny Graph-kund. CSV-format: `name,linkedin_url,title,node_type,gender`.
+- **Connectors** (`/insider-graph/connectors`): Tabell över alla datakällor — status, tier
+  (standard/valfri/kundspecifik), output-typ (Schema.org-objekt), uppdateringsfrekvens.
+- **JSON-LD** (`/insider-graph/schema`): Förhandsvisning av den kompilerade Schema.org-grafen.
+  Visar också CDN-URL per kund och GTM-snippet att kopiera.
+- **AI-synlighet** (`/insider-graph/polling`): Veckodata för Share of Voice, Sentiment och
+  Parity Index per kategori (Affär, Finans, Innovation, HR).
+
+### Nyckelkoncept i Insider Graph
+
+**Nodtyp** — varje medarbetare klassas som en av tre:
+- **Aktiv nod**: publicerar regelbundet. Scrapeas dagligen, fullt coachningsspår, högst pris-tier.
+- **Episodisk nod**: aktiv med jämna mellanrum. Scrapeas veckovis. Har en unik inkommande
+  e-postadress (`{client_id}.{employee_id}@inbox.insidergraph.io`) — när personen mailar
+  dit extraheras innehållet av en LLM till strukturerade Event-objekt.
+- **Passiv nod**: djup engångsstrukturering. Scrapeas månadsvis, ytligt.
+
+**Connector** — en pluggbar datakälla som implementerar `BaseConnector` (`fetch(config)`,
+`transform(raw) → SchemaOrgObject`). Idag finns LinkedIn (via Bright Data); fler planerade
+i ordningen YouTube → Instagram → Glassdoor → Substack → GitHub → Bolagsverket → Vinnova.
+
+**Mätningsdimensioner**:
+- **Share of Voice (SoV)**: Andel AI-frågor (av 4 kategorier × 3 frågor × 2 modeller = 24)
+  där kundens namn eller en medarbetares namn nämns. Värde 0–1.
+- **Sentiment**: -1 till 1. För varje svar med omnämnande ber Polling-agenten en LLM-domare
+  bedöma tonalitet.
+- **Parity Index**: Andel kvinnliga personer av alla personer som rekommenderas av AI.
+  Använder `gender`-fältet på medarbetaren.
+- **Baseline-disciplinen**: Företagets och medarbetarnas följarantal sparas i Firestore
+  som baseline men **exponeras aldrig i JSON-LD-output** — de används bara internt för
+  att bevisa att AI-synlighet ökat oberoende av nätverkstillväxt.
+
+### Teknisk arkitektur (skiljer sig från Insiders Insights)
+
+| | Insiders Insights | Insider Graph |
+|---|---|---|
+| Databas | PostgreSQL (Cloud SQL) | Firestore (eur3, native) |
+| Backend | `backend/` FastAPI | `insider-graph-api/` FastAPI |
+| Scheduling | Manuell poller | Cloud Run Jobs + Cloud Scheduler |
+| Agentkörning | Claude CLI via `agent-poll.mjs` | Cloud Run Jobs |
+| LLM-bruk | Claude (admin agent) | OpenAI GPT-4o + Gemini 1.5 Pro (polling) |
+| Scrape | — | Bright Data Datasets API |
+
+Cron-jobb (Cloud Scheduler, tidszon Europe/Stockholm):
+- `scrape-active-daily` 02:00 dagligen
+- `scrape-episodic-weekly` 03:00 måndagar
+- `polling-weekly` 06:00 tisdagar
+- `compile-schemas-hourly` varje timme (Change-agent skippar upload om grafen är oförändrad)
 """
 
 
@@ -280,6 +363,31 @@ def _build_context(db: Session, customer_id: Optional[str], page_context: Option
             for m in modules:
                 scope = "Global" if not m.customer_id else f"Kund: {m.customer_id[:8]}"
                 sections.append(f"- **{m.name}** ({m.abbr}) — {scope}")
+
+    elif page_context and page_context.startswith("graph_"):
+        context_labels.append(page_context)
+        sections.append("\n## Användaren är i Insider Graph-produkten")
+        graph_page_hints = {
+            "graph_home": "På översiktssidan — pipeline-status och förklaring av tjänsten.",
+            "graph_customers": (
+                "På kundsidan i Graph — onboarding via CSV-import. Hjälp användaren förstå "
+                "CSV-formatet (name,linkedin_url,title,node_type,gender) och nodtyper "
+                "(aktiv/episodisk/passiv)."
+            ),
+            "graph_connectors": (
+                "På connectors-sidan — översikt över datakällor (LinkedIn, Bolagsverket, "
+                "pressrum, e-post, m.fl.) och deras tier/frekvens."
+            ),
+            "graph_schema": (
+                "På JSON-LD-sidan — förhandsvisning av Schema.org-grafen som distribueras "
+                "via CDN och injiceras på kundens sajt via GTM-snippet."
+            ),
+            "graph_polling": (
+                "På AI-synlighet-sidan — Share of Voice, Sentiment och Parity Index per "
+                "vecka. Mäter hur kunden framträder i GPT-4o och Gemini 1.5 Pro."
+            ),
+        }
+        sections.append(graph_page_hints.get(page_context, ""))
 
     return "\n".join(sections), context_labels
 

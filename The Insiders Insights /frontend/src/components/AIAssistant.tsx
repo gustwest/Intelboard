@@ -157,6 +157,13 @@ export default function AIAssistant() {
 
   // Detect context from URL
   const getContext = useCallback((): { customerId: string | null; pageContext: string } => {
+    if (pathname.startsWith('/insider-graph')) {
+      if (pathname.startsWith('/insider-graph/kunder')) return { customerId: null, pageContext: 'graph_customers' };
+      if (pathname.startsWith('/insider-graph/connectors')) return { customerId: null, pageContext: 'graph_connectors' };
+      if (pathname.startsWith('/insider-graph/schema')) return { customerId: null, pageContext: 'graph_schema' };
+      if (pathname.startsWith('/insider-graph/polling')) return { customerId: null, pageContext: 'graph_polling' };
+      return { customerId: null, pageContext: 'graph_home' };
+    }
     const match = pathname.match(/\/kunder\/([^/]+)/);
     if (match) return { customerId: match[1], pageContext: 'customer_detail' };
     if (pathname.includes('/sources')) return { customerId: null, pageContext: 'sources' };
