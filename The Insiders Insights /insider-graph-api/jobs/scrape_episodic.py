@@ -1,12 +1,11 @@
-"""Cloud Run Job: scrape-active.
+"""Cloud Run Job: scrape-episodic.
 
-Triggas dagligen via Cloud Scheduler. Iterar alla kunder, kör connectors
-för aktiva noder, skriver RawItems till Firestore.
+Triggas måndagar via Cloud Scheduler. Episodiska noder är aktiva med jämna
+mellanrum — vi gör en lätt Google Alerts-sökning på personnamn och hämtar
+LinkedIn-profilen.
 
-    gcloud run jobs deploy scrape-active \\
-      --image=.../insider-graph-api:latest \\
-      --command python --args -m,jobs.scrape_active \\
-      --region europe-north1
+Stub-form i MVP: iterar nodtyp=episodisk och anropar samma connectors som
+scrape_active men markerar items som episodic-source.
 """
 import logging
 
@@ -14,14 +13,14 @@ import connectors
 import firestore_client as fs
 from connectors.base import ConnectorConfig
 
-log = logging.getLogger("jobs.scrape_active")
+log = logging.getLogger("jobs.scrape_episodic")
 
 
 def run() -> None:
     for client_id, client in fs.iter_clients():
         active_connectors = client.get("active_connectors", [])
         for employee_id, emp in fs.iter_employees(client_id):
-            if emp.get("node_type") != "aktiv":
+            if emp.get("node_type") != "episodisk":
                 continue
             for connector_id in active_connectors:
                 try:
@@ -29,14 +28,12 @@ def run() -> None:
                 except KeyError:
                     continue
                 connector = connector_cls()
-                items = connector.fetch(
-                    ConnectorConfig(
-                        client_id=client_id,
-                        employee_id=employee_id,
-                        params={"linkedin_url": emp.get("linkedin_url")},
-                    )
+                config = ConnectorConfig(
+                    client_id=client_id,
+                    employee_id=employee_id,
+                    params={"linkedin_url": emp.get("linkedin_url")},
                 )
-                for item in items:
+                for item in connector.fetch(config):
                     fs.raw_items_col(client_id, employee_id).add(
                         {
                             "source": item.source,
@@ -45,6 +42,7 @@ def run() -> None:
                             "url": item.url,
                             "published_at": item.published_at,
                             "included_in_output": True,
+                            "episodic": True,
                             **item.extra,
                         }
                     )
