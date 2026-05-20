@@ -41,6 +41,10 @@ def raw_items_col(client_id: str, employee_id: str):
     return employee_doc(client_id, employee_id).collection("raw_items")
 
 
+def raw_items_company_col(client_id: str):
+    return client_doc(client_id).collection("raw_items_company")
+
+
 def polling_results_col(client_id: str):
     return client_doc(client_id).collection("polling_results")
 

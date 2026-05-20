@@ -1,4 +1,5 @@
 steps:
+  # 1. Bygg och pusha en image som används av både service och alla jobs.
   - name: 'gcr.io/kaniko-project/executor:latest'
     args:
       - '--dockerfile=The Insiders Insights /insider-graph-api/Dockerfile'
@@ -11,6 +12,7 @@ steps:
       - '--snapshot-mode=redo'
       - '--use-new-run'
 
+  # 2. Deploy service (FastAPI, always-on).
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -21,6 +23,20 @@ steps:
       - '--region=europe-north1'
       - '--allow-unauthenticated'
       - '--platform=managed'
+
+  # 3. Uppdatera Cloud Run Jobs så de pekar på samma SHA som servicen.
+  #    Jobben skapas första gången av scripts/bootstrap.sh — denna step
+  #    misslyckas tyst om jobbet inte finns ännu (`|| true`).
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        IMAGE=europe-north1-docker.pkg.dev/$PROJECT_ID/insider-graph-repo/insider-graph-api:$COMMIT_SHA
+        for JOB in scrape-active scrape-episodic compile-all-schemas polling-weekly; do
+          gcloud run jobs update $$JOB --image=$$IMAGE --region=europe-north1 || \
+            echo "job $$JOB not yet created — run scripts/bootstrap.sh first"
+        done
 
 options:
   logging: CLOUD_LOGGING_ONLY

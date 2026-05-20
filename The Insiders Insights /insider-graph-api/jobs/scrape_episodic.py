@@ -23,6 +23,8 @@ def run() -> None:
             if emp.get("node_type") != "episodisk":
                 continue
             for connector_id in active_connectors:
+                if connector_id != "linkedin":
+                    continue  # episodisk skörd = per-person; bara LinkedIn för MVP
                 try:
                     connector_cls = connectors.get(connector_id)
                 except KeyError:

@@ -1,149 +1,353 @@
 'use client';
 
-import { Plug } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Plug, Play, Plus, Trash2, Save, AlertCircle, CheckCircle2 } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
+import { graphFetch } from '../_lib/api';
 
-type Connector = {
+type ConnectorMeta = {
   id: string;
-  name: string;
-  method: string;
+  fetch_method: string;
+  output_types: string[];
   frequency: string;
   tier: 'standard' | 'optional' | 'custom';
-  outputs: string[];
-  status: 'live' | 'stub' | 'planned';
 };
 
-const CONNECTORS: Connector[] = [
-  { id: 'linkedin-company', name: 'LinkedIn (företag)', method: 'scrape', frequency: 'dagligen', tier: 'standard', outputs: ['Organization', 'SocialMediaPosting', 'JobPosting'], status: 'stub' },
-  { id: 'linkedin-person', name: 'LinkedIn (person)', method: 'scrape', frequency: 'dagligen', tier: 'standard', outputs: ['Person', 'SocialMediaPosting'], status: 'stub' },
-  { id: 'bolagsverket', name: 'Bolagsverket', method: 'api', frequency: 'månadsvis', tier: 'standard', outputs: ['Organization'], status: 'planned' },
-  { id: 'pressroom', name: 'Pressrum / RSS', method: 'rss', frequency: 'dagligen', tier: 'standard', outputs: ['NewsArticle'], status: 'planned' },
-  { id: 'careers', name: 'Karriärsida', method: 'scrape', frequency: 'dagligen', tier: 'standard', outputs: ['JobPosting'], status: 'planned' },
-  { id: 'email', name: 'E-post (episodisk)', method: 'email', frequency: 'realtid', tier: 'standard', outputs: ['Event', 'NewsArticle'], status: 'planned' },
-  { id: 'instagram', name: 'Instagram', method: 'api + scrape', frequency: 'dagligen', tier: 'optional', outputs: ['SocialMediaPosting', 'ImageObject'], status: 'planned' },
-  { id: 'youtube', name: 'YouTube', method: 'api', frequency: 'dagligen', tier: 'optional', outputs: ['VideoObject'], status: 'planned' },
-  { id: 'facebook', name: 'Facebook', method: 'api + scrape', frequency: 'dagligen', tier: 'optional', outputs: ['SocialMediaPosting', 'Event'], status: 'planned' },
-  { id: 'substack', name: 'Substack', method: 'rss', frequency: 'dagligen', tier: 'optional', outputs: ['NewsArticle'], status: 'planned' },
-  { id: 'podcast', name: 'Podcast (RSS)', method: 'rss', frequency: 'dagligen', tier: 'optional', outputs: ['PodcastEpisode'], status: 'planned' },
-  { id: 'glassdoor', name: 'Glassdoor', method: 'scrape', frequency: 'veckovis', tier: 'optional', outputs: ['EmployerReview'], status: 'planned' },
-  { id: 'github', name: 'GitHub', method: 'api', frequency: 'veckovis', tier: 'optional', outputs: ['SoftwareSourceCode'], status: 'planned' },
-  { id: 'crunchbase', name: 'Crunchbase', method: 'api', frequency: 'månadsvis', tier: 'optional', outputs: ['Organization', 'FundingEvent'], status: 'planned' },
-  { id: 'scholar', name: 'Google Scholar', method: 'scrape', frequency: 'månadsvis', tier: 'optional', outputs: ['ScholarlyArticle'], status: 'planned' },
-  { id: 'prv', name: 'PRV / Patent', method: 'api', frequency: 'månadsvis', tier: 'optional', outputs: ['CreativeWork'], status: 'planned' },
-  { id: 'vinnova', name: 'Vinnova', method: 'api', frequency: 'månadsvis', tier: 'optional', outputs: ['Grant', 'ResearchProject'], status: 'planned' },
+type Client = { client_id: string; company_name: string | null };
+
+type RssFeed = { url: string; schema_type: string; label?: string };
+
+type ClientConnectors = {
+  client_id: string;
+  available: ConnectorMeta[];
+  active_connectors: string[];
+  rss_feeds: RssFeed[];
+};
+
+const STATIC_PLANNED: ConnectorMeta[] = [
+  { id: 'pressrum', fetch_method: 'rss', output_types: ['NewsArticle'], frequency: 'daily', tier: 'standard' },
+  { id: 'careers', fetch_method: 'rss', output_types: ['JobPosting'], frequency: 'daily', tier: 'standard' },
+  { id: 'email', fetch_method: 'email', output_types: ['Event', 'NewsArticle'], frequency: 'realtime', tier: 'standard' },
+  { id: 'instagram', fetch_method: 'api', output_types: ['SocialMediaPosting'], frequency: 'daily', tier: 'optional' },
+  { id: 'youtube', fetch_method: 'api', output_types: ['VideoObject'], frequency: 'daily', tier: 'optional' },
+  { id: 'facebook', fetch_method: 'api', output_types: ['SocialMediaPosting'], frequency: 'daily', tier: 'optional' },
+  { id: 'substack', fetch_method: 'rss', output_types: ['NewsArticle'], frequency: 'daily', tier: 'optional' },
+  { id: 'podcast', fetch_method: 'rss', output_types: ['PodcastEpisode'], frequency: 'daily', tier: 'optional' },
+  { id: 'glassdoor', fetch_method: 'scrape', output_types: ['EmployerReview'], frequency: 'weekly', tier: 'optional' },
+  { id: 'github', fetch_method: 'api', output_types: ['SoftwareSourceCode'], frequency: 'weekly', tier: 'optional' },
+  { id: 'crunchbase', fetch_method: 'api', output_types: ['Organization'], frequency: 'monthly', tier: 'optional' },
+  { id: 'scholar', fetch_method: 'scrape', output_types: ['ScholarlyArticle'], frequency: 'monthly', tier: 'optional' },
+  { id: 'prv', fetch_method: 'api', output_types: ['CreativeWork'], frequency: 'monthly', tier: 'optional' },
+  { id: 'vinnova', fetch_method: 'api', output_types: ['Grant'], frequency: 'monthly', tier: 'optional' },
 ];
 
-const tierStyle: Record<Connector['tier'], { bg: string; color: string; label: string }> = {
-  standard: { bg: 'rgba(45,212,191,0.12)', color: '#2dd4bf', label: 'standard' },
-  optional: { bg: 'rgba(96,165,250,0.12)', color: '#60a5fa', label: 'valfri' },
-  custom: { bg: 'rgba(251,113,133,0.12)', color: '#fb7185', label: 'kundspecifik' },
+const NAME: Record<string, string> = {
+  linkedin: 'LinkedIn',
+  rss: 'RSS-feeds (kund)',
+  bolagsverket: 'Bolagsverket',
+  pressrum: 'Pressrum',
+  careers: 'Karriärsida',
+  email: 'E-post (episodisk)',
+  instagram: 'Instagram',
+  youtube: 'YouTube',
+  facebook: 'Facebook',
+  substack: 'Substack',
+  podcast: 'Podcast',
+  glassdoor: 'Glassdoor',
+  github: 'GitHub',
+  crunchbase: 'Crunchbase',
+  scholar: 'Google Scholar',
+  prv: 'PRV / Patent',
+  vinnova: 'Vinnova',
 };
 
-const statusStyle: Record<Connector['status'], { color: string; label: string }> = {
-  live: { color: '#22c55e', label: 'Live' },
-  stub: { color: '#f59e0b', label: 'Stub' },
-  planned: { color: 'rgba(255,255,255,0.4)', label: 'Planerad' },
-};
+const SCHEMA_OPTIONS = ['NewsArticle', 'JobPosting', 'PodcastEpisode', 'Event'];
 
 export default function GraphConnectorsPage() {
+  const [clients, setClients] = useState<Client[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [state, setState] = useState<ClientConnectors | null>(null);
+  const [active, setActive] = useState<string[]>([]);
+  const [feeds, setFeeds] = useState<RssFeed[]>([]);
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [banner, setBanner] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    graphFetch<{ clients: Client[] }>('/api/clients')
+      .then((d) => {
+        setClients(d.clients);
+        if (d.clients[0]) setSelected(d.clients[0].client_id);
+      })
+      .catch((e) => setBanner({ tone: 'error', text: e.message }));
+  }, []);
+
+  useEffect(() => {
+    if (!selected) return;
+    graphFetch<ClientConnectors>(`/api/connectors/${selected}`)
+      .then((d) => {
+        setState(d);
+        setActive(d.active_connectors);
+        setFeeds(d.rss_feeds || []);
+        setDirty(false);
+      })
+      .catch((e) => setBanner({ tone: 'error', text: e.message }));
+  }, [selected]);
+
+  function toggle(id: string) {
+    setActive((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    setDirty(true);
+  }
+
+  function updateFeed(i: number, patch: Partial<RssFeed>) {
+    setFeeds((prev) => prev.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
+    setDirty(true);
+  }
+
+  function addFeed() {
+    setFeeds((prev) => [...prev, { url: '', schema_type: 'NewsArticle', label: '' }]);
+    setDirty(true);
+  }
+
+  function removeFeed(i: number) {
+    setFeeds((prev) => prev.filter((_, idx) => idx !== i));
+    setDirty(true);
+  }
+
+  async function save() {
+    if (!selected) return;
+    setSaving(true);
+    setBanner(null);
+    try {
+      await graphFetch(`/api/connectors/${selected}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active_connectors: active, rss_feeds: feeds.filter((f) => f.url) }),
+      });
+      setDirty(false);
+      setBanner({ tone: 'ok', text: 'Sparat' });
+    } catch (e: any) {
+      setBanner({ tone: 'error', text: e.message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function trigger(job: string, path: string) {
+    setBanner(null);
+    try {
+      await graphFetch(path, { method: 'POST' });
+      setBanner({ tone: 'ok', text: `Triggade ${job}` });
+    } catch (e: any) {
+      setBanner({ tone: 'error', text: e.message });
+    }
+  }
+
+  const liveIds = new Set((state?.available || []).map((c) => c.id));
+  const allConnectors: ConnectorMeta[] = [
+    ...(state?.available || []),
+    ...STATIC_PLANNED.filter((s) => !liveIds.has(s.id)),
+  ];
+
   return (
     <GraphPageShell
       title="Connectors"
       icon={<Plug size={22} />}
-      subtitle="Datakällor som connectors levererar Schema.org-objekt till GEO-motorn. Alla implementerar samma interface."
+      subtitle="Live-connectors syns med grön status. Aktivera per kund + konfigurera RSS-feeds."
     >
-      <div
-        style={{
-          background: C.card,
-          border: `1px solid ${C.border}`,
-          borderRadius: 12,
-          overflow: 'hidden',
-        }}
-      >
-        <div
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <label style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>Kund:</label>
+        <select
+          value={selected || ''}
+          onChange={(e) => setSelected(e.target.value)}
           style={{
-            display: 'grid',
-            gridTemplateColumns: '2fr 1fr 1fr 1fr 2fr 1fr',
-            gap: 12,
-            padding: '12px 20px',
-            fontSize: 10,
-            letterSpacing: '0.12em',
-            textTransform: 'uppercase',
-            color: C.muted,
-            borderBottom: `1px solid ${C.border}`,
-            fontWeight: 600,
+            padding: '8px 12px',
+            background: '#0a0a0f',
+            color: '#fff',
+            border: `1px solid ${C.border}`,
+            borderRadius: 8,
+            fontSize: 13,
+            outline: 'none',
           }}
         >
+          {clients.length === 0 && <option>Inga kunder</option>}
+          {clients.map((c) => (
+            <option key={c.client_id} value={c.client_id}>
+              {c.company_name || c.client_id}
+            </option>
+          ))}
+        </select>
+        <div style={{ flex: 1 }} />
+        <button
+          onClick={() => trigger('scrape-active', '/api/jobs/scrape-active')}
+          style={btn(C, 'subtle')}
+        >
+          <Play size={12} /> Kör scrape-active
+        </button>
+        <button
+          onClick={() => trigger('compile', `/api/jobs/compile/${selected}`)}
+          disabled={!selected}
+          style={btn(C, 'subtle')}
+        >
+          <Play size={12} /> Kompilera
+        </button>
+        <button
+          onClick={save}
+          disabled={!dirty || saving}
+          style={btn(C, dirty ? 'primary' : 'subtle')}
+        >
+          <Save size={12} /> {saving ? 'Sparar…' : 'Spara'}
+        </button>
+      </div>
+
+      {banner && (
+        <div
+          style={{
+            background: banner.tone === 'ok' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+            border: `1px solid ${banner.tone === 'ok' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`,
+            borderRadius: 8,
+            padding: '10px 14px',
+            color: banner.tone === 'ok' ? '#86efac' : '#fca5a5',
+            fontSize: 12,
+            marginBottom: 16,
+            display: 'flex',
+            gap: 8,
+            alignItems: 'center',
+          }}
+        >
+          {banner.tone === 'ok' ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+          {banner.text}
+        </div>
+      )}
+
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr 1fr 1.6fr 1fr', gap: 12, padding: '12px 20px', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.muted, borderBottom: `1px solid ${C.border}`, fontWeight: 600 }}>
           <span>Connector</span>
           <span>Metod</span>
           <span>Frekvens</span>
           <span>Tier</span>
           <span>Output</span>
-          <span>Status</span>
+          <span style={{ textAlign: 'right' }}>Aktiv</span>
         </div>
-        {CONNECTORS.map((c) => (
-          <div
-            key={c.id}
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '2fr 1fr 1fr 1fr 2fr 1fr',
-              gap: 12,
-              padding: '14px 20px',
-              borderBottom: `1px solid ${C.border}`,
-              fontSize: 13,
-              alignItems: 'center',
-            }}
-          >
-            <span style={{ color: '#fff', fontWeight: 500 }}>{c.name}</span>
-            <span style={{ color: C.muted }}>{c.method}</span>
-            <span style={{ color: C.muted }}>{c.frequency}</span>
-            <span>
-              <span
-                style={{
-                  fontSize: 10,
-                  padding: '3px 8px',
-                  borderRadius: 4,
-                  background: tierStyle[c.tier].bg,
-                  color: tierStyle[c.tier].color,
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                }}
-              >
-                {tierStyle[c.tier].label}
+        {allConnectors.map((c) => {
+          const isLive = liveIds.has(c.id);
+          const isActive = active.includes(c.id);
+          return (
+            <div
+              key={c.id}
+              style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr 1fr 1.6fr 1fr', gap: 12, padding: '14px 20px', borderBottom: `1px solid ${C.border}`, fontSize: 13, alignItems: 'center' }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: isLive ? '#22c55e' : 'rgba(255,255,255,0.25)' }} />
+                <span style={{ color: '#fff', fontWeight: 500 }}>{NAME[c.id] || c.id}</span>
               </span>
-            </span>
-            <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {c.outputs.map((o) => (
-                <span
-                  key={o}
-                  style={{
-                    fontSize: 10,
-                    padding: '2px 7px',
-                    borderRadius: 4,
-                    background: 'rgba(124,109,250,0.12)',
-                    color: '#7c6dfa',
-                    fontWeight: 500,
-                  }}
-                >
-                  {o}
+              <span style={{ color: C.muted }}>{c.fetch_method}</span>
+              <span style={{ color: C.muted }}>{c.frequency}</span>
+              <span>
+                <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 4, background: c.tier === 'standard' ? 'rgba(45,212,191,0.12)' : 'rgba(96,165,250,0.12)', color: c.tier === 'standard' ? '#2dd4bf' : '#60a5fa', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  {c.tier}
                 </span>
-              ))}
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  background: statusStyle[c.status].color,
-                }}
-              />
-              <span style={{ fontSize: 12, color: C.muted }}>{statusStyle[c.status].label}</span>
-            </span>
-          </div>
-        ))}
+              </span>
+              <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {c.output_types.map((o) => (
+                  <span key={o} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, background: 'rgba(124,109,250,0.12)', color: '#7c6dfa', fontWeight: 500 }}>
+                    {o}
+                  </span>
+                ))}
+              </span>
+              <span style={{ textAlign: 'right' }}>
+                {isLive ? (
+                  <button
+                    onClick={() => toggle(c.id)}
+                    disabled={!selected}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: 999,
+                      background: isActive ? 'rgba(34,197,94,0.18)' : 'transparent',
+                      color: isActive ? '#86efac' : C.muted,
+                      border: `1px solid ${isActive ? 'rgba(34,197,94,0.4)' : C.border}`,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {isActive ? 'På' : 'Av'}
+                  </button>
+                ) : (
+                  <span style={{ fontSize: 10, color: C.dim, fontStyle: 'italic' }}>Ej implementerad</span>
+                )}
+              </span>
+            </div>
+          );
+        })}
       </div>
+
+      {active.includes('rss') && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: '#fff', margin: 0 }}>RSS-feeds för {state?.client_id}</h2>
+            <button onClick={addFeed} style={btn(C, 'subtle')}>
+              <Plus size={12} /> Lägg till
+            </button>
+          </div>
+          {feeds.length === 0 ? (
+            <div style={{ fontSize: 12, color: C.muted, padding: '12px 0' }}>Inga feeds. Lägg till pressrum, karriärsida eller podcast-feed.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {feeds.map((f, i) => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 200px 160px 40px', gap: 8 }}>
+                  <input
+                    value={f.url}
+                    onChange={(e) => updateFeed(i, { url: e.target.value })}
+                    placeholder="https://example.com/feed.xml"
+                    style={inp(C)}
+                  />
+                  <input
+                    value={f.label || ''}
+                    onChange={(e) => updateFeed(i, { label: e.target.value })}
+                    placeholder="Etikett"
+                    style={inp(C)}
+                  />
+                  <select value={f.schema_type} onChange={(e) => updateFeed(i, { schema_type: e.target.value })} style={inp(C)}>
+                    {SCHEMA_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <button onClick={() => removeFeed(i)} style={{ ...btn(C, 'subtle'), padding: '8px' }}>
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </GraphPageShell>
   );
+}
+
+function btn(C: any, variant: 'primary' | 'subtle') {
+  return {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '8px 14px',
+    background: variant === 'primary' ? 'rgba(124,109,250,0.18)' : 'transparent',
+    color: variant === 'primary' ? '#7c6dfa' : '#fff',
+    border: `1px solid ${variant === 'primary' ? 'rgba(124,109,250,0.3)' : C.border}`,
+    borderRadius: 8,
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: 'pointer',
+  };
+}
+
+function inp(C: any) {
+  return {
+    padding: '8px 12px',
+    background: '#0a0a0f',
+    color: '#fff',
+    border: `1px solid ${C.border}`,
+    borderRadius: 6,
+    fontSize: 12,
+    outline: 'none',
+  };
 }

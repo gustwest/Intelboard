@@ -3,13 +3,24 @@
 Webhooks (SendGrid Inbound Parse) and admin endpoints. Background work runs as
 separate Cloud Run Jobs — see jobs/.
 """
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import clients, health, onboard, polling, webhooks
+from auth import ApiKeyMiddleware
+from config import settings
+from routers import clients, connectors_router, health, jobs as jobs_router, onboard, polling, review, webhooks
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("insider-graph-api")
 
 app = FastAPI(title="Insider Graph — API")
 
+if not settings.admin_api_key:
+    log.warning("ADMIN_API_KEY not set — admin endpoints are unauthenticated")
+
+app.add_middleware(ApiKeyMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,6 +31,9 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(clients.router)
+app.include_router(connectors_router.router)
+app.include_router(jobs_router.router)
 app.include_router(onboard.router)
 app.include_router(polling.router)
+app.include_router(review.router)
 app.include_router(webhooks.router)

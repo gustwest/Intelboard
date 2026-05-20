@@ -48,12 +48,37 @@ def compile_client(client_id: str) -> dict[str, Any]:
             organization["subjectOf"].append(
                 {
                     "@type": raw.get("schema_type", "CreativeWork"),
+                    "name": raw.get("name"),
                     "author": {"@id": person_id},
                     "datePublished": _iso(raw.get("published_at")),
                     "articleBody": raw.get("content"),
                     "url": raw.get("url"),
                 }
             )
+
+    for item in fs.raw_items_company_col(client_id).stream():
+        raw = item.to_dict() or {}
+        if not raw.get("included_in_output", True):
+            continue
+        if raw.get("schema_type") == "Organization":
+            organization.setdefault("subOrganization", []).append(
+                {
+                    "@type": "Organization",
+                    "name": raw.get("name"),
+                    "url": raw.get("url"),
+                    "description": raw.get("content"),
+                }
+            )
+            continue
+        organization["subjectOf"].append(
+            {
+                "@type": raw.get("schema_type", "CreativeWork"),
+                "name": raw.get("name"),
+                "datePublished": _iso(raw.get("published_at")),
+                "articleBody": raw.get("content"),
+                "url": raw.get("url"),
+            }
+        )
 
     return {
         "@context": "https://schema.org",

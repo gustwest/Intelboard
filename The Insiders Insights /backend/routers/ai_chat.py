@@ -205,8 +205,12 @@ Pipeline i fem steg:
   CDN-deploy, GTM-brygga, polling) och förklaring av mätningsdimensioner.
 - **Kunder** (`/insider-graph/kunder`): Onboarding-vy. Klicka "Importera CSV" för att
   skapa en ny Graph-kund. CSV-format: `name,linkedin_url,title,node_type,gender`.
-- **Connectors** (`/insider-graph/connectors`): Tabell över alla datakällor — status, tier
-  (standard/valfri/kundspecifik), output-typ (Schema.org-objekt), uppdateringsfrekvens.
+- **Connectors** (`/insider-graph/connectors`): Live-katalog över alla datakällor. Per kund
+  kan man slå på/av aktiva connectors, lägga till RSS-feeds (pressrum/karriär/podcast),
+  och manuellt trigga **Kör scrape-active** eller **Kompilera**. Implementerade connectors
+  är `linkedin`, `rss` och `bolagsverket`; övriga visas som "Ej implementerad".
+- **Granska** (`/insider-graph/review`): Items som LLM-extraktionen plockat in från
+  inkommande mail med confidence < 0,7. Ops-användaren godkänner eller avvisar.
 - **JSON-LD** (`/insider-graph/schema`): Förhandsvisning av den kompilerade Schema.org-grafen.
   Visar också CDN-URL per kund och GTM-snippet att kopiera.
 - **AI-synlighet** (`/insider-graph/polling`): Veckodata för Share of Voice, Sentiment och
@@ -221,9 +225,11 @@ Pipeline i fem steg:
   dit extraheras innehållet av en LLM till strukturerade Event-objekt.
 - **Passiv nod**: djup engångsstrukturering. Scrapeas månadsvis, ytligt.
 
-**Connector** — en pluggbar datakälla som implementerar `BaseConnector` (`fetch(config)`,
-`transform(raw) → SchemaOrgObject`). Idag finns LinkedIn (via Bright Data); fler planerade
-i ordningen YouTube → Instagram → Glassdoor → Substack → GitHub → Bolagsverket → Vinnova.
+**Connector** — en pluggbar datakälla som implementerar `BaseConnector` (`fetch(config)
+→ list[RawItem]`). Live i MVP: `linkedin` (via Bright Data), `rss` (generisk; konfigurera
+feeds per kund för pressrum/karriär/podcast), `bolagsverket` (öppna org-data). Webhook-baserat:
+`email` (SendGrid Inbound Parse → LLM-extraktion). Planerade: YouTube, Instagram, Glassdoor,
+Substack, GitHub, Crunchbase, Vinnova, PRV, Scholar.
 
 **Mätningsdimensioner**:
 - **Share of Voice (SoV)**: Andel AI-frågor (av 4 kategorier × 3 frågor × 2 modeller = 24)
@@ -248,10 +254,18 @@ i ordningen YouTube → Instagram → Glassdoor → Substack → GitHub → Bola
 | Scrape | — | Bright Data Datasets API |
 
 Cron-jobb (Cloud Scheduler, tidszon Europe/Stockholm):
-- `scrape-active-daily` 02:00 dagligen
-- `scrape-episodic-weekly` 03:00 måndagar
-- `polling-weekly` 06:00 tisdagar
-- `compile-schemas-hourly` varje timme (Change-agent skippar upload om grafen är oförändrad)
+- `scrape-active-daily` 04:00 dagligen
+- `scrape-episodic-weekly` 04:30 måndagar
+- `compile-all-daily` 05:00 dagligen + Eventarc-trigger på Firestore-writes
+- `polling-weekly-tue` 06:00 tisdagar
+
+**Auth**: Insider Graph-API:t kräver `X-API-Key` (Secret Manager: `insider-graph-admin-key`).
+Frontend skickar key via `NEXT_PUBLIC_GRAPH_API_KEY`. Webhooks och Eventarc-targets är
+undantagna och autentiseras separat.
+
+**Bootstrap**: `insider-graph-api/scripts/bootstrap.sh` skapar bucket, jobs, scheduler och
+Eventarc-trigger på GCP. `cloudbuild.yaml` bygger image + uppdaterar service och alla jobs
+till samma SHA vid varje deploy.
 """
 
 

@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     brightdata_linkedin_posts_dataset_id: str = ""
     sendgrid_api_key: str = ""
 
+    admin_api_key: str = ""
+    sendgrid_webhook_secret: str = ""
+    bolagsverket_api_key: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
