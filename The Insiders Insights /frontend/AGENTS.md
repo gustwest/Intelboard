@@ -4,10 +4,12 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
-# Deploy & verification — push to staging directly
+# Deploy & verification — staging is where we verify
 
-**All changes are pushed to `main` directly. This is our staging environment and where we verify everything that is built.** Do not sit on changes waiting for local verification — get them onto staging so they can be checked there.
+**All changes go to staging directly — staging is where we verify everything that is built.** Push to `main` AND deploy, then check on staging.
 
-- `git push origin main` auto-deploys the frontend via Cloud Build (`frontend/cloudbuild.yaml`, Kaniko build → Cloud Run service `insiders-frontend`). Triggered whenever files under `The Insiders Insights /frontend/` change.
 - Staging URL: https://insiders-frontend-815335042776.europe-north1.run.app
-- A deploy can take several minutes (build timeout 1200s). If staging still shows old content right after a push, the build is likely still running — wait, then hard-refresh.
+- Cloud Run service: `insiders-frontend` (region `europe-north1`, project `round-plating-480321-j7`).
+- **Deploy is currently MANUAL** — there is no Cloud Build trigger on push (`gcloud builds triggers list` returns 0). Despite the header in `frontend/cloudbuild.yaml` ("auto-deploy on push to main"), that trigger was never set up. A push to `main` alone does NOT update staging.
+- To deploy, run Cloud Build with `frontend/cloudbuild.yaml` from the repo root (this is how prior staging builds were produced — manual `gcloud builds submit`). Build takes several minutes (timeout 1200s).
+- TODO: set up the Cloud Build push trigger so `git push origin main` truly auto-deploys, matching the intended workflow.
