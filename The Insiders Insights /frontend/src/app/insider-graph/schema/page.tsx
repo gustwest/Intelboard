@@ -89,8 +89,8 @@ export default function GraphSchemaPage() {
           onChange={(e) => setSelected(e.target.value)}
           style={{
             padding: '8px 12px',
-            background: '#0a0a0f',
-            color: '#fff',
+            background: '#eef0f1',
+            color: '#3a4b56',
             border: `1px solid ${C.border}`,
             borderRadius: 8,
             fontSize: 13,
@@ -120,7 +120,7 @@ export default function GraphSchemaPage() {
         }}
       >
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>CDN-URL</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56' }}>CDN-URL</div>
           <code
             style={{
               fontSize: 12,
@@ -144,7 +144,7 @@ export default function GraphSchemaPage() {
             gap: 6,
             padding: '8px 14px',
             background: 'transparent',
-            color: copied === 'cdn' ? '#86efac' : '#fff',
+            color: copied === 'cdn' ? '#86efac' : '#3a4b56',
             border: `1px solid ${C.border}`,
             borderRadius: 8,
             fontSize: 13,
@@ -160,7 +160,7 @@ export default function GraphSchemaPage() {
 
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px', marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <h2 style={{ fontSize: 14, fontWeight: 600, color: '#fff', margin: 0 }}>GTM-snippet (engångsinstallation hos kund-IT)</h2>
+          <h2 style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56', margin: 0 }}>GTM-snippet (engångsinstallation hos kund-IT)</h2>
           <button
             onClick={() => copy(gtmSnippet, 'snippet')}
             style={{
@@ -168,9 +168,9 @@ export default function GraphSchemaPage() {
               alignItems: 'center',
               gap: 6,
               padding: '6px 12px',
-              background: copied === 'snippet' ? 'rgba(34,197,94,0.15)' : 'rgba(124,109,250,0.18)',
-              color: copied === 'snippet' ? '#86efac' : '#7c6dfa',
-              border: `1px solid ${copied === 'snippet' ? 'rgba(34,197,94,0.3)' : 'rgba(124,109,250,0.3)'}`,
+              background: copied === 'snippet' ? 'rgba(34,197,94,0.15)' : 'rgba(159,81,182,0.18)',
+              color: copied === 'snippet' ? '#86efac' : '#9f51b6',
+              border: `1px solid ${copied === 'snippet' ? 'rgba(34,197,94,0.3)' : 'rgba(159,81,182,0.3)'}`,
               borderRadius: 6,
               fontSize: 12,
               fontWeight: 600,
@@ -183,14 +183,14 @@ export default function GraphSchemaPage() {
         </div>
         <pre
           style={{
-            background: '#0a0a0f',
+            background: '#eef0f1',
             border: `1px solid ${C.border}`,
             borderRadius: 8,
             padding: '14px 18px',
             fontSize: 12,
             fontFamily: 'ui-monospace, SFMono-Regular, monospace',
             lineHeight: 1.65,
-            color: '#d4d4ec',
+            color: '#3a4b56',
             overflowX: 'auto',
             margin: 0,
           }}
@@ -203,19 +203,19 @@ export default function GraphSchemaPage() {
       </div>
 
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px' }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600, color: '#fff', margin: '0 0 12px' }}>
+        <h2 style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56', margin: '0 0 12px' }}>
           {json ? `Aktuell JSON-LD för ${selectedClient?.company_name || selected}` : 'Exempel-output'}
         </h2>
         <pre
           style={{
-            background: '#0a0a0f',
+            background: '#eef0f1',
             border: `1px solid ${C.border}`,
             borderRadius: 8,
             padding: '14px 18px',
             fontSize: 12,
             fontFamily: 'ui-monospace, SFMono-Regular, monospace',
             lineHeight: 1.65,
-            color: '#d4d4ec',
+            color: '#3a4b56',
             overflowX: 'auto',
             maxHeight: 480,
             margin: 0,

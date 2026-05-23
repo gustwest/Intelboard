@@ -162,8 +162,8 @@ export default function GraphConnectorsPage() {
           onChange={(e) => setSelected(e.target.value)}
           style={{
             padding: '8px 12px',
-            background: '#0a0a0f',
-            color: '#fff',
+            background: '#eef0f1',
+            color: '#3a4b56',
             border: `1px solid ${C.border}`,
             borderRadius: 8,
             fontSize: 13,
@@ -238,8 +238,8 @@ export default function GraphConnectorsPage() {
               style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr 1fr 1.6fr 1fr', gap: 12, padding: '14px 20px', borderBottom: `1px solid ${C.border}`, fontSize: 13, alignItems: 'center' }}
             >
               <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: isLive ? '#22c55e' : 'rgba(255,255,255,0.25)' }} />
-                <span style={{ color: '#fff', fontWeight: 500 }}>{NAME[c.id] || c.id}</span>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: isLive ? '#22c55e' : 'rgba(0,0,0,0.2)' }} />
+                <span style={{ color: '#3a4b56', fontWeight: 500 }}>{NAME[c.id] || c.id}</span>
               </span>
               <span style={{ color: C.muted }}>{c.fetch_method}</span>
               <span style={{ color: C.muted }}>{c.frequency}</span>
@@ -250,7 +250,7 @@ export default function GraphConnectorsPage() {
               </span>
               <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                 {c.output_types.map((o) => (
-                  <span key={o} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, background: 'rgba(124,109,250,0.12)', color: '#7c6dfa', fontWeight: 500 }}>
+                  <span key={o} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, background: 'rgba(159,81,182,0.12)', color: '#9f51b6', fontWeight: 500 }}>
                     {o}
                   </span>
                 ))}
@@ -285,7 +285,7 @@ export default function GraphConnectorsPage() {
       {active.includes('rss') && (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <h2 style={{ fontSize: 14, fontWeight: 600, color: '#fff', margin: 0 }}>RSS-feeds för {state?.client_id}</h2>
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56', margin: 0 }}>RSS-feeds för {state?.client_id}</h2>
             <button onClick={addFeed} style={btn(C, 'subtle')}>
               <Plus size={12} /> Lägg till
             </button>
@@ -330,9 +330,9 @@ function btn(C: any, variant: 'primary' | 'subtle') {
     alignItems: 'center',
     gap: 6,
     padding: '8px 14px',
-    background: variant === 'primary' ? 'rgba(124,109,250,0.18)' : 'transparent',
-    color: variant === 'primary' ? '#7c6dfa' : '#fff',
-    border: `1px solid ${variant === 'primary' ? 'rgba(124,109,250,0.3)' : C.border}`,
+    background: variant === 'primary' ? 'rgba(159,81,182,0.18)' : 'transparent',
+    color: variant === 'primary' ? '#9f51b6' : '#3a4b56',
+    border: `1px solid ${variant === 'primary' ? 'rgba(159,81,182,0.3)' : C.border}`,
     borderRadius: 8,
     fontSize: 12,
     fontWeight: 600,
@@ -343,8 +343,8 @@ function btn(C: any, variant: 'primary' | 'subtle') {
 function inp(C: any) {
   return {
     padding: '8px 12px',
-    background: '#0a0a0f',
-    color: '#fff',
+    background: '#eef0f1',
+    color: '#3a4b56',
     border: `1px solid ${C.border}`,
     borderRadius: 6,
     fontSize: 12,

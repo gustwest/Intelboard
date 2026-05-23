@@ -25,7 +25,7 @@ const PRODUCTS: Product[] = [
     name: 'geogiraph',
     tagline: 'Generative Engine Optimization',
     defaultPath: '/insider-graph',
-    accent: '#7c6dfa',
+    accent: '#9f51b6',
   },
 ];
 

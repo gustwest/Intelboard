@@ -69,7 +69,7 @@ export default function GraphKunderPage() {
         }}
       >
         <div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>Onboarda ny kund</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56' }}>Onboarda ny kund</div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>
             Ladda upp CSV med namn + LinkedIn-URL. Discovery-agenten skapar kund + medarbetare i Firestore.
           </div>
@@ -101,9 +101,9 @@ export default function GraphKunderPage() {
               alignItems: 'center',
               gap: 6,
               padding: '8px 14px',
-              background: 'rgba(124,109,250,0.18)',
-              color: '#7c6dfa',
-              border: '1px solid rgba(124,109,250,0.3)',
+              background: 'rgba(159,81,182,0.18)',
+              color: '#9f51b6',
+              border: '1px solid rgba(159,81,182,0.3)',
               borderRadius: 8,
               fontSize: 13,
               fontWeight: 600,
@@ -146,7 +146,7 @@ export default function GraphKunderPage() {
           }}
         >
           <Users size={32} color={C.dim} style={{ marginBottom: 12 }} />
-          <div style={{ fontSize: 14, color: '#fff', fontWeight: 600 }}>Inga Graph-kunder ännu</div>
+          <div style={{ fontSize: 14, color: '#3a4b56', fontWeight: 600 }}>Inga Graph-kunder ännu</div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 6, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto' }}>
             Klicka på <strong>Importera CSV</strong> för att onboarda din första kund.
           </div>
@@ -183,7 +183,7 @@ function ClientCard({ client }: { client: Client }) {
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
         <div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{client.company_name || client.client_id}</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56' }}>{client.company_name || client.client_id}</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 2, fontFamily: 'ui-monospace, monospace' }}>
             {client.client_id}
           </div>
@@ -194,7 +194,7 @@ function ClientCard({ client }: { client: Client }) {
             target="_blank"
             rel="noreferrer"
             title="Öppna JSON-LD i ny flik"
-            style={{ color: '#7c6dfa', textDecoration: 'none', display: 'flex' }}
+            style={{ color: '#9f51b6', textDecoration: 'none', display: 'flex' }}
           >
             <ExternalLink size={14} />
           </a>
@@ -243,7 +243,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
       <span>{label}</span>
-      <span style={{ color: '#fff' }}>{value}</span>
+      <span style={{ color: '#3a4b56' }}>{value}</span>
     </div>
   );
 }
@@ -319,7 +319,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: 'var(--brand-panel)',
+          background: '#ffffff',
           border: `1px solid ${C.border}`,
           borderRadius: 14,
           width: '100%',
@@ -330,7 +330,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 600, color: '#fff', margin: 0 }}>Onboarda ny Graph-kund</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 600, color: '#3a4b56', margin: 0 }}>Onboarda ny Graph-kund</h2>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer' }}>
             <X size={20} />
           </button>
@@ -360,8 +360,8 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
               width: '100%',
               marginTop: 6,
               padding: '12px 14px',
-              background: '#0a0a0f',
-              color: '#d4d4ec',
+              background: '#eef0f1',
+              color: '#3a4b56',
               border: `1px solid ${C.border}`,
               borderRadius: 8,
               fontFamily: 'ui-monospace, SFMono-Regular, monospace',
@@ -379,7 +379,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
             style={{
               padding: '8px 14px',
               background: 'transparent',
-              color: '#fff',
+              color: '#3a4b56',
               border: `1px solid ${C.border}`,
               borderRadius: 8,
               fontSize: 13,
@@ -394,9 +394,9 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
             disabled={submitting}
             style={{
               padding: '8px 14px',
-              background: 'rgba(124,109,250,0.25)',
-              color: '#7c6dfa',
-              border: '1px solid rgba(124,109,250,0.5)',
+              background: 'rgba(159,81,182,0.25)',
+              color: '#9f51b6',
+              border: '1px solid rgba(159,81,182,0.5)',
               borderRadius: 8,
               fontSize: 13,
               fontWeight: 600,
@@ -411,15 +411,15 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
         {previewError && <Banner tone="error">{previewError}</Banner>}
 
         {preview && (
-          <div style={{ background: '#0a0a0f', border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
+          <div style={{ background: '#eef0f1', border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>{preview.length} medarbetare hittade</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {preview.map((e, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12 }}>
-                  <span style={{ color: '#fff', fontWeight: 500 }}>
+                  <span style={{ color: '#3a4b56', fontWeight: 500 }}>
                     {e.name} <span style={{ color: C.muted, fontWeight: 400 }}>· {e.title || '—'}</span>
                   </span>
-                  <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 3, background: 'rgba(124,109,250,0.15)', color: '#7c6dfa', fontWeight: 600, textTransform: 'uppercase' }}>
+                  <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 3, background: 'rgba(159,81,182,0.15)', color: '#9f51b6', fontWeight: 600, textTransform: 'uppercase' }}>
                     {e.node_type}
                   </span>
                 </div>
@@ -437,7 +437,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
 function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
     <div>
-      <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+      <label style={{ fontSize: 11, color: '#6a7e8a', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
         {label}
       </label>
       <input
@@ -449,9 +449,9 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
           width: '100%',
           marginTop: 4,
           padding: '8px 12px',
-          background: '#0a0a0f',
-          color: '#fff',
-          border: '1px solid rgba(255,255,255,0.08)',
+          background: '#eef0f1',
+          color: '#3a4b56',
+          border: '1px solid #dfe3e7',
           borderRadius: 6,
           fontSize: 13,
           outline: 'none',

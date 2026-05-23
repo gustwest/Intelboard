@@ -17,7 +17,7 @@ export default function GraphPageShell({ title, icon, subtitle, badge, children 
         maxWidth: 1400,
         margin: '0 auto',
         padding: '24px 24px 60px',
-        color: '#f8fafc',
+        color: '#3a4b56',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 28 }}>
@@ -26,8 +26,8 @@ export default function GraphPageShell({ title, icon, subtitle, badge, children 
             width: 44,
             height: 44,
             borderRadius: 11,
-            background: 'rgba(124,109,250,0.18)',
-            color: '#7c6dfa',
+            background: 'rgba(159,81,182,0.18)',
+            color: '#9f51b6',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -56,9 +56,9 @@ export default function GraphPageShell({ title, icon, subtitle, badge, children 
                   textTransform: 'uppercase',
                   padding: '3px 8px',
                   borderRadius: 4,
-                  background: 'rgba(124,109,250,0.15)',
-                  color: '#7c6dfa',
-                  border: '1px solid rgba(124,109,250,0.3)',
+                  background: 'rgba(159,81,182,0.15)',
+                  color: '#9f51b6',
+                  border: '1px solid rgba(159,81,182,0.3)',
                   fontWeight: 600,
                 }}
               >
@@ -67,7 +67,7 @@ export default function GraphPageShell({ title, icon, subtitle, badge, children 
             )}
           </div>
           {subtitle && (
-            <p style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.5)', margin: '4px 0 0' }}>
+            <p style={{ fontSize: '0.8125rem', color: '#6a7e8a', margin: '4px 0 0' }}>
               {subtitle}
             </p>
           )}
@@ -79,10 +79,10 @@ export default function GraphPageShell({ title, icon, subtitle, badge, children 
 }
 
 export const graphColors = {
-  card: 'var(--brand-surface)',
-  border: 'rgba(255,255,255,0.08)',
-  accent: '#7c6dfa',
-  muted: 'rgba(255,255,255,0.5)',
-  dim: 'rgba(255,255,255,0.3)',
-  text: '#f8fafc',
+  card: '#ffffff',
+  border: '#dfe3e7',
+  accent: '#9f51b6',
+  muted: '#6a7e8a',
+  dim: '#9aa8b1',
+  text: '#3a4b56',
 };

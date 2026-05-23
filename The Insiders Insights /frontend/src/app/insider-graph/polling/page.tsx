@@ -76,8 +76,8 @@ export default function GraphPollingPage() {
           onChange={(e) => setSelected(e.target.value)}
           style={{
             padding: '8px 12px',
-            background: '#0a0a0f',
-            color: '#fff',
+            background: '#eef0f1',
+            color: '#3a4b56',
             border: `1px solid ${C.border}`,
             borderRadius: 8,
             fontSize: 13,
@@ -143,24 +143,24 @@ export default function GraphPollingPage() {
 
       {latest?.category_results ? (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px', marginBottom: 16 }}>
-          <h2 style={{ fontSize: 14, fontWeight: 600, color: '#fff', margin: '0 0 12px' }}>Per kategori — vecka {latest.week_id}</h2>
+          <h2 style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56', margin: '0 0 12px' }}>Per kategori — vecka {latest.week_id}</h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
             {Object.entries(latest.category_results).map(([cat, res]) => (
               <div
                 key={cat}
                 style={{
-                  background: 'rgba(255,255,255,0.02)',
+                  background: 'rgba(0,0,0,0.02)',
                   border: `1px solid ${C.border}`,
                   borderRadius: 10,
                   padding: '12px 14px',
                 }}
               >
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#fff', textTransform: 'capitalize' }}>{cat}</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#3a4b56', textTransform: 'capitalize' }}>{cat}</div>
                 <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>
-                  SoV: <span style={{ color: '#fff' }}>{Math.round(res.share_of_voice * 100)}%</span>
+                  SoV: <span style={{ color: '#3a4b56' }}>{Math.round(res.share_of_voice * 100)}%</span>
                 </div>
                 <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
-                  Sentiment: <span style={{ color: '#fff' }}>{res.sentiment_score.toFixed(2)}</span>
+                  Sentiment: <span style={{ color: '#3a4b56' }}>{res.sentiment_score.toFixed(2)}</span>
                 </div>
                 <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>
                   {res.mention_count}/{res.answer_count} omnämnanden
@@ -179,7 +179,7 @@ export default function GraphPollingPage() {
             marginBottom: 16,
           }}
         >
-          <h2 style={{ fontSize: 14, fontWeight: 600, color: '#fff', margin: '0 0 6px' }}>
+          <h2 style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56', margin: '0 0 6px' }}>
             Kategorier som mäts (när polling körs)
           </h2>
           <p style={{ fontSize: 12, color: C.muted, margin: '0 0 14px' }}>
@@ -190,13 +190,13 @@ export default function GraphPollingPage() {
               <div
                 key={c.name}
                 style={{
-                  background: 'rgba(255,255,255,0.02)',
+                  background: 'rgba(0,0,0,0.02)',
                   border: `1px solid ${C.border}`,
                   borderRadius: 10,
                   padding: '14px 16px',
                 }}
               >
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>{c.name}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56' }}>{c.name}</div>
                 <div style={{ fontSize: 12, color: C.muted, marginTop: 6, lineHeight: 1.55 }}>{c.desc}</div>
               </div>
             ))}
@@ -206,7 +206,7 @@ export default function GraphPollingPage() {
 
       {weeks && weeks.length > 1 && (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px' }}>
-          <h2 style={{ fontSize: 14, fontWeight: 600, color: '#fff', margin: '0 0 12px' }}>Historik</h2>
+          <h2 style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56', margin: '0 0 12px' }}>Historik</h2>
           <div
             style={{
               display: 'grid',
@@ -241,10 +241,10 @@ export default function GraphPollingPage() {
                 alignItems: 'center',
               }}
             >
-              <span style={{ color: '#fff', fontFamily: 'ui-monospace, monospace' }}>{w.week_id}</span>
-              <span style={{ color: '#fff' }}>{w.share_of_voice != null ? `${Math.round(w.share_of_voice * 100)}%` : '—'}</span>
-              <span style={{ color: '#fff' }}>{w.sentiment_score != null ? w.sentiment_score.toFixed(2) : '—'}</span>
-              <span style={{ color: '#fff' }}>{w.parity_index != null ? `${Math.round(w.parity_index * 100)}%` : '—'}</span>
+              <span style={{ color: '#3a4b56', fontFamily: 'ui-monospace, monospace' }}>{w.week_id}</span>
+              <span style={{ color: '#3a4b56' }}>{w.share_of_voice != null ? `${Math.round(w.share_of_voice * 100)}%` : '—'}</span>
+              <span style={{ color: '#3a4b56' }}>{w.sentiment_score != null ? w.sentiment_score.toFixed(2) : '—'}</span>
+              <span style={{ color: '#3a4b56' }}>{w.parity_index != null ? `${Math.round(w.parity_index * 100)}%` : '—'}</span>
               <span style={{ color: C.muted, fontSize: 11 }}>{w.models_used?.join(', ') || '—'}</span>
             </div>
           ))}
@@ -262,7 +262,7 @@ export default function GraphPollingPage() {
           }}
         >
           <Radar size={32} color={C.dim} style={{ marginBottom: 12 }} />
-          <div style={{ fontSize: 14, color: '#fff', fontWeight: 600 }}>Ingen mätning gjord ännu</div>
+          <div style={{ fontSize: 14, color: '#3a4b56', fontWeight: 600 }}>Ingen mätning gjord ännu</div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 6, maxWidth: 460, marginLeft: 'auto', marginRight: 'auto' }}>
             Polling-jobbet körs varje tisdag morgon. När OpenAI/Gemini-nycklar är satta körs första mätningen automatiskt.
           </div>
@@ -285,7 +285,7 @@ function MetricCard({ label, value, sub }: { label: string; value: string; sub: 
       <div style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>
         {label}
       </div>
-      <div style={{ fontSize: 28, fontWeight: 600, color: '#fff', marginTop: 8, letterSpacing: '-0.02em' }}>{value}</div>
+      <div style={{ fontSize: 28, fontWeight: 600, color: '#3a4b56', marginTop: 8, letterSpacing: '-0.02em' }}>{value}</div>
       <div style={{ fontSize: 12, color: C.dim, marginTop: 4 }}>{sub}</div>
     </div>
   );

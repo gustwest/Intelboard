@@ -22,7 +22,7 @@ const pipeline = [
 const toneColor: Record<string, string> = {
   ok: '#22c55e',
   warn: '#f59e0b',
-  idle: 'rgba(255,255,255,0.4)',
+  idle: '#9aa8b1',
 };
 
 export default function InsiderGraphHomePage() {
@@ -54,7 +54,7 @@ export default function InsiderGraphHomePage() {
             <div style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>
               {s.label}
             </div>
-            <div style={{ fontSize: 28, fontWeight: 600, color: '#fff', marginTop: 8, letterSpacing: '-0.02em' }}>
+            <div style={{ fontSize: 28, fontWeight: 600, color: '#3a4b56', marginTop: 8, letterSpacing: '-0.02em' }}>
               {s.value}
             </div>
             <div style={{ fontSize: 12, color: C.dim, marginTop: 4 }}>{s.sub}</div>
@@ -66,7 +66,7 @@ export default function InsiderGraphHomePage() {
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
             <Activity size={16} color={C.accent} />
-            <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: '#fff' }}>Pipeline-status</h2>
+            <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: '#3a4b56' }}>Pipeline-status</h2>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {pipeline.map((p) => (
@@ -77,7 +77,7 @@ export default function InsiderGraphHomePage() {
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   padding: '10px 14px',
-                  background: 'rgba(255,255,255,0.02)',
+                  background: 'rgba(0,0,0,0.02)',
                   borderRadius: 8,
                   border: `1px solid ${C.border}`,
                 }}
@@ -92,7 +92,7 @@ export default function InsiderGraphHomePage() {
                       boxShadow: p.tone === 'ok' ? '0 0 8px rgba(34,197,94,0.5)' : undefined,
                     }}
                   />
-                  <span style={{ fontSize: 13, color: '#fff', fontWeight: 500 }}>{p.key}</span>
+                  <span style={{ fontSize: 13, color: '#3a4b56', fontWeight: 500 }}>{p.key}</span>
                 </div>
                 <span style={{ fontSize: 12, color: C.muted }}>{p.state}</span>
               </div>
@@ -103,7 +103,7 @@ export default function InsiderGraphHomePage() {
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <Globe2 size={16} color={C.accent} />
-            <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: '#fff' }}>Så här fungerar geogiraph</h2>
+            <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: '#3a4b56' }}>Så här fungerar geogiraph</h2>
           </div>
           <ol style={{ paddingLeft: 18, margin: 0, color: C.muted, fontSize: 13, lineHeight: 1.75 }}>
             <li>Kund onboardas med CSV (medarbetare + LinkedIn-URL).</li>
@@ -116,8 +116,8 @@ export default function InsiderGraphHomePage() {
             style={{
               marginTop: 16,
               padding: 12,
-              background: 'rgba(124,109,250,0.06)',
-              border: '1px solid rgba(124,109,250,0.2)',
+              background: 'rgba(159,81,182,0.06)',
+              border: '1px solid rgba(159,81,182,0.2)',
               borderRadius: 8,
               fontSize: 12,
               color: C.muted,
@@ -146,7 +146,7 @@ export default function InsiderGraphHomePage() {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <TrendingUp size={16} color={C.accent} />
-          <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: '#fff' }}>Mätningsdimensioner</h2>
+          <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: '#3a4b56' }}>Mätningsdimensioner</h2>
         </div>
         <p style={{ fontSize: 13, color: C.muted, margin: '4px 0 12px' }}>
           Hur geogiraph bevisar effekt — alla mätvärden räknas internt och rapporteras till kund.
@@ -167,13 +167,13 @@ export default function InsiderGraphHomePage() {
             <div
               key={m.name}
               style={{
-                background: 'rgba(255,255,255,0.02)',
+                background: 'rgba(0,0,0,0.02)',
                 border: `1px solid ${C.border}`,
                 borderRadius: 10,
                 padding: '14px 16px',
               }}
             >
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>{m.name}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56' }}>{m.name}</div>
               <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{m.desc}</div>
             </div>
           ))}

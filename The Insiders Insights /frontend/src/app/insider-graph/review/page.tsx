@@ -93,8 +93,8 @@ export default function GraphReviewPage() {
           onChange={(e) => setSelected(e.target.value)}
           style={{
             padding: '8px 12px',
-            background: '#0a0a0f',
-            color: '#fff',
+            background: '#eef0f1',
+            color: '#3a4b56',
             border: `1px solid ${C.border}`,
             borderRadius: 8,
             fontSize: 13,
@@ -124,7 +124,7 @@ export default function GraphReviewPage() {
       ) : items.length === 0 ? (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '48px 24px', textAlign: 'center' }}>
           <Inbox size={32} color={C.dim} style={{ marginBottom: 12 }} />
-          <div style={{ fontSize: 14, color: '#fff', fontWeight: 600 }}>Inget att granska</div>
+          <div style={{ fontSize: 14, color: '#3a4b56', fontWeight: 600 }}>Inget att granska</div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>
             Alla inkommande mail har confidence ≥ 0,7 eller är redan beslutade.
           </div>
@@ -146,11 +146,11 @@ export default function GraphReviewPage() {
               >
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 12 }}>
                   <div style={{ display: 'flex', gap: 12, flex: 1, minWidth: 0 }}>
-                    <div style={{ width: 36, height: 36, borderRadius: 9, background: 'rgba(124,109,250,0.15)', color: '#7c6dfa', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 9, background: 'rgba(159,81,182,0.15)', color: '#9f51b6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <Icon size={16} />
                     </div>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{item.name || '(utan titel)'}</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56' }}>{item.name || '(utan titel)'}</div>
                       <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
                         {item.schema_type} · {item.employee_name || item.employee_id}
                         {item.start_date && ` · ${item.start_date}`}
@@ -207,13 +207,13 @@ export default function GraphReviewPage() {
 
                 {(item.subject || item.from_email) && (
                   <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>
-                    <strong style={{ color: '#fff' }}>{item.subject || '(utan ämne)'}</strong>
+                    <strong style={{ color: '#3a4b56' }}>{item.subject || '(utan ämne)'}</strong>
                     {item.from_email && <span> · från {item.from_email}</span>}
                   </div>
                 )}
 
                 {item.content && (
-                  <div style={{ fontSize: 12, color: '#d4d4ec', background: '#0a0a0f', padding: '10px 14px', borderRadius: 6, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+                  <div style={{ fontSize: 12, color: '#3a4b56', background: '#eef0f1', padding: '10px 14px', borderRadius: 6, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
                     {item.content}
                   </div>
                 )}

@@ -46,7 +46,7 @@ export default function Sidebar() {
 
   const product = activeProductId(pathname);
   const navLinks = product === 'graph' ? GRAPH_LINKS : INSIDERS_LINKS;
-  const productAccent = product === 'graph' ? '#7c6dfa' : 'var(--brand-accent)';
+  const productAccent = product === 'graph' ? '#9f51b6' : 'var(--brand-accent)';
 
   return (
     <aside style={{
@@ -87,7 +87,7 @@ export default function Sidebar() {
                 transition: 'all 0.2s ease',
                 color: isActive ? '#fff' : 'var(--brand-muted)',
                 background: isActive
-                  ? `linear-gradient(90deg, ${product === 'graph' ? 'rgba(124, 109, 250, 0.18)' : 'rgba(0, 212, 255, 0.15)'}, transparent)`
+                  ? `linear-gradient(90deg, ${product === 'graph' ? 'rgba(159, 81, 182, 0.18)' : 'rgba(0, 212, 255, 0.15)'}, transparent)`
                   : 'transparent',
                 borderLeft: isActive ? `3px solid ${productAccent}` : '3px solid transparent',
               }}
