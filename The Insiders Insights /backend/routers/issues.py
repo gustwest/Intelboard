@@ -19,6 +19,7 @@ class IssueCreate(BaseModel):
     title: str
     description: str
     images: Optional[List[Dict[str, str]]] = None
+    product: str = "the-insiders"
 
 
 class IssueUpdate(BaseModel):
@@ -63,9 +64,10 @@ def _issue_to_out(issue: models.Issue) -> dict:
 # Routes
 # ------------------------------------------------------------------
 @router.get("")
-def list_issues(db: Session = Depends(get_db)):
+def list_issues(product: str = "the-insiders", db: Session = Depends(get_db)):
     issues = (
         db.query(models.Issue)
+        .filter_by(product=product)
         .options(joinedload(models.Issue.comments))
         .order_by(models.Issue.created_at.desc())
         .all()
@@ -75,8 +77,9 @@ def list_issues(db: Session = Depends(get_db)):
 
 @router.post("")
 def create_issue(req: IssueCreate, db: Session = Depends(get_db)):
-    ny_count = db.query(models.Issue).filter_by(status="NY").count()
+    ny_count = db.query(models.Issue).filter_by(status="NY", product=req.product).count()
     issue = models.Issue(
+        product=req.product,
         title=req.title.strip(),
         description=req.description.strip(),
         status="NY",

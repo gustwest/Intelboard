@@ -36,6 +36,7 @@ const GRAPH_LINKS = [
   { href: '/insider-graph/review', label: 'Granska', icon: Inbox },
   { href: '/insider-graph/schema', label: 'JSON-LD', icon: FileJson },
   { href: '/insider-graph/polling', label: 'AI-synlighet', icon: Radar },
+  { href: '/insider-graph/admin', label: 'Admin', icon: ShieldAlert },
 ];
 
 export default function Sidebar() {

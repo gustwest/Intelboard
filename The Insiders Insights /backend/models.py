@@ -204,6 +204,8 @@ class Issue(Base):
     __tablename__ = "issues"
 
     id = Column(String, primary_key=True, default=_uuid)
+    # Which product workspace this issue belongs to: "the-insiders" | "insider-graph"
+    product = Column(String, nullable=False, default="the-insiders", index=True)
     title = Column(String, nullable=False)
     description = Column(Text, default="")
     status = Column(String, nullable=False, default="NY", index=True)
@@ -268,6 +270,8 @@ class AgentSession(Base):
     __tablename__ = "agent_sessions"
 
     id = Column(String, primary_key=True, default=_uuid)
+    # Which product workspace this session belongs to: "the-insiders" | "insider-graph"
+    product = Column(String, nullable=False, default="the-insiders", index=True)
     title = Column(String, nullable=False)
     pinned = Column(Boolean, default=False)
     claude_session_id = Column(String, nullable=True)
@@ -357,6 +361,8 @@ class AdminFile(Base):
     __tablename__ = "admin_files"
 
     id = Column(String, primary_key=True, default=_uuid)
+    # Which product workspace this file belongs to: "the-insiders" | "insider-graph"
+    product = Column(String, nullable=False, default="the-insiders", index=True)
     original_name = Column(String, nullable=False)
     display_name = Column(String, nullable=False)
     category = Column(String, default="Övrigt")

@@ -77,8 +77,9 @@ async function backend<T>(
 
 // ── Public API ───────────────────────────────────────────────────
 
-export async function getSessions(): Promise<AgentSession[]> {
-  return backend<AgentSession[]>('/api/agent/sessions');
+export async function getSessions(product?: string): Promise<AgentSession[]> {
+  const q = product ? `?product=${encodeURIComponent(product)}` : '';
+  return backend<AgentSession[]>(`/api/agent/sessions${q}`);
 }
 
 export async function getSession(id: string): Promise<AgentSession | undefined> {
@@ -94,6 +95,7 @@ export async function createTask(
   sessionId?: string,
   model?: string,
   image?: { base64: string; contentType: string } | null,
+  product?: string,
 ): Promise<{ session: AgentSession; task: AgentTask }> {
   return backend<{ session: AgentSession; task: AgentTask }>(
     '/api/agent/tasks',
@@ -105,6 +107,7 @@ export async function createTask(
         model,
         imageBase64: image?.base64,
         imageContentType: image?.contentType,
+        ...(product ? { product } : {}),
       }),
     },
   );
@@ -143,7 +146,7 @@ export async function deleteSession(sessionId: string): Promise<boolean> {
   }
 }
 
-export async function getStatus(): Promise<{
+export async function getStatus(product?: string): Promise<{
   online: boolean;
   lastPoll?: string;
   model?: string;
@@ -151,7 +154,8 @@ export async function getStatus(): Promise<{
   projectDir?: string;
   stats: { total: number; completed: number; failed: number; successRate: number };
 }> {
-  return backend('/api/agent/status');
+  const q = product ? `?product=${encodeURIComponent(product)}` : '';
+  return backend(`/api/agent/status${q}`);
 }
 
 // ── Poll endpoints (used only by /api/admin/agent/poll route) ────

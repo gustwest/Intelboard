@@ -74,13 +74,18 @@ def _file_to_out(f: models.AdminFile) -> dict:
 
 
 @router.get("/api/files")
-def list_files(db: Session = Depends(get_db)):
-    files = db.query(models.AdminFile).order_by(models.AdminFile.uploaded_at.desc()).all()
+def list_files(product: str = "the-insiders", db: Session = Depends(get_db)):
+    files = (
+        db.query(models.AdminFile)
+        .filter_by(product=product)
+        .order_by(models.AdminFile.uploaded_at.desc())
+        .all()
+    )
     return [_file_to_out(f) for f in files]
 
 
 @router.post("/api/files")
-async def upload_file(file: UploadFile = File(...), name: str = Form(""), category: str = Form("Övrigt"), db: Session = Depends(get_db)):
+async def upload_file(file: UploadFile = File(...), name: str = Form(""), category: str = Form("Övrigt"), product: str = Form("the-insiders"), db: Session = Depends(get_db)):
     import uuid
     file_id = str(uuid.uuid4())
     ext = os.path.splitext(file.filename or "file")[1]
@@ -91,6 +96,7 @@ async def upload_file(file: UploadFile = File(...), name: str = Form(""), catego
         f.write(content)
     admin_file = models.AdminFile(
         id=file_id,
+        product=product,
         original_name=file.filename or "unknown",
         display_name=name.strip() or file.filename or "unknown",
         category=category.strip(),

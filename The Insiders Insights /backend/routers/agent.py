@@ -49,6 +49,7 @@ class AgentTaskCreate(BaseModel):
     model: Optional[str] = None
     imageBase64: Optional[str] = None       # raw base64 or "data:image/png;base64,..."
     imageContentType: Optional[str] = None  # e.g. "image/png"
+    product: str = "the-insiders"           # which admin workspace a new session belongs to
 
 
 class AgentSessionPatch(BaseModel):
@@ -143,9 +144,10 @@ def _get_or_create_meta(db: Session) -> models.AgentMeta:
 # Routes
 # ------------------------------------------------------------------
 @router.get("/sessions")
-def agent_list_sessions(db: Session = Depends(get_db)):
+def agent_list_sessions(product: str = "the-insiders", db: Session = Depends(get_db)):
     sessions = (
         db.query(models.AgentSession)
+        .filter_by(product=product)
         .options(joinedload(models.AgentSession.tasks))
         .order_by(models.AgentSession.updated_at.desc())
         .all()
@@ -185,7 +187,7 @@ def agent_create_task(req: AgentTaskCreate, db: Session = Depends(get_db)):
             raise HTTPException(404, "Session not found")
     else:
         title = req.prompt[:50] + "…" if len(req.prompt) > 50 else req.prompt
-        session = models.AgentSession(title=title, created_at=now, updated_at=now)
+        session = models.AgentSession(title=title, product=req.product, created_at=now, updated_at=now)
         db.add(session)
         db.flush()
 
@@ -382,12 +384,17 @@ def agent_poll_patch(req: AgentPollPatch, authorization: Optional[str] = Header(
 
 
 @router.get("/status")
-def agent_status(db: Session = Depends(get_db)):
+def agent_status(product: Optional[str] = None, db: Session = Depends(get_db)):
     meta = _get_or_create_meta(db)
 
-    total = db.query(models.AgentTask).count()
-    completed = db.query(models.AgentTask).filter_by(status="DONE").count()
-    failed = db.query(models.AgentTask).filter_by(status="FAILED").count()
+    # "online" reflects the (shared) worker; stats are scoped per product when asked.
+    task_q = db.query(models.AgentTask)
+    if product:
+        task_q = task_q.join(models.AgentSession).filter(models.AgentSession.product == product)
+
+    total = task_q.count()
+    completed = task_q.filter(models.AgentTask.status == "DONE").count()
+    failed = task_q.filter(models.AgentTask.status == "FAILED").count()
 
     online = False
     last_poll = meta.last_poll

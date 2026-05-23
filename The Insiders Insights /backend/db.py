@@ -45,7 +45,9 @@ def init_db():
     Base.metadata.create_all(bind=engine)  # creates new tables but won't add columns
 
     # Auto-migrate: add missing columns to existing tables
-    if not DATABASE_URL.startswith("sqlite"):
+    if DATABASE_URL.startswith("sqlite"):
+        _sqlite_auto_migrate()
+    else:
         _pg_auto_migrate()
 
 
@@ -61,10 +63,30 @@ def _pg_auto_migrate():
         "ALTER TABLE datasets ADD COLUMN IF NOT EXISTS period_end DATE",
         "ALTER TABLE agent_tasks ADD COLUMN IF NOT EXISTS cancel_requested BOOLEAN NOT NULL DEFAULT FALSE",
         "ALTER TABLE agent_tasks ADD COLUMN IF NOT EXISTS image_path VARCHAR",
+        # Per-product admin workspaces (The Insiders / Insider Graph)
+        "ALTER TABLE issues ADD COLUMN IF NOT EXISTS product VARCHAR NOT NULL DEFAULT 'the-insiders'",
+        "ALTER TABLE admin_files ADD COLUMN IF NOT EXISTS product VARCHAR NOT NULL DEFAULT 'the-insiders'",
+        "ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS product VARCHAR NOT NULL DEFAULT 'the-insiders'",
     ]
-    with engine.begin() as conn:
-        for sql in migrations:
-            try:
+    for sql in migrations:
+        try:
+            with engine.begin() as conn:
                 conn.execute(sqlalchemy.text(sql))
-            except Exception:
-                pass  # column already exists or other non-critical issue
+        except Exception:
+            pass  # column already exists or other non-critical issue
+
+
+def _sqlite_auto_migrate():
+    """SQLite (local dev) has no ADD COLUMN IF NOT EXISTS — attempt each ALTER
+    in its own transaction and swallow 'duplicate column' errors."""
+    migrations = [
+        "ALTER TABLE issues ADD COLUMN product VARCHAR NOT NULL DEFAULT 'the-insiders'",
+        "ALTER TABLE admin_files ADD COLUMN product VARCHAR NOT NULL DEFAULT 'the-insiders'",
+        "ALTER TABLE agent_sessions ADD COLUMN product VARCHAR NOT NULL DEFAULT 'the-insiders'",
+    ]
+    for sql in migrations:
+        try:
+            with engine.begin() as conn:
+                conn.execute(sqlalchemy.text(sql))
+        except Exception:
+            pass  # column already exists or other non-critical issue
