@@ -22,7 +22,7 @@ const PRODUCTS: Product[] = [
   },
   {
     id: 'graph',
-    name: 'Insider Graph',
+    name: 'geogiraph',
     tagline: 'Generative Engine Optimization',
     defaultPath: '/insider-graph',
     accent: '#7c6dfa',
@@ -87,7 +87,7 @@ export default function ProductSwitcher() {
             flexShrink: 0,
           }}
         >
-          {active.id === 'graph' ? 'IG' : 'TI'}
+          {active.id === 'graph' ? 'GG' : 'TI'}
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#fff', lineHeight: 1.2 }}>
@@ -166,7 +166,7 @@ export default function ProductSwitcher() {
                     flexShrink: 0,
                   }}
                 >
-                  {p.id === 'graph' ? 'IG' : 'TI'}
+                  {p.id === 'graph' ? 'GG' : 'TI'}
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#fff', lineHeight: 1.2 }}>

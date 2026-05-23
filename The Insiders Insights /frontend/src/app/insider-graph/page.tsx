@@ -28,7 +28,7 @@ const toneColor: Record<string, string> = {
 export default function InsiderGraphHomePage() {
   return (
     <GraphPageShell
-      title="Insider Graph — översikt"
+      title="geogiraph — översikt"
       icon={<LayoutDashboard size={22} />}
       subtitle="GEO-motor som gör kundens organisation maskinläsbar för AI-sökmotorer."
       badge="MVP"
@@ -103,7 +103,7 @@ export default function InsiderGraphHomePage() {
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <Globe2 size={16} color={C.accent} />
-            <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: '#fff' }}>Så här fungerar Insider Graph</h2>
+            <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: '#fff' }}>Så här fungerar geogiraph</h2>
           </div>
           <ol style={{ paddingLeft: 18, margin: 0, color: C.muted, fontSize: 13, lineHeight: 1.75 }}>
             <li>Kund onboardas med CSV (medarbetare + LinkedIn-URL).</li>
@@ -149,7 +149,7 @@ export default function InsiderGraphHomePage() {
           <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: '#fff' }}>Mätningsdimensioner</h2>
         </div>
         <p style={{ fontSize: 13, color: C.muted, margin: '4px 0 12px' }}>
-          Hur Insider Graph bevisar effekt — alla mätvärden räknas internt och rapporteras till kund.
+          Hur geogiraph bevisar effekt — alla mätvärden räknas internt och rapporteras till kund.
         </p>
         <div
           style={{

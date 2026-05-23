@@ -172,21 +172,21 @@ navigerar till källdetaljsidan vid klick. Pilen (▼) expanderar listan med ens
 
 ---
 
-## Produkt 2: Insider Graph
+## Produkt 2: geogiraph
 
-Insider Graph är en **separat tjänst** som lever bredvid The Insiders Insights i samma
+geogiraph är en **separat tjänst** som lever bredvid The Insiders Insights i samma
 plattform. Användare växlar mellan produkterna via en ProductSwitcher högst upp i sidebar
-("THE INSIDERS." ↔ "INSIDER GRAPH"). När pathname börjar med `/insider-graph/` är användaren
+("THE INSIDERS." ↔ "GEOGIRAPH"). När pathname börjar med `/insider-graph/` är användaren
 i Graph-läget och sidebarens nav-länkar ändras.
 
-**Kunder är samma bolag** i båda produkterna — `client_id` i Insider Graph är samma slug
+**Kunder är samma bolag** i båda produkterna — `client_id` i geogiraph är samma slug
 som `customer.slug` i Insiders Insights. Inloggning är delad via NextAuth.
 
-### Vad Insider Graph gör (Generative Engine Optimization)
+### Vad geogiraph gör (Generative Engine Optimization)
 
-Insider Graph gör en kunds organisation **maskinläsbar för AI-sökmotorer** (ChatGPT,
+geogiraph gör en kunds organisation **maskinläsbar för AI-sökmotorer** (ChatGPT,
 Perplexity, Gemini, Google AI Overviews). I stället för att optimera annonsering mot
-LinkedIn (vilket är Insiders Insights fokus) optimerar Insider Graph kundens *närvaro*
+LinkedIn (vilket är Insiders Insights fokus) optimerar geogiraph kundens *närvaro*
 i de AI-svar som ges till frågor som "Vilka är de ledande bolagen inom X i Sverige?"
 
 Pipeline i fem steg:
@@ -216,7 +216,7 @@ Pipeline i fem steg:
 - **AI-synlighet** (`/insider-graph/polling`): Veckodata för Share of Voice, Sentiment och
   Parity Index per kategori (Affär, Finans, Innovation, HR).
 
-### Nyckelkoncept i Insider Graph
+### Nyckelkoncept i geogiraph
 
 **Nodtyp** — varje medarbetare klassas som en av tre:
 - **Aktiv nod**: publicerar regelbundet. Scrapeas dagligen, fullt coachningsspår, högst pris-tier.
@@ -244,7 +244,7 @@ Substack, GitHub, Crunchbase, Vinnova, PRV, Scholar.
 
 ### Teknisk arkitektur (skiljer sig från Insiders Insights)
 
-| | Insiders Insights | Insider Graph |
+| | Insiders Insights | geogiraph |
 |---|---|---|
 | Databas | PostgreSQL (Cloud SQL) | Firestore (eur3, native) |
 | Backend | `backend/` FastAPI | `insider-graph-api/` FastAPI |
@@ -259,7 +259,7 @@ Cron-jobb (Cloud Scheduler, tidszon Europe/Stockholm):
 - `compile-all-daily` 05:00 dagligen + Eventarc-trigger på Firestore-writes
 - `polling-weekly-tue` 06:00 tisdagar
 
-**Auth**: Insider Graph-API:t kräver `X-API-Key` (Secret Manager: `insider-graph-admin-key`).
+**Auth**: geogiraph-API:t kräver `X-API-Key` (Secret Manager: `insider-graph-admin-key`).
 Frontend skickar key via `NEXT_PUBLIC_GRAPH_API_KEY`. Webhooks och Eventarc-targets är
 undantagna och autentiseras separat.
 
@@ -380,7 +380,7 @@ def _build_context(db: Session, customer_id: Optional[str], page_context: Option
 
     elif page_context and page_context.startswith("graph_"):
         context_labels.append(page_context)
-        sections.append("\n## Användaren är i Insider Graph-produkten")
+        sections.append("\n## Användaren är i geogiraph-produkten")
         graph_page_hints = {
             "graph_home": "På översiktssidan — pipeline-status och förklaring av tjänsten.",
             "graph_customers": (
