@@ -78,8 +78,18 @@ def _pg_auto_migrate():
 
 def _sqlite_auto_migrate():
     """SQLite (local dev) has no ADD COLUMN IF NOT EXISTS — attempt each ALTER
-    in its own transaction and swallow 'duplicate column' errors."""
+    in its own transaction and swallow 'duplicate column' errors. Mirrors the
+    PostgreSQL migrations so a long-lived local insiders.db stays in sync."""
     migrations = [
+        "ALTER TABLE sources ADD COLUMN platform VARCHAR DEFAULT ''",
+        "ALTER TABLE sources ADD COLUMN category VARCHAR DEFAULT ''",
+        "ALTER TABLE datasets ADD COLUMN ai_summary TEXT DEFAULT ''",
+        "ALTER TABLE datasets ADD COLUMN granularity VARCHAR DEFAULT 'unknown'",
+        "ALTER TABLE datasets ADD COLUMN period_start DATE",
+        "ALTER TABLE datasets ADD COLUMN period_end DATE",
+        "ALTER TABLE agent_tasks ADD COLUMN cancel_requested BOOLEAN NOT NULL DEFAULT 0",
+        "ALTER TABLE agent_tasks ADD COLUMN image_path VARCHAR",
+        # Per-product admin workspaces (The Insiders / Insider Graph)
         "ALTER TABLE issues ADD COLUMN product VARCHAR NOT NULL DEFAULT 'the-insiders'",
         "ALTER TABLE admin_files ADD COLUMN product VARCHAR NOT NULL DEFAULT 'the-insiders'",
         "ALTER TABLE agent_sessions ADD COLUMN product VARCHAR NOT NULL DEFAULT 'the-insiders'",
