@@ -49,6 +49,7 @@ def onboard_client(req: OnboardRequest) -> OnboardResponse:
         {
             "company_name": req.company_name,
             "org_number": req.org_number,
+            "lei": req.lei,
             "company_linkedin_url": req.company_linkedin_url,
             "active_connectors": list(req.active_connectors or ["linkedin"]),
             "tier": req.tier,

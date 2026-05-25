@@ -63,6 +63,33 @@ class CompileClientTest(unittest.TestCase):
         self.assertNotIn("5000", blob)
         self.assertNotIn("ollow", blob)  # followers/follower
 
+    def test_corporate_structure_projected_to_org_node(self):
+        _graph_setup(
+            company_items={
+                "g1": {
+                    "schema_type": "Organization",
+                    "url": "https://search.gleif.org/#/record/CHILD000000000000001",
+                    "included_in_output": True,
+                    "extra": {
+                        "lei": "CHILD000000000000001",
+                        "parent_organization": {"name": "Acme Group AB", "lei": "PARENTLEI00000000001"},
+                        "subsidiaries": [{"name": "Acme Tech AB", "lei": "T1"}],
+                    },
+                }
+            },
+            claims={},
+        )
+        org = _nodes(compile_client("acme"), "Organization")[0]
+        self.assertEqual(org["leiCode"], "CHILD000000000000001")
+        self.assertEqual(
+            org["parentOrganization"],
+            {"@type": "Organization", "name": "Acme Group AB", "leiCode": "PARENTLEI00000000001"},
+        )
+        self.assertEqual(
+            org["subOrganization"],
+            {"@type": "Organization", "name": "Acme Tech AB", "leiCode": "T1"},
+        )
+
     def test_description_built_from_narrative_claims(self):
         _graph_setup()
         org = _nodes(compile_client("acme"), "Organization")[0]

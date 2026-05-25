@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 import connectors
 import firestore_client as fs
+from connectors.gleif import search_lei
 
 router = APIRouter(prefix="/api/connectors", tags=["connectors"])
 
@@ -25,6 +26,12 @@ class ConnectorsUpdate(BaseModel):
 @router.get("")
 def list_connectors() -> dict[str, Any]:
     return {"connectors": connectors.all_metadata()}
+
+
+@router.get("/gleif/search")
+def gleif_search(q: str) -> dict[str, Any]:
+    """Slå upp LEI-kod på företagsnamn (onboarding-hjälp för GLEIF-connectorn)."""
+    return {"query": q, "results": search_lei(q)}
 
 
 @router.get("/{client_id}")

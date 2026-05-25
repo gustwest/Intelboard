@@ -26,23 +26,30 @@ MIN_INTERVAL = timedelta(days=7)
 
 
 def run() -> None:
-    connector = connectors.get("website")()
     for client_id, client in fs.iter_clients():
-        website = (client.get("settings") or {}).get("website")
-        if not website:
-            continue
-        if _crawled_recently(client):
-            log.info("skipping %s — crawled within %s", client_id, MIN_INTERVAL)
-            continue
+        crawl_client(client_id, client)
 
-        config = ConnectorConfig(client_id=client_id, params={"website": website})
-        count = 0
-        col = fs.raw_items_company_col(client_id)
-        for item in connector.fetch(config):
-            col.document(item.item_id).set(_payload(item))  # idempotent
-            count += 1
-        fs.client_doc(client_id).update({"website_last_crawled_at": datetime.now(timezone.utc)})
-        log.info("website: wrote %s chunks for %s", count, client_id)
+
+def crawl_client(client_id: str, client: dict, *, force: bool = False) -> int:
+    """Crawla EN kunds webbplats. `force=True` kringgår cadence-guarden (används
+    vid onboarding där det aldrig crawlats förut). Returnerar antal chunks."""
+    website = (client.get("settings") or {}).get("website")
+    if not website:
+        return 0
+    if not force and _crawled_recently(client):
+        log.info("skipping %s — crawled within %s", client_id, MIN_INTERVAL)
+        return 0
+
+    connector = connectors.get("website")()
+    config = ConnectorConfig(client_id=client_id, params={"website": website})
+    count = 0
+    col = fs.raw_items_company_col(client_id)
+    for item in connector.fetch(config):
+        col.document(item.item_id).set(_payload(item))  # idempotent
+        count += 1
+    fs.client_doc(client_id).update({"website_last_crawled_at": datetime.now(timezone.utc)})
+    log.info("website: wrote %s chunks for %s", count, client_id)
+    return count
 
 
 def _crawled_recently(client: dict) -> bool:
@@ -62,7 +69,8 @@ def _payload(item) -> dict:
         "url": item.url,
         "published_at": item.published_at,
         "included_in_output": True,
-        **item.extra,
+        # extra nestas (inte utplattat) — se schema_org/claims.py.
+        "extra": item.extra,
     }
 
 

@@ -25,6 +25,7 @@ _COMPANY_FIELD_MAP: dict[str, tuple[str, str]] = {
     "industry": ("knowsAbout", "Verksam inom {value}"),
     "industries": ("knowsAbout", "Verksam inom {value}"),
     "org_number": ("identifier", "Organisationsnummer {value}"),
+    "lei": ("leiCode", "LEI-kod {value}"),
 }
 
 
@@ -50,6 +51,42 @@ def derive_property_claims(client_id: str) -> Iterator[Claim]:
                 source=[source],
                 confidence=1.0,
             )
+        # Koncernstruktur (GLEIF Level 2): moder/dotter är schema.org-Organization-
+        # objekt, inte skalärer → egen härledning utanför _COMPANY_FIELD_MAP.
+        yield from _relationship_claims(extra, source)
+
+
+def _relationship_claims(extra: dict[str, Any], source: ClaimSource) -> Iterator[Claim]:
+    parent = extra.get("parent_organization")
+    if isinstance(parent, dict) and parent.get("name"):
+        yield Claim(
+            claim_kind="property",
+            subject_ref="org",
+            predicate="parentOrganization",
+            value=_org_ref(parent),
+            statement=f"Del av {parent['name']}",
+            source=[source],
+            confidence=1.0,
+        )
+    for sub in extra.get("subsidiaries") or []:
+        if isinstance(sub, dict) and sub.get("name"):
+            yield Claim(
+                claim_kind="property",
+                subject_ref="org",
+                predicate="subOrganization",
+                value=_org_ref(sub),
+                statement=f"Dotterbolag: {sub['name']}",
+                source=[source],
+                confidence=1.0,
+            )
+
+
+def _org_ref(node: dict[str, Any]) -> dict[str, Any]:
+    """Bygg en schema.org-Organization-referens (namn + LEI som leiCode)."""
+    ref: dict[str, Any] = {"@type": "Organization", "name": node.get("name")}
+    if node.get("lei"):
+        ref["leiCode"] = node["lei"]
+    return ref
 
 
 def _display(value: Any) -> str:

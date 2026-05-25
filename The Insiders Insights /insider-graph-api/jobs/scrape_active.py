@@ -20,22 +20,31 @@ log = logging.getLogger("jobs.scrape_active")
 
 def run() -> None:
     for client_id, client in fs.iter_clients():
-        active_connectors = client.get("active_connectors", [])
-        _run_company_level(client_id, client, active_connectors)
+        run_for_client(client_id, client)
 
-        # MVP: bara bolagsnivå. Per-medarbetare-profiler är avstängda by default.
-        # Slås på antingen globalt (settings.scrape_employee_linkedin) eller per
-        # kund (client.settings.scrape_employee_profiles). När det är på hämtas
-        # bara medarbetare med node_type="aktiv" — så ledningen markeras "aktiv"
-        # och övriga "passiv".
-        if not _employee_linkedin_enabled(client):
+
+def run_for_client(client_id: str, client: dict) -> None:
+    """Kör company- (och ev. employee-) connectors för EN kund.
+
+    Anropas både av cron-loopen (run) och av onboarding-ingestionen
+    (services/ingest) så att en ny kund fylls på direkt.
+    """
+    active_connectors = client.get("active_connectors", [])
+    _run_company_level(client_id, client, active_connectors)
+
+    # MVP: bara bolagsnivå. Per-medarbetare-profiler är avstängda by default.
+    # Slås på antingen globalt (settings.scrape_employee_linkedin) eller per
+    # kund (client.settings.scrape_employee_profiles). När det är på hämtas
+    # bara medarbetare med node_type="aktiv" — så ledningen markeras "aktiv"
+    # och övriga "passiv".
+    if not _employee_linkedin_enabled(client):
+        return
+    for employee_id, emp in fs.iter_employees(client_id):
+        if emp.get("node_type") != "aktiv":
             continue
-        for employee_id, emp in fs.iter_employees(client_id):
-            if emp.get("node_type") != "aktiv":
-                continue
-            if emp.get("opted_out"):
-                continue  # opt-out → hämta ingen ny data för personen
-            _run_employee_level(client_id, employee_id, emp, active_connectors)
+        if emp.get("opted_out"):
+            continue  # opt-out → hämta ingen ny data för personen
+        _run_employee_level(client_id, employee_id, emp, active_connectors)
 
 
 def _employee_linkedin_enabled(client: dict) -> bool:
@@ -59,6 +68,7 @@ def _run_company_level(client_id: str, client: dict, active: list[str]) -> None:
     """
     params = {
         "org_number": client.get("org_number"),
+        "lei": client.get("lei"),
         "linkedin_url": client.get("company_linkedin_url"),
         "rss_feeds": (client.get("settings") or {}).get("rss_feeds") or [],
     }
@@ -99,7 +109,10 @@ def _payload(item) -> dict:
         "url": item.url,
         "published_at": item.published_at,
         "included_in_output": True,
-        **item.extra,
+        # extra nestas (inte utplattat) — property-härledningen i
+        # schema_org/claims.py läser raw["extra"]. Plattas den ut härleds inga
+        # property-claims (Bolagsverket/GLEIF).
+        "extra": item.extra,
     }
 
 

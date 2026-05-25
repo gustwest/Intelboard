@@ -28,6 +28,8 @@ class OnboardRequest(BaseModel):
     company_name: str
     company_linkedin_url: str | None = None
     org_number: str | None = None
+    # LEI-kod (Legal Entity Identifier) — matar GLEIF-connectorn (koncernstruktur).
+    lei: str | None = None
     active_connectors: list[str] | None = None
     employees: list[EmployeeInput] = Field(default_factory=list)
     # Connector-params som matar respektive connectors fetch(). Lagras under

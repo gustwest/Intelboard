@@ -37,6 +37,40 @@ class DerivePropertyClaimsTest(unittest.TestCase):
             self.assertEqual(c.source[0].kind, "item")
             self.assertEqual(c.source[0].item_id, "bv1")
 
+    def test_lei_and_corporate_structure(self):
+        fakefs.reset(
+            company_items={
+                "g1": {
+                    "schema_type": "Organization",
+                    "included_in_output": True,
+                    "extra": {
+                        "name": "Acme Nordic AB",  # namn mappas inte → inget claim
+                        "lei": "CHILD000000000000001",
+                        "parent_organization": {"name": "Acme Group AB", "lei": "PARENTLEI00000000001"},
+                        "subsidiaries": [
+                            {"name": "Acme Tech AB", "lei": "T1"},
+                            {"name": "Acme Labs AB", "lei": "T2"},
+                        ],
+                    },
+                }
+            }
+        )
+        by_pred: dict = {}
+        claims = list(derive_property_claims("acme"))
+        for c in claims:
+            by_pred.setdefault(c.predicate, []).append(c.value)
+
+        self.assertEqual(by_pred["leiCode"], ["CHILD000000000000001"])
+        self.assertEqual(
+            by_pred["parentOrganization"],
+            [{"@type": "Organization", "name": "Acme Group AB", "leiCode": "PARENTLEI00000000001"}],
+        )
+        self.assertIn({"@type": "Organization", "name": "Acme Tech AB", "leiCode": "T1"}, by_pred["subOrganization"])
+        self.assertEqual(len(by_pred["subOrganization"]), 2)
+        self.assertNotIn("name", by_pred)
+        for c in claims:  # alla källförsedda mot item g1
+            self.assertEqual(c.source[0].item_id, "g1")
+
     def test_skips_items_excluded_from_output(self):
         fakefs.reset(
             company_items={

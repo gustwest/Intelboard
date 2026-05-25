@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Users, Plus, X, AlertCircle, CheckCircle2, ExternalLink, RefreshCw } from 'lucide-react';
+import { Users, Plus, X, AlertCircle, CheckCircle2, ExternalLink, RefreshCw, Search } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import { graphFetch } from '../_lib/api';
 
@@ -364,6 +364,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
         active_connectors: [...active],
         company_linkedin_url: active.has('linkedin') ? (fieldValues['company_linkedin_url'] as string) || null : null,
         org_number: active.has('bolagsverket') ? (fieldValues['org_number'] as string) || null : null,
+        lei: active.has('gleif') ? (fieldValues['lei'] as string) || null : null,
         website_start_url: active.has('website') ? (fieldValues['website_start_url'] as string) || null : null,
         scrape_employee_profiles: active.has('linkedin') ? !!fieldValues['scrape_employee_profiles'] : false,
         rss_feeds: active.has('rss')
@@ -612,6 +613,18 @@ function ConnectorCard({
       {active && conn.input_fields.length > 0 && (
         <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
           {conn.input_fields.map((f) => {
+            if (conn.id === 'gleif' && f.name === 'lei') {
+              return (
+                <LeiSearchField
+                  key={f.name}
+                  label={`${f.label}${f.required ? ' *' : ''}`}
+                  help={f.help}
+                  placeholder={f.placeholder}
+                  value={(fieldValues[f.name] as string) || ''}
+                  onChange={(v) => setField(f.name, v)}
+                />
+              );
+            }
             if (f.type === 'bool') {
               return (
                 <label key={f.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#3a4b56', cursor: 'pointer' }}>
@@ -772,6 +785,166 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
           outline: 'none',
         }}
       />
+    </div>
+  );
+}
+
+type LeiHit = { name: string | null; lei: string; address?: string | null };
+
+function LeiSearchField({
+  value,
+  onChange,
+  label,
+  help,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  label: string;
+  help: string;
+  placeholder?: string;
+}) {
+  const [query, setQuery] = useState('');
+  const [hits, setHits] = useState<LeiHit[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searched, setSearched] = useState(false);
+
+  async function search() {
+    const q = query.trim();
+    if (!q) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const d = await graphFetch<{ results: LeiHit[] }>(
+        `/api/connectors/gleif/search?q=${encodeURIComponent(q)}`,
+      );
+      setHits(d.results || []);
+      setSearched(true);
+    } catch {
+      setError('Sökningen mot GLEIF misslyckades. Försök igen.');
+      setHits([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function pick(hit: LeiHit) {
+    onChange(hit.lei);
+    setHits([]);
+    setSearched(false);
+    setQuery(hit.name || hit.lei);
+  }
+
+  const inputStyle: React.CSSProperties = {
+    flex: 1,
+    padding: '8px 12px',
+    background: '#eef0f1',
+    color: '#3a4b56',
+    border: '1px solid #dfe3e7',
+    borderRadius: 6,
+    fontSize: 13,
+    outline: 'none',
+  };
+
+  return (
+    <div>
+      <label style={{ fontSize: 11, color: '#6a7e8a', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+        {label}
+      </label>
+      {help && <div style={{ fontSize: 11, color: C.muted, margin: '3px 0 6px' }}>{help}</div>}
+      <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+        <input
+          value={query}
+          onChange={(e) => {
+            const v = e.target.value;
+            setQuery(v);
+            // Tillåt direkt inklistrad LEI (20 alfanumeriska tecken) utan sökning.
+            if (/^[A-Za-z0-9]{20}$/.test(v.trim())) onChange(v.trim().toUpperCase());
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              search();
+            }
+          }}
+          placeholder={placeholder || 'Sök företagsnamn eller klistra in LEI'}
+          style={inputStyle}
+        />
+        <button
+          type="button"
+          onClick={search}
+          disabled={loading || !query.trim()}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 5,
+            padding: '0 12px',
+            background: 'transparent',
+            color: '#3a4b56',
+            border: `1px solid ${C.border}`,
+            borderRadius: 6,
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: loading || !query.trim() ? 'default' : 'pointer',
+            opacity: loading || !query.trim() ? 0.5 : 1,
+          }}
+        >
+          <Search size={13} /> {loading ? 'Söker…' : 'Sök'}
+        </button>
+      </div>
+
+      {value && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, fontSize: 12, color: '#3a4b56' }}>
+          <CheckCircle2 size={13} style={{ color: '#22c55e' }} />
+          <span>
+            Vald LEI: <strong style={{ fontFamily: 'monospace' }}>{value}</strong>
+          </span>
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            title="Rensa"
+            style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer', display: 'flex' }}
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
+      {error && <div style={{ fontSize: 11, color: '#fca5a5', marginTop: 6 }}>{error}</div>}
+
+      {hits.length > 0 && (
+        <div style={{ marginTop: 6, border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }}>
+          {hits.map((h) => (
+            <button
+              key={h.lei}
+              type="button"
+              onClick={() => pick(h)}
+              style={{
+                display: 'block',
+                width: '100%',
+                textAlign: 'left',
+                padding: '8px 10px',
+                background: value === h.lei ? 'rgba(159,81,182,0.08)' : 'transparent',
+                border: 'none',
+                borderBottom: `1px solid ${C.border}`,
+                cursor: 'pointer',
+              }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#3a4b56' }}>{h.name || '(namnlöst)'}</div>
+              <div style={{ fontSize: 11, color: C.muted }}>
+                <span style={{ fontFamily: 'monospace' }}>{h.lei}</span>
+                {h.address ? ` · ${h.address}` : ''}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+      {searched && !loading && hits.length === 0 && !error && (
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>
+          Inga träffar. Justera sökningen eller klistra in LEI-koden direkt.
+        </div>
+      )}
     </div>
   );
 }
