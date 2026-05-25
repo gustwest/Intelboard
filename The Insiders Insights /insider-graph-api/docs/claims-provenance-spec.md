@@ -203,6 +203,8 @@ starkaste domän som finns i kundens tier.**
 samma `@id` som profilens org + `sameAs` → profilsidan) + endpoint
 `GET /api/delivery/{client_id}`. Ops samlar leverans-artefakterna (profil-länk,
 identitets-snutt, badge) i frontend-fliken **Leverans** (`insider-graph/leverans`).
+Tier väljs vid onboarding (`OnboardRequest.tier` + `profile_base_url`, UI i
+`insider-graph/kunder`) och skrivs på klientdokumentet → styr `@id`-basen i kompilatorn.
 
 ## 8. Konsekvens för ops-rollen
 

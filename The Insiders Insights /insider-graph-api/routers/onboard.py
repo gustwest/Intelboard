@@ -41,6 +41,8 @@ def onboard_from_csv(req: CsvOnboardRequest) -> OnboardResponse:
         company_linkedin_url=req.company_linkedin_url,
         org_number=req.org_number,
         employees=employees,
+        tier=req.tier,
+        profile_base_url=req.profile_base_url,
     )
     try:
         return onboard_client(onboard_req)

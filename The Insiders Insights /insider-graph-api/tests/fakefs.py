@@ -77,11 +77,24 @@ def reset(
 
 
 def client_doc(client_id: str) -> _DocRef:
-    return _DocRef(client_id, STATE.get("client"))
+    return _DocRef(
+        client_id,
+        STATE.get("client"),
+        on_set=lambda _i, p: STATE.__setitem__("client", p),
+        on_update=lambda _i, p: (STATE.get("client") or {}).update(p),
+    )
 
 
 def iter_employees(client_id: str):
     return list(STATE.get("employees", {}).items())
+
+
+def employee_doc(client_id: str, employee_id: str) -> _DocRef:
+    return _DocRef(
+        employee_id,
+        STATE.get("employees", {}).get(employee_id),
+        on_set=lambda i, p: STATE.setdefault("employees", {}).__setitem__(i, p),
+    )
 
 
 def iter_claims(client_id: str):

@@ -61,12 +61,16 @@ def onboard_client(req: OnboardRequest) -> OnboardResponse:
     if client_ref.get().exists:
         raise ValueError(f"client already exists: {req.client_id}")
 
+    # premium → profilsidan på kundens domän; annars geogiraph-default (base = None).
+    profile_base_url = (req.profile_base_url or "").rstrip("/") or None
     client_ref.set(
         {
             "company_name": req.company_name,
             "org_number": req.org_number,
             "company_linkedin_url": req.company_linkedin_url,
             "active_connectors": list(req.active_connectors or ["linkedin"]),
+            "tier": req.tier,
+            "profile_base_url": profile_base_url,
             "settings": {
                 "fetch_about": True,
                 "fetch_life": True,

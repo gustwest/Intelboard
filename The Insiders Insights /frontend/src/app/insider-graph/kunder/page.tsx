@@ -22,6 +22,7 @@ type Client = {
   cdn_url: string | null;
   last_compiled: string | null;
   active_connectors: string[];
+  tier?: string;
 };
 
 const SAMPLE_CSV = `name,linkedin_url,title,node_type,gender
@@ -53,7 +54,7 @@ export default function GraphKunderPage() {
     <GraphPageShell
       title="Kunder"
       icon={<Users size={22} />}
-      subtitle="geogiraph-kunder är samma bolag som i The Insiders. Här onboardas medarbetare och datakällor."
+      subtitle="geograph-kunder är samma bolag som i The Insiders. Här onboardas medarbetare och datakällor."
     >
       <div
         style={{
@@ -202,6 +203,7 @@ function ClientCard({ client }: { client: Client }) {
       </div>
 
       <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
+        {client.tier === 'premium' && <Badge color="#9f51b6" label="premium" />}
         <Badge color="#22c55e" label={`${client.node_types.aktiv} aktiv`} />
         <Badge color="#f59e0b" label={`${client.node_types.episodisk} episodisk`} />
         <Badge color={C.muted} label={`${client.node_types.passiv} passiv`} />
@@ -253,6 +255,8 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
   const [companyName, setCompanyName] = useState('');
   const [companyLinkedinUrl, setCompanyLinkedinUrl] = useState('');
   const [orgNumber, setOrgNumber] = useState('');
+  const [tier, setTier] = useState<'default' | 'premium'>('default');
+  const [profileBaseUrl, setProfileBaseUrl] = useState('');
   const [csv, setCsv] = useState(SAMPLE_CSV);
   const [preview, setPreview] = useState<ParsedEmployee[] | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -291,6 +295,8 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
           company_linkedin_url: companyLinkedinUrl || null,
           org_number: orgNumber || null,
           csv,
+          tier,
+          profile_base_url: tier === 'premium' ? profileBaseUrl || null : null,
         }),
       });
       setResult({ ok: true, message: `Skapade kund ${data.client_id} med ${data.employees_created} medarbetare.` });
@@ -346,6 +352,45 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
             placeholder="https://www.linkedin.com/company/exempel-ab"
           />
           <Field label="Organisationsnummer" value={orgNumber} onChange={setOrgNumber} placeholder="556677-8899" />
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 11, color: '#6a7e8a', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            Hosting-tier
+          </label>
+          <div style={{ display: 'inline-flex', border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', marginTop: 6, marginLeft: 12, verticalAlign: 'middle' }}>
+            {([['default', 'Default (geogiraph)'], ['premium', 'Premium (egen domän)']] as ['default' | 'premium', string][]).map(([v, label]) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setTier(v)}
+                style={{
+                  padding: '7px 14px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: tier === v ? 'rgba(159,81,182,0.18)' : '#eef0f1',
+                  color: tier === v ? '#9f51b6' : '#3a4b56',
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {tier === 'premium' && (
+            <div style={{ marginTop: 12 }}>
+              <Field
+                label="Profilsidans bas-URL (kundens domän)"
+                value={profileBaseUrl}
+                onChange={setProfileBaseUrl}
+                placeholder="https://profil.kund.se"
+              />
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
+                Sätter @id-basen för JSON-LD. Kräver CNAME → vår tjänst (se Leverans).
+              </div>
+            </div>
+          )}
         </div>
 
         <div style={{ marginBottom: 14 }}>

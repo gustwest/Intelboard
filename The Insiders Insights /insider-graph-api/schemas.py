@@ -21,6 +21,10 @@ class OnboardRequest(BaseModel):
     org_number: str | None = None
     active_connectors: list[str] | None = None
     employees: list[EmployeeInput] = Field(default_factory=list)
+    # Hosting-tier (se docs/claims-provenance-spec.md §7). "premium" → profilsidan
+    # på kundens egen domän; profile_base_url sätter @id-basen för JSON-LD.
+    tier: Literal["default", "premium"] = "default"
+    profile_base_url: str | None = None
 
 
 class OnboardResponse(BaseModel):
@@ -35,6 +39,8 @@ class CsvOnboardRequest(BaseModel):
     company_linkedin_url: str | None = None
     org_number: str | None = None
     csv: str
+    tier: Literal["default", "premium"] = "default"
+    profile_base_url: str | None = None
 
 
 class CsvPreviewResponse(BaseModel):

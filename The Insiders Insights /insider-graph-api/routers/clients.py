@@ -27,6 +27,7 @@ def list_clients() -> dict[str, Any]:
                 "active_connectors": data.get("active_connectors", []),
                 "employee_count": employee_count,
                 "node_types": node_types,
+                "tier": data.get("tier", "default"),
                 "cdn_url": data.get("cdn_url"),
                 "profile_url": data.get("profile_url"),
                 "last_compiled": _iso(data.get("last_compiled")),
@@ -67,6 +68,8 @@ def get_client(client_id: str) -> dict[str, Any]:
         "active_connectors": data.get("active_connectors", []),
         "cdn_url": data.get("cdn_url"),
         "profile_url": data.get("profile_url"),
+        "tier": data.get("tier", "default"),
+        "profile_base_url": data.get("profile_base_url"),
         "last_compiled": _iso(data.get("last_compiled")),
         "employees": employees,
     }
