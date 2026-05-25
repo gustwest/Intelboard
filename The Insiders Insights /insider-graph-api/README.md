@@ -16,9 +16,13 @@ insider-graph-api/
 │   ├── linkedin.py         LinkedIn (Bright Data)
 │   ├── rss.py              Generisk RSS (pressrum, podcast, careers)
 │   └── bolagsverket.py     Bolagsverket organisationsdata
-├── schema_org/
-│   └── compiler.py         RawItems → JSON-LD-graf
+├── schema_org/             claims → JSON-LD + profilsida (se docs/claims-provenance-spec.md)
+│   ├── compiler.py         render-modell → JSON-LD-graf (proveniens via claims)
+│   ├── claims.py           deterministisk connector-extra → property-claims
+│   ├── profile_page.py     statisk profilsida (lager 2) ur render-modellen
+│   └── badge.py            badge-snutt (lager 3): statisk HTML / JS
 ├── routers/
+│   ├── badge.py            /api/badge/{client_id} (genererar badge-snutt)
 │   ├── clients.py          GET /api/clients
 │   ├── connectors_router.py /api/connectors (catalog + per-kund toggles)
 │   ├── health.py
@@ -29,13 +33,15 @@ insider-graph-api/
 │   └── webhooks.py         /api/webhooks/sendgrid (inbound mail)
 ├── services/
 │   ├── brightdata.py       Bright Data Datasets API
+│   ├── claim_extraction.py LLM-extraktion: fritext → narrative-claims + validering
 │   ├── discovery.py        Onboarding-agent
 │   ├── email_extraction.py LLM-extraktion av Event/NewsArticle ur mail
 │   └── polling.py          AI-synlighet (SoV / Sentiment / Parity)
 ├── jobs/                   Cloud Run Jobs (cron-styrda)
 │   ├── scrape_active.py
 │   ├── scrape_episodic.py
-│   ├── compile_schema.py
+│   ├── extract_claims.py   narrativ claims-extraktion per kund
+│   ├── compile_schema.py   JSON-LD + profilsida → GCS/CDN
 │   ├── compile_all_schemas.py
 │   └── polling_weekly.py
 └── scripts/

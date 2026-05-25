@@ -1,20 +1,25 @@
-"""Kompilerar Firestore-state till en JSON-LD-graf per kund.
+"""Kompilerar Firestore-state till en render-modell, och vidare till JSON-LD.
 
-Output följer Schema.org. Organization är rotnod, allt annat binds via @id.
-Grafen projiceras ur **claims** (se docs/claims-provenance-spec.md):
+`build_render_model()` är den gemensamma mellanrepresentationen som *både*
+JSON-LD-kompilatorn (`compile_client`) och den statiska profilsidan
+(`schema_org/profile_page.py`) läser ur — så de kan aldrig säga olika saker.
 
-  * `property`-claims fyller schema.org-egenskaper på subjektsnoden (konsumtion)
-    OCH emitteras som Claim-noder med `isBasedOn` (proveniens).
-  * `narrative`-claims blir Claim-noder med `isBasedOn` → källnod.
-  * varje refererad källa blir en källnod (WebPage/CreativeWork) med url + datum.
+Allt projiceras ur **claims** (se docs/claims-provenance-spec.md):
 
-Regeln "ingen källa → inget claim" upprätthålls vid skapandet av claims; här
-litar vi på att persisterade claims redan har källa. Sociala mätvärden
-(följare, likes) inkluderas ALDRIG.
+  * `property`-claims fyller schema.org-egenskaper (konsumtion) och visas i faktapanelen.
+  * `narrative`-claims blir prosa + Claim-noder med `isBasedOn` → källnod.
+  * varje refererad källa blir en numrerad källnod (WebPage/CreativeWork) med url + datum.
 
-`@id`-basen är konfigurerbar per kund via `profile_base_url` på klientdokumentet
-(default = geogiraph-domänen). Det är så default/premium-hosting (§7) styrs.
+Regeln "ingen källa → inget claim" upprätthålls vid skapandet av claims. Manuella
+källor saknar länkbar nod och bär i stället en etikett (default "uppgift från bolaget").
+Sociala mätvärden (följare, likes) inkluderas ALDRIG.
+
+`@id`-basen är konfigurerbar per kund via `profile_base_url` (default = geogiraph-
+domänen). Det är så default/premium-hosting (§7) styrs.
 """
+from __future__ import annotations
+
+from dataclasses import dataclass, field
 from typing import Any, Iterator
 
 import firestore_client as fs
@@ -22,13 +27,55 @@ from schema_org.claims import derive_property_claims
 from schemas import Claim, ClaimSource
 
 DEFAULT_BASE = "https://profiles.geogiraph.com"
+DEFAULT_MANUAL_LABEL = "uppgift från bolaget"
 
 # Källans raw-schema_type beskriver subjektet den gav, inte själva källdokumentet.
 # Org/Person-källor är i praktiken webbsidor vi läst.
 _PAGE_TYPES = {"Organization", "Person"}
 
 
-def compile_client(client_id: str) -> dict[str, Any]:
+@dataclass
+class Source:
+    number: int          # fotnotsnummer (ordning för första förekomst)
+    sid: str             # @id
+    url: str | None
+    date: str | None
+    name: str | None
+    schema_type: str
+
+
+@dataclass
+class Fact:
+    predicate: str
+    value: Any
+    statement: str | None
+    footnotes: list[int] = field(default_factory=list)
+    manual_label: str | None = None
+
+
+@dataclass
+class Prose:
+    statement: str
+    footnotes: list[int] = field(default_factory=list)
+    manual_label: str | None = None
+
+
+@dataclass
+class RenderModel:
+    client_id: str
+    base: str
+    org_id: str
+    company_name: str | None
+    same_as: list[str]
+    facts: list[Fact]
+    prose: list[Prose]
+    sources: list[Source]
+    persons: list[dict[str, Any]]
+    description: str | None
+    last_updated: str | None
+
+
+def build_render_model(client_id: str) -> RenderModel:
     client = fs.client_doc(client_id).get()
     if not client.exists:
         raise KeyError(f"client not found: {client_id}")
@@ -37,70 +84,126 @@ def compile_client(client_id: str) -> dict[str, Any]:
     base = (data.get("profile_base_url") or f"{DEFAULT_BASE}/{client_id}").rstrip("/")
     org_id = f"{base}#org"
 
-    organization: dict[str, Any] = {
-        "@type": "Organization",
-        "@id": org_id,
-        "name": data.get("company_name"),
-    }
-    # Default-tier: ankra mot geogiraph men knyt entiteten till bolagets egen sajt.
     same_as = [u for u in [data.get("website"), data.get("company_linkedin_url")] if u]
-
-    # Subjektsnoder: organisationen + en Person per medarbetare (identitet).
-    persons: dict[str, dict[str, Any]] = {}
-    for emp_id, emp in fs.iter_employees(client_id):
-        persons[emp_id] = {
+    persons = [
+        {
             "@type": "Person",
             "@id": f"{base}#person-{emp_id}",
             "name": emp.get("name"),
             "jobTitle": emp.get("title"),
             "worksFor": {"@id": org_id},
         }
+        for emp_id, emp in fs.iter_employees(client_id)
+    ]
 
-    def subject_node(ref: str) -> dict[str, Any] | None:
-        return organization if ref == "org" else persons.get(ref)
+    sources: dict[str, Source] = {}  # item_id → Source (bevarar ordning)
+    facts: list[Fact] = []
+    prose: list[Prose] = []
 
-    sources: dict[str, dict[str, Any]] = {}
-    claim_nodes: list[dict[str, Any]] = []
-    org_narrative: list[str] = []
+    def resolve(src: ClaimSource) -> tuple[int | None, str | None]:
+        """→ (fotnotsnummer för item-källa, etikett för manuell källa)."""
+        if src.kind == "manual":
+            return None, (src.label or DEFAULT_MANUAL_LABEL)
+        if not src.item_id:
+            return None, None
+        existing = sources.get(src.item_id)
+        if existing is None:
+            existing = _load_source(client_id, base, src, len(sources) + 1)
+            if existing is None:
+                return None, None
+            sources[src.item_id] = existing
+        if existing.url:
+            if existing.url not in same_as:
+                same_as.append(existing.url)
+        return existing.number, None
 
-    for idx, claim in enumerate(_iter_output_claims(client_id)):
-        subject = subject_node(claim.subject_ref)
-        if subject is None:
-            continue
-
-        based_on: list[dict[str, str]] = []
+    for claim in _iter_output_claims(client_id):
+        if claim.subject_ref != "org":
+            continue  # MVP: medarbetar-claims projiceras inte ännu
+        footnotes: list[int] = []
+        manual_label: str | None = None
         for src in claim.source:
-            node = _source_node(client_id, base, src, sources)
-            if node is not None:
-                based_on.append({"@id": node["@id"]})
-                if claim.subject_ref == "org" and node.get("url"):
-                    if node["url"] not in same_as:
-                        same_as.append(node["url"])
+            number, label = resolve(src)
+            if number is not None and number not in footnotes:
+                footnotes.append(number)
+            if label and manual_label is None:
+                manual_label = label
 
         if claim.claim_kind == "property" and claim.predicate:
-            _apply_property(subject, claim.predicate, claim.value)
-        elif claim.claim_kind == "narrative" and claim.subject_ref == "org" and claim.statement:
-            org_narrative.append(claim.statement.strip().rstrip("."))
+            facts.append(Fact(claim.predicate, claim.value, claim.statement, footnotes, manual_label))
+        elif claim.claim_kind == "narrative" and claim.statement:
+            prose.append(Prose(claim.statement.strip(), footnotes, manual_label))
 
-        claim_node: dict[str, Any] = {
-            "@type": "Claim",
-            "@id": f"{base}#claim-{idx}",
-            "text": claim.statement or f"{claim.predicate}: {claim.value}",
-            "about": {"@id": subject["@id"]},
+    description = (". ".join(p.statement.rstrip(".") for p in prose) + ".") if prose else None
+    ordered_sources = sorted(sources.values(), key=lambda s: s.number)
+    last_updated = max((s.date for s in ordered_sources if s.date), default=None)
+
+    return RenderModel(
+        client_id=client_id,
+        base=base,
+        org_id=org_id,
+        company_name=data.get("company_name"),
+        same_as=same_as,
+        facts=facts,
+        prose=prose,
+        sources=ordered_sources,
+        persons=persons,
+        description=description,
+        last_updated=last_updated,
+    )
+
+
+def compile_client(client_id: str) -> dict[str, Any]:
+    """Render-modell → JSON-LD-graf (Organization + Person + källnoder + Claim-noder)."""
+    model = build_render_model(client_id)
+    by_number = {s.number: s for s in model.sources}
+
+    organization: dict[str, Any] = {
+        "@type": "Organization",
+        "@id": model.org_id,
+        "name": model.company_name,
+    }
+    for fact in model.facts:
+        _apply_property(organization, fact.predicate, fact.value)
+    if model.description:
+        organization["description"] = model.description
+    if model.same_as:
+        organization["sameAs"] = model.same_as
+    if model.sources:
+        organization["subjectOf"] = [{"@id": s.sid} for s in model.sources]
+
+    source_nodes = [
+        {
+            k: v
+            for k, v in {
+                "@type": "WebPage" if s.schema_type in _PAGE_TYPES else (s.schema_type or "CreativeWork"),
+                "@id": s.sid,
+                "url": s.url,
+                "datePublished": s.date,
+                "name": s.name,
+            }.items()
+            if v is not None
         }
+        for s in model.sources
+    ]
+
+    claim_nodes: list[dict[str, Any]] = []
+    for idx, entry in enumerate([*model.facts, *model.prose]):
+        text = entry.statement or (
+            f"{entry.predicate}: {entry.value}" if isinstance(entry, Fact) else ""
+        )
+        node: dict[str, Any] = {
+            "@type": "Claim",
+            "@id": f"{model.base}#claim-{idx}",
+            "text": text,
+            "about": {"@id": model.org_id},
+        }
+        based_on = [{"@id": by_number[n].sid} for n in entry.footnotes if n in by_number]
         if based_on:
-            claim_node["isBasedOn"] = based_on if len(based_on) > 1 else based_on[0]
-        claim_nodes.append(claim_node)
+            node["isBasedOn"] = based_on if len(based_on) > 1 else based_on[0]
+        claim_nodes.append(node)
 
-    # description = sammanfattning enbart ur godkända narrative-claims (alla källförsedda).
-    if org_narrative:
-        organization["description"] = ". ".join(org_narrative) + "."
-    if same_as:
-        organization["sameAs"] = same_as
-    if sources:
-        organization["subjectOf"] = [{"@id": n["@id"]} for n in sources.values()]
-
-    graph: list[dict[str, Any]] = [organization, *persons.values(), *sources.values(), *claim_nodes]
+    graph = [organization, *model.persons, *source_nodes, *claim_nodes]
     return {"@context": "https://schema.org", "@graph": graph}
 
 
@@ -129,34 +232,19 @@ def _apply_property(node: dict[str, Any], predicate: str, value: Any) -> None:
     node[predicate] = bag if len(bag) > 1 else bag[0]
 
 
-def _source_node(
-    client_id: str, base: str, src: ClaimSource, sources: dict[str, dict[str, Any]]
-) -> dict[str, Any] | None:
-    """Materialisera (och cachea) en källnod. Manuella källor har ingen nod —
-    de saknar länkbart ursprung och renderas som etikett på profilsidan."""
-    if src.kind != "item" or not src.item_id:
-        return None
-    if src.item_id in sources:
-        return sources[src.item_id]
-
+def _load_source(client_id: str, base: str, src: ClaimSource, number: int) -> Source | None:
     snap = fs.raw_item_doc(client_id, src.employee_id, src.item_id).get()
     if not snap.exists:
         return None
     raw = snap.to_dict() or {}
-
-    schema_type = raw.get("schema_type")
-    node = {
-        "@type": "WebPage" if schema_type in _PAGE_TYPES else (schema_type or "CreativeWork"),
-        "@id": f"{base}#src-{src.item_id}",
-        "url": raw.get("url"),
-        "datePublished": _iso(raw.get("published_at")),
-    }
-    name = raw.get("name") or (raw.get("extra") or {}).get("name")
-    if name:
-        node["name"] = name
-    node = {k: v for k, v in node.items() if v is not None}
-    sources[src.item_id] = node
-    return node
+    return Source(
+        number=number,
+        sid=f"{base}#src-{src.item_id}",
+        url=raw.get("url"),
+        date=_iso(raw.get("published_at")),
+        name=raw.get("name") or (raw.get("extra") or {}).get("name"),
+        schema_type=raw.get("schema_type") or "CreativeWork",
+    )
 
 
 def _iso(value: Any) -> str | None:

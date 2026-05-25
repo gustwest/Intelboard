@@ -224,6 +224,13 @@ siffra (ser normalt ut, inte som en varning). Texten är `ClaimSource.label`, de
 **"uppgift från bolaget"**, omskrivningsbar (t.ex. "enligt branschrapport X") när
 uppgiften har ett annat icke-länkbart ursprung.
 
+**Implementation:** `schema_org/profile_page.py` renderar statisk HTML ur samma
+render-modell som JSON-LD (`build_render_model` i `compiler.py`) — de kan aldrig
+divergera. `compile-schema`-jobbet laddar upp `index.html` bredvid `schema.json` och
+sätter `profile_url` på klientdokumentet. Faktapanel + prosa bär fotnoter (ankrad lista
++ `title`-popover); källförteckning numrerad med url + datum; trust-rad med källantal +
+färskhet.
+
 ## 10. Badge (lager 3)
 
 Diskret komponent på kundsajten som länkar till profilsidan. Riktar sig till människor.
@@ -240,9 +247,15 @@ Diskret komponent på kundsajten som länkar till profilsidan. Riktar sig till m
   profil) finns en **central server-side degrade-switch** hos oss — märket skyddas utan att
   kunden rör något.
 
+**Implementation:** `schema_org/badge.py` (`render_badge` statisk / `render_badge_js`) +
+endpoint `GET /api/badge/{client_id}` (`routers/badge.py`) med `theme`, `variant`,
+`accent`, `delivery`. Live-färskhet i JS-varianten kräver ett publicerat meta-endpoint
+och degrade-switchen — ännu inte byggt.
+
 ## 11. Utanför denna spec
 
 - Onboarding-UI för claims-review.
 - Schemaläggning av `extract-claims`-jobbet (cron/Eventarc) som övriga jobs.
-- Central degrade-switch — mekanik (§10).
+- Central degrade-switch + meta-endpoint för badgens live-färskhet (§10).
+- Premium-tier: faktisk CNAME-uppsättning + servering på kundens domän (§7).
 ```

@@ -14,6 +14,7 @@ from google.cloud import firestore, storage
 import firestore_client as fs
 from config import settings
 from schema_org.compiler import compile_client
+from schema_org.profile_page import render_profile_html
 
 log = logging.getLogger("jobs.compile_schema")
 
@@ -21,6 +22,7 @@ log = logging.getLogger("jobs.compile_schema")
 def run(client_id: str) -> None:
     graph = compile_client(client_id)
     payload = json.dumps(graph, ensure_ascii=False, default=str)
+    profile_html = render_profile_html(client_id)
 
     if not settings.cdn_bucket:
         log.warning("CDN_BUCKET not configured — skipping upload")
@@ -28,21 +30,26 @@ def run(client_id: str) -> None:
         return
 
     bucket = storage.Client().bucket(settings.cdn_bucket)
-    blob = bucket.blob(f"clients/{client_id}/schema.json")
+    schema_blob = bucket.blob(f"clients/{client_id}/schema.json")
 
-    if blob.exists():
-        existing = blob.download_as_text()
-        if existing == payload:
-            log.info("no change for %s — skipping upload", client_id)
-            return
+    if schema_blob.exists() and schema_blob.download_as_text() == payload:
+        log.info("no change for %s — skipping upload", client_id)
+        return
 
-    blob.upload_from_string(payload, content_type="application/ld+json")
-    blob.cache_control = "public, max-age=300"
-    blob.patch()
+    schema_blob.upload_from_string(payload, content_type="application/ld+json")
+    schema_blob.cache_control = "public, max-age=300"
+    schema_blob.patch()
+
+    # Profilsidan (lager 2): statisk HTML bredvid schema.json, samma render-modell.
+    page_blob = bucket.blob(f"clients/{client_id}/index.html")
+    page_blob.upload_from_string(profile_html, content_type="text/html; charset=utf-8")
+    page_blob.cache_control = "public, max-age=300"
+    page_blob.patch()
 
     fs.client_doc(client_id).update(
         {
             "cdn_url": f"{settings.cdn_base_url}/clients/{client_id}/schema.json",
+            "profile_url": f"{settings.cdn_base_url}/clients/{client_id}/",
             "last_compiled": firestore.SERVER_TIMESTAMP,
         }
     )
