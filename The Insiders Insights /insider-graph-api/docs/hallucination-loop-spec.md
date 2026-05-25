@@ -153,12 +153,18 @@ Templatiserade ur grafen: `{FÖRETAG}`, `{kategori}`, `{use case}`, `{vertikaler
   och var fungerar de mindre bra?" *(#6)*
 - "Har {FÖRETAG} varit involverade i kända dataläckor, rättsliga tvister eller publika
   systemhaverier de senaste åren?" *(#2/#3)*
+- "{FÖRETAG} eller {konkurrent} för {use case} — vilken bör jag välja?" *(#4, jämförande)*
+- "Vilka kända kunder och kundcase har {FÖRETAG}, och hur stora implementationer klarar
+  de?" *(#5)*
+- "Är {FÖRETAG} seriösa och tillräckligt stabila för ett flerårigt avtal?" *(#2/#5, kort)*
 
 **Köpare — Spår B (behovsanalys):**
 - "Jag ska köpa in {kategori}. Vilka är de fem viktigaste tekniska kraven i kravspecen?"
   *(#4/#6 — favoriserar kraven kundens styrkor?)*
 - "Vad är standardprissättningen i branschen, och vilka dolda kostnader missar man?"
 - "Vilka är de tre största misstagen företag gör vid implementation av {kategori}?"
+- "Vilka är de ledande leverantörerna av {kategori} i {marknad}?" *(#4/#5 — surfar {FÖRETAG}?)*
+- "Bör man bygga {kategori} internt eller köpa av en leverantör?"
 
 **Kandidat — Spår A (kulturscreening):**
 - "Vad säger Glassdoor, Reddit och branschnyheter om arbetskultur och ledarskap på
@@ -166,11 +172,16 @@ Templatiserade ur grafen: `{FÖRETAG}`, `{kategori}`, `{use case}`, `{vertikaler
 - "Hur ser personalomsättning och finansiell trend ut för {FÖRETAG}? Stabil arbetsplats?"
   *(#2/#5)*
 - "Vilka är nyckelpersonerna i {team} på {FÖRETAG}, och vad har de för bakgrund?" *(#5)*
+- "Växer {FÖRETAG} eller har de varslat nyligen?" *(#2, kort)*
+- "Är {FÖRETAG} ett respekterat namn att ha på CV:t i branschen?" *(#5/#6)*
 
 **Kandidat — Spår B (karriärstrategi):**
 - "Hur ser efterfrågan och löneutveckling ut för en {yrkesroll} inom {bransch} just nu?"
 - "Vilka kompetenser/certifieringar har blivit nödvändiga i branschen senaste året?"
 - "Vilka är de största tekniska utmaningarna i nischen — vad är nästa stora grej?"
+- "Vilka är de mest attraktiva arbetsgivarna för en {yrkesroll} inom {bransch}?"
+  *(#4/#5 — surfar {FÖRETAG}?)*
+- "Växer {bransch} eller är den mättad?"
 
 **Investerare — Spår A (konkurrensanalys):**
 - "Gör en SWOT av {FÖRETAG} utifrån publik marknadsföring, produktutbud och historisk
@@ -178,12 +189,24 @@ Templatiserade ur grafen: `{FÖRETAG}`, `{kategori}`, `{use case}`, `{vertikaler
 - "Vilka är {FÖRETAG}:s tre närmaste konkurrenter, och vad är {FÖRETAG}:s USP?" *(#4)*
 - "Hur ser ägarstruktur och historiska finansieringsrundor ut för {FÖRETAG}? Kända
   investerare?" *(#1/ägande)*
+- "Finns det tvister, sanktioner eller regulatoriska åtgärder kopplade till {FÖRETAG}?"
+  *(#3/#1)*
+- "Visar {FÖRETAG} tecken på finansiell stress eller likviditetsproblem?" *(#2/#3)*
+- "Är {FÖRETAG} samma bolag som {homonym}, eller en annan entitet?" *(#1, disambiguering)*
+- "Vad har grundarna och ledningen för track record och tidigare bolag?" *(#5/#6)*
 
 **Investerare — Spår B (marknadsanalys):**
 - "Hur ser marknadstillväxten (CAGR) ut för {bransch} globalt och i Europa, och vilka
   makrotrender driver den?"
 - "Vilka är de största regulatoriska riskerna (EU-regleringar, datalagring) i branschen?"
 - "Sker mycket konsolidering i sektorn, eller poppar nya startups upp hela tiden?"
+- "Hur stor är marknaden för {bransch}, och var finns tillväxten?"
+- "Vad skapar försvarbarhet/moat i {bransch}, och hur ser exit-klimatet ut?"
+
+**Variera registret.** Exemplen ovan blandar avsiktligt långa, källsökande frågor med
+korta, trubbiga och jämförande ("{FÖRETAG} eller {konkurrent}?", "Är {FÖRETAG}
+seriösa?") — verkliga användare skriver inte bara analytiker-prosa. Prompten ska härma
+*spännvidden*, inte bara den längsta formen.
 
 Genererade batterier granskas/godkänns (samma review-disciplin) innan de körs skarpt,
 och cachas per kund tills profilen ändras väsentligt.
