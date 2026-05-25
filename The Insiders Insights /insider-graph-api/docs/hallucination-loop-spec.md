@@ -69,9 +69,70 @@ kundens kategori/marknad/konkurrenter (ur grafen). Exempel:
 
 Batterierna körs mot motorerna (återanvänd polling-motoranropen, models_used).
 
+## 5.1 Frågegenerering (kärnan i skiva 1)
+
+Frågorna **LLM-genereras** (inte handskrivna) av en persona-expert-prompt som gör en
+*djup domänanalys* — annars blir frågorna ytliga och missar riskytan. Genereras med
+högsta kvalitet (samma klass som klassningen, §13); låg volym (per kund per refresh) så
+kostnad är inget hinder.
+
+**Persona-expertlinser** (roll i prompten):
+- **Köpare** — senior B2B-inköpare/utvärderare: trovärdighet, fit för use case,
+  leveransspår, referenser, alternativ, röda flaggor.
+- **Kandidat** — eftertraktad kandidat: stabilitet/tillväxt vs varsel, kultur/rykte,
+  ledningens trovärdighet, finansiell hälsa.
+- **Investerare/DD** — analytiker: ägande/struktur (förväxlingsrisk), finansiell sundhet,
+  tvister/sanktioner/kontrovers, ledningens track record.
+
+**Konkurrenthantering (anti-styrning).** Kund kan ange en konkurrentlista vid onboarding
+och uppdatera löpande — men den används bara som **svaga ledtrådar**. Prompten härleder
+självständigt det faktiska konkurrenslandskapet och får inte övervikta den angivna
+listan; merparten frågor är beslutsdrivna, inte konkurrentdrivna.
+
+**Genererings-prompt (utkast — itereras):**
+
+```
+# Roll
+Du är en senior {persona_expert} inför ett högt insatt beslut om {företag}. Du tänker
+självständigt, kritiskt och obekvämt — som någon vars affär/karriär/kapital står på
+spel. Du nöjer dig inte med ytliga frågor.
+
+# Kontext om bolaget (ur kunskapsgrafen)
+{legalt namn, LEI, bransch/SNI, kärnerbjudande, vertikaler, geografi, storleksband,
+nyckelpersoner, koncernstruktur, kategori/marknad}
+
+# Konkurrenshintar (icke-uttömmande — övervikta INTE)
+{kund-angivna konkurrenter}. Använd som svaga ledtrådar; härled själv det faktiska
+konkurrenslandskapet. Låt inte listan styra frågorna.
+
+# Uppgift (två steg)
+1. ANALYS: Resonera djupt om vad en sofistikerad {persona} verkligen behöver veta före
+   beslutet — inklusive de obekväma, risk-sökande frågorna (red flags, alternativ,
+   stabilitet, ägande/förväxling, rykte). Lista de underliggande beslutskriterierna.
+2. FRÅGOR: Härled de faktiska frågor personan skulle skriva till en AI-motor för att
+   täcka kriterierna.
+
+# Krav
+- Neutralt och naturligt formulerade — ALDRIG ledande ("är inte X bäst?" förbjudet).
+  Öppna frågor som inte förutsätter svaret.
+- Täck riskytan (§4): förväxling, inaktuella/hallucinerade negativ, konkurrent-
+  förskjutning, skadlig tystnad, negativ inramning.
+- Blanda direkta, jämförande och öppna frågor. Realistiska för kategorin. Hitta inte
+  på specifika fakta.
+- Generera på svenska och engelska (motorerna svarar på båda).
+
+# Output (JSON)
+{"questions":[{"text","language","decision_criterion","harm_modes":[...],
+"type":"direct|comparative|open"}]}
+```
+
+Genererade batterier granskas/godkänns (samma review-disciplin) innan de körs skarpt,
+och cachas per kund tills profilen ändras väsentligt.
+
 ## 6. Scoring → Risk Exposure-score
 
-För varje (persona, fråga, motor)-svar klassar en LLM:
+För varje (persona, fråga, motor)-svar klassar **validator-modellen (claude-opus —
+högsta kvalitet, §13)**:
 `{skademodell | "ok", severity: high|medium|low, sourcing: cites_customer|web|none,
  evidence: citat}`.
 
@@ -186,15 +247,18 @@ risker) som social proof — bara aggregat, inget känsligt.
 Varje skiva följer Definition of Done i connector-roadmap.md §3. Skiva 1 ger redan
 kundvärde (riskrapport) utan publiceringsrisk.
 
-## 13. Öppna frågor
+## 13. Beslut & öppna frågor
 
-1. **Frågebatterierna:** börjar vi med en hand­skriven kärnuppsättning per persona, eller
-   låter vi en LLM generera dem ur kundens kategori/konkurrenter (med granskning)?
-2. **LLM för skadeklassning:** validator-modellen (claude-opus, precision) eller billigare
-   för volym?
-3. **Resolved-tröskel:** kräver vi N korrekta cykler i rad innan en risk räknas som löst
-   (mot flimmer)?
-4. **Konkurrentlista:** var hämtar vi {konkurrent} för jämförelsefrågorna — kund-angivet
-   vid onboarding, eller härlett?
-5. **Publik exponering:** hur mycket av riskregistret visas i GTM-modalen vs bara i
-   kundportalen?
+Beslutat:
+- **Frågebatterierna:** LLM-genererade av en djup persona-expert-prompt (§5.1) — inte
+  handskrivna.
+- **Skadeklassning:** validator-modellen (claude-opus) — högsta kvalitet krävs.
+- **Konkurrentlista:** kombination — kund-angiven vid onboarding + löpande uppdatering,
+  men som svaga ledtrådar (anti-styrning, §5.1). Kräver ett `competitors`-fält i
+  onboarding/client-doc.
+
+Kvar:
+- **Resolved-tröskel:** kräver vi N korrekta cykler i rad innan en risk räknas som löst
+  (mot flimmer)? (Kan beslutas under skiva 4.)
+- **Publik exponering:** hur mycket av riskregistret visas i GTM-modalen vs bara i
+  kundportalen? (Kan beslutas under skiva 3.)
