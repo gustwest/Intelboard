@@ -61,6 +61,7 @@ def compile_client(client_id: str) -> dict[str, Any]:
 
     sources: dict[str, dict[str, Any]] = {}
     claim_nodes: list[dict[str, Any]] = []
+    org_narrative: list[str] = []
 
     for idx, claim in enumerate(_iter_output_claims(client_id)):
         subject = subject_node(claim.subject_ref)
@@ -78,6 +79,8 @@ def compile_client(client_id: str) -> dict[str, Any]:
 
         if claim.claim_kind == "property" and claim.predicate:
             _apply_property(subject, claim.predicate, claim.value)
+        elif claim.claim_kind == "narrative" and claim.subject_ref == "org" and claim.statement:
+            org_narrative.append(claim.statement.strip().rstrip("."))
 
         claim_node: dict[str, Any] = {
             "@type": "Claim",
@@ -89,6 +92,9 @@ def compile_client(client_id: str) -> dict[str, Any]:
             claim_node["isBasedOn"] = based_on if len(based_on) > 1 else based_on[0]
         claim_nodes.append(claim_node)
 
+    # description = sammanfattning enbart ur godkända narrative-claims (alla källförsedda).
+    if org_narrative:
+        organization["description"] = ". ".join(org_narrative) + "."
     if same_as:
         organization["sameAs"] = same_as
     if sources:

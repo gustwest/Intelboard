@@ -107,6 +107,12 @@ Tre steg — steg 3 är det som skiljer "verifierad" från "påstår sig vara ve
    chunken *faktiskt stödjer* claimet. Faller → `needs_review` eller kasseras.
    Lågt confidence → review-grinden (§3).
 
+**Implementation:** `services/claim_extraction.py` (narrativ extraktion: chunka → generera
+→ validera, andra-LLM-pass på varje claim) + job-wrapper `jobs/extract_claims.py`.
+Claim utan giltig chunk eller som faller på valideringen skrivs aldrig med
+`included_in_output=True`. `confidence < 0.7` → `needs_review`. Idempotent (deterministiskt
+claim-id). Property-claims härleds separat och deterministiskt (`schema_org/claims.py`).
+
 Property-claims mappas från connector-`extra{}` deterministiskt (ingen LLM behövs):
 
 | Källfält (`extra`) | predicate | källa |
@@ -134,8 +140,8 @@ Nytt: **`Organization` projiceras helt ur claims.**
   `Person`-noder byggs i detta skede från medarbetardokumentets identitetsfält (namn,
   titel) och kan ta emot claims; full claims-projektion av medarbetare är ett senare steg.
 - `Organization.description` = sammanfattning komponerad **enbart** av godkända
-  narrative-claims (inte längre handskriven `about`). *(Inte byggd ännu — kräver
-  narrativ-extraktionen, §5.)*
+  narrative-claims på org-nivå (inte längre handskriven `about`). Bygger på att varje
+  narrative-claim är självbärande (§5) → sammanfogas till löptext.
 - Sociala mätvärden (följare, likes) inkluderas fortsatt **aldrig** (oförändrad regel).
 - **`@id`-basen är konfigurerbar per kund** via `profile_base_url`, default
   `https://profiles.geogiraph.com/<kund>` (konstant `DEFAULT_BASE`). Se §7.
@@ -237,6 +243,6 @@ Diskret komponent på kundsajten som länkar till profilsidan. Riktar sig till m
 ## 11. Utanför denna spec
 
 - Onboarding-UI för claims-review.
-- Promptdetaljer + valideringsregler för extraktionssteget (§5.2–5.3).
+- Schemaläggning av `extract-claims`-jobbet (cron/Eventarc) som övriga jobs.
 - Central degrade-switch — mekanik (§10).
 ```
