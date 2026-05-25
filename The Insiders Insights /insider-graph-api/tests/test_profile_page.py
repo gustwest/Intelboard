@@ -54,6 +54,12 @@ class ProfileHtmlTest(unittest.TestCase):
         _setup()
         self.assertNotIn("5000", render_profile_html("acme"))
 
+    def test_faq_section_rendered(self):
+        _setup()
+        html = render_profile_html("acme")
+        self.assertIn("Vanliga frågor", html)
+        self.assertIn("När grundades Acme AB?", html)
+
 
 class LlmsTxtTest(unittest.TestCase):
     def test_structure_and_facts(self):
@@ -68,6 +74,12 @@ class LlmsTxtTest(unittest.TestCase):
     def test_no_social_metrics(self):
         _setup()
         self.assertNotIn("5000", render_llms_txt("acme"))
+
+    def test_faq_in_llms_txt(self):
+        _setup()
+        txt = render_llms_txt("acme")
+        self.assertIn("## Frågor & svar", txt)
+        self.assertIn("### När grundades Acme AB?", txt)
 
 
 if __name__ == "__main__":

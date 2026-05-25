@@ -247,6 +247,12 @@ färskhet.
 claims, för AI-crawlers) bredvid `schema.json`. `compile-all-schemas` skriver `robots.txt`
 (släpper in crawlers + pekar på sitemap) och `sitemap.xml` (alla profilsidor) på CDN-roten.
 
+**FAQPage / Q&A:** `build_faq` (i `compiler.py`) härleder deterministiska fråga–svar-par
+ur claims (faktan → "När grundades…", "Var har… sitt säte"; narrative → "Vad gör…").
+Emitteras som `FAQPage` i JSON-LD (varje `acceptedAnswer` bär `citation` → källa) och
+renderas som sektion "Vanliga frågor" på profilsidan + i `llms.txt`. Q&A-format är
+särskilt effektivt för LLM:er — de får färdiga, källförsedda par.
+
 ## 10. Badge (lager 3)
 
 Diskret komponent på kundsajten som länkar till profilsidan. Riktar sig till människor.

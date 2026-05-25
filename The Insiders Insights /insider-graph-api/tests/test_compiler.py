@@ -109,6 +109,17 @@ class CompileClientTest(unittest.TestCase):
         claims = _nodes(compile_client("acme"), "Claim")
         self.assertFalse(any("Avvisat" in c["text"] for c in claims))
 
+    def test_faqpage_emitted_with_cited_answers(self):
+        _graph_setup()
+        faq = _nodes(compile_client("acme"), "FAQPage")
+        self.assertEqual(len(faq), 1)
+        questions = {q["name"]: q["acceptedAnswer"] for q in faq[0]["mainEntity"]}
+        self.assertIn("Vad gör Acme AB?", questions)
+        self.assertIn("När grundades Acme AB?", questions)
+        # faktasvar bär proveniens via citation
+        self.assertIn("citation", questions["När grundades Acme AB?"])
+        self.assertIn("2014", questions["När grundades Acme AB?"]["text"])
+
     def test_missing_client_raises(self):
         fakefs.reset(client=None)
         with self.assertRaises(KeyError):

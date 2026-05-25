@@ -13,7 +13,7 @@ import html
 import json
 from datetime import datetime
 
-from schema_org.compiler import RenderModel, build_render_model, compile_client
+from schema_org.compiler import RenderModel, build_faq, build_render_model, compile_client
 
 # schema.org-predikat → svensk etikett i faktapanelen.
 _FACT_LABELS = {
@@ -55,6 +55,12 @@ def render_llms_txt(client_id: str) -> str:
             lines.append(f"- {label}: {value}")
         lines.append("")
 
+    faq = build_faq(model)
+    if faq:
+        lines.append("## Frågor & svar")
+        for e in faq:
+            lines += [f"### {e.question}", e.answer, ""]
+
     if model.sources:
         lines.append("## Källor")
         for s in model.sources:
@@ -76,6 +82,7 @@ def _render(model: RenderModel, graph: dict) -> str:
     facts_html = "\n".join(_fact_row(f) for f in model.facts)
     prose_html = "".join(_prose_sentence(p) for p in model.prose).strip()
     sources_html = "\n".join(_source_item(s) for s in model.sources)
+    faq_html = _faq_section(model)
     trust = _trust_line(model)
 
     return f"""<!doctype html>
@@ -103,6 +110,9 @@ def _render(model: RenderModel, graph: dict) -> str:
   .facts dd {{ margin: 0; }}
   sup a {{ color: #2563eb; text-decoration: none; font-size: .7em; padding: 0 .1em; }}
   .manual {{ color: #888; font-size: .8em; font-style: italic; white-space: nowrap; }}
+  .faq {{ margin-top: 2rem; }}
+  .faq dt {{ font-weight: 600; margin-top: .75rem; }}
+  .faq dd {{ margin: .15rem 0 0; color: #333; }}
   .sources {{ margin-top: 2rem; border-top: 1px solid #e5e5e5; padding-top: 1rem; font-size: .9rem; }}
   .sources ol {{ padding-left: 1.25rem; color: #555; }}
   .sources a {{ color: #2563eb; }}
@@ -122,7 +132,7 @@ def _render(model: RenderModel, graph: dict) -> str:
 <section class="about">
 <p>{prose_html}</p>
 </section>
-
+{faq_html}
 <section class="sources">
 <h2 style="font-size:1rem">Källor</h2>
 <ol>
@@ -134,6 +144,22 @@ def _render(model: RenderModel, graph: dict) -> str:
 </body>
 </html>
 """
+
+
+def _faq_section(model: RenderModel) -> str:
+    faq = build_faq(model)
+    if not faq:
+        return ""
+    rows = "".join(
+        f'<div class="qa"><dt>{html.escape(e.question)}</dt>'
+        f'<dd>{html.escape(e.answer)}{_footnote_marks(e.footnotes)}</dd></div>'
+        for e in faq
+    )
+    return f'<section class="faq"><h2 style="font-size:1rem">Vanliga frågor</h2><dl>{rows}</dl></section>'
+
+
+def _footnote_marks(footnotes) -> str:
+    return "".join(f'<sup><a href="#src-{n}" title="Källa {n}">[{n}]</a></sup>' for n in footnotes)
 
 
 def _fact_row(fact) -> str:

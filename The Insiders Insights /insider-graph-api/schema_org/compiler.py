@@ -61,6 +61,13 @@ class Prose:
 
 
 @dataclass
+class FaqEntry:
+    question: str
+    answer: str
+    footnotes: list[int]
+
+
+@dataclass
 class RenderModel:
     client_id: str
     base: str
@@ -203,8 +210,61 @@ def compile_client(client_id: str) -> dict[str, Any]:
             node["isBasedOn"] = based_on if len(based_on) > 1 else based_on[0]
         claim_nodes.append(node)
 
-    graph = [organization, *model.persons, *source_nodes, *claim_nodes]
+    faq_nodes: list[dict[str, Any]] = []
+    faq = build_faq(model)
+    if faq:
+        main_entity = []
+        for entry in faq:
+            answer: dict[str, Any] = {"@type": "Answer", "text": entry.answer}
+            cites = [{"@id": by_number[n].sid} for n in entry.footnotes if n in by_number]
+            if cites:
+                answer["citation"] = cites if len(cites) > 1 else cites[0]
+            main_entity.append({"@type": "Question", "name": entry.question, "acceptedAnswer": answer})
+        faq_nodes.append({"@type": "FAQPage", "@id": f"{model.base}#faq", "mainEntity": main_entity})
+
+    graph = [organization, *model.persons, *source_nodes, *claim_nodes, *faq_nodes]
     return {"@context": "https://schema.org", "@graph": graph}
+
+
+# predikat → (frågemall, svarsmall). {name} = bolaget, {value} = (sammanslaget) värde.
+_FAQ_TEMPLATES: dict[str, tuple[str, str]] = {
+    "foundingDate": ("När grundades {name}?", "{name} grundades {value}."),
+    "address": ("Var har {name} sitt säte?", "{name} har sitt säte i {value}."),
+    "knowsAbout": ("Vad är {name} verksamt inom?", "{name} är verksamt inom {value}."),
+    "numberOfEmployees": ("Hur många anställda har {name}?", "{name} har {value} anställda."),
+    "identifier": ("Vad är {name}s organisationsnummer?", "Organisationsnumret är {value}."),
+}
+_FAQ_ORDER = ["foundingDate", "address", "knowsAbout", "numberOfEmployees", "identifier"]
+
+
+def build_faq(model: RenderModel) -> list[FaqEntry]:
+    """Deterministiska Q&A ur claims — källförsedda (footnotes följer faktan/prosan)."""
+    name = model.company_name or model.client_id
+    entries: list[FaqEntry] = []
+
+    if model.description:
+        prose_fns = sorted({n for p in model.prose for n in p.footnotes})
+        entries.append(FaqEntry(f"Vad gör {name}?", model.description, prose_fns))
+
+    grouped: dict[str, dict[str, list]] = {}
+    for fact in model.facts:
+        g = grouped.setdefault(fact.predicate, {"values": [], "footnotes": []})
+        for v in (fact.value if isinstance(fact.value, list) else [fact.value]):
+            if v not in g["values"]:
+                g["values"].append(v)
+        for n in fact.footnotes:
+            if n not in g["footnotes"]:
+                g["footnotes"].append(n)
+
+    for predicate in _FAQ_ORDER:
+        if predicate not in grouped or predicate not in _FAQ_TEMPLATES:
+            continue
+        q_tmpl, a_tmpl = _FAQ_TEMPLATES[predicate]
+        value = ", ".join(str(v) for v in grouped[predicate]["values"])
+        entries.append(
+            FaqEntry(q_tmpl.format(name=name), a_tmpl.format(name=name, value=value), sorted(grouped[predicate]["footnotes"]))
+        )
+    return entries
 
 
 def _iter_output_claims(client_id: str) -> Iterator[Claim]:
