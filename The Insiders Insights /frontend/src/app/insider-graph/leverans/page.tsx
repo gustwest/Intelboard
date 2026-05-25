@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Rocket, Copy, Check, ExternalLink } from 'lucide-react';
+import { Rocket, Copy, Check, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import { graphFetch } from '../_lib/api';
 
@@ -9,6 +9,56 @@ type Client = {
   client_id: string;
   company_name: string | null;
   profile_url: string | null;
+  cdn_url: string | null;
+};
+
+// Speglar den faktiska claims-baserade outputen: Organization-rot med
+// källförsedda egenskaper, källnoder och Claim-noder med isBasedOn → källa.
+const SAMPLE_BASE = 'https://profiles.geogiraph.com/exempel-ab';
+const SAMPLE_JSON = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': `${SAMPLE_BASE}#org`,
+      name: 'Exempel AB',
+      foundingDate: '2014',
+      address: 'Göteborg',
+      knowsAbout: ['Inbyggda system', 'Fordonsindustri'],
+      identifier: '5566778899',
+      description: 'Hjälper fordonstillverkare med inbyggda system.',
+      sameAs: ['https://exempel.se', 'https://www.linkedin.com/company/exempel-ab'],
+      subjectOf: [{ '@id': `${SAMPLE_BASE}#src-bv1` }],
+    },
+    {
+      '@type': 'Person',
+      '@id': `${SAMPLE_BASE}#person-anna`,
+      name: 'Anna Andersson',
+      jobTitle: 'VD',
+      worksFor: { '@id': `${SAMPLE_BASE}#org` },
+    },
+    {
+      '@type': 'WebPage',
+      '@id': `${SAMPLE_BASE}#src-bv1`,
+      url: 'https://www.allabolag.se/5566778899',
+      datePublished: '2024-03-01',
+      name: 'Exempel AB',
+    },
+    {
+      '@type': 'Claim',
+      '@id': `${SAMPLE_BASE}#claim-0`,
+      text: 'Grundat 2014',
+      about: { '@id': `${SAMPLE_BASE}#org` },
+      isBasedOn: { '@id': `${SAMPLE_BASE}#src-bv1` },
+    },
+    {
+      '@type': 'Claim',
+      '@id': `${SAMPLE_BASE}#claim-1`,
+      text: 'Hjälper fordonstillverkare med inbyggda system',
+      about: { '@id': `${SAMPLE_BASE}#org` },
+      isBasedOn: { '@id': `${SAMPLE_BASE}#src-bv1` },
+    },
+  ],
 };
 
 type Delivery = {
@@ -38,6 +88,10 @@ export default function LeveransPage() {
   const [useAccent, setUseAccent] = useState(false);
   const [accent, setAccent] = useState('#9f51b6');
 
+  // Full kompilerad JSON-LD-graf (QA-vy, hopfällbar)
+  const [showOutput, setShowOutput] = useState(false);
+  const [output, setOutput] = useState<{ clientId: string; json: string } | null>(null);
+
   useEffect(() => {
     graphFetch<{ clients: Client[] }>('/api/clients')
       .then((d) => {
@@ -63,6 +117,29 @@ export default function LeveransPage() {
       .catch((e) => setError(e.message));
   }, [selected, theme, variant, mode, useAccent, accent]);
 
+  // Hämta den fulla kompilerade grafen från CDN när kund byts
+  useEffect(() => {
+    const c = clients.find((x) => x.client_id === selected);
+    if (!c?.cdn_url) return;
+    let cancelled = false;
+    fetch(c.cdn_url)
+      .then((r) => (r.ok ? r.text() : Promise.reject(`HTTP ${r.status}`)))
+      .then((txt) => {
+        if (cancelled) return;
+        let json = txt;
+        try {
+          json = JSON.stringify(JSON.parse(txt), null, 2);
+        } catch {
+          /* lämna rå text om parsning misslyckas */
+        }
+        setOutput({ clientId: c.client_id, json });
+      })
+      .catch((e) => !cancelled && setError(String(e)));
+    return () => {
+      cancelled = true;
+    };
+  }, [selected, clients]);
+
   const copy = useCallback((text: string, key: string) => {
     navigator.clipboard.writeText(text);
     setCopied(key);
@@ -71,6 +148,12 @@ export default function LeveransPage() {
 
   const profileUrl = delivery?.compiled_url || delivery?.profile_url || null;
   const isCompiled = Boolean(delivery?.compiled_url);
+
+  const selectedClient = clients.find((c) => c.client_id === selected) || null;
+  const cdnUrl =
+    selectedClient?.cdn_url ||
+    'https://storage.googleapis.com/insider-graph-cdn-<project>/clients/<client_id>/schema.json';
+  const fullJson = output?.clientId === selected ? output.json : null;
 
   return (
     <GraphPageShell
@@ -176,6 +259,50 @@ export default function LeveransPage() {
         </Row>
         <pre style={{ ...preStyle, marginTop: 10 }}>{badge?.snippet || '…'}</pre>
       </Card>
+
+      {/* 4. Full kompilerad JSON-LD-graf (QA — hopfällbar) */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 22px', marginBottom: 16 }}>
+        <button
+          onClick={() => setShowOutput((v) => !v)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            width: '100%',
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            padding: 0,
+            textAlign: 'left',
+          }}
+        >
+          {showOutput ? <ChevronDown size={16} color={C.muted} /> : <ChevronRight size={16} color={C.muted} />}
+          <div style={{ flex: 1 }}>
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56', margin: 0 }}>JSON-LD-output (kompilerad graf)</h2>
+            <p style={{ fontSize: 12, color: C.muted, margin: '2px 0 0', lineHeight: 1.5 }}>
+              Hela Schema.org-grafen som distribueras via CDN. För granskning/QA — det är profilsidan ovan kunden faktiskt installerar.
+            </p>
+          </div>
+        </button>
+
+        {showOutput && (
+          <div style={{ marginTop: 16 }}>
+            <Row>
+              <code style={codeStyle}>{cdnUrl}</code>
+              <button onClick={() => copy(cdnUrl, 'cdn')} style={btnStyle}>
+                {copied === 'cdn' ? <Check size={14} /> : <Copy size={14} />}
+                {copied === 'cdn' ? 'Kopierad' : 'Kopiera URL'}
+              </button>
+            </Row>
+            <div style={{ fontSize: 12, color: C.muted, margin: '14px 0 8px' }}>
+              {fullJson ? `Aktuell JSON-LD för ${selectedClient?.company_name || selected}` : 'Exempel-output (ej kompilerad)'}
+            </div>
+            <pre style={{ ...preStyle, maxHeight: 480, whiteSpace: 'pre', wordBreak: 'normal' }}>
+              {fullJson || JSON.stringify(SAMPLE_JSON, null, 2)}
+            </pre>
+          </div>
+        )}
+      </div>
 
       {error && (
         <div style={errorStyle}>{error}</div>
