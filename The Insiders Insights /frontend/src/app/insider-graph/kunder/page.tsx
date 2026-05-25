@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Users, Upload, X, AlertCircle, CheckCircle2, ExternalLink, RefreshCw } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
-import { GRAPH_API, graphFetch } from '../_lib/api';
+import { graphFetch } from '../_lib/api';
 
 type ParsedEmployee = {
   name: string;
@@ -40,8 +40,8 @@ export default function GraphKunderPage() {
     try {
       const data = await graphFetch<{ clients: Client[] }>('/api/clients');
       setClients(data.clients);
-    } catch (e: any) {
-      setLoadError(e.message);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : String(e));
       setClients([]);
     }
   }
@@ -273,8 +273,8 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
         body: JSON.stringify({ client_id: clientId, company_name: companyName, csv }),
       });
       setPreview(data.employees);
-    } catch (e: any) {
-      setPreviewError(e.message || 'Kunde inte förhandsvisa');
+    } catch (e) {
+      setPreviewError(e instanceof Error ? e.message : 'Kunde inte förhandsvisa');
     }
   }
 
@@ -300,8 +300,8 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
         }),
       });
       setResult({ ok: true, message: `Skapade kund ${data.client_id} med ${data.employees_created} medarbetare.` });
-    } catch (e: any) {
-      setResult({ ok: false, message: e.message || 'Onboarding misslyckades' });
+    } catch (e) {
+      setResult({ ok: false, message: e instanceof Error ? e.message : 'Onboarding misslyckades' });
     } finally {
       setSubmitting(false);
     }
