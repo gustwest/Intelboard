@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { FileJson, Copy, Check } from 'lucide-react';
+import Link from 'next/link';
+import { FileJson, Copy, Check, Rocket } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import { graphFetch } from '../_lib/api';
 
@@ -36,7 +37,7 @@ export default function GraphSchemaPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [json, setJson] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState<'snippet' | 'cdn' | null>(null);
+  const [copied, setCopied] = useState<'cdn' | null>(null);
 
   useEffect(() => {
     graphFetch<{ clients: Client[] }>('/api/clients')
@@ -68,9 +69,8 @@ export default function GraphSchemaPage() {
 
   const selectedClient = clients.find((c) => c.client_id === selected) || null;
   const cdnUrl = selectedClient?.cdn_url || `https://storage.googleapis.com/insider-graph-cdn-<project>/clients/<client_id>/schema.json`;
-  const gtmSnippet = makeGtmSnippet(cdnUrl);
 
-  function copy(text: string, key: 'snippet' | 'cdn') {
+  function copy(text: string, key: 'cdn') {
     navigator.clipboard.writeText(text);
     setCopied(key);
     setTimeout(() => setCopied(null), 1500);
@@ -80,7 +80,7 @@ export default function GraphSchemaPage() {
     <GraphPageShell
       title="JSON-LD-output"
       icon={<FileJson size={22} />}
-      subtitle="Schema.org-grafen som distribueras via CDN och injiceras på kundens sajt via GTM."
+      subtitle="Schema.org-grafen som genereras per kund och distribueras via CDN. För installation hos kund, se Leverans."
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <label style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>Kund:</label>
@@ -158,49 +158,29 @@ export default function GraphSchemaPage() {
         </button>
       </div>
 
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px', marginBottom: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <h2 style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56', margin: 0 }}>GTM-snippet (engångsinstallation hos kund-IT)</h2>
-          <button
-            onClick={() => copy(gtmSnippet, 'snippet')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '6px 12px',
-              background: copied === 'snippet' ? 'rgba(34,197,94,0.15)' : 'rgba(159,81,182,0.18)',
-              color: copied === 'snippet' ? '#86efac' : '#9f51b6',
-              border: `1px solid ${copied === 'snippet' ? 'rgba(34,197,94,0.3)' : 'rgba(159,81,182,0.3)'}`,
-              borderRadius: 6,
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            {copied === 'snippet' ? <Check size={12} /> : <Copy size={12} />}
-            {copied === 'snippet' ? 'Kopierad' : 'Kopiera snippet'}
-          </button>
+      <Link
+        href="/insider-graph/leverans"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          background: 'rgba(159,81,182,0.08)',
+          border: `1px solid rgba(159,81,182,0.25)`,
+          borderRadius: 12,
+          padding: '14px 20px',
+          marginBottom: 16,
+          textDecoration: 'none',
+          color: '#3a4b56',
+        }}
+      >
+        <Rocket size={18} color="#9f51b6" />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>Installera hos kund → Leverans</div>
+          <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
+            Datan levereras inte via JS-injektion (många AI-crawlers kör inte JS). Profilsida, statisk identitets-snutt och badge finns under Leverans.
+          </div>
         </div>
-        <pre
-          style={{
-            background: '#eef0f1',
-            border: `1px solid ${C.border}`,
-            borderRadius: 8,
-            padding: '14px 18px',
-            fontSize: 12,
-            fontFamily: 'ui-monospace, SFMono-Regular, monospace',
-            lineHeight: 1.65,
-            color: '#3a4b56',
-            overflowX: 'auto',
-            margin: 0,
-          }}
-        >
-{gtmSnippet}
-        </pre>
-        <div style={{ fontSize: 11, color: C.muted, marginTop: 8, lineHeight: 1.55 }}>
-          Custom HTML Tag i GTM, trigger: <code>All Pages</code>, prioritet 1. Fetchen körs asynkront — noll påverkan på Core Web Vitals.
-        </div>
-      </div>
+      </Link>
 
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px' }}>
         <h2 style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56', margin: '0 0 12px' }}>
@@ -242,21 +222,4 @@ export default function GraphSchemaPage() {
       )}
     </GraphPageShell>
   );
-}
-
-function makeGtmSnippet(cdnUrl: string): string {
-  return `<script>
-(function() {
-  var CDN_URL = '${cdnUrl}';
-  fetch(CDN_URL, { cache: 'no-store' })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      var s = document.createElement('script');
-      s.type = 'application/ld+json';
-      s.text = JSON.stringify(data);
-      document.head.appendChild(s);
-    })
-    .catch(function() { /* tyst fail */ });
-})();
-</script>`;
 }
