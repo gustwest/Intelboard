@@ -16,6 +16,7 @@ import {
   FileJson,
   Radar,
   Inbox,
+  Rocket,
 } from 'lucide-react';
 import ProductSwitcher, { activeProductId } from './ProductSwitcher';
 
@@ -35,6 +36,7 @@ const GRAPH_LINKS = [
   { href: '/insider-graph/connectors', label: 'Connectors', icon: Plug },
   { href: '/insider-graph/review', label: 'Granska', icon: Inbox },
   { href: '/insider-graph/schema', label: 'JSON-LD', icon: FileJson },
+  { href: '/insider-graph/leverans', label: 'Leverans', icon: Rocket },
   { href: '/insider-graph/polling', label: 'AI-synlighet', icon: Radar },
   { href: '/insider-graph/admin', label: 'Admin', icon: ShieldAlert },
 ];

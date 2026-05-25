@@ -26,9 +26,12 @@ def get_badge(
 
     kwargs = {"theme": theme, "variant": variant, "accent": accent}
     snippet = render_badge_js(client_id, **kwargs) if delivery == "js" else render_badge(client_id, **kwargs)
+    # preview = alltid statisk inline-variant så den kan visas i UI:t (pill är fixed).
+    preview = render_badge(client_id, theme=theme, accent=accent, variant="footer")
     return {
         "client_id": client_id,
         "profile_url": profile_url(client_id),
         "delivery": delivery,
         "snippet": snippet,
+        "preview": preview,
     }

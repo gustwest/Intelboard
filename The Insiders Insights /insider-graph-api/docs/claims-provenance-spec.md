@@ -199,6 +199,11 @@ starkaste domän som finns i kundens tier.**
 - *Premium:* `@id` på **kundens** domän (starkast auktoritet för AI-motorerna — och det
   mätbara mervärdet i premium).
 
+**Implementation:** identitets-snutten (`schema_org/delivery.py`, statisk JSON-LD med
+samma `@id` som profilens org + `sameAs` → profilsidan) + endpoint
+`GET /api/delivery/{client_id}`. Ops samlar leverans-artefakterna (profil-länk,
+identitets-snutt, badge) i frontend-fliken **Leverans** (`insider-graph/leverans`).
+
 ## 8. Konsekvens för ops-rollen
 
 Från **"skriv beskrivningen"** → **"godkänn, redigera och prioritera de claims systemet
