@@ -12,22 +12,51 @@ type Client = {
   cdn_url: string | null;
 };
 
+// Speglar den faktiska claims-baserade outputen: Organization-rot med
+// källförsedda egenskaper, källnoder och Claim-noder med isBasedOn → källa.
+const B = 'https://profiles.geogiraph.com/exempel-ab';
 const SAMPLE = {
   '@context': 'https://schema.org',
   '@graph': [
     {
       '@type': 'Organization',
-      '@id': 'https://insidergraph.io/clients/exempel-ab#org',
+      '@id': `${B}#org`,
       name: 'Exempel AB',
-      description: 'Konsultbolag inom GEO och AI-synlighet.',
-      knowsAbout: ['GEO', 'AI-synlighet', 'Schema.org'],
-      employee: [
-        {
-          '@type': 'Person',
-          name: 'Anna Andersson',
-          jobTitle: 'VD',
-        },
-      ],
+      foundingDate: '2014',
+      address: 'Göteborg',
+      knowsAbout: ['Inbyggda system', 'Fordonsindustri'],
+      identifier: '5566778899',
+      description: 'Hjälper fordonstillverkare med inbyggda system.',
+      sameAs: ['https://exempel.se', 'https://www.linkedin.com/company/exempel-ab'],
+      subjectOf: [{ '@id': `${B}#src-bv1` }],
+    },
+    {
+      '@type': 'Person',
+      '@id': `${B}#person-anna`,
+      name: 'Anna Andersson',
+      jobTitle: 'VD',
+      worksFor: { '@id': `${B}#org` },
+    },
+    {
+      '@type': 'WebPage',
+      '@id': `${B}#src-bv1`,
+      url: 'https://www.allabolag.se/5566778899',
+      datePublished: '2024-03-01',
+      name: 'Exempel AB',
+    },
+    {
+      '@type': 'Claim',
+      '@id': `${B}#claim-0`,
+      text: 'Grundat 2014',
+      about: { '@id': `${B}#org` },
+      isBasedOn: { '@id': `${B}#src-bv1` },
+    },
+    {
+      '@type': 'Claim',
+      '@id': `${B}#claim-1`,
+      text: 'Hjälper fordonstillverkare med inbyggda system',
+      about: { '@id': `${B}#org` },
+      isBasedOn: { '@id': `${B}#src-bv1` },
     },
   ],
 };
