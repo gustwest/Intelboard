@@ -105,7 +105,7 @@ def build_render_model(client_id: str) -> RenderModel:
 
     sources: dict[str, Source] = {}  # item_id → Source (bevarar ordning)
     facts: list[Fact] = []
-    prose: list[Prose] = []
+    prose_by_key: dict[str, Prose] = {}  # normaliserad text → Prose (dedup, bevarar ordning)
 
     def resolve(src: ClaimSource) -> tuple[int | None, str | None]:
         """→ (fotnotsnummer för item-källa, etikett för manuell källa)."""
@@ -139,8 +139,13 @@ def build_render_model(client_id: str) -> RenderModel:
         if claim.claim_kind == "property" and claim.predicate:
             facts.append(Fact(claim.predicate, claim.value, claim.statement, footnotes, manual_label))
         elif claim.claim_kind == "narrative" and claim.statement:
-            prose.append(Prose(claim.statement.strip(), footnotes, manual_label))
+            _merge_prose(prose_by_key, claim.statement.strip(), footnotes, manual_label)
 
+    # Dedup: snarlika påståenden (samma normaliserade text) är sammanslagna; deras
+    # källor är förenade → ett påstående som bekräftas av flera källor citerar alla.
+    prose = list(prose_by_key.values())
+    for p in prose:
+        p.footnotes.sort()
     description = (". ".join(p.statement.rstrip(".") for p in prose) + ".") if prose else None
     ordered_sources = sorted(sources.values(), key=lambda s: s.number)
     last_updated = max((s.date for s in ordered_sources if s.date), default=None)
@@ -290,6 +295,26 @@ def _apply_property(node: dict[str, Any], predicate: str, value: Any) -> None:
         if v not in bag:
             bag.append(v)
     node[predicate] = bag if len(bag) > 1 else bag[0]
+
+
+def _merge_prose(bag: dict[str, "Prose"], statement: str, footnotes: list[int], manual_label: str | None) -> None:
+    """Slå ihop snarlika narrative-claims (samma normaliserade text) och förena källor."""
+    key = _normalize(statement)
+    existing = bag.get(key)
+    if existing is None:
+        bag[key] = Prose(statement, list(footnotes), manual_label)
+        return
+    for n in footnotes:
+        if n not in existing.footnotes:
+            existing.footnotes.append(n)
+    if existing.manual_label is None and manual_label:
+        existing.manual_label = manual_label
+
+
+def _normalize(text: str) -> str:
+    """Normalisera för dedup-jämförelse: gemener, ihopslagna blanksteg, utan kantskiljetecken.
+    Fångar exakta/nästan-exakta dubbletter; semantiska parafraser är medvetet utanför."""
+    return " ".join(text.lower().split()).strip(" .,:;!?")
 
 
 def _load_source(client_id: str, base: str, src: ClaimSource, number: int) -> Source | None:

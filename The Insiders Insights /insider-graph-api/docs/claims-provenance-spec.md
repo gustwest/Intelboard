@@ -142,6 +142,10 @@ Nytt: **`Organization` projiceras helt ur claims.**
 - `Organization.description` = sammanfattning komponerad **enbart** av godkända
   narrative-claims på org-nivå (inte längre handskriven `about`). Bygger på att varje
   narrative-claim är självbärande (§5) → sammanfogas till löptext.
+- **Dedup:** snarlika narrative-claims (samma normaliserade text — gemener, ihopslagna
+  blanksteg, utan kantskiljetecken) slås ihop till ett, och deras **källor förenas** → ett
+  påstående som flera källor bekräftar citerar alla (starkare proveniens, inga dubbletter i
+  description/prosa/FAQ). Semantiska parafraser är medvetet utanför (skulle kräva embeddings).
 - Sociala mätvärden (följare, likes) inkluderas fortsatt **aldrig** (oförändrad regel).
 - **`@id`-basen är konfigurerbar per kund** via `profile_base_url`, default
   `https://profiles.geogiraph.com/<kund>` (konstant `DEFAULT_BASE`). Se §7.
@@ -281,4 +285,28 @@ och degrade-switchen — ännu inte byggt.
 - Schemaläggning av `extract-claims`-jobbet (cron/Eventarc) som övriga jobs.
 - Central degrade-switch + meta-endpoint för badgens live-färskhet (§10).
 - Premium-tier: faktisk CNAME-uppsättning + servering på kundens domän (§7).
-```
+
+## 12. Person-claims / ledning (design låst — byggs med connectors)
+
+Att lyfta in **ledning/nyckelpersoner** med proveniens. Personuppgifter → **samtyckes-
+baserat och opt-in per person**. Designen är låst; byggs när LinkedIn-connectorn (som
+hämtar persondata) finns, så vi kan verifiera mot riktig data i stället för att hantera
+personuppgifter blint.
+
+**Princip — opt-out som default:**
+- Per medarbetare: `include_in_profile: bool = False`. Ingen person syns utan att kunden
+  uttryckligen togglat på (förutsatt personens samtycke).
+- Endast opt-in:ade personer: LinkedIn-profilen hämtas (länken finns redan i
+  `EmployeeInput.linkedin_url`), claims tillskrivs personen (`subject_ref=<employee_id>`),
+  och en `Person`-nod renderas **med proveniens** (fotnoter → personens profil/inlägg).
+- En toggel per person i UI:t (av som standard).
+
+**Vad som måste byggas då:**
+- `include_in_profile`-flagga + UI-toggel per medarbetare.
+- Extraktionen: **tillskriva** claims till rätt person (idag skrivs allt `subject_ref="org"`).
+- `build_render_model`: projicera `subject_ref=<employee_id>`-claims på Person-noder (idag
+  hoppas de över — *"MVP: medarbetar-claims projiceras inte ännu"*).
+- Per-person-rendering på profilsidan + Person-claims i FAQ/llms.txt vid behov.
+
+**Inte byggt nu** av GDPR-skäl: personuppgiftshantering ska designas mot verklig data,
+inte mockar. Bara grinden (default-av) och projektionen är förberedd i tanken.

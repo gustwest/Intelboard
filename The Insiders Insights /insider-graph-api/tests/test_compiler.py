@@ -120,6 +120,34 @@ class CompileClientTest(unittest.TestCase):
         self.assertIn("citation", questions["När grundades Acme AB?"])
         self.assertIn("2014", questions["När grundades Acme AB?"]["text"])
 
+    def test_duplicate_narrative_claims_merge_and_union_sources(self):
+        # Samma påstående från två källor → ett claim, båda källorna förenade.
+        same = "Hjälper fordonstillverkare med inbyggda system"
+        _graph_setup(
+            company_items={
+                "bv1": {"schema_type": "Organization", "url": "https://allabolag.se/x",
+                        "published_at": datetime(2024, 3, 1, tzinfo=timezone.utc),
+                        "included_in_output": True, "extra": {}},
+                "li1": {"schema_type": "SocialMediaPosting", "url": "https://linkedin.com/post/1",
+                        "published_at": datetime(2024, 5, 1, tzinfo=timezone.utc),
+                        "included_in_output": True, "extra": {}},
+            },
+            claims={
+                "c1": {"claim_kind": "narrative", "subject_ref": "org", "statement": same,
+                       "source": [{"kind": "item", "item_id": "bv1"}], "included_in_output": True},
+                "c2": {"claim_kind": "narrative", "subject_ref": "org", "statement": same + ".",  # nästan-exakt
+                       "source": [{"kind": "item", "item_id": "li1"}], "included_in_output": True},
+            },
+        )
+        graph = compile_client("acme")
+        org = _nodes(graph, "Organization")[0]
+        # bara en mening i description (inte dubblerad)
+        self.assertEqual(org["description"].count("Hjälper fordonstillverkare"), 1)
+        # ett narrative Claim, med båda källorna i isBasedOn
+        narr = [c for c in _nodes(graph, "Claim") if "fordonstillverkare" in c["text"]]
+        self.assertEqual(len(narr), 1)
+        self.assertEqual(len(narr[0]["isBasedOn"]), 2)
+
     def test_missing_client_raises(self):
         fakefs.reset(client=None)
         with self.assertRaises(KeyError):
