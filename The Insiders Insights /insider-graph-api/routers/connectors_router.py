@@ -19,6 +19,7 @@ router = APIRouter(prefix="/api/connectors", tags=["connectors"])
 class ConnectorsUpdate(BaseModel):
     active_connectors: list[str] | None = None
     rss_feeds: list[dict[str, str]] | None = None
+    scrape_employee_profiles: bool | None = None
 
 
 @router.get("")
@@ -37,6 +38,10 @@ def get_client_connectors(client_id: str) -> dict[str, Any]:
         "available": connectors.all_metadata(),
         "active_connectors": data.get("active_connectors", []),
         "rss_feeds": (data.get("settings") or {}).get("rss_feeds", []),
+        # Default AV: medarbetares LinkedIn-profiler scrapas inte automatiskt.
+        "scrape_employee_profiles": bool(
+            (data.get("settings") or {}).get("scrape_employee_profiles", False)
+        ),
     }
 
 
@@ -54,6 +59,8 @@ def update_client_connectors(client_id: str, payload: ConnectorsUpdate) -> dict[
         update["active_connectors"] = payload.active_connectors
     if payload.rss_feeds is not None:
         update["settings.rss_feeds"] = payload.rss_feeds
+    if payload.scrape_employee_profiles is not None:
+        update["settings.scrape_employee_profiles"] = payload.scrape_employee_profiles
 
     if update:
         ref.update(update)

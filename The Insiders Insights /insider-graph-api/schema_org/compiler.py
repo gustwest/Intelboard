@@ -61,14 +61,9 @@ def compile_client(client_id: str) -> dict[str, Any]:
         if not raw.get("included_in_output", True):
             continue
         if raw.get("schema_type") == "Organization":
-            organization.setdefault("subOrganization", []).append(
-                {
-                    "@type": "Organization",
-                    "name": raw.get("name"),
-                    "url": raw.get("url"),
-                    "description": raw.get("content"),
-                }
-            )
+            # Företagsnivå-källor (LinkedIn-företagssida, Bolagsverket) beskriver
+            # kunden själv → berika rotnoden istället för att skapa subOrganization.
+            _merge_company_org(organization, raw)
             continue
         organization["subjectOf"].append(
             {
@@ -84,6 +79,34 @@ def compile_client(client_id: str) -> dict[str, Any]:
         "@context": "https://schema.org",
         "@graph": [organization],
     }
+
+
+def _merge_company_org(organization: dict[str, Any], raw: dict[str, Any]) -> None:
+    """Fyll tomma fält på rot-Organization från en företagsnivå-källa.
+
+    Kurerade värden från klientdokumentet vinner alltid; connector-data fyller
+    bara luckor. `name` lämnas orört (sätts alltid från company_name).
+    """
+    if not organization.get("description") and raw.get("content"):
+        organization["description"] = raw["content"]
+    if not organization.get("foundingDate") and raw.get("founded"):
+        organization["foundingDate"] = raw["founded"]
+
+    industry = raw.get("industry")
+    if industry:
+        known = organization.setdefault("knowsAbout", [])
+        if industry not in known:
+            known.append(industry)
+
+    address = raw.get("address") or raw.get("headquarters")
+    if address and not organization.get("address"):
+        organization["address"] = address
+
+    url = raw.get("url")
+    if url:
+        same_as = organization.setdefault("sameAs", [])
+        if url not in same_as:
+            same_as.append(url)
 
 
 def _iso(value: Any) -> str | None:

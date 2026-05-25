@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plug, Play, Plus, Trash2, Save, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Plug, Play, Plus, Trash2, Save, AlertCircle, CheckCircle2, Users } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import { graphFetch } from '../_lib/api';
 
@@ -22,6 +22,7 @@ type ClientConnectors = {
   available: ConnectorMeta[];
   active_connectors: string[];
   rss_feeds: RssFeed[];
+  scrape_employee_profiles: boolean;
 };
 
 const STATIC_PLANNED: ConnectorMeta[] = [
@@ -69,6 +70,7 @@ export default function GraphConnectorsPage() {
   const [state, setState] = useState<ClientConnectors | null>(null);
   const [active, setActive] = useState<string[]>([]);
   const [feeds, setFeeds] = useState<RssFeed[]>([]);
+  const [scrapeEmployees, setScrapeEmployees] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [banner, setBanner] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
@@ -89,6 +91,7 @@ export default function GraphConnectorsPage() {
         setState(d);
         setActive(d.active_connectors);
         setFeeds(d.rss_feeds || []);
+        setScrapeEmployees(!!d.scrape_employee_profiles);
         setDirty(false);
       })
       .catch((e) => setBanner({ tone: 'error', text: e.message }));
@@ -122,7 +125,11 @@ export default function GraphConnectorsPage() {
       await graphFetch(`/api/connectors/${selected}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active_connectors: active, rss_feeds: feeds.filter((f) => f.url) }),
+        body: JSON.stringify({
+          active_connectors: active,
+          rss_feeds: feeds.filter((f) => f.url),
+          scrape_employee_profiles: scrapeEmployees,
+        }),
       });
       setDirty(false);
       setBanner({ tone: 'ok', text: 'Sparat' });
@@ -219,6 +226,56 @@ export default function GraphConnectorsPage() {
           {banner.text}
         </div>
       )}
+
+      <div
+        style={{
+          background: C.card,
+          border: `1px solid ${scrapeEmployees ? 'rgba(159,81,182,0.4)' : C.border}`,
+          borderRadius: 12,
+          padding: '18px 22px',
+          marginBottom: 16,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 16,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, minWidth: 0 }}>
+          <span style={{ color: scrapeEmployees ? '#9f51b6' : C.muted, marginTop: 2, flexShrink: 0 }}>
+            <Users size={18} />
+          </span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56' }}>
+              Hämta medarbetares LinkedIn-profiler
+            </div>
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 4, lineHeight: 1.55 }}>
+              Avstängt som standard — då hämtas <strong>ingen</strong> information om enskilda
+              medarbetare automatiskt, bara bolagets egen LinkedIn-sida. Slås det på hämtas profiler
+              endast för medarbetare märkta <code>aktiv</code> (t.ex. ledningen).
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={() => {
+            setScrapeEmployees((v) => !v);
+            setDirty(true);
+          }}
+          disabled={!selected}
+          style={{
+            flexShrink: 0,
+            padding: '6px 16px',
+            borderRadius: 999,
+            background: scrapeEmployees ? 'rgba(159,81,182,0.18)' : 'transparent',
+            color: scrapeEmployees ? '#9f51b6' : C.muted,
+            border: `1px solid ${scrapeEmployees ? 'rgba(159,81,182,0.4)' : C.border}`,
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: selected ? 'pointer' : 'not-allowed',
+          }}
+        >
+          {scrapeEmployees ? 'På' : 'Av'}
+        </button>
+      </div>
 
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr 1fr 1.6fr 1fr', gap: 12, padding: '12px 20px', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.muted, borderBottom: `1px solid ${C.border}`, fontWeight: 600 }}>

@@ -12,6 +12,7 @@ import logging
 
 import connectors
 import firestore_client as fs
+from config import settings
 from connectors.base import ConnectorConfig
 
 log = logging.getLogger("jobs.scrape_active")
@@ -21,21 +22,45 @@ def run() -> None:
     for client_id, client in fs.iter_clients():
         active_connectors = client.get("active_connectors", [])
         _run_company_level(client_id, client, active_connectors)
+
+        # MVP: bara bolagsnivå. Per-medarbetare-profiler är avstängda by default.
+        # Slås på antingen globalt (settings.scrape_employee_linkedin) eller per
+        # kund (client.settings.scrape_employee_profiles). När det är på hämtas
+        # bara medarbetare med node_type="aktiv" — så ledningen markeras "aktiv"
+        # och övriga "passiv".
+        if not _employee_linkedin_enabled(client):
+            continue
         for employee_id, emp in fs.iter_employees(client_id):
             if emp.get("node_type") != "aktiv":
                 continue
             _run_employee_level(client_id, employee_id, emp, active_connectors)
 
 
+def _employee_linkedin_enabled(client: dict) -> bool:
+    """Ska personprofiler scrapas för den här kunden?
+
+    Per-kund-override vinner över global default. Sätt
+    client.settings.scrape_employee_profiles = True för att kartlägga t.ex.
+    ledningen hos ETT bolag utan att påverka övriga kunder.
+    """
+    override = (client.get("settings") or {}).get("scrape_employee_profiles")
+    if override is not None:
+        return bool(override)
+    return settings.scrape_employee_linkedin
+
+
 def _run_company_level(client_id: str, client: dict, active: list[str]) -> None:
-    """Connectors som körs en gång per kund (Bolagsverket, RSS-feeds)."""
+    """Connectors som körs en gång per kund (LinkedIn-företagssida, Bolagsverket, RSS).
+
+    employee_id är None här → LinkedIn-connectorn använder company-datasetet och
+    hämtar bolagets sida, inte en personprofil.
+    """
     params = {
         "org_number": client.get("org_number"),
+        "linkedin_url": client.get("company_linkedin_url"),
         "rss_feeds": (client.get("settings") or {}).get("rss_feeds") or [],
     }
     for connector_id in active:
-        if connector_id == "linkedin":
-            continue  # företagsprofil hanteras via dedicated company employee
         try:
             connector_cls = connectors.get(connector_id)
         except KeyError:
