@@ -23,6 +23,35 @@ class ReviewAction(BaseModel):
     note: str | None = None
 
 
+@router.get("/{client_id}/risks")
+def list_risk_findings(client_id: str) -> dict[str, Any]:
+    """GEO-riskloop skiva 1: öppna findings (read-only) för granskning."""
+    if not fs.client_doc(client_id).get().exists:
+        raise HTTPException(404, f"client not found: {client_id}")
+
+    items: list[dict[str, Any]] = []
+    for fid, data in fs.iter_risk_findings(client_id):
+        if data.get("status") not in (None, "open"):
+            continue
+        items.append(
+            {
+                "id": fid,
+                "persona": data.get("persona"),
+                "track": data.get("track"),
+                "question": data.get("question"),
+                "engine": data.get("engine"),
+                "harm": data.get("harm"),
+                "severity": data.get("severity"),
+                "sourcing": data.get("sourcing"),
+                "engine_excerpt": data.get("engine_excerpt"),
+                "detected_at": _iso(data.get("detected_at")),
+            }
+        )
+    order = {"high": 0, "medium": 1, "low": 2}
+    items.sort(key=lambda x: order.get(x.get("severity"), 3))
+    return {"client_id": client_id, "findings": items}
+
+
 @router.get("/{client_id}")
 def list_pending(client_id: str) -> dict[str, Any]:
     if not fs.client_doc(client_id).get().exists:

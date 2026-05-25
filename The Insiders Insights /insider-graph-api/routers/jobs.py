@@ -51,6 +51,17 @@ def trigger_compile(client_id: str, background: BackgroundTasks) -> dict[str, An
     return {"status": "queued", "job": "compile_schema", "client_id": client_id}
 
 
+@router.post("/risk-detect/{client_id}")
+def trigger_risk_detect(client_id: str, background: BackgroundTasks) -> dict[str, Any]:
+    """GEO-riskloop skiva 1 — generera frågor + klassa motorsvar för en kund."""
+    if not fs.client_doc(client_id).get().exists:
+        raise HTTPException(404, "client not found")
+    from services.risk_detector import run_for_client
+
+    background.add_task(run_for_client, client_id)
+    return {"status": "queued", "job": "risk_detect", "client_id": client_id}
+
+
 @router.post("/compile-via-eventarc")
 async def compile_via_eventarc(request: Request, background: BackgroundTasks) -> dict[str, Any]:
     """Eventarc-target: triggas av Firestore-writes på raw_items/.

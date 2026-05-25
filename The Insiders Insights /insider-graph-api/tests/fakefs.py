@@ -66,6 +66,7 @@ def reset(
     company_items: dict[str, dict] | None = None,
     employee_items: dict[str, dict[str, dict]] | None = None,
     claims: dict[str, dict] | None = None,
+    risk_findings: dict[str, dict] | None = None,
 ) -> None:
     STATE.clear()
     STATE.update(
@@ -74,6 +75,7 @@ def reset(
         company_items=company_items or {},
         employee_items=employee_items or {},
         claims=claims or {},
+        risk_findings=risk_findings or {},
         writes={},
     )
 
@@ -131,6 +133,22 @@ def claim_doc(client_id: str, claim_id: str) -> _DocRef:
         on_update=lambda i, p: STATE["claims"].setdefault(i, {}).update(p),  # review uppdaterar
         on_delete=lambda i: STATE.get("claims", {}).pop(i, None),  # GDPR-radering
     )
+
+
+def risk_findings_col(client_id: str) -> _Col:
+    return _Col(STATE.get("risk_findings"))
+
+
+def risk_finding_doc(client_id: str, finding_id: str) -> _DocRef:
+    return _DocRef(
+        finding_id,
+        STATE.get("risk_findings", {}).get(finding_id),
+        on_set=lambda i, p: STATE.setdefault("risk_findings", {}).__setitem__(i, p),
+    )
+
+
+def iter_risk_findings(client_id: str):
+    return list(STATE.get("risk_findings", {}).items())
 
 
 def writes() -> dict[str, dict]:

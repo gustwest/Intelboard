@@ -327,7 +327,7 @@ risker) som social proof — bara aggregat, inget känsligt.
 
 | Skiva | Innehåll | DoD-koppling |
 |-------|----------|--------------|
-| 1 | Frågebatterier + skadeklassning (read-only) → findings i review-kö | test på klassning |
+| 1 | Frågebatterier + skadeklassning (read-only) → findings i review-kö ✅ **byggd** (services/risk_detector.py) | test på klassning |
 | 2 | Korrigering: godkänd finding → förstärkt ammunition-claim → recompile + logg | compiler-test |
 | 3 | Månadsrapport: render-modell + endpoint + HTML, per persona | render-test |
 | 4 | Effekt över tid: Risk Exposure-trend + resolved-detektering | trend-test |
