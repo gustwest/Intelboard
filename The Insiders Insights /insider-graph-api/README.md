@@ -73,6 +73,19 @@ uvicorn main:app --reload --port 8081
 
 Port 8081 så det inte krockar med befintliga `backend/` (8080) och `frontend/` (3000).
 
+## Tester
+
+Enhetstester för claims/kompilator/extraktion mot en fake Firestore (stdlib
+`unittest`, inga extra beroenden):
+
+```bash
+cd insider-graph-api
+PYTHONPATH=. python -m unittest discover -s tests -p "test_*.py"
+```
+
+`tests/fakefs.py` installeras som `firestore_client` så ingen riktig Firestore
+eller GCP-credential behövs.
+
 ## Auth
 
 Admin-endpoints kräver `X-API-Key: <ADMIN_API_KEY>`. Lokalt utan key — middleware släpper igenom allt och loggar en startup-varning. Skarpa miljöer ska alltid ha `ADMIN_API_KEY` satt via Secret Manager.
