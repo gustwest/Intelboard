@@ -14,7 +14,7 @@ from google.cloud import firestore, storage
 import firestore_client as fs
 from config import settings
 from schema_org.compiler import compile_client
-from schema_org.profile_page import render_profile_html
+from schema_org.profile_page import render_llms_txt, render_profile_html
 
 log = logging.getLogger("jobs.compile_schema")
 
@@ -23,6 +23,7 @@ def run(client_id: str) -> None:
     graph = compile_client(client_id)
     payload = json.dumps(graph, ensure_ascii=False, default=str)
     profile_html = render_profile_html(client_id)
+    llms_txt = render_llms_txt(client_id)
 
     if not settings.cdn_bucket:
         log.warning("CDN_BUCKET not configured — skipping upload")
@@ -45,6 +46,12 @@ def run(client_id: str) -> None:
     page_blob.upload_from_string(profile_html, content_type="text/html; charset=utf-8")
     page_blob.cache_control = "public, max-age=300"
     page_blob.patch()
+
+    # llms.txt: markdown-summering för AI-crawlers (discoverability).
+    llms_blob = bucket.blob(f"clients/{client_id}/llms.txt")
+    llms_blob.upload_from_string(llms_txt, content_type="text/plain; charset=utf-8")
+    llms_blob.cache_control = "public, max-age=300"
+    llms_blob.patch()
 
     fs.client_doc(client_id).update(
         {

@@ -242,6 +242,11 @@ sätter `profile_url` på klientdokumentet. Faktapanel + prosa bär fotnoter (an
 + `title`-popover); källförteckning numrerad med url + datum; trust-rad med källantal +
 färskhet.
 
+**Discoverability:** profilsidans `<head>` har canonical-länk, meta description, robots
+(index/follow) och OpenGraph. Per kund genereras även `llms.txt` (markdown-summering ur
+claims, för AI-crawlers) bredvid `schema.json`. `compile-all-schemas` skriver `robots.txt`
+(släpper in crawlers + pekar på sitemap) och `sitemap.xml` (alla profilsidor) på CDN-roten.
+
 ## 10. Badge (lager 3)
 
 Diskret komponent på kundsajten som länkar till profilsidan. Riktar sig till människor.

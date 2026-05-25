@@ -36,9 +36,42 @@ def render_profile_html(client_id: str) -> str:
     return _render(model, graph)
 
 
+def render_llms_txt(client_id: str) -> str:
+    """Markdown-summering enligt llms.txt-konventionen — en ren, faktatät vy som
+    AI-crawlers kan läsa direkt. Allt härlett ur samma claims (källförsett)."""
+    model = build_render_model(client_id)
+    name = model.company_name or model.client_id
+
+    lines = [f"# {name}", ""]
+    if model.description:
+        lines += [f"> {model.description}", ""]
+    lines += [f"AI-profil verifierad av Geogiraph. {_trust_line(model)}.", ""]
+
+    if model.facts:
+        lines.append("## Fakta")
+        for f in model.facts:
+            label = _FACT_LABELS.get(f.predicate, f.predicate)
+            value = ", ".join(str(v) for v in f.value) if isinstance(f.value, list) else str(f.value)
+            lines.append(f"- {label}: {value}")
+        lines.append("")
+
+    if model.sources:
+        lines.append("## Källor")
+        for s in model.sources:
+            label = s.name or s.url or f"Källa {s.number}"
+            date = f" ({_fmt_date(s.date)})" if s.date else ""
+            link = f"[{label}]({s.url})" if s.url else label
+            lines.append(f"- {link}{date}")
+        lines.append("")
+
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def _render(model: RenderModel, graph: dict) -> str:
     name = html.escape(model.company_name or model.client_id)
     jsonld = json.dumps(graph, ensure_ascii=False, default=str)
+    canonical = html.escape(model.base)
+    desc = html.escape((model.description or f"AI-profil för {model.company_name or model.client_id}.")[:300])
 
     facts_html = "\n".join(_fact_row(f) for f in model.facts)
     prose_html = "".join(_prose_sentence(p) for p in model.prose).strip()
@@ -51,6 +84,13 @@ def _render(model: RenderModel, graph: dict) -> str:
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{name} — AI-profil</title>
+<meta name="description" content="{desc}">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{canonical}">
+<meta property="og:type" content="profile">
+<meta property="og:title" content="{name} — AI-profil">
+<meta property="og:description" content="{desc}">
+<meta property="og:url" content="{canonical}">
 <script type="application/ld+json">{jsonld}</script>
 <style>
   body {{ font-family: -apple-system, system-ui, sans-serif; max-width: 720px;

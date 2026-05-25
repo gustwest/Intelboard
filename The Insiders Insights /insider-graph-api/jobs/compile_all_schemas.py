@@ -3,25 +3,58 @@
 Iterar alla kunder och kompilerar JSON-LD per kund. Wraps jobs.compile_schema
 för att vara cron-triggable utan per-kund-argument.
 
+Skriver dessutom discoverability-filer på CDN-roten: robots.txt (släpper in
+AI-crawlers + pekar på sitemap) och sitemap.xml (alla profilsidor).
+
 Change-agentens diff-logik i compile_schema.run() hindrar onödiga uploads.
 """
 import logging
 
+from google.cloud import storage
+
 import firestore_client as fs
+from config import settings
 from jobs.compile_schema import run as compile_one
 
 log = logging.getLogger("jobs.compile_all")
 
 
 def run() -> None:
-    count = 0
+    compiled: list[str] = []
     for client_id, _ in fs.iter_clients():
         try:
             compile_one(client_id)
-            count += 1
+            compiled.append(client_id)
         except Exception as exc:
             log.exception("compile failed for %s: %s", client_id, exc)
-    log.info("compiled %d clients", count)
+    log.info("compiled %d clients", len(compiled))
+
+    if settings.cdn_bucket and compiled:
+        _write_discoverability(compiled)
+
+
+def _write_discoverability(client_ids: list[str]) -> None:
+    base = settings.cdn_base_url.rstrip("/")
+    bucket = storage.Client().bucket(settings.cdn_bucket)
+
+    robots = f"User-agent: *\nAllow: /\n\nSitemap: {base}/sitemap.xml\n"
+    _put(bucket, "robots.txt", robots, "text/plain; charset=utf-8")
+
+    urls = "".join(f"  <url><loc>{base}/clients/{cid}/</loc></url>\n" for cid in client_ids)
+    sitemap = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"{urls}</urlset>\n"
+    )
+    _put(bucket, "sitemap.xml", sitemap, "application/xml; charset=utf-8")
+    log.info("wrote robots.txt + sitemap.xml (%d urls)", len(client_ids))
+
+
+def _put(bucket, path: str, body: str, content_type: str) -> None:
+    blob = bucket.blob(path)
+    blob.upload_from_string(body, content_type=content_type)
+    blob.cache_control = "public, max-age=3600"
+    blob.patch()
 
 
 if __name__ == "__main__":
