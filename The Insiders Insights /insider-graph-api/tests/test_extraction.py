@@ -37,10 +37,14 @@ def _setup_one_source():
 
 class ExtractionTest(unittest.TestCase):
     def tearDown(self):
-        ce._pick_llm = _orig_pick_llm
+        ce._pick_generator = _orig_pick_generator
+        ce._pick_validator = _orig_pick_validator
 
     def _use(self, llm):
-        ce._pick_llm = lambda: llm
+        # Samma fake för båda rollerna — _FakeLLM skiljer på generera/validera
+        # via systemprompten, så en instans räcker.
+        ce._pick_generator = lambda: llm
+        ce._pick_validator = lambda: llm
 
     def test_grounded_validated_claim_is_written(self):
         _setup_one_source()
@@ -84,7 +88,8 @@ class ExtractionTest(unittest.TestCase):
         self.assertEqual(fakefs.writes(), {})
 
 
-_orig_pick_llm = ce._pick_llm
+_orig_pick_generator = ce._pick_generator
+_orig_pick_validator = ce._pick_validator
 
 
 if __name__ == "__main__":

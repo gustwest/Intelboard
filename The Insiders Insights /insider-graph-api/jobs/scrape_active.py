@@ -33,6 +33,8 @@ def run() -> None:
         for employee_id, emp in fs.iter_employees(client_id):
             if emp.get("node_type") != "aktiv":
                 continue
+            if emp.get("opted_out"):
+                continue  # opt-out → hämta ingen ny data för personen
             _run_employee_level(client_id, employee_id, emp, active_connectors)
 
 

@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 import httpx
 
 from config import settings
-from connectors.base import BaseConnector, ConnectorConfig, RawItem
+from connectors.base import BaseConnector, ConnectorConfig, InputField, RawItem
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +27,15 @@ class BolagsverketConnector(BaseConnector):
     output_types = ("Organization",)
     frequency = "monthly"
     tier = "standard"
+    input_fields = (
+        InputField(
+            "org_number",
+            "Organisationsnummer",
+            type="text",
+            required=True,
+            placeholder="556677-8899",
+        ),
+    )
 
     def fetch(self, config: ConnectorConfig) -> list[RawItem]:
         if not settings.bolagsverket_api_key:

@@ -12,6 +12,15 @@ class EmployeeInput(BaseModel):
     title: str | None = None
     node_type: str = "aktiv"
     gender: str | None = None
+    # opt-out: connectors slutar hämta ny data för personen (scrape-jobben hoppar
+    # över hen). Redan insamlad data ligger kvar tills den raderas explicit.
+    opted_out: bool = False
+
+
+class RssFeed(BaseModel):
+    url: str
+    schema_type: str = "NewsArticle"
+    label: str | None = None
 
 
 class OnboardRequest(BaseModel):
@@ -21,6 +30,11 @@ class OnboardRequest(BaseModel):
     org_number: str | None = None
     active_connectors: list[str] | None = None
     employees: list[EmployeeInput] = Field(default_factory=list)
+    # Connector-params som matar respektive connectors fetch(). Lagras under
+    # client.settings (website, rss_feeds, scrape_employee_profiles).
+    website_start_url: str | None = None
+    rss_feeds: list[RssFeed] = Field(default_factory=list)
+    scrape_employee_profiles: bool = False
     # Hosting-tier (se docs/claims-provenance-spec.md §7). "premium" → profilsidan
     # på kundens egen domän; profile_base_url sätter @id-basen för JSON-LD.
     tier: Literal["default", "premium"] = "default"
@@ -33,34 +47,28 @@ class OnboardResponse(BaseModel):
     employee_ids: list[str]
 
 
-class CsvOnboardRequest(BaseModel):
-    client_id: str
-    company_name: str
-    company_linkedin_url: str | None = None
-    org_number: str | None = None
-    csv: str
-    tier: Literal["default", "premium"] = "default"
-    profile_base_url: str | None = None
-
-
-class CsvPreviewResponse(BaseModel):
-    employees: list[EmployeeInput]
-    row_count: int
-
-
 # --- Claims & proveniens (se docs/claims-provenance-spec.md) ---------------
 
 
 class ClaimSource(BaseModel):
     """Källa bakom ett claim. Ett claim utan minst en källa skrivs aldrig."""
 
-    kind: Literal["item", "manual"] = "item"
+    kind: Literal["item", "manual", "attested"] = "item"
     # kind="item": peka på ett raw_item-dokument (→ url, datum).
     item_id: str | None = None
     # employee_id sätts om källan är ett medarbetar-item; None = företagsnivå.
     employee_id: str | None = None
     # kind="manual": neutral etikett, default "uppgift från bolaget", omskrivningsbar.
+    # kind="attested": etikett för det vi går i god för, t.ex.
+    # "LinkedIn-data, verifierad av Geogiraph".
     label: str | None = None
+    # kind="attested": en källa vi själva verifierar (t.ex. LinkedIns officiella
+    # export). Starkare än "manual" (företagets ord) men inte självverifierbar via
+    # publik URL → egen typ. attested_at bär färskheten (ISO-datum) som krävs för att
+    # attesteringen ska behålla trovärdighet. url = valfri publik ankare (t.ex.
+    # kundens LinkedIn-sida). Se docs/claims-provenance-spec.md §4.
+    attested_at: str | None = None
+    url: str | None = None
 
 
 class Claim(BaseModel):

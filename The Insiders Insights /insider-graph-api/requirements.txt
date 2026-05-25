@@ -10,4 +10,7 @@ python-multipart==0.0.9
 langchain==0.3.7
 langchain-openai==0.2.5
 langchain-google-genai==2.0.4
+langchain-anthropic==0.2.4
+trafilatura==2.0.0
+pypdf==6.12.1
 sendgrid==6.11.0

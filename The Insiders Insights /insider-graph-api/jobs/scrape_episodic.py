@@ -22,6 +22,8 @@ def run() -> None:
         for employee_id, emp in fs.iter_employees(client_id):
             if emp.get("node_type") != "episodisk":
                 continue
+            if emp.get("opted_out"):
+                continue  # opt-out → hämta ingen ny data för personen
             for connector_id in active_connectors:
                 if connector_id != "linkedin":
                     continue  # episodisk skörd = per-person; bara LinkedIn för MVP

@@ -21,7 +21,7 @@ from typing import Any
 
 import httpx
 
-from connectors.base import BaseConnector, ConnectorConfig, RawItem
+from connectors.base import BaseConnector, ConnectorConfig, InputField, RawItem
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +38,15 @@ class RssConnector(BaseConnector):
     output_types = ("NewsArticle", "JobPosting", "PodcastEpisode")
     frequency = "daily"
     tier = "standard"
+    input_fields = (
+        InputField(
+            "rss_feeds",
+            "RSS-feeds",
+            type="feed_list",
+            required=True,
+            help="En rad per feed: URL, schema-typ (NewsArticle/JobPosting/PodcastEpisode) och etikett.",
+        ),
+    )
 
     def fetch(self, config: ConnectorConfig) -> list[RawItem]:
         feeds = config.params.get("rss_feeds") or []

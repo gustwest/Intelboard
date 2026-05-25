@@ -148,6 +148,54 @@ class CompileClientTest(unittest.TestCase):
         self.assertEqual(len(narr), 1)
         self.assertEqual(len(narr[0]["isBasedOn"]), 2)
 
+    def test_attested_source_emitted_as_verified_dataset(self):
+        _graph_setup(
+            claims={
+                "c1": {
+                    "claim_kind": "narrative",
+                    "subject_ref": "org",
+                    "statement": "1500 ledare följer aktivt bolaget på LinkedIn",
+                    "source": [{
+                        "kind": "attested",
+                        "label": "LinkedIn-data, verifierad av Geogiraph",
+                        "attested_at": "2026-05-01",
+                        "url": "https://www.linkedin.com/company/acme",
+                    }],
+                    "included_in_output": True,
+                }
+            }
+        )
+        graph = compile_client("acme")
+        datasets = _nodes(graph, "Dataset")
+        self.assertEqual(len(datasets), 1)
+        src = datasets[0]
+        self.assertEqual(src["name"], "LinkedIn-data, verifierad av Geogiraph")
+        self.assertEqual(src["datePublished"], "2026-05-01")
+        self.assertEqual(src["sdPublisher"], {"@type": "Organization", "name": "Geogiraph"})
+        # claimet pekar på den attesterade källan
+        claim = [c for c in _nodes(graph, "Claim") if "1500 ledare" in c["text"]][0]
+        self.assertEqual(claim["isBasedOn"]["@id"], src["@id"])
+        # publik ankare hamnar i sameAs
+        org = _nodes(graph, "Organization")[0]
+        self.assertIn("https://www.linkedin.com/company/acme", org["sameAs"])
+
+    def test_attested_source_without_url_has_no_link(self):
+        _graph_setup(
+            claims={
+                "c1": {
+                    "claim_kind": "narrative",
+                    "subject_ref": "org",
+                    "statement": "Följarbasen domineras av seniora beslutsfattare",
+                    "source": [{"kind": "attested", "label": "LinkedIn-data, verifierad av Geogiraph",
+                                "attested_at": "2026-05-01"}],
+                    "included_in_output": True,
+                }
+            }
+        )
+        src = _nodes(compile_client("acme"), "Dataset")[0]
+        self.assertNotIn("url", src)
+        self.assertEqual(src["sdPublisher"]["name"], "Geogiraph")
+
     def test_missing_client_raises(self):
         fakefs.reset(client=None)
         with self.assertRaises(KeyError):

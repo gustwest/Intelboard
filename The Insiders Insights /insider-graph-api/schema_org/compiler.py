@@ -19,6 +19,7 @@ domänen). Det är så default/premium-hosting (§7) styrs.
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from typing import Any, Iterator
 
@@ -28,6 +29,8 @@ from schemas import Claim, ClaimSource
 
 DEFAULT_BASE = "https://profiles.geogiraph.com"
 DEFAULT_MANUAL_LABEL = "uppgift från bolaget"
+DEFAULT_ATTESTED_LABEL = "verifierad av Geogiraph"
+ATTESTED_PUBLISHER = "Geogiraph"
 
 # Källans raw-schema_type beskriver subjektet den gav, inte själva källdokumentet.
 # Org/Person-källor är i praktiken webbsidor vi läst.
@@ -42,6 +45,7 @@ class Source:
     date: str | None
     name: str | None
     schema_type: str
+    attested: bool = False   # True → källa vi själva verifierar (sdPublisher=Geogiraph)
 
 
 @dataclass
@@ -108,9 +112,29 @@ def build_render_model(client_id: str) -> RenderModel:
     prose_by_key: dict[str, Prose] = {}  # normaliserad text → Prose (dedup, bevarar ordning)
 
     def resolve(src: ClaimSource) -> tuple[int | None, str | None]:
-        """→ (fotnotsnummer för item-källa, etikett för manuell källa)."""
+        """→ (fotnotsnummer för item-/attesterad källa, etikett för manuell källa)."""
         if src.kind == "manual":
             return None, (src.label or DEFAULT_MANUAL_LABEL)
+        if src.kind == "attested":
+            # Attesterad källa: en riktig, numrerad källnod byggd ur ClaimSource-fälten
+            # (inte ur ett raw_item). Bär label + datum; sdPublisher=Geogiraph i grafen.
+            key = f"att:{src.label}|{src.attested_at}|{src.url}"
+            existing = sources.get(key)
+            if existing is None:
+                digest = hashlib.sha1(key.encode("utf-8")).hexdigest()[:10]
+                existing = Source(
+                    number=len(sources) + 1,
+                    sid=f"{base}#src-att-{digest}",
+                    url=src.url,
+                    date=src.attested_at,
+                    name=src.label or DEFAULT_ATTESTED_LABEL,
+                    schema_type="Dataset",
+                    attested=True,
+                )
+                sources[key] = existing
+            if existing.url and existing.url not in same_as:
+                same_as.append(existing.url)
+            return existing.number, None
         if not src.item_id:
             return None, None
         existing = sources.get(src.item_id)
@@ -193,6 +217,9 @@ def compile_client(client_id: str) -> dict[str, Any]:
                 "url": s.url,
                 "datePublished": s.date,
                 "name": s.name,
+                # Attesterad källa: gör attesteringen maskinläsbar — Geogiraph är
+                # den som går i god för (structured-data publisher).
+                "sdPublisher": {"@type": "Organization", "name": ATTESTED_PUBLISHER} if s.attested else None,
             }.items()
             if v is not None
         }

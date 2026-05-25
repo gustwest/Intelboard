@@ -6,6 +6,10 @@ Tre steg (docs/claims-provenance-spec.md §5):
                 varje claim MÅSTE ange vilka chunks det vilar på
   3. validera — ett andra LLM-pass bekräftar att chunken faktiskt stödjer påståendet
 
+Hybrid-modeller (services/llm.py): generatorn (stort kontextfönster) genererar,
+validatorn (vasst resonemang) validerar. Generering batchas så att en stor korpus
+(flersidig crawl + PDF:er) inte sprängs in i ett enda anrop.
+
 Regeln "ingen källa → inget claim": ett genererat claim utan giltig chunk-referens,
 eller som inte klarar valideringen, skrivs aldrig med `included_in_output=True`.
 Property-claims härleds deterministiskt i schema_org/claims.py — inte här.
@@ -15,23 +19,20 @@ No-op (tom lista) om ingen LLM är konfigurerad — pipelinen ovanpå fungerar �
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
-import re
 from dataclasses import dataclass
 from typing import Any
 
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_openai import ChatOpenAI
-
 import firestore_client as fs
-from config import settings
 from schemas import Claim, ClaimSource
+from services import llm as llm_factory
 
 log = logging.getLogger(__name__)
 
 REVIEW_THRESHOLD = 0.7
+# Teckenbudget per genereringsanrop. Korpusar större än så delas i batchar, så
+# även en stor crawl ryms (med marginal mot kontextfönstret).
+BATCH_CHAR_BUDGET = 600_000
 
 GENERATE_PROMPT = """Du extraherar faktapåståenden om ett företag ur källtexter.
 
@@ -76,8 +77,9 @@ def extract_claims_for_client(client_id: str) -> dict[str, Any]:
     if not fs.client_doc(client_id).get().exists:
         raise KeyError(f"client not found: {client_id}")
 
-    llm = _pick_llm()
-    if llm is None:
+    generator = _pick_generator()
+    validator = _pick_validator()
+    if generator is None:
         log.warning("no LLM configured — claim extraction skipped")
         return {"client_id": client_id, "written": 0, "skipped": 0, "reason": "no_llm"}
 
@@ -88,14 +90,14 @@ def extract_claims_for_client(client_id: str) -> dict[str, Any]:
     by_label = {c.label: c for c in chunks}
     written = skipped = 0
 
-    for cand in _generate(llm, chunks):
+    for cand in _generate(generator, chunks):
         statement = (cand.get("statement") or "").strip()
         cited = [by_label[lbl] for lbl in cand.get("chunks", []) if lbl in by_label]
         if not statement or not cited:
             skipped += 1  # ingen källa → inget claim
             continue
 
-        if not _validate(llm, statement, cited):
+        if not _validate(validator, statement, cited):
             skipped += 1  # valideringen föll → kasseras
             continue
 
@@ -139,16 +141,36 @@ def _gather_chunks(client_id: str) -> list[Chunk]:
 
 
 def _generate(llm, chunks: list[Chunk]) -> list[dict[str, Any]]:
-    corpus = "\n\n".join(f"[{c.label}] {c.text}" for c in chunks)
-    data = _invoke_json(llm, GENERATE_PROMPT, corpus)
-    claims = (data or {}).get("claims", [])
-    return claims if isinstance(claims, list) else []
+    """Generera claims batchvis så en stor korpus inte sprängs in i ett anrop."""
+    claims: list[dict[str, Any]] = []
+    for batch in _batches(chunks):
+        corpus = "\n\n".join(f"[{c.label}] {c.text}" for c in batch)
+        data = llm_factory.invoke_json(llm, GENERATE_PROMPT, corpus)
+        batch_claims = (data or {}).get("claims", [])
+        if isinstance(batch_claims, list):
+            claims.extend(batch_claims)
+    return claims
+
+
+def _batches(chunks: list[Chunk]):
+    """Dela chunks i batchar under teckenbudgeten. Etiketterna (C1..) är globala,
+    så claims i en batch refererar fortfarande rätt chunk via by_label."""
+    batch: list[Chunk] = []
+    size = 0
+    for c in chunks:
+        if batch and size + len(c.text) > BATCH_CHAR_BUDGET:
+            yield batch
+            batch, size = [], 0
+        batch.append(c)
+        size += len(c.text)
+    if batch:
+        yield batch
 
 
 def _validate(llm, statement: str, cited: list[Chunk]) -> bool:
     source_text = "\n\n".join(c.text for c in cited)
     payload = f"PÅSTÅENDE:\n{statement}\n\nKÄLLA:\n{source_text}"
-    data = _invoke_json(llm, VALIDATE_PROMPT, payload)
+    data = llm_factory.invoke_json(llm, VALIDATE_PROMPT, payload)
     return bool((data or {}).get("supported") is True)
 
 
@@ -158,27 +180,10 @@ def _persist(client_id: str, claim: Claim) -> None:
     fs.claim_doc(client_id, claim_id).set(claim.model_dump())
 
 
-def _invoke_json(llm, system: str, user: str) -> dict[str, Any] | None:
-    try:
-        resp = llm.invoke([SystemMessage(content=system), HumanMessage(content=user)])
-        raw = resp.content if hasattr(resp, "content") else str(resp)
-    except Exception as exc:  # blockering / timeout: logga, hoppa över
-        log.warning("claim-extraction LLM call failed: %s", exc)
-        return None
-    match = re.search(r"\{.*\}", raw, re.DOTALL)
-    if not match:
-        return None
-    try:
-        return json.loads(match.group(0))
-    except json.JSONDecodeError:
-        return None
+# Module-level seams (patchas i tester).
+def _pick_generator():
+    return llm_factory.make_generator()
 
 
-def _pick_llm():
-    if settings.openai_api_key:
-        return ChatOpenAI(api_key=settings.openai_api_key, model="gpt-4o", temperature=0, timeout=30)
-    if settings.gemini_api_key:
-        return ChatGoogleGenerativeAI(
-            google_api_key=settings.gemini_api_key, model="gemini-1.5-pro", temperature=0, timeout=30
-        )
-    return None
+def _pick_validator():
+    return llm_factory.make_validator()

@@ -1,12 +1,16 @@
-from connectors.base import BaseConnector, ConnectorConfig, RawItem
+from dataclasses import asdict
+
+from connectors.base import BaseConnector, ConnectorConfig, InputField, RawItem
 from connectors.bolagsverket import BolagsverketConnector
 from connectors.linkedin import LinkedInConnector
 from connectors.rss import RssConnector
+from connectors.website import WebsiteConnector
 
 REGISTRY: dict[str, type[BaseConnector]] = {
     LinkedInConnector.id: LinkedInConnector,
     RssConnector.id: RssConnector,
     BolagsverketConnector.id: BolagsverketConnector,
+    WebsiteConnector.id: WebsiteConnector,
 }
 
 
@@ -27,9 +31,10 @@ def all_metadata() -> list[dict[str, object]]:
                 "output_types": list(cls.output_types),
                 "frequency": cls.frequency,
                 "tier": cls.tier,
+                "input_fields": [asdict(f) for f in cls.input_fields],
             }
         )
     return out
 
 
-__all__ = ["BaseConnector", "ConnectorConfig", "RawItem", "REGISTRY", "all_metadata", "get"]
+__all__ = ["BaseConnector", "ConnectorConfig", "InputField", "RawItem", "REGISTRY", "all_metadata", "get"]

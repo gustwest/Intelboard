@@ -8,6 +8,14 @@ class Settings(BaseSettings):
 
     openai_api_key: str = ""
     gemini_api_key: str = ""
+    anthropic_api_key: str = ""
+
+    # Modellval för claims-pipelinen (hybrid). Konfig-överstyrbart eftersom exakta
+    # API-modellsträngar rör sig — ops kan rätta utan kodändring.
+    # Generera/relevans: stort kontextfönster sväljer hela korpusen i ett anrop.
+    generator_model: str = "gemini-3.1-pro"
+    # Validering: vassaste resonemanget på det precisionskritiska steget.
+    validator_model: str = "claude-opus-4-7"
 
     brightdata_api_key: str = ""
     brightdata_linkedin_profile_dataset_id: str = ""

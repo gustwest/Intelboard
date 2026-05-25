@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from config import settings
-from connectors.base import BaseConnector, ConnectorConfig, RawItem
+from connectors.base import BaseConnector, ConnectorConfig, InputField, RawItem
 from services.brightdata import BrightDataClient
 
 log = logging.getLogger(__name__)
@@ -29,6 +29,22 @@ class LinkedInConnector(BaseConnector):
     output_types = ("Organization", "Person", "SocialMediaPosting", "JobPosting")
     frequency = "daily"
     tier = "standard"
+    input_fields = (
+        InputField(
+            "company_linkedin_url",
+            "Företagets LinkedIn-URL",
+            type="url",
+            required=True,
+            placeholder="https://www.linkedin.com/company/exempel-ab",
+        ),
+        InputField(
+            "scrape_employee_profiles",
+            "Scrapa medarbetarnas LinkedIn-profiler",
+            type="bool",
+            required=False,
+            help="Hämtar profildata per aktiv medarbetare, inte bara företagssidan.",
+        ),
+    )
 
     def __init__(self, client: BrightDataClient | None = None) -> None:
         self.client = client or BrightDataClient()

@@ -16,6 +16,24 @@ from typing import Any, ClassVar, Literal
 FetchMethod = Literal["api", "rss", "scrape", "email"]
 Frequency = Literal["realtime", "daily", "weekly", "monthly"]
 Tier = Literal["standard", "optional", "custom"]
+FieldType = Literal["text", "url", "bool", "feed_list"]
+
+
+@dataclass(frozen=True)
+class InputField:
+    """Ett input-fält som connectorn behöver för att fungera.
+
+    Onboarding-UI:t renderar fälten generiskt utifrån `all_metadata()` och
+    blockerar skapande om ett `required`-fält för en påslagen connector saknas.
+    `name` matchar nyckeln i onboarding-payloaden (se routers/onboard.py).
+    """
+
+    name: str
+    label: str
+    type: FieldType = "text"
+    required: bool = True
+    placeholder: str = ""
+    help: str = ""
 
 
 @dataclass
@@ -33,6 +51,10 @@ class RawItem:
     url: str
     published_at: datetime
     extra: dict[str, Any] = field(default_factory=dict)
+    # Stabilt dokument-id. None → jobbet använder .add() (slumpmässigt id, som
+    # tidigare). Sätt ett deterministiskt id (t.ex. hash av url+chunk_index) för
+    # idempotent persist: omkörning skriver över i stället för att hopa dubbletter.
+    item_id: str | None = None
 
 
 class BaseConnector(ABC):
@@ -41,6 +63,9 @@ class BaseConnector(ABC):
     output_types: ClassVar[tuple[str, ...]]
     frequency: ClassVar[Frequency]
     tier: ClassVar[Tier]
+    # Fält som onboarding-UI:t ska visa när connectorn slås på. Tom = inget
+    # företagsfält behövs (t.ex. om connectorn bara körs per medarbetare).
+    input_fields: ClassVar[tuple[InputField, ...]] = ()
 
     @abstractmethod
     def fetch(self, config: ConnectorConfig) -> list[RawItem]:

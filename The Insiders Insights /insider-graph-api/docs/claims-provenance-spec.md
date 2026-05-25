@@ -83,9 +83,22 @@ Claim-dokument:
 
 | Fält | Typ | Beskrivning |
 |---|---|---|
-| `kind` | `"item" \| "manual"` | `item` = härlett ur raw_item; `manual` = uppgift från bolaget |
+| `kind` | `"item" \| "manual" \| "attested"` | `item` = härlett ur raw_item; `manual` = uppgift från bolaget; `attested` = källa vi själva verifierar |
 | `item_id` | str \| null | För `item`: peka på raw_item-dokumentet (→ url, datum) |
-| `label` | str \| null | För `manual`: t.ex. "uppgift från bolaget" |
+| `label` | str \| null | För `manual`/`attested`: etikett, t.ex. "uppgift från bolaget" / "LinkedIn-data, verifierad av Geogiraph" |
+| `attested_at` | str \| null | För `attested`: ISO-datum för verifieringen — bär färskheten |
+| `url` | str \| null | För `attested`: valfri publik ankare (t.ex. kundens LinkedIn-sida) |
+
+### Tre trovärdighetsnivåer för källor
+
+Modellen skiljer på *hur* en uppgift är verifierad — och renderar dem olika så att
+Verified-historien förblir ärlig:
+
+| `kind` | Trovärdighet | Verifiering | Rendering |
+|---|---|---|---|
+| `item` | starkast | självverifierande — länkbar publik URL motorn själv kan kolla | klickbar fotnot |
+| `attested` | stark | **vi** går i god för auktoritativ källa (t.ex. LinkedIns officiella export) per datum | numrerad källnod, `Dataset` + `sdPublisher: Geogiraph`, etikett + datum |
+| `manual` | svagast | företagets ord, ej externt verifierbart | neutral etikett "uppgift från bolaget" |
 
 ### Manuella claims
 
@@ -93,6 +106,42 @@ Tillåtna. Ops kan lägga ett claim med `source = [{kind: "manual", label: ...}]
 Renderas **annorlunda** än länkbara källor (ingen klickbar referens, märks t.ex.
 "uppgift från bolaget"), så att Verified-historien förblir ärlig. Ett manuellt claim
 uppfyller §2.2 (det *har* en källa), men är inte externt verifierbart.
+
+### Attesterade claims
+
+För data från en auktoritativ källa som vi själva verifierar — typfallet är LinkedIns
+**officiella export** (t.ex. följarbasens sammansättning: senioritet, titel, geografi,
+bransch, aggregerat). Den är inte självverifierande via publik URL (segmentdatan ligger
+inte öppet), men starkare än `manual`: det är inte företagets ord, det är auktoritativ
+data som **Geogiraph attesterar är oförvanskad per ett datum**.
+
+Renderas som en numrerad källnod (`Dataset`) med `sdPublisher: {Organization, Geogiraph}`,
+etikett och `datePublished` = `attested_at`. Datumet är obligatoriskt — attesteringen
+behåller sin trovärdighet bara om den hålls färsk (uppdateras med jämna mellanrum).
+
+**Precision i vad vi attesterar:** vi går i god för att det är källans oförvanskade data
+per datum X — *inte* för att källans egen kategorisering (vem LinkedIn räknar som "ledare")
+är en objektiv sanning. Etiketten ska inte lova mer än så.
+
+### Ingestion av attesterad data (connector)
+
+Förvärvsmodell som gör "oförvanskad"-löftet sant: **vi** laddar ner filen direkt från den
+officiella källan (operatör, ej kund) och laddar upp den mot kunden i vårt system. Kunden
+rör aldrig datan på vägen → ingen mellanhand kan ha ändrat den.
+
+Till skillnad från de schemalagda connectorerna (`fetch()` via cron) är detta en
+**operatör-uppladdning** (push): `POST /api/attested/{client_id}/{source_type}`
+(`routers/attested.py`), skyddad av admin-API-nyckeln.
+
+Vi tolkar ett **kanoniskt intag-format** — CSV med `dimension,segment,value` — inte
+källans råa export rakt av (de varierar och ändras; vi normaliserar vid förberedelsen).
+Native-parsers per export-typ registreras i `PARSERS` (`services/attested_ingest.py`) när
+riktiga exempelfiler finns. Claims byggs **deterministiskt** (ingen LLM) med
+per-dimension-mallar; id på `(source_type, dimension, segment)` → re-upload med nytt värde
+skriver över i stället för att skapa dubbletter.
+
+Första källan: `linkedin_follower_demographics` (följarbasens sammansättning per
+senioritet/funktion/bransch/geografi/företagsstorlek).
 
 ## 5. Extraktionspipeline
 
@@ -146,7 +195,11 @@ Nytt: **`Organization` projiceras helt ur claims.**
   blanksteg, utan kantskiljetecken) slås ihop till ett, och deras **källor förenas** → ett
   påstående som flera källor bekräftar citerar alla (starkare proveniens, inga dubbletter i
   description/prosa/FAQ). Semantiska parafraser är medvetet utanför (skulle kräva embeddings).
-- Sociala mätvärden (följare, likes) inkluderas fortsatt **aldrig** (oförändrad regel).
+- Råa vanity-mätvärden (följarantal, likes) som *egenskaper på Organization* inkluderas
+  fortsatt **aldrig**. Undantag: ett `attested`-claim får bära sådan data som **bevis för
+  ett substantiellt påstående** (t.ex. "X seniora beslutsfattare följer bolaget" som stöd
+  för en positionering), eftersom det då är auktoritativ, daterad och av oss verifierad
+  källa — inte en osourcad siffra. Se §4 (attesterade claims).
 - **`@id`-basen är konfigurerbar per kund** via `profile_base_url`, default
   `https://profiles.geogiraph.com/<kund>` (konstant `DEFAULT_BASE`). Se §7.
 

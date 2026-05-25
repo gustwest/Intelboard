@@ -22,11 +22,12 @@ class _Snap:
 
 
 class _DocRef:
-    def __init__(self, _id: str, data: dict | None, on_set=None, on_update=None):
+    def __init__(self, _id: str, data: dict | None, on_set=None, on_update=None, on_delete=None):
         self._id = _id
         self._data = data
         self._on_set = on_set
         self._on_update = on_update
+        self._on_delete = on_delete
 
     def get(self) -> _Snap:
         return _Snap(self._id, self._data)
@@ -38,6 +39,10 @@ class _DocRef:
     def update(self, payload: dict) -> None:
         if self._on_update:
             self._on_update(self._id, payload)
+
+    def delete(self) -> None:
+        if self._on_delete:
+            self._on_delete(self._id)
 
 
 class _Col:
@@ -124,6 +129,7 @@ def claim_doc(client_id: str, claim_id: str) -> _DocRef:
         STATE.get("claims", {}).get(claim_id),
         on_set=lambda i, p: STATE["writes"].__setitem__(i, p),  # extraktion skapar nya
         on_update=lambda i, p: STATE["claims"].setdefault(i, {}).update(p),  # review uppdaterar
+        on_delete=lambda i: STATE.get("claims", {}).pop(i, None),  # GDPR-radering
     )
 
 

@@ -2,7 +2,8 @@
 import unittest
 
 import fakefs  # installerar fake firestore_client — måste importeras först
-from schemas import EmployeeInput, OnboardRequest
+from routers.clients import _purge_employee_from_claims
+from schemas import EmployeeInput, OnboardRequest, RssFeed
 from services.discovery import onboard_client
 
 
@@ -32,6 +33,50 @@ class OnboardTierTest(unittest.TestCase):
         fakefs.reset(client={"company_name": "Finns"})
         with self.assertRaises(ValueError):
             onboard_client(_req())
+
+
+class OnboardConnectorParamsTest(unittest.TestCase):
+    def test_connector_params_stored_under_settings(self):
+        fakefs.reset(client=None)
+        onboard_client(_req(
+            website_start_url="https://kund.se/",
+            rss_feeds=[RssFeed(url="https://kund.se/feed", schema_type="NewsArticle", label="Press")],
+            scrape_employee_profiles=True,
+        ))
+        settings = fakefs.STATE["client"]["settings"]
+        self.assertEqual(settings["website"], {"start_url": "https://kund.se/"})
+        self.assertEqual(settings["rss_feeds"][0]["url"], "https://kund.se/feed")
+        self.assertTrue(settings["scrape_employee_profiles"])
+
+    def test_no_connector_params_leaves_settings_clean(self):
+        fakefs.reset(client=None)
+        onboard_client(_req())
+        settings = fakefs.STATE["client"]["settings"]
+        self.assertNotIn("website", settings)
+        self.assertNotIn("rss_feeds", settings)
+        self.assertFalse(settings["scrape_employee_profiles"])
+
+
+class PurgeEmployeeFromClaimsTest(unittest.TestCase):
+    def test_subject_claims_deleted_source_claims_pruned(self):
+        fakefs.reset(claims={
+            # personens eget claim → raderas
+            "c1": {"subject_ref": "anna", "source": [{"employee_id": "anna"}]},
+            # företags-claim med flera källor → personens källa dras bort, claim kvar
+            "c2": {"subject_ref": "org", "source": [{"employee_id": "anna"}, {"employee_id": "bo"}]},
+            # företags-claim med BARA personens källa → källlöst → raderas
+            "c3": {"subject_ref": "org", "source": [{"employee_id": "anna"}]},
+            # orört claim
+            "c4": {"subject_ref": "org", "source": [{"employee_id": "bo"}]},
+        })
+        removed, pruned = _purge_employee_from_claims("acme", "anna")
+        self.assertEqual(removed, 2)   # c1 + c3
+        self.assertEqual(pruned, 1)    # c2
+        claims = fakefs.STATE["claims"]
+        self.assertNotIn("c1", claims)
+        self.assertNotIn("c3", claims)
+        self.assertIn("c4", claims)
+        self.assertEqual(claims["c2"]["source"], [{"employee_id": "bo"}])
 
 
 if __name__ == "__main__":

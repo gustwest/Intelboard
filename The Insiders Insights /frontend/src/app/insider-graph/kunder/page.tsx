@@ -1,17 +1,38 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Users, Upload, X, AlertCircle, CheckCircle2, ExternalLink, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { Users, Plus, X, AlertCircle, CheckCircle2, ExternalLink, RefreshCw } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import { graphFetch } from '../_lib/api';
 
-type ParsedEmployee = {
+type ConnectorField = {
+  name: string;
+  label: string;
+  type: 'text' | 'url' | 'bool' | 'feed_list';
+  required: boolean;
+  placeholder: string;
+  help: string;
+};
+
+type ConnectorMeta = {
+  id: string;
+  fetch_method: string;
+  output_types: string[];
+  frequency: string;
+  tier: string;
+  input_fields: ConnectorField[];
+};
+
+type EmployeeRow = {
   name: string;
   linkedin_url: string;
-  title: string | null;
+  title: string;
   node_type: string;
-  gender: string | null;
+  gender: string;
 };
+
+type RssFeedRow = { url: string; schema_type: string; label: string };
 
 type Client = {
   client_id: string;
@@ -25,29 +46,39 @@ type Client = {
   tier?: string;
 };
 
-const SAMPLE_CSV = `name,linkedin_url,title,node_type,gender
-Anna Andersson,https://www.linkedin.com/in/anna-andersson,VD,aktiv,kvinna
-Erik Eriksson,https://www.linkedin.com/in/erik-eriksson,CMO,aktiv,man
-Linda Lindberg,https://www.linkedin.com/in/linda-lindberg,Senior Advisor,episodisk,kvinna`;
+const NODE_TYPES = ['aktiv', 'episodisk', 'passiv'];
+
+function emptyEmployee(): EmployeeRow {
+  return { name: '', linkedin_url: '', title: '', node_type: 'aktiv', gender: '' };
+}
 
 export default function GraphKunderPage() {
   const [showModal, setShowModal] = useState(false);
   const [clients, setClients] = useState<Client[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  async function loadClients() {
-    setLoadError(null);
-    try {
-      const data = await graphFetch<{ clients: Client[] }>('/api/clients');
-      setClients(data.clients);
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : String(e));
-      setClients([]);
-    }
-  }
+  const loadClients = useCallback(() => {
+    return graphFetch<{ clients: Client[] }>('/api/clients')
+      .then((data) => {
+        setClients(data.clients);
+        setLoadError(null);
+      })
+      .catch((e) => {
+        setLoadError(e instanceof Error ? e.message : String(e));
+        setClients([]);
+      });
+  }, []);
 
   useEffect(() => {
-    loadClients();
+    graphFetch<{ clients: Client[] }>('/api/clients')
+      .then((data) => {
+        setClients(data.clients);
+        setLoadError(null);
+      })
+      .catch((e) => {
+        setLoadError(e instanceof Error ? e.message : String(e));
+        setClients([]);
+      });
   }, []);
 
   return (
@@ -72,7 +103,7 @@ export default function GraphKunderPage() {
         <div>
           <div style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56' }}>Onboarda ny kund</div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>
-            Ladda upp CSV med namn + LinkedIn-URL. Discovery-agenten skapar kund + medarbetare i Firestore.
+            Fyll i företagsuppgifter, välj connectors och lägg till medarbetare manuellt.
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -111,7 +142,7 @@ export default function GraphKunderPage() {
               cursor: 'pointer',
             }}
           >
-            <Upload size={14} /> Importera CSV
+            <Plus size={14} /> Ny kund
           </button>
         </div>
       </div>
@@ -149,7 +180,7 @@ export default function GraphKunderPage() {
           <Users size={32} color={C.dim} style={{ marginBottom: 12 }} />
           <div style={{ fontSize: 14, color: '#3a4b56', fontWeight: 600 }}>Inga Graph-kunder ännu</div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 6, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto' }}>
-            Klicka på <strong>Importera CSV</strong> för att onboarda din första kund.
+            Klicka på <strong>Ny kund</strong> för att onboarda din första kund.
           </div>
         </div>
       ) : (
@@ -174,50 +205,58 @@ export default function GraphKunderPage() {
 
 function ClientCard({ client }: { client: Client }) {
   return (
-    <div
-      style={{
-        background: C.card,
-        border: `1px solid ${C.border}`,
-        borderRadius: 12,
-        padding: '18px 20px',
-      }}
+    <Link
+      href={`/insider-graph/kunder/${client.client_id}`}
+      style={{ textDecoration: 'none', color: 'inherit' }}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56' }}>{client.company_name || client.client_id}</div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 2, fontFamily: 'ui-monospace, monospace' }}>
-            {client.client_id}
+      <div
+        style={{
+          background: C.card,
+          border: `1px solid ${C.border}`,
+          borderRadius: 12,
+          padding: '18px 20px',
+          cursor: 'pointer',
+          transition: 'border-color 0.15s',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56' }}>{client.company_name || client.client_id}</div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 2, fontFamily: 'ui-monospace, monospace' }}>
+              {client.client_id}
+            </div>
           </div>
+          {client.cdn_url && (
+            <a
+              href={client.cdn_url}
+              target="_blank"
+              rel="noreferrer"
+              title="Öppna JSON-LD i ny flik"
+              onClick={(e) => e.stopPropagation()}
+              style={{ color: '#9f51b6', textDecoration: 'none', display: 'flex' }}
+            >
+              <ExternalLink size={14} />
+            </a>
+          )}
         </div>
-        {client.cdn_url && (
-          <a
-            href={client.cdn_url}
-            target="_blank"
-            rel="noreferrer"
-            title="Öppna JSON-LD i ny flik"
-            style={{ color: '#9f51b6', textDecoration: 'none', display: 'flex' }}
-          >
-            <ExternalLink size={14} />
-          </a>
-        )}
-      </div>
 
-      <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
-        {client.tier === 'premium' && <Badge color="#9f51b6" label="premium" />}
-        <Badge color="#22c55e" label={`${client.node_types.aktiv} aktiv`} />
-        <Badge color="#f59e0b" label={`${client.node_types.episodisk} episodisk`} />
-        <Badge color={C.muted} label={`${client.node_types.passiv} passiv`} />
-      </div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
+          {client.tier === 'premium' && <Badge color="#9f51b6" label="premium" />}
+          <Badge color="#22c55e" label={`${client.node_types.aktiv} aktiv`} />
+          <Badge color="#f59e0b" label={`${client.node_types.episodisk} episodisk`} />
+          <Badge color={C.muted} label={`${client.node_types.passiv} passiv`} />
+        </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 14, fontSize: 11, color: C.muted }}>
-        <Row label="Medarbetare" value={`${client.employee_count} st`} />
-        <Row label="Connectors" value={client.active_connectors.join(', ') || '—'} />
-        <Row
-          label="Senast kompilerad"
-          value={client.last_compiled ? new Date(client.last_compiled).toLocaleString('sv-SE') : 'Inte ännu'}
-        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 14, fontSize: 11, color: C.muted }}>
+          <Row label="Medarbetare" value={`${client.employee_count} st`} />
+          <Row label="Connectors" value={client.active_connectors.join(', ') || '—'} />
+          <Row
+            label="Senast kompilerad"
+            value={client.last_compiled ? new Date(client.last_compiled).toLocaleString('sv-SE') : 'Inte ännu'}
+          />
+        </div>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -253,51 +292,99 @@ function Row({ label, value }: { label: string; value: string }) {
 function OnboardModal({ onClose }: { onClose: () => void }) {
   const [clientId, setClientId] = useState('');
   const [companyName, setCompanyName] = useState('');
-  const [companyLinkedinUrl, setCompanyLinkedinUrl] = useState('');
-  const [orgNumber, setOrgNumber] = useState('');
   const [tier, setTier] = useState<'default' | 'premium'>('default');
   const [profileBaseUrl, setProfileBaseUrl] = useState('');
-  const [csv, setCsv] = useState(SAMPLE_CSV);
-  const [preview, setPreview] = useState<ParsedEmployee[] | null>(null);
-  const [previewError, setPreviewError] = useState<string | null>(null);
+
+  const [available, setAvailable] = useState<ConnectorMeta[]>([]);
+  const [active, setActive] = useState<Set<string>>(new Set(['linkedin']));
+  // Skalära connector-fältvärden, keyade på fältets `name` (matchar OnboardRequest).
+  const [fieldValues, setFieldValues] = useState<Record<string, string | boolean>>({});
+  const [rssFeeds, setRssFeeds] = useState<RssFeedRow[]>([{ url: '', schema_type: 'NewsArticle', label: '' }]);
+
+  const [employees, setEmployees] = useState<EmployeeRow[]>([emptyEmployee()]);
+
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
 
-  async function handlePreview() {
-    setPreviewError(null);
-    setPreview(null);
-    try {
-      const data = await graphFetch<{ employees: ParsedEmployee[] }>('/api/onboard/preview-csv', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ client_id: clientId, company_name: companyName, csv }),
-      });
-      setPreview(data.employees);
-    } catch (e) {
-      setPreviewError(e instanceof Error ? e.message : 'Kunde inte förhandsvisa');
+  useEffect(() => {
+    graphFetch<{ connectors: ConnectorMeta[] }>('/api/connectors')
+      .then((d) => setAvailable(d.connectors))
+      .catch(() => setAvailable([]));
+  }, []);
+
+  function toggleConnector(id: string) {
+    setActive((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function setField(name: string, value: string | boolean) {
+    setFieldValues((prev) => ({ ...prev, [name]: value }));
+  }
+
+  function setEmployee(i: number, patch: Partial<EmployeeRow>) {
+    setEmployees((prev) => prev.map((e, idx) => (idx === i ? { ...e, ...patch } : e)));
+  }
+
+  function validate(): string | null {
+    if (!clientId.trim()) return 'client_id (slug) krävs.';
+    if (!companyName.trim()) return 'Företagsnamn krävs.';
+    for (const conn of available) {
+      if (!active.has(conn.id)) continue;
+      for (const f of conn.input_fields) {
+        if (!f.required) continue;
+        if (f.type === 'feed_list') {
+          if (!rssFeeds.some((r) => r.url.trim())) return `${conn.id}: minst en feed-URL krävs.`;
+        } else {
+          const v = fieldValues[f.name];
+          if (typeof v !== 'string' || !v.trim()) return `${conn.id}: "${f.label}" krävs.`;
+        }
+      }
     }
+    const valid = employees.filter((e) => e.name.trim() && e.linkedin_url.trim());
+    if (valid.length === 0) return 'Lägg till minst en medarbetare med namn + LinkedIn-URL.';
+    return null;
   }
 
   async function handleSubmit() {
     setResult(null);
-    if (!clientId || !companyName) {
-      setResult({ ok: false, message: 'client_id och company_name krävs' });
+    const err = validate();
+    if (err) {
+      setResult({ ok: false, message: err });
       return;
     }
     setSubmitting(true);
     try {
-      const data = await graphFetch<{ client_id: string; employees_created: number }>('/api/onboard/from-csv', {
+      const payload = {
+        client_id: clientId.trim(),
+        company_name: companyName.trim(),
+        active_connectors: [...active],
+        company_linkedin_url: active.has('linkedin') ? (fieldValues['company_linkedin_url'] as string) || null : null,
+        org_number: active.has('bolagsverket') ? (fieldValues['org_number'] as string) || null : null,
+        website_start_url: active.has('website') ? (fieldValues['website_start_url'] as string) || null : null,
+        scrape_employee_profiles: active.has('linkedin') ? !!fieldValues['scrape_employee_profiles'] : false,
+        rss_feeds: active.has('rss')
+          ? rssFeeds.filter((r) => r.url.trim()).map((r) => ({ url: r.url.trim(), schema_type: r.schema_type, label: r.label.trim() || null }))
+          : [],
+        employees: employees
+          .filter((e) => e.name.trim() && e.linkedin_url.trim())
+          .map((e) => ({
+            name: e.name.trim(),
+            linkedin_url: e.linkedin_url.trim(),
+            title: e.title.trim() || null,
+            node_type: e.node_type,
+            gender: e.gender.trim() || null,
+          })),
+        tier,
+        profile_base_url: tier === 'premium' ? profileBaseUrl.trim() || null : null,
+      };
+      const data = await graphFetch<{ client_id: string; employees_created: number }>('/api/onboard', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          client_id: clientId,
-          company_name: companyName,
-          company_linkedin_url: companyLinkedinUrl || null,
-          org_number: orgNumber || null,
-          csv,
-          tier,
-          profile_base_url: tier === 'premium' ? profileBaseUrl || null : null,
-        }),
+        body: JSON.stringify(payload),
       });
       setResult({ ok: true, message: `Skapade kund ${data.client_id} med ${data.employees_created} medarbetare.` });
     } catch (e) {
@@ -329,7 +416,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
           border: `1px solid ${C.border}`,
           borderRadius: 14,
           width: '100%',
-          maxWidth: 760,
+          maxWidth: 820,
           maxHeight: '90vh',
           overflowY: 'auto',
           padding: 28,
@@ -342,19 +429,14 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
+        {/* Företag */}
+        <SectionLabel>Företag</SectionLabel>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
           <Field label="client_id (slug)" value={clientId} onChange={setClientId} placeholder="exempel-ab" />
           <Field label="Företagsnamn" value={companyName} onChange={setCompanyName} placeholder="Exempel AB" />
-          <Field
-            label="Företagets LinkedIn-URL"
-            value={companyLinkedinUrl}
-            onChange={setCompanyLinkedinUrl}
-            placeholder="https://www.linkedin.com/company/exempel-ab"
-          />
-          <Field label="Organisationsnummer" value={orgNumber} onChange={setOrgNumber} placeholder="556677-8899" />
         </div>
 
-        <div style={{ marginBottom: 14 }}>
+        <div style={{ marginBottom: 18 }}>
           <label style={{ fontSize: 11, color: '#6a7e8a', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
             Hosting-tier
           </label>
@@ -393,52 +475,88 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
           )}
         </div>
 
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 12, color: C.muted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            CSV — kolumner: name, linkedin_url, title, node_type, gender
-          </label>
-          <textarea
-            value={csv}
-            onChange={(e) => setCsv(e.target.value)}
-            rows={8}
-            style={{
-              width: '100%',
-              marginTop: 6,
-              padding: '12px 14px',
-              background: '#eef0f1',
-              color: '#3a4b56',
-              border: `1px solid ${C.border}`,
-              borderRadius: 8,
-              fontFamily: 'ui-monospace, SFMono-Regular, monospace',
-              fontSize: 12,
-              lineHeight: 1.6,
-              resize: 'vertical',
-              outline: 'none',
-            }}
-          />
+        {/* Connectors */}
+        <SectionLabel>Connectors — slå på de källor kunden ska hämta data från</SectionLabel>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
+          {available.length === 0 && (
+            <div style={{ fontSize: 12, color: C.muted }}>Inga connectors tillgängliga.</div>
+          )}
+          {available.map((conn) => (
+            <ConnectorCard
+              key={conn.id}
+              conn={conn}
+              active={active.has(conn.id)}
+              onToggle={() => toggleConnector(conn.id)}
+              fieldValues={fieldValues}
+              setField={setField}
+              rssFeeds={rssFeeds}
+              setRssFeeds={setRssFeeds}
+            />
+          ))}
         </div>
 
+        {/* Medarbetare */}
+        <SectionLabel>Medarbetare</SectionLabel>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.8fr 1.2fr 1fr 0.9fr 28px', gap: 8, fontSize: 10, color: C.muted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0 2px' }}>
+            <span>Namn</span>
+            <span>LinkedIn-URL</span>
+            <span>Titel</span>
+            <span>Nodtyp</span>
+            <span>Kön</span>
+            <span />
+          </div>
+          {employees.map((emp, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.8fr 1.2fr 1fr 0.9fr 28px', gap: 8, alignItems: 'center' }}>
+              <RowInput value={emp.name} onChange={(v) => setEmployee(i, { name: v })} placeholder="Anna Andersson" />
+              <RowInput value={emp.linkedin_url} onChange={(v) => setEmployee(i, { linkedin_url: v })} placeholder="https://linkedin.com/in/…" />
+              <RowInput value={emp.title} onChange={(v) => setEmployee(i, { title: v })} placeholder="VD" />
+              <select
+                value={emp.node_type}
+                onChange={(e) => setEmployee(i, { node_type: e.target.value })}
+                style={selectStyle}
+              >
+                {NODE_TYPES.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+              <RowInput value={emp.gender} onChange={(v) => setEmployee(i, { gender: v })} placeholder="kvinna" />
+              <button
+                onClick={() => setEmployees((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev))}
+                title="Ta bort rad"
+                style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer', display: 'flex', justifyContent: 'center' }}
+              >
+                <X size={15} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={() => setEmployees((prev) => [...prev, emptyEmployee()])}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 12px',
+            background: 'transparent',
+            color: '#3a4b56',
+            border: `1px dashed ${C.border}`,
+            borderRadius: 8,
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: 'pointer',
+            marginBottom: 18,
+          }}
+        >
+          <Plus size={13} /> Lägg till medarbetare
+        </button>
+
         <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-          <button
-            onClick={handlePreview}
-            style={{
-              padding: '8px 14px',
-              background: 'transparent',
-              color: '#3a4b56',
-              border: `1px solid ${C.border}`,
-              borderRadius: 8,
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            Förhandsvisa
-          </button>
           <button
             onClick={handleSubmit}
             disabled={submitting}
             style={{
-              padding: '8px 14px',
+              padding: '9px 16px',
               background: 'rgba(159,81,182,0.25)',
               color: '#9f51b6',
               border: '1px solid rgba(159,81,182,0.5)',
@@ -453,28 +571,180 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {previewError && <Banner tone="error">{previewError}</Banner>}
-
-        {preview && (
-          <div style={{ background: '#eef0f1', border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>{preview.length} medarbetare hittade</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {preview.map((e, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12 }}>
-                  <span style={{ color: '#3a4b56', fontWeight: 500 }}>
-                    {e.name} <span style={{ color: C.muted, fontWeight: 400 }}>· {e.title || '—'}</span>
-                  </span>
-                  <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 3, background: 'rgba(159,81,182,0.15)', color: '#9f51b6', fontWeight: 600, textTransform: 'uppercase' }}>
-                    {e.node_type}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {result && <Banner tone={result.ok ? 'success' : 'error'}>{result.message}</Banner>}
       </div>
+    </div>
+  );
+}
+
+function ConnectorCard({
+  conn,
+  active,
+  onToggle,
+  fieldValues,
+  setField,
+  rssFeeds,
+  setRssFeeds,
+}: {
+  conn: ConnectorMeta;
+  active: boolean;
+  onToggle: () => void;
+  fieldValues: Record<string, string | boolean>;
+  setField: (name: string, value: string | boolean) => void;
+  rssFeeds: RssFeedRow[];
+  setRssFeeds: (rows: RssFeedRow[]) => void;
+}) {
+  return (
+    <div
+      style={{
+        border: `1px solid ${active ? 'rgba(159,81,182,0.4)' : C.border}`,
+        borderRadius: 10,
+        padding: '12px 14px',
+        background: active ? 'rgba(159,81,182,0.05)' : 'transparent',
+      }}
+    >
+      <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+        <input type="checkbox" checked={active} onChange={onToggle} />
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56', textTransform: 'capitalize' }}>{conn.id}</span>
+        <span style={{ fontSize: 10, color: C.muted }}>· {conn.fetch_method} · {conn.frequency}</span>
+      </label>
+
+      {active && conn.input_fields.length > 0 && (
+        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {conn.input_fields.map((f) => {
+            if (f.type === 'bool') {
+              return (
+                <label key={f.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#3a4b56', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={!!fieldValues[f.name]}
+                    onChange={(e) => setField(f.name, e.target.checked)}
+                  />
+                  {f.label}
+                  {f.help && <span style={{ color: C.muted, fontSize: 11 }}>— {f.help}</span>}
+                </label>
+              );
+            }
+            if (f.type === 'feed_list') {
+              return <RssFeedEditor key={f.name} conn={conn} rows={rssFeeds} setRows={setRssFeeds} help={f.help} />;
+            }
+            return (
+              <div key={f.name}>
+                <Field
+                  label={`${f.label}${f.required ? ' *' : ''}`}
+                  value={(fieldValues[f.name] as string) || ''}
+                  onChange={(v) => setField(f.name, v)}
+                  placeholder={f.placeholder}
+                />
+                {f.help && <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>{f.help}</div>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RssFeedEditor({
+  conn,
+  rows,
+  setRows,
+  help,
+}: {
+  conn: ConnectorMeta;
+  rows: RssFeedRow[];
+  setRows: (rows: RssFeedRow[]) => void;
+  help: string;
+}) {
+  const types = conn.output_types.length ? conn.output_types : ['NewsArticle'];
+  function update(i: number, patch: Partial<RssFeedRow>) {
+    setRows(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  }
+  return (
+    <div>
+      <label style={{ fontSize: 11, color: '#6a7e8a', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+        RSS-feeds *
+      </label>
+      {help && <div style={{ fontSize: 11, color: C.muted, margin: '3px 0 8px' }}>{help}</div>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {rows.map((r, i) => (
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 1.2fr 28px', gap: 6, alignItems: 'center' }}>
+            <RowInput value={r.url} onChange={(v) => update(i, { url: v })} placeholder="https://kund.se/feed" />
+            <select value={r.schema_type} onChange={(e) => update(i, { schema_type: e.target.value })} style={selectStyle}>
+              {types.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+            <RowInput value={r.label} onChange={(v) => update(i, { label: v })} placeholder="Pressrum" />
+            <button
+              onClick={() => setRows(rows.length > 1 ? rows.filter((_, idx) => idx !== i) : rows)}
+              title="Ta bort feed"
+              style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer', display: 'flex', justifyContent: 'center' }}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        onClick={() => setRows([...rows, { url: '', schema_type: types[0], label: '' }])}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 5,
+          padding: '5px 10px',
+          marginTop: 8,
+          background: 'transparent',
+          color: '#3a4b56',
+          border: `1px dashed ${C.border}`,
+          borderRadius: 7,
+          fontSize: 11,
+          fontWeight: 600,
+          cursor: 'pointer',
+        }}
+      >
+        <Plus size={12} /> Lägg till feed
+      </button>
+    </div>
+  );
+}
+
+const selectStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '8px 8px',
+  background: '#eef0f1',
+  color: '#3a4b56',
+  border: '1px solid #dfe3e7',
+  borderRadius: 6,
+  fontSize: 12,
+  outline: 'none',
+};
+
+function RowInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <input
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      style={{
+        width: '100%',
+        padding: '8px 10px',
+        background: '#eef0f1',
+        color: '#3a4b56',
+        border: '1px solid #dfe3e7',
+        borderRadius: 6,
+        fontSize: 12,
+        outline: 'none',
+      }}
+    />
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ fontSize: 11, color: '#6a7e8a', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+      {children}
     </div>
   );
 }
