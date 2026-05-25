@@ -76,55 +76,114 @@ Frågorna **LLM-genereras** (inte handskrivna) av en persona-expert-prompt som g
 högsta kvalitet (samma klass som klassningen, §13); låg volym (per kund per refresh) så
 kostnad är inget hinder.
 
-**Persona-expertlinser** (roll i prompten):
-- **Köpare** — senior B2B-inköpare/utvärderare: trovärdighet, fit för use case,
-  leveransspår, referenser, alternativ, röda flaggor.
+### Två spår per persona
+
+Varje persona ställer frågor i **två spår** — bägge måste genereras:
+
+- **Spår A — Direkt (om bolaget).** Företagsspecifika frågor där motorn kan skada kunden
+  direkt (rykte, stabilitet, tvister, ägande). Klassas mot skademodell #1–6 mot
+  källförsett facit.
+- **Spår B — Kategori (om branschen).** Branschgenerella frågor där kunden *bör dyka upp*
+  i övervägandet — eller försvinner. Klassas på **närvaro & inramning**: surfar kunden
+  alls? Lyfts kriterier/krav som favoriserar kundens differentiering, eller bara
+  konkurrenternas? (skademodell #4 förskjutning, #5 tystnad). **Spår B är en evolution av
+  befintlig SoV-polling** (`category_results`, `share_of_voice`) — vi återanvänder och
+  fördjupar den, A-spåret är det nya risklagret.
+
+### Persona-expertlinser (roll i prompten)
+- **Köpare** — senior B2B-inköpare: trovärdighet, fit, leveransspår, referenser,
+  alternativ, röda flaggor.
 - **Kandidat** — eftertraktad kandidat: stabilitet/tillväxt vs varsel, kultur/rykte,
   ledningens trovärdighet, finansiell hälsa.
 - **Investerare/DD** — analytiker: ägande/struktur (förväxlingsrisk), finansiell sundhet,
-  tvister/sanktioner/kontrovers, ledningens track record.
+  tvister/sanktioner, ledningens track record, marknadsposition.
 
-**Konkurrenthantering (anti-styrning).** Kund kan ange en konkurrentlista vid onboarding
-och uppdatera löpande — men den används bara som **svaga ledtrådar**. Prompten härleder
-självständigt det faktiska konkurrenslandskapet och får inte övervikta den angivna
-listan; merparten frågor är beslutsdrivna, inte konkurrentdrivna.
+### Konkurrenthantering (anti-styrning)
+Kund anger en konkurrentlista vid onboarding (löpande uppdaterbar) — men den används bara
+som **svaga ledtrådar**. Prompten härleder självständigt konkurrenslandskapet och får inte
+övervikta listan; merparten frågor är beslutsdrivna, inte konkurrentdrivna.
 
-**Genererings-prompt (utkast — itereras):**
+### Genererings-prompt (delad scaffold)
 
 ```
 # Roll
-Du är en senior {persona_expert} inför ett högt insatt beslut om {företag}. Du tänker
+Du är en senior {persona_expert} inför ett högt insatt beslut om {FÖRETAG}. Du tänker
 självständigt, kritiskt och obekvämt — som någon vars affär/karriär/kapital står på
 spel. Du nöjer dig inte med ytliga frågor.
 
-# Kontext om bolaget (ur kunskapsgrafen)
+# Kontext (ur kunskapsgrafen)
 {legalt namn, LEI, bransch/SNI, kärnerbjudande, vertikaler, geografi, storleksband,
-nyckelpersoner, koncernstruktur, kategori/marknad}
+nyckelpersoner, koncernstruktur, kategori, marknad, nyckelroller}
 
-# Konkurrenshintar (icke-uttömmande — övervikta INTE)
-{kund-angivna konkurrenter}. Använd som svaga ledtrådar; härled själv det faktiska
-konkurrenslandskapet. Låt inte listan styra frågorna.
+# Konkurrenshintar (svaga ledtrådar — övervikta INTE)
+{konkurrenter}. Härled själv det faktiska landskapet; låt inte listan styra frågorna.
 
-# Uppgift (två steg)
-1. ANALYS: Resonera djupt om vad en sofistikerad {persona} verkligen behöver veta före
-   beslutet — inklusive de obekväma, risk-sökande frågorna (red flags, alternativ,
-   stabilitet, ägande/förväxling, rykte). Lista de underliggande beslutskriterierna.
-2. FRÅGOR: Härled de faktiska frågor personan skulle skriva till en AI-motor för att
-   täcka kriterierna.
+# Möjliga förväxlingar (disambiguering)
+{homonymer ur GLEIF-namnsökning}. Formulera frågor som testar om motorn blandar ihop
+{FÖRETAG} med dessa.
 
-# Krav
-- Neutralt och naturligt formulerade — ALDRIG ledande ("är inte X bäst?" förbjudet).
-  Öppna frågor som inte förutsätter svaret.
-- Täck riskytan (§4): förväxling, inaktuella/hallucinerade negativ, konkurrent-
-  förskjutning, skadlig tystnad, negativ inramning.
-- Blanda direkta, jämförande och öppna frågor. Realistiska för kategorin. Hitta inte
-  på specifika fakta.
-- Generera på svenska och engelska (motorerna svarar på båda).
+# Uppgift (två steg — redovisa steg 1 i "analysis")
+1. ANALYS: Vad behöver en skarp {persona} egentligen veta före beslutet? Lista
+   beslutskriterierna OCH de obekväma farhågorna.
+2. FRÅGOR: Härled frågorna i BÅDA spåren:
+   - Spår A (om {FÖRETAG}): företagsspecifika risk-/screeningfrågor.
+   - Spår B (om branschen): kategori-/behovsfrågor där {FÖRETAG} bör surfa.
+
+# Regler
+- Naturligt, i personans egen röst — ALDRIG ledande ("varför är {FÖRETAG} bäst…").
+- Täck riskytan (§4) brett, inte tio varianter av samma fråga.
+- Blanda direkta, jämförande och öppna frågor. Realistiska. Hitta ALDRIG på fakta.
+- Generera på svenska och engelska.
+# Självkritik före output: stryk ledande, dubbletter, för mjuka, ej-personliga frågor.
 
 # Output (JSON)
-{"questions":[{"text","language","decision_criterion","harm_modes":[...],
-"type":"direct|comparative|open"}]}
+{"analysis":"…","questions":[{"text","language","track":"A|B","persona",
+"decision_criterion","harm_modes":[…],"type":"direct|comparative|open"}]}
 ```
+
+### Few-shot-exempel (anchors — visar djupet vi vill ha)
+
+Templatiserade ur grafen: `{FÖRETAG}`, `{kategori}`, `{use case}`, `{vertikaler}`,
+`{yrkesroll}`, `{bransch}`, `{team}`.
+
+**Köpare — Spår A (screening):**
+- "Sammanställ publika kundomdömen, forum och tech-bloggar om {FÖRETAG}. Vad är kunderna
+  mest nöjda med, och vanligaste klagomålen?" *(#3/#6)*
+- "Vilka typer av företag (bransch/storlek) har störst nytta av {FÖRETAG}:s lösningar,
+  och var fungerar de mindre bra?" *(#6)*
+- "Har {FÖRETAG} varit involverade i kända dataläckor, rättsliga tvister eller publika
+  systemhaverier de senaste åren?" *(#2/#3)*
+
+**Köpare — Spår B (behovsanalys):**
+- "Jag ska köpa in {kategori}. Vilka är de fem viktigaste tekniska kraven i kravspecen?"
+  *(#4/#6 — favoriserar kraven kundens styrkor?)*
+- "Vad är standardprissättningen i branschen, och vilka dolda kostnader missar man?"
+- "Vilka är de tre största misstagen företag gör vid implementation av {kategori}?"
+
+**Kandidat — Spår A (kulturscreening):**
+- "Vad säger Glassdoor, Reddit och branschnyheter om arbetskultur och ledarskap på
+  {FÖRETAG}?" *(#3/#6)*
+- "Hur ser personalomsättning och finansiell trend ut för {FÖRETAG}? Stabil arbetsplats?"
+  *(#2/#5)*
+- "Vilka är nyckelpersonerna i {team} på {FÖRETAG}, och vad har de för bakgrund?" *(#5)*
+
+**Kandidat — Spår B (karriärstrategi):**
+- "Hur ser efterfrågan och löneutveckling ut för en {yrkesroll} inom {bransch} just nu?"
+- "Vilka kompetenser/certifieringar har blivit nödvändiga i branschen senaste året?"
+- "Vilka är de största tekniska utmaningarna i nischen — vad är nästa stora grej?"
+
+**Investerare — Spår A (konkurrensanalys):**
+- "Gör en SWOT av {FÖRETAG} utifrån publik marknadsföring, produktutbud och historisk
+  tillväxt." *(#6/#3)*
+- "Vilka är {FÖRETAG}:s tre närmaste konkurrenter, och vad är {FÖRETAG}:s USP?" *(#4)*
+- "Hur ser ägarstruktur och historiska finansieringsrundor ut för {FÖRETAG}? Kända
+  investerare?" *(#1/ägande)*
+
+**Investerare — Spår B (marknadsanalys):**
+- "Hur ser marknadstillväxten (CAGR) ut för {bransch} globalt och i Europa, och vilka
+  makrotrender driver den?"
+- "Vilka är de största regulatoriska riskerna (EU-regleringar, datalagring) i branschen?"
+- "Sker mycket konsolidering i sektorn, eller poppar nya startups upp hela tiden?"
 
 Genererade batterier granskas/godkänns (samma review-disciplin) innan de körs skarpt,
 och cachas per kund tills profilen ändras väsentligt.
@@ -135,6 +194,12 @@ För varje (persona, fråga, motor)-svar klassar **validator-modellen (claude-op
 högsta kvalitet, §13)**:
 `{skademodell | "ok", severity: high|medium|low, sourcing: cites_customer|web|none,
  evidence: citat}`.
+
+Spåren poängsätts olika (§5.1):
+- **Spår A** mot källförsett facit → skademodell #1–6.
+- **Spår B** på **närvaro & inramning** → surfar kunden i svaret (#5), nämns bara
+  konkurrenter (#4), favoriserar kriterierna kundens differentiering? Bygger på och
+  fördjupar SoV-/`category_results`-måtten.
 
 - **Risk Exposure-score** = severity-vägd andel svar med en skademodell, per persona och
   totalt. Det är huvud-KPI:t som trendar månad-över-månad.
