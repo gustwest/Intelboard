@@ -22,10 +22,11 @@ class _Snap:
 
 
 class _DocRef:
-    def __init__(self, _id: str, data: dict | None, on_set=None):
+    def __init__(self, _id: str, data: dict | None, on_set=None, on_update=None):
         self._id = _id
         self._data = data
         self._on_set = on_set
+        self._on_update = on_update
 
     def get(self) -> _Snap:
         return _Snap(self._id, self._data)
@@ -33,6 +34,10 @@ class _DocRef:
     def set(self, payload: dict) -> None:
         if self._on_set:
             self._on_set(self._id, payload)
+
+    def update(self, payload: dict) -> None:
+        if self._on_update:
+            self._on_update(self._id, payload)
 
 
 class _Col:
@@ -101,7 +106,12 @@ def raw_item_doc(client_id: str, employee_id: str | None, item_id: str) -> _DocR
 
 
 def claim_doc(client_id: str, claim_id: str) -> _DocRef:
-    return _DocRef(claim_id, None, on_set=lambda i, p: STATE["writes"].__setitem__(i, p))
+    return _DocRef(
+        claim_id,
+        STATE.get("claims", {}).get(claim_id),
+        on_set=lambda i, p: STATE["writes"].__setitem__(i, p),  # extraktion skapar nya
+        on_update=lambda i, p: STATE["claims"].setdefault(i, {}).update(p),  # review uppdaterar
+    )
 
 
 def writes() -> dict[str, dict]:

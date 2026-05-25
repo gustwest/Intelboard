@@ -210,6 +210,12 @@ Från **"skriv beskrivningen"** → **"godkänn, redigera och prioritera de clai
 extraherat"**. Handskriven fritext utan källa är inte längre möjlig (utom som explicit
 markerat manuellt claim, §4).
 
+**Implementation:** låg-confidence narrative-claims (`needs_review`) granskas i
+frontend-fliken **Granska** (`insider-graph/review`, flik "Claims"): godkänn/avvisa +
+inline-redigering av påståendet före godkännande. Backend: `GET /api/review/{client_id}/claims`
++ `POST /api/review/{client_id}/claims/{claim_id}` (`routers/review.py`). Prioritering
+(ordning) är ännu inte byggd.
+
 ## 9. Profilsida — rendering (lager 2)
 
 Profilsidan renderar nivå-2-proveniens (fotnoter) ovanpå lager-1-datan. Anatomi:
@@ -259,7 +265,6 @@ och degrade-switchen — ännu inte byggt.
 
 ## 11. Utanför denna spec
 
-- Onboarding-UI för claims-review.
 - Schemaläggning av `extract-claims`-jobbet (cron/Eventarc) som övriga jobs.
 - Central degrade-switch + meta-endpoint för badgens live-färskhet (§10).
 - Premium-tier: faktisk CNAME-uppsättning + servering på kundens domän (§7).
