@@ -45,6 +45,26 @@ def raw_items_company_col(client_id: str):
     return client_doc(client_id).collection("raw_items_company")
 
 
+def raw_item_doc(client_id: str, employee_id: str | None, item_id: str):
+    """Slå upp ett enskilt källitem. employee_id=None → företagsnivå."""
+    if employee_id is None:
+        return raw_items_company_col(client_id).document(item_id)
+    return raw_items_col(client_id, employee_id).document(item_id)
+
+
+def claims_col(client_id: str):
+    return client_doc(client_id).collection("claims")
+
+
+def claim_doc(client_id: str, claim_id: str):
+    return claims_col(client_id).document(claim_id)
+
+
+def iter_claims(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
+    for doc in claims_col(client_id).stream():
+        yield doc.id, doc.to_dict() or {}
+
+
 def polling_results_col(client_id: str):
     return client_doc(client_id).collection("polling_results")
 
