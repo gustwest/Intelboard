@@ -7,7 +7,8 @@
 #   - GCS-bucket för JSON-LD (CDN-origin)
 #   - Service-account för insider-graph-api
 #   - IAM-bindningar (Firestore, GCS, Secret Manager)
-#   - Cloud Run Jobs (scrape-active, scrape-episodic, compile-all-schemas, polling-weekly)
+#   - Cloud Run Jobs (scrape-active, scrape-episodic, scrape-website, extract-all-claims,
+#     compile-all-schemas, polling-weekly, xml-sync, sunset-skills, quarterly-linkedin-todo)
 #   - Cloud Scheduler-triggers för jobben
 #   - Eventarc-trigger för compile_schema vid Firestore-skrivningar
 #
@@ -131,6 +132,8 @@ create_or_update_job() {
 
 create_or_update_job scrape-active           jobs.scrape_active
 create_or_update_job scrape-episodic         jobs.scrape_episodic
+create_or_update_job scrape-website          jobs.scrape_website
+create_or_update_job extract-all-claims      jobs.extract_all_claims
 create_or_update_job compile-all-schemas     jobs.compile_all_schemas
 create_or_update_job polling-weekly          jobs.polling_weekly
 create_or_update_job xml-sync                jobs.xml_sync
@@ -158,10 +161,15 @@ schedule_job() {
   fi
 }
 
+# Pipelinens dagliga ordning: inhämtning → claim-extraktion → compile.
+# scrape-website måndagar 03:45 (veckovis crawl, cadence-guard skyddar mot oftare),
 # scrape-active dagligen 04:00, scrape-episodic måndagar 04:30,
-# compile-all dagligen 05:00, polling tisdagar 06:00.
+# extract-all-claims dagligen 04:45 (efter inhämtning, FÖRE compile så dagens claims
+# kommer med), compile-all dagligen 05:00, polling tisdagar 06:00.
+schedule_job scrape-website-weekly   "45 3 * * 1" scrape-website
 schedule_job scrape-active-daily     "0 4 * * *"  scrape-active
 schedule_job scrape-episodic-weekly  "30 4 * * 1" scrape-episodic
+schedule_job extract-all-claims-daily "45 4 * * *" extract-all-claims
 schedule_job compile-all-daily       "0 5 * * *"  compile-all-schemas
 schedule_job polling-weekly-tue      "0 6 * * 2"  polling-weekly
 # Jobfeed-pipelinen: xml-sync dagligen 03:30 (före compile-all så stängningar hinner

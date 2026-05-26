@@ -7,25 +7,40 @@ import unittest
 
 import fakefs  # installerar fake firestore_client — måste importeras först
 from jobs import compile_schema, scrape_active, scrape_website
+from services import claim_extraction
 from services.ingest import ingest_new_client
 
 
 class IngestNewClientTest(unittest.TestCase):
     def setUp(self):
-        self._orig = (scrape_active.run_for_client, scrape_website.crawl_client, compile_schema.run)
+        self._orig = (
+            scrape_active.run_for_client,
+            scrape_website.crawl_client,
+            claim_extraction.extract_claims_for_client,
+            compile_schema.run,
+        )
         self.calls = []
         scrape_active.run_for_client = lambda cid, client: self.calls.append(("scrape_active", cid))
         scrape_website.crawl_client = lambda cid, client, force=False: self.calls.append(("website", cid, force))
+        claim_extraction.extract_claims_for_client = lambda cid: self.calls.append(("extract_claims", cid))
         compile_schema.run = lambda cid: self.calls.append(("compile", cid))
 
     def tearDown(self):
-        scrape_active.run_for_client, scrape_website.crawl_client, compile_schema.run = self._orig
+        (
+            scrape_active.run_for_client,
+            scrape_website.crawl_client,
+            claim_extraction.extract_claims_for_client,
+            compile_schema.run,
+        ) = self._orig
 
     def test_runs_connectors_and_compiles(self):
         fakefs.reset(client={"active_connectors": ["gleif", "website"]})
         ingest_new_client("acme")
         self.assertEqual(self.calls[0], ("scrape_active", "acme"))
         self.assertIn(("website", "acme", True), self.calls)  # force kringgår cadence-guard
+        # claim-extraktion måste ske EFTER inhämtning men FÖRE compile
+        names = [c[0] for c in self.calls]
+        self.assertLess(names.index("extract_claims"), names.index("compile"))
         self.assertEqual(self.calls[-1], ("compile", "acme"))
 
     def test_website_skipped_when_not_active(self):

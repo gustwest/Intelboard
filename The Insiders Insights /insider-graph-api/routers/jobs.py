@@ -64,6 +64,18 @@ def trigger_quarterly_todo(background: BackgroundTasks) -> dict[str, Any]:
     return {"status": "queued", "job": "quarterly_todo"}
 
 
+@router.post("/extract-claims/{client_id}")
+def trigger_extract_claims(client_id: str, background: BackgroundTasks) -> dict[str, Any]:
+    """Narrativ claims-extraktion för en kund (fritext → narrative-claims). Kör compile
+    efteråt för att projicera de nya claimsen in i JSON-LD/profilsidan."""
+    if not fs.client_doc(client_id).get().exists:
+        raise HTTPException(404, "client not found")
+    from services.claim_extraction import extract_claims_for_client
+
+    background.add_task(extract_claims_for_client, client_id)
+    return {"status": "queued", "job": "extract_claims", "client_id": client_id}
+
+
 @router.post("/compile/{client_id}")
 def trigger_compile(client_id: str, background: BackgroundTasks) -> dict[str, Any]:
     if not fs.client_doc(client_id).get().exists:

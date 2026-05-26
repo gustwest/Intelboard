@@ -39,7 +39,9 @@ insider-graph-api/
 ├── jobs/                   Cloud Run Jobs (cron-styrda)
 │   ├── scrape_active.py
 │   ├── scrape_episodic.py
-│   ├── extract_claims.py   narrativ claims-extraktion per kund
+│   ├── scrape_website.py    veckovis domän-crawl per kund
+│   ├── extract_claims.py    narrativ claims-extraktion per kund (--client-id)
+│   ├── extract_all_claims.py  fan-out över alla kunder (cron-bar)
 │   ├── compile_schema.py   JSON-LD + profilsida → GCS/CDN
 │   ├── compile_all_schemas.py
 │   └── polling_weekly.py
@@ -52,8 +54,10 @@ insider-graph-api/
 | Tjänst | Trigger | Cloud Run |
 |---|---|---|
 | `insider-graph-api` | webhooks + admin-API | service (always-on) |
+| `scrape-website` | Cloud Scheduler måndagar 03:45 | job |
 | `scrape-active` | Cloud Scheduler dagligen 04:00 | job |
 | `scrape-episodic` | Cloud Scheduler måndagar 04:30 | job |
+| `extract-all-claims` | Cloud Scheduler dagligen 04:45 | job |
 | `compile-all-schemas` | Cloud Scheduler dagligen 05:00 + Eventarc | job |
 | `polling-weekly` | Cloud Scheduler tisdagar 06:00 | job |
 | `xml-sync` | Cloud Scheduler dagligen 03:30 | job |

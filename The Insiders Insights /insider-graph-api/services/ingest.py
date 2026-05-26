@@ -17,6 +17,7 @@ import logging
 
 import firestore_client as fs
 from jobs import compile_schema, scrape_active, scrape_website
+from services import claim_extraction
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +41,15 @@ def ingest_new_client(client_id: str) -> None:
         except Exception:
             log.exception("ingest_new_client: website-crawl misslyckades för %s", client_id)
 
-    # Kompilera så property-claims (inkl. GLEIF-koncernstruktur) syns direkt.
+    # Extrahera narrativa claims ur den nyss inhämtade fritexten (website-crawl m.m.)
+    # FÖRE compile, annars projiceras de inte in i grafen förrän nästa körning.
+    # No-op om ingen LLM är konfigurerad.
+    try:
+        claim_extraction.extract_claims_for_client(client_id)
+    except Exception:
+        log.exception("ingest_new_client: claim-extraktion misslyckades för %s", client_id)
+
+    # Kompilera så property- + narrative-claims (inkl. GLEIF-koncernstruktur) syns direkt.
     try:
         compile_schema.run(client_id)
     except Exception:
