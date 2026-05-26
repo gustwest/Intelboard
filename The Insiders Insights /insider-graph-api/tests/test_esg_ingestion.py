@@ -14,6 +14,7 @@ from schemas import (
 )
 from services import esg_ingestion as ing
 from services import esg_report as rep
+from services import esrs_mapping
 
 
 def _core(**over):
@@ -76,6 +77,11 @@ class IngestSubmissionTest(unittest.TestCase):
 
         self.assertEqual(result["phase_reached"], 1)
         self.assertTrue(result["ammo_claim_ids"])
+        # ESRS-datapunkter mappas från de inmatade fälten (riktning).
+        topics = {dp["esrs_topic"] for dp in result["esrs_datapoints"]}
+        self.assertIn("E1", topics)  # Scope 1-3 → E1-6
+        self.assertEqual(fakefs.STATE["esg_submissions"][result["submission_id"]]["esrs_datapoints"],
+                         result["esrs_datapoints"])
         # Claims skrivs som källförsedda korrigeringar (fakefs claim_doc.set → writes()).
         written = fakefs.writes()
         self.assertEqual(len(written), len(result["ammo_claim_ids"]))
@@ -133,6 +139,47 @@ class RiskScoreTest(unittest.TestCase):
         self.assertTrue(model["improvement_opportunities"])  # invariant icke-tom
         # HTML renderas utan att krascha.
         self.assertIn("AI ESG Risk Score", rep.render_report_html(model))
+
+
+class ESRSMappingTest(unittest.TestCase):
+    def test_datapoints_filled_maps_known_fields(self):
+        dps = esrs_mapping.datapoints_filled(["scope_1_co2e", "employee_turnover_rate", "unknown_field"])
+        topics = {d["esrs_topic"] for d in dps}
+        self.assertEqual(topics, {"E1", "S1"})       # okänt fält ignoreras
+        self.assertEqual(len(dps), 2)
+
+    def test_topics_for_pillar(self):
+        self.assertIn("E1", esrs_mapping.topics_for_pillar("E"))
+        self.assertNotIn("S1", esrs_mapping.topics_for_pillar("E"))
+
+    def test_topic_label(self):
+        self.assertEqual(esrs_mapping.topic_label("E1"), "E1 Klimatförändring")
+        self.assertFalse(esrs_mapping.is_topic("ZZ"))
+
+
+class ESRSCoverageTest(unittest.TestCase):
+    def test_coverage_groups_open_findings_by_topic(self):
+        fakefs.reset(
+            client={"company_name": "Acme AB"},
+            esg_findings={
+                "f1": {"pillar": "E", "esrs_topic": "E1", "status": "CRITICAL_OMISSION_RISK",
+                       "severity": "high", "review_status": "open", "question": "q", "engine": "x"},
+                "f2": {"pillar": "G", "esrs_topic": "G1", "status": "HIGH_REPUTATION_RISK",
+                       "severity": "medium", "review_status": "open", "question": "q", "engine": "x"},
+                "f3": {"pillar": "E", "esrs_topic": "", "status": "CRITICAL_OMISSION_RISK",
+                       "severity": "low", "review_status": "open", "question": "q", "engine": "x"},
+            },
+            esg_run_summary={"answers_by_pillar": {"E": 2, "S": 0, "G": 1}},
+        )
+        model = rep.build_report_model("acme", "2026-05")
+        coverage = {c["esrs_topic"]: c for c in model["esrs_coverage"]}
+        self.assertIn("E1", coverage)
+        self.assertIn("G1", coverage)
+        self.assertNotIn("", coverage)  # otaggade findings tas ej med i ESRS-koppling
+        self.assertEqual(coverage["E1"]["critical_omission"], 1)
+        self.assertEqual(coverage["G1"]["high_reputation"], 1)
+        self.assertTrue(model["esrs_note"])  # ej-compliance-noten finns
+        self.assertIn("ESRS-koppling", rep.render_report_html(model))
 
 
 if __name__ == "__main__":

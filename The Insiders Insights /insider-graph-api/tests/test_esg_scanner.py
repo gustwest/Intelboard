@@ -15,16 +15,18 @@ from services.risk_detector import Context
 class ParseQuestionsTest(unittest.TestCase):
     def test_parse_and_defaults(self):
         data = {"questions": [
-            {"text": "Q1?", "language": "en"},
+            {"text": "Q1?", "language": "en", "esrs_topic": "E1"},
             {"text": "   "},                  # tom → skippas
-            {"text": "Q3?", "language": "de"},  # ogiltigt språk → default sv
+            {"text": "Q3?", "language": "de", "esrs_topic": "S1"},  # S1 ogiltig för pelare E → ""
         ]}
         qs = es._parse_questions(data, "E")
         self.assertEqual(len(qs), 2)
         self.assertEqual(qs[0].language, "en")
         self.assertEqual(qs[0].pillar, "E")
         self.assertEqual(qs[0].kind, "expansion")
+        self.assertEqual(qs[0].esrs_topic, "E1")   # giltig E-topic behålls
         self.assertEqual(qs[1].language, "sv")
+        self.assertEqual(qs[1].esrs_topic, "")     # S1 ej giltig för pelare E → tom
 
 
 class ClassifyTest(unittest.TestCase):
@@ -73,6 +75,63 @@ def _approved_q(pillar, kind, text, **over):
     return base
 
 
+class LintTest(unittest.TestCase):
+    """Bias-/ledande-grinden (A) mellan generering och review."""
+
+    def setUp(self):
+        self._orig = (es.llm_factory.invoke_json, es._generate_candidates)
+
+    def tearDown(self):
+        (es.llm_factory.invoke_json, es._generate_candidates) = self._orig
+
+    def test_lint_questions_parses_verdicts(self):
+        es.llm_factory.invoke_json = lambda *a: {"verdicts": [
+            {"leading": False, "issues": [], "rewrite": ""},
+            {"leading": True, "issues": ["presupposition"], "rewrite": "Vad redovisar X om Y?"},
+        ]}
+        out = es.lint_questions(object(), ["q1", "q2"])
+        self.assertEqual(len(out), 2)
+        self.assertTrue(out[1]["leading"])
+
+    def test_lint_unavailable_returns_empty(self):
+        es.llm_factory.invoke_json = lambda *a: None
+        self.assertEqual(es.lint_questions(object(), ["q1"]), [])
+
+    def test_leading_question_rewritten(self):
+        es._generate_candidates = lambda *a: [ESGQuestion("E", "expansion", "Varför är Acme dåliga på utsläpp?", "sv")]
+        es.llm_factory.invoke_json = lambda *a: {"verdicts": [
+            {"leading": True, "issues": ["laddat ord", "presupposition"], "rewrite": "Vad redovisar Acme om sina utsläpp?"}
+        ]}
+        out = es.generate_expansions(object(), "E", Context("Acme AB", "p", "f"), "SaaS")
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0].text, "Vad redovisar Acme om sina utsläpp?")
+        self.assertEqual(out[0].lint_status, "rewritten")
+        self.assertIn("presupposition", out[0].lint_issues)
+
+    def test_leading_unfixable_dropped(self):
+        es._generate_candidates = lambda *a: [ESGQuestion("E", "expansion", "Ledande utan fix?", "sv")]
+        es.llm_factory.invoke_json = lambda *a: {"verdicts": [{"leading": True, "issues": ["styrande"], "rewrite": ""}]}
+        out = es.generate_expansions(object(), "E", Context("Acme AB", "p", "f"), "SaaS")
+        self.assertEqual(out, [])  # ledande + ingen omformulering → släpps
+
+    def test_clean_question_kept(self):
+        es._generate_candidates = lambda *a: [ESGQuestion("E", "expansion", "Vad redovisar Acme om Scope 3?", "sv")]
+        es.llm_factory.invoke_json = lambda *a: {"verdicts": [{"leading": False, "issues": [], "rewrite": ""}]}
+        out = es.generate_expansions(object(), "E", Context("Acme AB", "p", "f"), "SaaS")
+        self.assertEqual(out[0].lint_status, "clean")
+
+
+class ExpansionPromptTest(unittest.TestCase):
+    def test_prompt_grounds_in_esrs_and_materiality(self):
+        prompt = es._expansion_prompt("E", Context("Acme AB", "profil", "facit"), "tillverkning")
+        self.assertIn("ESRS", prompt)
+        self.assertIn("E4 Biologisk mångfald", prompt)  # ämnen exempelfrågorna missar
+        self.assertIn("VÄSENTLIGHET", prompt)           # analys-steg
+        self.assertIn("dubbel väsentlighet", prompt)
+        self.assertIn("ALDRIG ledande", prompt)         # icke-ledande-regel
+        self.assertIn("Acme AB", prompt)                # few-shots med bolagsnamn
+
+
 class GenerateAndStoreTest(unittest.TestCase):
     def setUp(self):
         self._orig = (es.llm_factory.make_validator, es.generate_expansions)
@@ -102,6 +161,10 @@ class GenerateAndStoreTest(unittest.TestCase):
         self.assertEqual(kinds.count("expansion"), 3)
         self.assertTrue(all(d["needs_review"] for d in stored.values()))
         self.assertTrue(all(d["context_hash"] for d in stored.values()))
+        # Exempelfrågorna bär ESRS-topic och lint_status "floor".
+        examples = [d for d in stored.values() if d["kind"] == "example"]
+        self.assertTrue(all(d["esrs_topic"] for d in examples))
+        self.assertTrue(all(d["lint_status"] == "floor" for d in examples))
 
     def test_cache_hit_skips_regeneration(self):
         fakefs.reset(client={"company_name": "Acme AB"})

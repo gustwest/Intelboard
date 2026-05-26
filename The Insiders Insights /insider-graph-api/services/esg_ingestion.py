@@ -23,6 +23,7 @@ from google.cloud import firestore
 
 import firestore_client as fs
 from schemas import Claim, ClaimSource, ESGMetricsSubmission
+from services import esrs_mapping
 
 log = logging.getLogger(__name__)
 
@@ -103,6 +104,14 @@ def ingest_submission(client_id: str, submission: ESGMetricsSubmission) -> dict:
     company = client.get("company_name") or client_id
     phase = phase_reached(submission)
 
+    # Vilka ESRS-datapunkter formuläret täcker (riktning, ej compliance).
+    field_names = list(submission.core.model_dump().keys())
+    if submission.csrd_basic is not None:
+        field_names += list(submission.csrd_basic.model_dump().keys())
+    if submission.enterprise_advanced is not None:
+        field_names += list(submission.enterprise_advanced.model_dump().keys())
+    esrs_datapoints = esrs_mapping.datapoints_filled(field_names)
+
     statements = build_statements(company, submission)
     claim_ids: list[str] = []
     for stmt in statements:
@@ -125,6 +134,7 @@ def ingest_submission(client_id: str, submission: ESGMetricsSubmission) -> dict:
                 submission.enterprise_advanced.model_dump() if submission.enterprise_advanced else None
             ),
             "ammo_claim_ids": claim_ids,
+            "esrs_datapoints": esrs_datapoints,
             "submitted_at": firestore.SERVER_TIMESTAMP,
         }
     )
@@ -147,4 +157,9 @@ def ingest_submission(client_id: str, submission: ESGMetricsSubmission) -> dict:
         "ESG-ingestion %s: fas %d, %d claims, finding=%s",
         client_id, phase, len(claim_ids), submission.finding_id,
     )
-    return {"submission_id": sub_id, "phase_reached": phase, "ammo_claim_ids": claim_ids}
+    return {
+        "submission_id": sub_id,
+        "phase_reached": phase,
+        "ammo_claim_ids": claim_ids,
+        "esrs_datapoints": esrs_datapoints,
+    }

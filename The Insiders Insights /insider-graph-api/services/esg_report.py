@@ -18,6 +18,7 @@ from typing import Any
 from google.cloud import firestore
 
 import firestore_client as fs
+from services import esrs_mapping
 
 log = logging.getLogger(__name__)
 
@@ -95,8 +96,30 @@ def build_report_model(client_id: str, month: str | None = None) -> dict[str, An
         "risk_score": risk_score,
         "detected": detected,
         "actioned_count": len(actioned_f),
+        "esrs_coverage": _esrs_coverage(open_f),
+        "esrs_note": esrs_mapping.NOT_COMPLIANCE_NOTE,
         "improvement_opportunities": _improvements(open_f, answers_by_pillar),
     }
+
+
+def _esrs_coverage(open_findings: list[dict]) -> list[dict[str, Any]]:
+    """Vilka ESRS-ämnen AI-perceptionsriskerna rör — riktning, ej DMA. Grupperar öppna
+    findings per esrs_topic så en hållbarhetschef ser vilket upplysningsområde som är
+    osynligt/missvisat i AI."""
+    by_topic: dict[str, dict[str, Any]] = {}
+    for d in open_findings:
+        code = d.get("esrs_topic")
+        if not esrs_mapping.is_topic(code):
+            continue
+        row = by_topic.setdefault(
+            code, {"esrs_topic": code, "label": esrs_mapping.topic_label(code),
+                   "critical_omission": 0, "high_reputation": 0}
+        )
+        if d.get("status") == "CRITICAL_OMISSION_RISK":
+            row["critical_omission"] += 1
+        elif d.get("status") == "HIGH_REPUTATION_RISK":
+            row["high_reputation"] += 1
+    return sorted(by_topic.values(), key=lambda r: r["esrs_topic"])
 
 
 def _finding_row(d: dict) -> dict[str, Any]:
@@ -158,6 +181,13 @@ def render_report_html(report: dict[str, Any]) -> str:
     month = report.get("month") or ""
     score = report.get("risk_score") or {}
     overall = score.get("overall")
+    esrs_note = html.escape(report.get("esrs_note") or "")
+    esrs_rows = "".join(
+        f"<tr><td>{html.escape(r.get('label') or '')}</td>"
+        f"<td class='num'>{r.get('critical_omission', 0)}</td>"
+        f"<td class='num'>{r.get('high_reputation', 0)}</td></tr>"
+        for r in (report.get("esrs_coverage") or [])
+    ) or "<tr><td colspan='3'>Inga ESRS-taggade risker.</td></tr>"
 
     pillar_rows = "".join(
         f"<tr><td>{PILLAR_LABELS.get(p, p)}</td>"
@@ -194,7 +224,8 @@ def render_report_html(report: dict[str, Any]) -> str:
 </style></head><body>
 <p class="banner"><strong>Internt utkast.</strong> Synas av teamet och färdigställs som
 ledningsgruppsrapport utanför verktyget. AI ESG Risk Score är en blind nollmätning av hur
-AI-motorerna porträtterar bolagets hållbarhet — inte bolagets faktiska ESG-prestanda.</p>
+AI-motorerna porträtterar bolagets hållbarhet — <strong>inte bolagets faktiska ESG-prestanda,
+inte en CSRD-rapport och inte en dubbel väsentlighetsanalys (DMA)</strong>.</p>
 <h1>AI ESG Risk Score — {name}</h1>
 <p class="note">{_month_label(month)}</p>
 
@@ -203,6 +234,12 @@ AI-motorerna porträtterar bolagets hållbarhet — inte bolagets faktiska ESG-p
 <table><thead><tr><th>Pelare</th><th class="num">Risk</th><th class="num">Informationsgap</th>
 <th class="num">Reputationsrisk</th><th class="num">Svar</th></tr></thead>
 <tbody>{pillar_rows}</tbody></table>
+
+<h2>ESRS-koppling (riktning)</h2>
+<p class="note">{esrs_note}</p>
+<table><thead><tr><th>ESRS-ämne</th><th class="num">Informationsgap</th>
+<th class="num">Reputationsrisk</th></tr></thead>
+<tbody>{esrs_rows}</tbody></table>
 
 <h2>Detekterade risker</h2>
 <table><thead><tr><th>Pelare</th><th>Fråga</th><th>Motor</th><th>Status</th><th>Allvar</th>

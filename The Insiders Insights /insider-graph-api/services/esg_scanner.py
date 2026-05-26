@@ -36,6 +36,7 @@ from typing import Any
 from google.cloud import firestore
 
 import firestore_client as fs
+from services import esrs_mapping
 from services import llm as llm_factory
 from services.risk_detector import build_context, Context, _ask  # delad kontext + motoranrop
 
@@ -53,22 +54,41 @@ _PILLAR_EXPANSION_THEME = {
     "G": "strukturerat kring affärsetik, certifieringar och riskfilter",
 }
 
-# Obligatoriska exempelfrågor (golvet). {company} fylls vid generering. Måste alltid täckas.
-EXAMPLE_QUESTIONS: dict[str, tuple[str, ...]] = {
+# ESRS topical standards per pelare — relevans-ryggraden. Genereringen förankras i dessa
+# så att frågorna täcker det som faktiskt är MATERIELLT (dubbel väsentlighet) för bolagets
+# sektor, inte bara de fasta exempelfrågorna. Förhindrar att vi missar t.ex. E2–E4/S2–S4.
+ESRS_SUBTOPICS = {
     "E": (
-        "Gör en sammanställning av {company}s rapporterade Scope 1, 2 och 3-utsläpp samt deras netto-noll-mål.",
-        "Hur stor andel förnybar energi använder {company} i sin drift och vad är deras återvinningsgrad?",
-        "Hur väl är {company}s verksamhet anpassad efter kriterierna i EU-taxonomin?",
+        "E1 Klimatförändring (utsläpp, energi, mål), E2 Föroreningar, E3 Vatten & marina "
+        "resurser, E4 Biologisk mångfald & ekosystem, E5 Resursanvändning & cirkulär ekonomi"
     ),
     "S": (
-        "Beskriv arbetsmiljön, ledarskapet och företagskulturen på {company} utifrån publika diskussioner.",
-        "Vilka konkreta nyckeltal redovisar {company} gällande jämställdhet (Gender Parity) i ledningsgrupp och styrelse?",
-        "Finns det uppgifter om det ojusterade lönegapet (Gender Pay Gap) eller personalomsättningen hos {company}?",
+        "S1 Egen personal (arbetsvillkor, jämställdhet, hälsa & säkerhet), S2 Arbetare i "
+        "värdekedjan, S3 Berörda samhällen, S4 Konsumenter & slutanvändare"
     ),
     "G": (
-        "Vilka oberoende hållbarhetsbetyg, ISO-certifieringar (t.ex. 27001, 14001) eller ESG-audits (t.ex. EcoVadis) har verifierats för {company}?",
-        "Hur säkerställer {company} att deras leverantörskedja följer en etisk Supplier Code of Conduct?",
-        "Finns det några dokumenterade historiska kontroverser, mutanklagelser eller sårbarheter i bolagsstyrningen för {company}?",
+        "G1 Affärsetik & uppförande (antikorruption, visselblåsning, leverantörsrelationer, "
+        "politiskt engagemang, styrning)"
+    ),
+}
+
+# Obligatoriska exempelfrågor (golvet) — (ESRS-topic, frågemall). {company} fylls vid
+# generering. Måste alltid täckas; topic-taggen kopplar findingen till ett ESRS-ämne.
+EXAMPLE_QUESTIONS: dict[str, tuple[tuple[str, str], ...]] = {
+    "E": (
+        ("E1", "Gör en sammanställning av {company}s rapporterade Scope 1, 2 och 3-utsläpp samt deras netto-noll-mål."),
+        ("E5", "Hur stor andel förnybar energi använder {company} i sin drift och vad är deras återvinningsgrad?"),
+        ("E1", "Hur väl är {company}s verksamhet anpassad efter kriterierna i EU-taxonomin?"),
+    ),
+    "S": (
+        ("S1", "Beskriv arbetsmiljön, ledarskapet och företagskulturen på {company} utifrån publika diskussioner."),
+        ("S1", "Vilka konkreta nyckeltal redovisar {company} gällande jämställdhet (Gender Parity) i ledningsgrupp och styrelse?"),
+        ("S1", "Finns det uppgifter om det ojusterade lönegapet (Gender Pay Gap) eller personalomsättningen hos {company}?"),
+    ),
+    "G": (
+        ("G1", "Vilka oberoende hållbarhetsbetyg, ISO-certifieringar (t.ex. 27001, 14001) eller ESG-audits (t.ex. EcoVadis) har verifierats för {company}?"),
+        ("G1", "Hur säkerställer {company} att deras leverantörskedja följer en etisk Supplier Code of Conduct?"),
+        ("G1", "Finns det några dokumenterade historiska kontroverser, mutanklagelser eller sårbarheter i bolagsstyrningen för {company}?"),
     ),
 }
 
@@ -84,6 +104,11 @@ class ESGQuestion:
     kind: str            # "example" (golvet) | "expansion" (LLM-genererad djupdykning)
     text: str
     language: str        # "sv" | "en"
+    esrs_topic: str = ""  # ESRS topical standard frågan rör, t.ex. "E1" (se esrs_mapping)
+    # Bias-/ledande-lint (A): "floor" (mandaterad exempelfråga, ej lintad), "clean",
+    # "rewritten" (ledande → neutral omformulering), "unchecked" (lint otillgänglig).
+    lint_status: str = "unchecked"
+    lint_issues: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -96,6 +121,7 @@ class ESGFinding:
     sentiment: str       # negative | neutral | positive
     engine_excerpt: str  # kort citat ur svaret (evidens)
     answer_excerpt: str = ""  # längre utdrag — frontend visar det blinda svaret
+    esrs_topic: str = ""  # ärvs från frågan — kopplar findingen till ett ESRS-ämne
 
 
 @dataclass
@@ -136,9 +162,14 @@ def generate_and_store_esg_questions(client_id: str) -> dict | None:
     industry = _industry_hint(client)
     written = 0
     for pillar in PILLARS:
-        # Golvet: de obligatoriska exempelfrågorna täcks alltid.
-        for tmpl in EXAMPLE_QUESTIONS[pillar]:
-            q = ESGQuestion(pillar=pillar, kind="example", text=tmpl.format(company=context.company_name), language="sv")
+        # Golvet: de obligatoriska exempelfrågorna täcks alltid. De är öppet och neutralt
+        # formulerade per spec → lint-status "floor" (granskas ändå av människan i review).
+        for topic, tmpl in EXAMPLE_QUESTIONS[pillar]:
+            q = ESGQuestion(
+                pillar=pillar, kind="example",
+                text=tmpl.format(company=context.company_name), language="sv",
+                esrs_topic=topic, lint_status="floor",
+            )
             _persist_question(client_id, q, ctx_hash)
             written += 1
         # Prompt Expansion Engine: branschanpassade djupdykningar.
@@ -185,6 +216,7 @@ def run_esg_scan(client_id: str) -> ESGScanResult | None:
             if cls.status == "ok":
                 continue
             cls.pillar, cls.question, cls.engine = q.pillar, q.text, engine_name
+            cls.esrs_topic = q.esrs_topic
             cls.answer_excerpt = answer.strip()[:1500]
             _persist(client_id, cls)
             findings.append(cls)
@@ -238,7 +270,33 @@ def _industry_hint(client: dict) -> str:
 
 
 def generate_expansions(llm, pillar: str, context: Context, industry: str) -> list[ESGQuestion]:
-    """LLM-metaklassen genererar branschanpassade djupdykningsfrågor för en pelare."""
+    """Prompt Expansion Engine: generera materialitetsförankrade djupdykningsfrågor och kör
+    dem genom bias-/ledande-linten (A) innan de seedas för review. Ledande frågor
+    omformuleras neutralt; går de inte att rädda släpps de."""
+    candidates = _generate_candidates(llm, pillar, context, industry)
+    if not candidates:
+        return []
+
+    verdicts = lint_questions(llm, [q.text for q in candidates])
+    cleaned: list[ESGQuestion] = []
+    for i, q in enumerate(candidates):
+        v = verdicts[i] if i < len(verdicts) else {}
+        q.lint_issues = [str(x) for x in (v.get("issues") or [])]
+        if v.get("leading"):
+            rewrite = (v.get("rewrite") or "").strip()
+            if not rewrite:
+                log.info("ESG-lint: släpper ledande fråga (ej räddningsbar): %s", q.text[:80])
+                continue  # ledande utan neutral omformulering → släpps helt
+            q.text = rewrite
+            q.lint_status = "rewritten"
+        else:
+            q.lint_status = "clean" if verdicts else "unchecked"
+        cleaned.append(q)
+    return cleaned
+
+
+def _generate_candidates(llm, pillar: str, context: Context, industry: str) -> list[ESGQuestion]:
+    """Råa kandidatfrågor från genereringsprompten (materialitet → frågor)."""
     system = _expansion_prompt(pillar, context, industry)
     data = llm_factory.invoke_json(llm, system, "Generera djupdykningsfrågorna nu.")
     if not data:
@@ -248,16 +306,19 @@ def generate_expansions(llm, pillar: str, context: Context, industry: str) -> li
 
 def _parse_questions(data: dict, pillar: str) -> list[ESGQuestion]:
     out: list[ESGQuestion] = []
+    valid_topics = set(esrs_mapping.topics_for_pillar(pillar))
     for q in data.get("questions") or []:
         text = (q.get("text") or "").strip()
         if not text:
             continue
+        topic = q.get("esrs_topic") if q.get("esrs_topic") in valid_topics else ""
         out.append(
             ESGQuestion(
                 pillar=pillar,
                 kind="expansion",
                 text=text,
                 language=q.get("language") if q.get("language") in ("sv", "en") else "sv",
+                esrs_topic=topic,
             )
         )
     return out
@@ -265,10 +326,13 @@ def _parse_questions(data: dict, pillar: str) -> list[ESGQuestion]:
 
 def _expansion_prompt(pillar: str, context: Context, industry: str) -> str:
     industry_line = industry or "(okänd — härled rimlig kontext själv)"
+    # Few-shots: exempelfrågorna anchrar önskad nivå OCH neutral, öppen, icke-ledande stil.
+    few_shots = "\n".join(f"- {t.format(company=context.company_name)}" for _topic, t in EXAMPLE_QUESTIONS[pillar])
+    topic_codes = ", ".join(esrs_mapping.topics_for_pillar(pillar))
     return f"""# Roll
 Du är en senior ESG- och CSRD-analytiker som granskar hur AI-motorer porträtterar ett bolags
-hållbarhetsprofil. Du formulerar skarpa, mätbara frågor som blottlägger informationsgap och
-ryktesrisker.
+hållbarhetsprofil. Du formulerar neutrala, mätbara frågor som blottlägger informationsgap och
+ryktesrisker — utan att själv vara ledande.
 
 # Bolag
 {context.profile}
@@ -276,19 +340,60 @@ ryktesrisker.
 # Bransch
 {industry_line}
 
-# Pelare att expandera
-{PILLAR_LABELS[pillar]} — expandera {_PILLAR_EXPANSION_THEME[pillar]}.
+# Pelare: {PILLAR_LABELS[pillar]}
+Relevanta ESRS-ämnen: {ESRS_SUBTOPICS[pillar]}
+Fokusera expansionen {_PILLAR_EXPANSION_THEME[pillar]}.
 
-# Uppgift
-Generera upp till {MAX_EXPANSIONS_PER_PILLAR} NYA branschanpassade djupdykningsfrågor om
-{context.company_name} (utöver standardfrågorna), i den här pelaren. Frågorna ska:
-- vara konkreta och mätbara, i en kritisk granskares röst — ALDRIG ledande,
-- använda bolagsnamnet, och vara realistiska att ställa en publik AI-assistent,
-- ALDRIG hitta på fakta om bolaget.
-Generera på både svenska och engelska.
+# Uppgift (två steg — redovisa steg 1 i "analysis")
+1. VÄSENTLIGHET: Vilka av ESRS-ämnena ovan är MEST materiella för {context.company_name} givet
+   sektorn? Resonera kort utifrån dubbel väsentlighet (bolagets påverkan på omvärlden OCH den
+   finansiella risken för bolaget). Detta styr vilka frågor som är mest relevanta att ställa.
+2. FRÅGOR: Härled upp till {MAX_EXPANSIONS_PER_PILLAR} NYA frågor (utöver standardfrågorna) som
+   täcker de mest materiella ämnena. Tagga varje fråga med det primära ESRS-ämne den rör
+   (en av: {topic_codes}).
+
+# Regler (icke förhandlingsbara)
+- NEUTRALA och ÖPPNA — ALDRIG ledande: inga laddade/värderande ord, inga presuppositioner (anta
+  inte att något redan är sant), ingen styrning mot ett förutbestämt svar, inga ja/nej-fällor där
+  nyans krävs. Fråga "Vad redovisar X om …?" snarare än "Varför är X dåliga på …?".
+- Konkreta och mätbara; använd bolagsnamnet; realistiska att ställa en publik AI-assistent.
+- ALDRIG hitta på fakta om bolaget. Generera på både svenska och engelska.
+
+# Exempel på önskad nivå och NEUTRAL stil (härma stilen, inte ordagrant)
+{few_shots}
 
 # Output (ENDAST JSON)
-{{"questions":[{{"text":"...","language":"sv|en"}}]}}"""
+{{"analysis":"...","questions":[{{"text":"...","language":"sv|en","esrs_topic":"{topic_codes.split(', ')[0]}"}}]}}"""
+
+
+# --- Bias-/ledande-lint (A): grind mellan generering och review ---------------
+
+_LINT_SYSTEM = """Du granskar om frågor som ska ställas till en AI-motor är LEDANDE eller
+biased. En bra granskningsfråga är NEUTRAL, ÖPPEN och MÄTBAR och styr inte svaret.
+
+Flagga en fråga som ledande om den har något av:
+- presupposition (antar att något redan är sant, t.ex. "Varför misslyckas X med …?"),
+- laddade eller värderande ord ("dålig", "skandalösa", "usla"),
+- styrning mot ett förutbestämt svar,
+- falskt dilemma / ja-nej-fälla där nyans krävs.
+
+För varje fråga (i ordning): är den ledande, vilka problem, och ge en NEUTRAL omformulering
+som mäter samma sak utan att styra (tom sträng om frågan redan är neutral). Var konservativ —
+flagga bara faktiskt ledande frågor, inte bara skarpa eller kritiska.
+
+Returnera ENDAST JSON:
+{"verdicts":[{"leading":true|false,"issues":["..."],"rewrite":"neutral omformulering eller tom"}]}"""
+
+
+def lint_questions(llm, texts: list[str]) -> list[dict]:
+    """Ett batchat lint-anrop för en pelares kandidatfrågor → en verdikt-lista i samma ordning.
+    Tom lista om linten är otillgänglig (frågorna behålls då 'unchecked' och fångas i review)."""
+    if not texts:
+        return []
+    numbered = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(texts))
+    data = llm_factory.invoke_json(llm, _LINT_SYSTEM, "Granska dessa frågor:\n" + numbered)
+    verdicts = (data or {}).get("verdicts")
+    return verdicts if isinstance(verdicts, list) else []
 
 
 # --- Skadeklassning (ESG-omission + reputationsrisk) --------------------------
@@ -359,6 +464,9 @@ def _persist_question(client_id: str, q: ESGQuestion, ctx_hash: str) -> None:
             "kind": q.kind,
             "text": q.text,
             "language": q.language,
+            "esrs_topic": q.esrs_topic,
+            "lint_status": q.lint_status,   # floor | clean | rewritten | unchecked
+            "lint_issues": q.lint_issues,   # ev. flaggade problem, synliga i review
             "status": "open",
             "needs_review": True,
             "context_hash": ctx_hash,
@@ -383,6 +491,7 @@ def _persist(client_id: str, f: ESGFinding) -> None:
         "sentiment": f.sentiment,
         "engine_excerpt": f.engine_excerpt,
         "answer_excerpt": f.answer_excerpt,
+        "esrs_topic": f.esrs_topic,
         "detected_at": firestore.SERVER_TIMESTAMP,
     }
     if not snap.exists:

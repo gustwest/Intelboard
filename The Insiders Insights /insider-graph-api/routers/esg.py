@@ -77,6 +77,8 @@ def list_questions(client_id: str) -> dict[str, Any]:
                 "kind": q.get("kind"),
                 "text": q.get("text"),
                 "language": q.get("language"),
+                "lint_status": q.get("lint_status"),   # floor | clean | rewritten | unchecked
+                "lint_issues": q.get("lint_issues") or [],
                 "generated_at": _iso(q.get("generated_at")),
             }
         )
