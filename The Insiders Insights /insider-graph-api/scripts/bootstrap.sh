@@ -34,6 +34,22 @@ BUCKET="${CDN_BUCKET:-insider-graph-cdn-${PROJECT_ID}}"
 REPO="insider-graph-repo"
 IMAGE="europe-north1-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}:latest"
 
+# Origin-URL som compile-schema sätter på profilsidan/schema.json. Default är den råa
+# GCS path-style-URL:en (fungerar direkt, ingen LB krävs). Vid clean-URL-cutover:
+# kör om med CDN_BASE_URL=https://${PROFILE_DOMAIN} EFTER att DNS pekar på LB-IP:t och
+# certet är ACTIVE (se docs/clean-url-cutover.md). En enda variabel flyttar allt.
+CDN_BASE_URL="${CDN_BASE_URL:-https://storage.googleapis.com/${BUCKET}}"
+
+# Egen domän för profilsidorna (clean-URL via HTTPS-LB + Cloud CDN). LB-sektionen
+# nedan provisioneras bara om PROFILE_DOMAIN är satt. Lämna tom för att hoppa över.
+PROFILE_DOMAIN="${PROFILE_DOMAIN:-}"
+LB_IP_NAME="insider-graph-cdn-ip"
+LB_BACKEND="insider-graph-cdn-backend"
+LB_URLMAP="insider-graph-cdn-urlmap"
+LB_CERT="insider-graph-cdn-cert"
+LB_PROXY="insider-graph-cdn-proxy"
+LB_FRULE="insider-graph-cdn-fr"
+
 if [[ -z "$PROJECT_ID" ]]; then
   echo "PROJECT_ID är inte satt (gcloud config get-value project)" >&2
   exit 1
@@ -77,6 +93,73 @@ JSON
 gsutil cors set cors.json "gs://$BUCKET"
 rm cors.json
 
+# ---- 3b. Clean-URL: HTTPS-LB + Cloud CDN på egen domän --------------------
+# Provisioneras bara om PROFILE_DOMAIN är satt. Ger snygga, migrations-säkra
+# profil-URL:er (https://$PROFILE_DOMAIN/clients/<id>/) i stället för den råa
+# storage.googleapis.com-adressen, och låter MainPageSuffix servera index.html
+# för katalog-URL:er. Allt här är idempotent (describe-före-create).
+#
+# OBS: detta sätter BARA upp infran. CDN_BASE_URL flippas INTE automatiskt —
+# se docs/clean-url-cutover.md för den ordnade övergången (DNS → cert ACTIVE →
+# flippa CDN_BASE_URL → redeploy → recompile).
+if [[ -n "$PROFILE_DOMAIN" ]]; then
+  echo "==> Clean-URL: sätter upp HTTPS-LB + CDN för $PROFILE_DOMAIN"
+  gcloud services enable compute.googleapis.com --project="$PROJECT_ID"
+
+  # MainPageSuffix: katalog-URL (…/clients/<id>/) serverar index.html bakom LB:n.
+  gsutil web set -m index.html "gs://$BUCKET"
+
+  # Global statisk anycast-IP (det DNS:en ska peka på).
+  if ! gcloud compute addresses describe "$LB_IP_NAME" --global --project="$PROJECT_ID" >/dev/null 2>&1; then
+    echo "==> Reserverar global statisk IP: $LB_IP_NAME"
+    gcloud compute addresses create "$LB_IP_NAME" --global --project="$PROJECT_ID"
+  fi
+  LB_IP="$(gcloud compute addresses describe "$LB_IP_NAME" --global --project="$PROJECT_ID" --format='value(address)')"
+
+  # Backend-bucket med Cloud CDN aktiverat.
+  if ! gcloud compute backend-buckets describe "$LB_BACKEND" --project="$PROJECT_ID" >/dev/null 2>&1; then
+    echo "==> Skapar backend-bucket (CDN): $LB_BACKEND"
+    gcloud compute backend-buckets create "$LB_BACKEND" \
+      --gcs-bucket-name="$BUCKET" --enable-cdn --project="$PROJECT_ID"
+  fi
+
+  # URL-map → backend-bucket.
+  if ! gcloud compute url-maps describe "$LB_URLMAP" --project="$PROJECT_ID" >/dev/null 2>&1; then
+    echo "==> Skapar URL-map: $LB_URLMAP"
+    gcloud compute url-maps create "$LB_URLMAP" \
+      --default-backend-bucket="$LB_BACKEND" --project="$PROJECT_ID"
+  fi
+
+  # Google-managed SSL-cert. Blir ACTIVE först när DNS för $PROFILE_DOMAIN pekar på LB_IP.
+  if ! gcloud compute ssl-certificates describe "$LB_CERT" --global --project="$PROJECT_ID" >/dev/null 2>&1; then
+    echo "==> Skapar managed SSL-cert: $LB_CERT ($PROFILE_DOMAIN)"
+    gcloud compute ssl-certificates create "$LB_CERT" \
+      --domains="$PROFILE_DOMAIN" --global --project="$PROJECT_ID"
+  fi
+
+  # Target HTTPS-proxy.
+  if ! gcloud compute target-https-proxies describe "$LB_PROXY" --global --project="$PROJECT_ID" >/dev/null 2>&1; then
+    echo "==> Skapar target HTTPS-proxy: $LB_PROXY"
+    gcloud compute target-https-proxies create "$LB_PROXY" \
+      --url-map="$LB_URLMAP" --ssl-certificates="$LB_CERT" --global --project="$PROJECT_ID"
+  fi
+
+  # Global forwarding-rule (443) → proxy, på den reserverade IP:n.
+  if ! gcloud compute forwarding-rules describe "$LB_FRULE" --global --project="$PROJECT_ID" >/dev/null 2>&1; then
+    echo "==> Skapar forwarding-rule (443): $LB_FRULE"
+    gcloud compute forwarding-rules create "$LB_FRULE" \
+      --global --target-https-proxy="$LB_PROXY" --ports=443 \
+      --address="$LB_IP_NAME" --project="$PROJECT_ID"
+  fi
+
+  echo
+  echo "==> LB klar. Peka DNS innan certet kan bli ACTIVE:"
+  echo "    $PROFILE_DOMAIN   A   $LB_IP"
+  echo "    Följ cert-status:  gcloud compute ssl-certificates describe $LB_CERT --global --format='value(managed.status)'"
+  echo "    När ACTIVE: se docs/clean-url-cutover.md för att flippa CDN_BASE_URL."
+  echo
+fi
+
 # ---- 4. Service account + IAM ---------------------------------------------
 if ! gcloud iam service-accounts describe "$SA_EMAIL" --project="$PROJECT_ID" >/dev/null 2>&1; then
   echo "==> Skapar service-account: $SA_EMAIL"
@@ -102,7 +185,7 @@ done
 echo "==> Uppdaterar service-env för $SERVICE"
 gcloud run services update "$SERVICE" --region="$REGION" --project="$PROJECT_ID" \
   --service-account="$SA_EMAIL" \
-  --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=https://storage.googleapis.com/${BUCKET}" \
+  --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL}" \
   --update-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,BRIGHTDATA_API_KEY=insider-graph-brightdata-api-key:latest,BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID=insider-graph-brightdata-linkedin-profile-dataset-id:latest,BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID=insider-graph-brightdata-linkedin-company-dataset-id:latest" \
   || echo "==> Service finns ej ännu — kör cloudbuild först"
 
@@ -116,7 +199,7 @@ create_or_update_job() {
       --image="$IMAGE" --region="$REGION" --project="$PROJECT_ID" \
       --service-account="$SA_EMAIL" \
       --command="python" --args="-m,$CMD" \
-      --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=https://storage.googleapis.com/${BUCKET}" \
+      --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL}" \
       --update-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,BRIGHTDATA_API_KEY=insider-graph-brightdata-api-key:latest,BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID=insider-graph-brightdata-linkedin-profile-dataset-id:latest,BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID=insider-graph-brightdata-linkedin-company-dataset-id:latest"
   else
     echo "==> Skapar job: $NAME"
@@ -125,7 +208,7 @@ create_or_update_job() {
       --service-account="$SA_EMAIL" \
       --command="python" --args="-m,$CMD" \
       --max-retries=1 \
-      --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=https://storage.googleapis.com/${BUCKET}" \
+      --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL}" \
       --set-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,BRIGHTDATA_API_KEY=insider-graph-brightdata-api-key:latest,BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID=insider-graph-brightdata-linkedin-profile-dataset-id:latest,BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID=insider-graph-brightdata-linkedin-company-dataset-id:latest"
   fi
 }
@@ -204,3 +287,4 @@ echo "  1. Säkerställ att secrets finns i Secret Manager (se README.md)."
 echo "  2. Trigga första bygget: gcloud builds submit --config cloudbuild.yaml ."
 echo "  3. Onboarda en pilotkund via /insider-graph/kunder."
 echo "  4. Kör 'Kör scrape-active' + 'Kompilera' från UI för att verifiera flödet."
+echo "  5. (Valfritt) Clean-URL på egen domän: se docs/clean-url-cutover.md"
