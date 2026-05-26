@@ -90,3 +90,8 @@ class Claim(BaseModel):
     included_in_output: bool = True
     needs_review: bool = False
     review_status: Literal["approved", "rejected"] | None = None
+    # Sätts när validator-LLM:en (Claude via Vertex EU) bekräftat att claimet stöds av
+    # sin källa. Narrative-claims valideras alltid före persist (ingen källa/validering
+    # → inget claim), så ett persisterat narrative-claim bär alltid dessa. ISO-tid + modell.
+    validated_at: str | None = None
+    validated_by: str | None = None

@@ -229,6 +229,8 @@ def list_pending_claims(client_id: str) -> dict[str, Any]:
                 "confidence": data.get("confidence"),
                 "source": data.get("source", []),
                 "created_at": _iso(data.get("created_at")),
+                "validated_at": _iso(data.get("validated_at")),
+                "validated_by": data.get("validated_by"),
             }
         )
     items.sort(key=lambda x: x.get("confidence") if x.get("confidence") is not None else 1.0)
@@ -238,8 +240,10 @@ def list_pending_claims(client_id: str) -> dict[str, Any]:
 @router.post("/{client_id}/claims/{claim_id}")
 def decide_claim(client_id: str, claim_id: str, action: ClaimReviewAction) -> dict[str, Any]:
     doc_ref = fs.claim_doc(client_id, claim_id)
-    if not doc_ref.get().exists:
+    snap = doc_ref.get()
+    if not snap.exists:
         raise HTTPException(404, "claim not found")
+    existing = snap.to_dict() or {}
 
     update: dict[str, Any] = {
         "review_status": "approved" if action.decision == "approve" else "rejected",
@@ -248,6 +252,12 @@ def decide_claim(client_id: str, claim_id: str, action: ClaimReviewAction) -> di
         "included_in_output": action.decision == "approve",
         "needs_review": False,
     }
+    if action.decision == "approve":
+        # Godkännandet är i sig en validering. Behåll maskin-stämpeln om den finns
+        # (narrative-claims validerade av Claude); annars stämpla den mänskliga
+        # granskningen så även property/manuella claims bär en validerings-notis.
+        update["validated_at"] = existing.get("validated_at") or firestore.SERVER_TIMESTAMP
+        update["validated_by"] = existing.get("validated_by") or "granskare (manuellt godkänd)"
     if action.statement is not None:  # ops redigerade påståendet före godkännande
         update["statement"] = action.statement
     doc_ref.update(update)

@@ -7,6 +7,7 @@ import unittest
 
 import fakefs  # installerar fake firestore_client — måste importeras först
 import services.claim_extraction as ce
+from config import settings
 
 
 class _Resp:
@@ -56,6 +57,9 @@ class ExtractionTest(unittest.TestCase):
         self.assertTrue(written[0]["included_in_output"])
         self.assertFalse(written[0]["needs_review"])
         self.assertEqual(written[0]["source"][0]["item_id"], "src1")
+        # Validerings-stämpel: sätts när claimet klarat validator-passet.
+        self.assertTrue(written[0]["validated_at"])
+        self.assertEqual(written[0]["validated_by"], settings.validator_model)
 
     def test_ungrounded_claim_is_skipped(self):
         _setup_one_source()

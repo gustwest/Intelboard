@@ -34,6 +34,8 @@ type ClaimItem = {
   confidence: number | null;
   source: ClaimSource[];
   created_at: string | null;
+  validated_at: string | null;
+  validated_by: string | null;
 };
 
 type Tab = 'items' | 'claims';
@@ -54,6 +56,8 @@ export default function GraphReviewPage() {
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Godkända claims stannar kvar i vyn med en valideringsnotis (id → godkänt-tid).
+  const [approved, setApproved] = useState<Record<string, string>>({});
 
   useEffect(() => {
     graphFetch<{ clients: Client[] }>('/api/clients')
@@ -118,7 +122,12 @@ export default function GraphReviewPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      setClaims((prev) => (prev ? prev.filter((c) => c.id !== claim.id) : prev));
+      if (decision === 'approve') {
+        // Stanna kvar med en valideringsnotis i stället för att försvinna.
+        setApproved((prev) => ({ ...prev, [claim.id]: new Date().toISOString() }));
+      } else {
+        setClaims((prev) => (prev ? prev.filter((c) => c.id !== claim.id) : prev));
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -221,6 +230,9 @@ export default function GraphReviewPage() {
           const sourceLabel = claim.source.map((s) => (s.kind === 'manual' ? s.label || 'manuell' : 'källa')).join(', ') || 'ingen källa';
           const text = edits[claim.id] ?? claim.statement ?? '';
           const isProperty = claim.claim_kind === 'property';
+          const approvedAt = approved[claim.id];
+          const validatedTs = claim.validated_at ?? approvedAt ?? null;
+          const validatedBy = claim.validated_by ?? (approvedAt ? 'granskare (manuellt godkänd)' : null);
           return (
             <div key={claim.id} style={{ ...cardStyle, opacity: busyId === claim.id ? 0.5 : 1 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 12 }}>
@@ -230,9 +242,19 @@ export default function GraphReviewPage() {
                     <div style={{ fontSize: 11, color: C.muted }}>
                       {isProperty ? `Property · ${claim.predicate}` : 'Narrative'} · {sourceLabel}
                     </div>
+                    {validatedTs && (
+                      <div style={{ fontSize: 11, color: '#3a7d44', marginTop: 2 }}>
+                        ✓ Validerad {new Date(validatedTs).toLocaleDateString('sv-SE')}
+                        {validatedBy ? ` · ${validatedBy}` : ''}
+                      </div>
+                    )}
                   </div>
                 </div>
-                <Actions confidence={claim.confidence} busy={busyId === claim.id} onApprove={() => decideClaim(claim, 'approve')} onReject={() => decideClaim(claim, 'reject')} />
+                {approvedAt ? (
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#3a7d44', whiteSpace: 'nowrap' }}>✓ Godkänd</span>
+                ) : (
+                  <Actions confidence={claim.confidence} busy={busyId === claim.id} onApprove={() => decideClaim(claim, 'approve')} onReject={() => decideClaim(claim, 'reject')} />
+                )}
               </div>
               {isProperty ? (
                 <div style={contentStyle}>{String(claim.value)}</div>

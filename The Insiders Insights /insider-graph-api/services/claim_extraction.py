@@ -21,9 +21,11 @@ from __future__ import annotations
 import hashlib
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 import firestore_client as fs
+from config import settings
 from schemas import Claim, ClaimSource
 from services import llm as llm_factory
 
@@ -114,6 +116,9 @@ def extract_claims_for_client(client_id: str) -> dict[str, Any]:
             confidence=confidence,
             included_in_output=approved,
             needs_review=not approved,
+            # Klarade validator-passet ovan → stämpla att (och när/av vad) det skedde.
+            validated_at=datetime.now(timezone.utc).isoformat(),
+            validated_by=settings.validator_model,
         )
         _persist(client_id, claim)
         written += 1
