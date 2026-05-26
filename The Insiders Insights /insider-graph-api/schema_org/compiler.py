@@ -25,9 +25,9 @@ from typing import Any, Iterator
 
 import firestore_client as fs
 from schema_org.claims import derive_property_claims, derive_skill_claims
+from schema_org.urls import canonical_url
 from schemas import Claim, ClaimSource
 
-DEFAULT_BASE = "https://profiles.geogiraph.com"
 DEFAULT_MANUAL_LABEL = "uppgift från bolaget"
 DEFAULT_ATTESTED_LABEL = "verifierad av Geogiraph"
 ATTESTED_PUBLISHER = "Geogiraph"
@@ -111,7 +111,7 @@ def build_render_model(client_id: str) -> RenderModel:
         raise KeyError(f"client not found: {client_id}")
 
     data = client.to_dict() or {}
-    base = (data.get("profile_base_url") or f"{DEFAULT_BASE}/{client_id}").rstrip("/")
+    base = canonical_url(client_id, data.get("profile_base_url"))
     org_id = f"{base}#org"
 
     same_as = [u for u in [data.get("website"), data.get("company_linkedin_url")] if u]

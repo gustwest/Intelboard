@@ -16,7 +16,7 @@ import html
 import json
 
 import firestore_client as fs
-from schema_org.compiler import DEFAULT_BASE
+from schema_org.urls import canonical_url
 
 LABEL = "AI-Profil verifierad av Geogiraph"
 
@@ -37,7 +37,7 @@ _THEMES = {
 
 def profile_url(client_id: str) -> str:
     data = fs.client_doc(client_id).get().to_dict() or {}
-    return (data.get("profile_base_url") or f"{DEFAULT_BASE}/{client_id}").rstrip("/")
+    return canonical_url(client_id, data.get("profile_base_url"))
 
 
 def render_badge(

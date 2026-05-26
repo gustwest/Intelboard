@@ -10,11 +10,11 @@ from __future__ import annotations
 import json
 
 import firestore_client as fs
-from schema_org.compiler import DEFAULT_BASE
+from schema_org.urls import canonical_url
 
 
 def _base(client_id: str, data: dict) -> str:
-    return (data.get("profile_base_url") or f"{DEFAULT_BASE}/{client_id}").rstrip("/")
+    return canonical_url(client_id, data.get("profile_base_url"))
 
 
 def render_identity_snippet(client_id: str) -> str:

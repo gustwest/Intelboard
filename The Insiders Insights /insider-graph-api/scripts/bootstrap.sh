@@ -39,6 +39,9 @@ IMAGE="europe-north1-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}:latest"
 # kör om med CDN_BASE_URL=https://${PROFILE_DOMAIN} EFTER att DNS pekar på LB-IP:t och
 # certet är ACTIVE (se docs/clean-url-cutover.md). En enda variabel flyttar allt.
 CDN_BASE_URL="${CDN_BASE_URL:-https://storage.googleapis.com/${BUCKET}}"
+# Clean-URL-läge (rena katalog-URL:er, innehåll utan clients/-prefix). Sätts true
+# vid cutover, tillsammans med CDN_BASE_URL → egen domän. Default false = path-style.
+CDN_CLEAN_URLS="${CDN_CLEAN_URLS:-false}"
 
 # Egen domän för profilsidorna (clean-URL via HTTPS-LB + Cloud CDN). LB-sektionen
 # nedan provisioneras bara om PROFILE_DOMAIN är satt. Lämna tom för att hoppa över.
@@ -185,7 +188,7 @@ done
 echo "==> Uppdaterar service-env för $SERVICE"
 gcloud run services update "$SERVICE" --region="$REGION" --project="$PROJECT_ID" \
   --service-account="$SA_EMAIL" \
-  --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL}" \
+  --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS}" \
   --update-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,BRIGHTDATA_API_KEY=insider-graph-brightdata-api-key:latest,BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID=insider-graph-brightdata-linkedin-profile-dataset-id:latest,BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID=insider-graph-brightdata-linkedin-company-dataset-id:latest" \
   || echo "==> Service finns ej ännu — kör cloudbuild först"
 
@@ -199,7 +202,7 @@ create_or_update_job() {
       --image="$IMAGE" --region="$REGION" --project="$PROJECT_ID" \
       --service-account="$SA_EMAIL" \
       --command="python" --args="-m,$CMD" \
-      --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL}" \
+      --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS}" \
       --update-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,BRIGHTDATA_API_KEY=insider-graph-brightdata-api-key:latest,BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID=insider-graph-brightdata-linkedin-profile-dataset-id:latest,BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID=insider-graph-brightdata-linkedin-company-dataset-id:latest"
   else
     echo "==> Skapar job: $NAME"
@@ -208,7 +211,7 @@ create_or_update_job() {
       --service-account="$SA_EMAIL" \
       --command="python" --args="-m,$CMD" \
       --max-retries=1 \
-      --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL}" \
+      --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS}" \
       --set-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,BRIGHTDATA_API_KEY=insider-graph-brightdata-api-key:latest,BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID=insider-graph-brightdata-linkedin-profile-dataset-id:latest,BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID=insider-graph-brightdata-linkedin-company-dataset-id:latest"
   fi
 }

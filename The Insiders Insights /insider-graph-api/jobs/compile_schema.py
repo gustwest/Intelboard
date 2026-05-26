@@ -13,6 +13,7 @@ from google.cloud import firestore, storage
 
 import firestore_client as fs
 from config import settings
+from schema_org import urls
 from schema_org.compiler import compile_client
 from schema_org.profile_page import render_llms_txt, render_profile_html
 
@@ -31,7 +32,7 @@ def run(client_id: str) -> None:
         return
 
     bucket = storage.Client().bucket(settings.cdn_bucket)
-    schema_blob = bucket.blob(f"clients/{client_id}/schema.json")
+    schema_blob = bucket.blob(urls.schema_object(client_id))
 
     # Change-agent: hoppa över de dyra uppladdningarna om grafen är oförändrad.
     # Firestore-metadatan (URL:erna) skrivs ändå alltid — den är idempotent och
@@ -46,25 +47,24 @@ def run(client_id: str) -> None:
         schema_blob.patch()
 
         # Profilsidan (lager 2): statisk HTML bredvid schema.json, samma render-modell.
-        page_blob = bucket.blob(f"clients/{client_id}/index.html")
+        page_blob = bucket.blob(urls.page_object(client_id))
         page_blob.upload_from_string(profile_html, content_type="text/html; charset=utf-8")
         page_blob.cache_control = "public, max-age=300"
         page_blob.patch()
 
         # llms.txt: markdown-summering för AI-crawlers (discoverability).
-        llms_blob = bucket.blob(f"clients/{client_id}/llms.txt")
+        llms_blob = bucket.blob(urls.llms_object(client_id))
         llms_blob.upload_from_string(llms_txt, content_type="text/plain; charset=utf-8")
         llms_blob.cache_control = "public, max-age=300"
         llms_blob.patch()
 
     fs.client_doc(client_id).update(
         {
-            "cdn_url": f"{settings.cdn_base_url}/clients/{client_id}/schema.json",
-            # Peka direkt på objektet, inte katalog-slashen: GCS path-style-endpointen
-            # (storage.googleapis.com/BUCKET/...) översätter inte en avslutande "/" till
-            # index.html (kräver website-config bakom en HTTPS-LB). Direkt objekt-URL
-            # fungerar på den publika bucketen som den ser ut idag.
-            "profile_url": f"{settings.cdn_base_url}/clients/{client_id}/index.html",
+            "cdn_url": urls.cdn_url(client_id),
+            # served_url pekar i path-style-läge direkt på objektet (…/index.html),
+            # eftersom GCS path-style inte serverar index.html för en katalog-URL. I
+            # clean-läge (bakom LB med MainPageSuffix) blir det den rena …/<id>/-URL:en.
+            "profile_url": urls.served_url(client_id),
             "last_compiled": firestore.SERVER_TIMESTAMP,
         }
     )

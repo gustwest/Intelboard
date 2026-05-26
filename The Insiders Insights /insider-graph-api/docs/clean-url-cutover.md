@@ -60,61 +60,65 @@ curl -sI https://profiles.geogiraph.com/clients/<id>/index.html | head -1   # 20
 curl -sI https://profiles.geogiraph.com/clients/<id>/            | head -1   # 200 (MainPageSuffix)
 ```
 
-## Steg 4 — Flippa origin-URL:en
+## Steg 4 — Flippa origin-läget
 
-En enda variabel flyttar `schema.json`, profilsidan **och** badge-länken till den nya
-domänen. Kör om bootstrap (uppdaterar både Cloud Run-servicen och alla jobb):
+Två variabler flyttar `schema.json`, profilsidan, badge-länken **och kanoniken** till
+den nya domänen — och släpper `clients/`-prefixet så katalog-URL:erna blir rena. Kör om
+bootstrap (uppdaterar både Cloud Run-servicen och alla jobb):
 
 ```bash
 PROFILE_DOMAIN=profiles.geogiraph.com \
 CDN_BASE_URL=https://profiles.geogiraph.com \
+CDN_CLEAN_URLS=true \
   ./scripts/bootstrap.sh
 ```
 
-(Alternativt sätt `CDN_BASE_URL` i `cloudbuild.yaml` så det överlever framtida deploys —
-annars återställer nästa deploy default-värdet. Gör det till en permanent ändring när
-cutover är verifierad.)
+- `CDN_BASE_URL` → vilken domän URL:erna pekar på.
+- `CDN_CLEAN_URLS=true` → innehåll i `<id>/` (utan `clients/`-prefix), rena
+  katalog-URL:er (`…/<id>/`, serveras via MainPageSuffix), och **kanonik == serverad
+  adress** (stänger GEO-glappet automatiskt — ingen kodändring behövs).
+
+All URL-logik bor i `schema_org/urls.py`; flaggorna styr den. Lås beteendet med
+`tests/test_urls.py` (båda lägena testas).
+
+> Sätt båda variablerna permanent i `cloudbuild.yaml` när cutover är verifierad —
+> annars återställer nästa deploy default-värdena (path-style).
 
 ## Steg 5 — Recompile
 
-Nya URL:er skrivs först vid nästa compile. Tack vare den idempotenta
-metadata-skrivningen i `compile_schema.py` räcker en omkörning även om grafen är
-oförändrad:
+Layouten ändras till `<id>/...`, så artefakterna måste skrivas om till de nya
+objektnamnen. Tack vare den idempotenta metadata-skrivningen i `compile_schema.py`
+räcker en omkörning även om grafen är oförändrad:
 
 ```bash
 gcloud run jobs execute compile-all-schemas --region=europe-north1
 ```
 
-Verifiera i Leverans-fliken att "Öppna" går till `https://profiles.geogiraph.com/...`
-och laddar sidan.
+(De gamla `clients/<id>/`-objekten blir kvar som föräldralösa — städa bort dem med
+`gsutil -m rm -r gs://$BUCKET/clients` när allt verifierats.)
 
-## Valfritt steg 6 — Kanonik-koherens (polish)
+Verifiera i Leverans-fliken att "Öppna" går till `https://profiles.geogiraph.com/<slug>/`
+och laddar sidan, och att sidans `<link rel="canonical">` är samma URL.
 
-Efter steg 4 serveras sidan på den fina domänen, men `<link rel="canonical">` i sidan
-pekar fortfarande på `DEFAULT_BASE/<id>` (`https://profiles.geogiraph.com/<id>`), vilket
-inte är samma URL som den faktiskt serveras på (`…/clients/<id>/index.html`). För en
-GEO-produkt är det värt att stänga den glappet så crawlers ser en kanonik som matchar
-serverad adress.
+## Premium: kundens egen domän (`profile_base_url`)
 
-Minsta ändring i `schema_org/compiler.py` (`build_render_model`):
+GEO-mässigt starkast är att sanningskällan ligger på *kundens* domän — då är innehållet
+första-parts och väger tyngst hos AI-motorer/sök. Fältet finns redan på premium-kortet
+("Profilsidans bas-URL"). När det är satt deklarerar `urls.canonical_url()` automatiskt
+kundens domän som kanonik (badge + identitets-snutt + JSON-LD `@id` följer med). Kvar är
+att faktiskt *servera* sidan på den domänen — två vägar:
 
-```python
-# före:
-base = (data.get("profile_base_url") or f"{DEFAULT_BASE}/{client_id}").rstrip("/")
+1. **Kund-proxy (lägst ops för oss):** kunden lägger en reverse-proxy/redirect från
+   `ai.kund.se` → `https://profiles.geogiraph.com/<slug>/`. Inget LB-arbete vår sida.
+   Bra default för premium.
+2. **White-glove (egen backend-bucket):** kunden CNAME:ar `ai.kund.se` → vår LB-IP, vi
+   lägger domänen på managed-certet (`--domains` tar flera) och kopplar en host-regel i
+   URL-mappen till en backend-bucket vars rot är kundens innehåll. OBS: backend-buckets
+   stödjer inte path-rewrite — kundens artefakter måste därför ligga i bucket-roten
+   (egen bucket per premium-kund, eller separat prefix som serveras som rot). Verifiera
+   host-routningen i en stage-uppsättning innan vi lovar noll-touch.
 
-# efter — kanonik = där sidan faktiskt bor (premium-kundens egen domän går före):
-base = data.get("profile_base_url")
-base = base.rstrip("/") if base else f"{settings.cdn_base_url}/clients/{client_id}/index.html"
-```
-
-Obs:
-- Detta ändrar alla `@id`-IRI:er i JSON-LD-grafen (de härleds ur `base`). Det är
-  bara identifierare, men ändringen triggar en engångs-recompile för alla kunder
-  (change-agenten ser en diff) — väntat.
-- `profile_base_url`-grenen (premium custom domain) lämnas orörd: där deklarerar vi
-  medvetet kundens egen domän som kanonik även om vi hostar sidan.
-- Gör den här ändringen **först efter** att LB:n är live (annars pekar kanoniken på en
-  path-style-URL som 404:ar).
+Oavsett väg: certet blir ACTIVE först när kundens DNS pekar rätt.
 
 ## Rollback
 

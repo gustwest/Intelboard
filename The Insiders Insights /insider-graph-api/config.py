@@ -5,6 +5,11 @@ class Settings(BaseSettings):
     firestore_project_id: str = ""
     cdn_bucket: str = ""
     cdn_base_url: str = "https://cdn.insidergraph.io"
+    # Clean-URL-läge: bakom HTTPS-LB med MainPageSuffix serveras profilsidorna på
+    # egen domän med rena katalog-URL:er (…/<id>/) och innehåll utan clients/-prefix.
+    # Default False = GCS path-style (explicit …/index.html). Flippas vid cutover
+    # tillsammans med CDN_BASE_URL — se docs/clean-url-cutover.md.
+    cdn_clean_urls: bool = False
 
     # Probe-motorer (de publika AI-assistenterna vi MÄTER, inte våra egna). Avsiktligt
     # första-parts US: probe-payloaden är publik (bolagsnamn + generisk fråga) och poängen
