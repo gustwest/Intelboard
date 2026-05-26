@@ -37,7 +37,7 @@ def _parse_skills(raw: str) -> list[str]:
 @router.post("/{client_id}/snapshots")
 async def upload_snapshot(
     client_id: str,
-    skills: str = Form(..., description="Aggregerade kompetenser, komma- eller radseparerade"),
+    skills: str = Form("", description="Aggregerade kompetenser — valfritt här, kan fyllas/finslipas vid verifiering"),
     quarter: str | None = Form(None, description="t.ex. 2026-Q2"),
     followers: int | None = Form(None, description="Samlat följarantal — endast intern visning"),
     file: UploadFile | None = None,
@@ -46,8 +46,10 @@ async def upload_snapshot(
         raise HTTPException(404, f"client not found: {client_id}")
 
     parsed = _parse_skills(skills)
-    if not parsed:
-        raise HTTPException(422, "minst en kompetens krävs")
+    # Skärmklipp eller kompetenser räcker — kompetenserna kan annars fyllas vid den
+    # interna verifieringen (granskaren ser underlaget och skriver in dem då).
+    if not parsed and file is None:
+        raise HTTPException(422, "ladda upp ett underlag (skärmklipp/export) eller ange minst en kompetens")
 
     snapshot_id = "snap-" + uuid.uuid4().hex[:12]
     # Underlaget (export/skärmklipp) lagras privat så granskaren kan öppna det; faller

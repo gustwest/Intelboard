@@ -7,6 +7,7 @@ import { Users, ArrowLeft, Trash2, X, AlertCircle, ExternalLink } from 'lucide-r
 import GraphPageShell, { graphColors as C } from '../../_components/GraphPageShell';
 import AttestedUpload from '../../_components/AttestedUpload';
 import JobFeedsEditor from '../../_components/JobFeedsEditor';
+import LinkedInCapacityUpload from '../../_components/LinkedInCapacityUpload';
 import ESGAddon from '../../_components/ESGAddon';
 import { graphFetch } from '../../_lib/api';
 
@@ -154,6 +155,9 @@ export default function ClientDetailPage() {
 
           {/* Platsannons-feeds (ATS-XML) — per kund */}
           <JobFeedsEditor clientId={clientId} />
+
+          {/* LinkedIn-kapacitetsdata (kvartal) — dra in skärmklipp/export, per kund */}
+          <LinkedInCapacityUpload clientId={clientId} />
 
           {/* Medarbetare */}
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>

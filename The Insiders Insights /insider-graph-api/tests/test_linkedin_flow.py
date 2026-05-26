@@ -71,6 +71,18 @@ class FileStorageTest(unittest.TestCase):
         snap = list(fakefs.STATE["linkedin_snapshots"].values())[0]
         self.assertEqual(snap["file_path"], "linkedin/acme/snap/x.png")
 
+    def test_screenshot_only_upload_no_skills_ok(self):
+        # bara skärmklipp, inga kompetenser — kompetenser fylls vid verifiering
+        linkedin.blob_storage.store = lambda *a: "linkedin/acme/snap/s.png"
+        res = asyncio.run(linkedin.upload_snapshot(
+            "acme", skills="", quarter=None, followers=None,
+            file=_FakeUpload("s.png", b"PNG", "image/png"),
+        ))
+        self.assertEqual(res["snapshot_status"], "PENDING_INTERNAL_VERIFICATION")
+        snap = list(fakefs.STATE["linkedin_snapshots"].values())[0]
+        self.assertEqual(snap["skills"], [])
+        self.assertEqual(snap["file_path"], "linkedin/acme/snap/s.png")
+
     def test_download_proxy_streams_stored_file(self):
         fakefs.reset(client={}, linkedin_snapshots={"s1": {"file_path": "linkedin/acme/s1/x.png"}})
         linkedin.blob_storage.fetch = lambda path: (b"PNG", "image/png")
