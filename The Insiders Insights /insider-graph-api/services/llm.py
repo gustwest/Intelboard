@@ -13,8 +13,10 @@ service-account-auth (ADC) — INGEN första-parts US-väg och ingen US-fallback
 GCP-projekt returnerar fabriken None → pipelinen blir no-op men kraschar inte (och
 läcker inget till US). SDK:n importeras lazy. Se projektminnet om dataresidens.
 
-OBS: probe-motorerna vi *mäter* (gpt-4o/gemini i polling.py + risk_detector._build_engines)
-är en separat yta — EU-kompatibel routning av dem är ett öppet produkt/compliance-beslut.
+Probe-motorerna vi *mäter* (gpt-4o/gemini i polling.py + risk_detector._build_engines) är
+en separat yta som avsiktligt är **första-parts**: payloaden är publik (bolagsnamn +
+generisk fråga) och poängen är att mäta de motorer användare faktiskt träffar. EU-skyddet
+ligger där den fulla kunddatan behandlas — våra resonemangsmodeller, inte probarna.
 """
 from __future__ import annotations
 
@@ -67,44 +69,30 @@ def _vertex_anthropic(model: str):
 
 
 def make_probe_engines() -> dict[str, Any]:
-    """De externa motorerna polling + risk_detector ställer frågor till. EU-only routar
-    samma modeller via EU-region (mätneutralt): Gemini→Vertex EU, GPT-4o→Azure OpenAI EU.
-    GPT är fail-closed: utan Azure OpenAI EU stängs den av i eu_only-läge (ingen US-läcka).
-    """
+    """De externa motorerna polling + risk_detector ställer frågor till. Avsiktligt
+    första-parts: vi mäter de motorer användare faktiskt träffar, och payloaden är
+    publik (bolagsnamn + generisk fråga). EU-skyddet ligger på våra resonemangsmodeller
+    (make_generator/make_validator via Vertex EU), inte här."""
     engines: dict[str, Any] = {}
-
-    if settings.gcp_project:
-        engines[settings.probe_gemini_model] = _vertex_gemini(settings.probe_gemini_model)
-    else:
-        log.warning("probe-Gemini otillgänglig — GCP-projekt ej satt")
-
-    if settings.azure_openai_endpoint and settings.azure_openai_api_key and settings.azure_openai_deployment:
-        engines["gpt-4o"] = _azure_openai()
-    elif not settings.eu_only and settings.openai_api_key:
-        engines["gpt-4o"] = _openai_us()  # escape hatch (ej EU) — endast när eu_only=False
-    else:
-        log.warning("probe-GPT avstängd (EU-only): Azure OpenAI EU ej konfigurerad — fail-closed")
-
+    if settings.openai_api_key:
+        engines["gpt-4o"] = _openai_probe()
+    if settings.gemini_api_key:
+        engines["gemini-1.5-pro"] = _gemini_probe()
     return engines
 
 
-def _azure_openai():
-    from langchain_openai import AzureChatOpenAI
-
-    return AzureChatOpenAI(
-        azure_endpoint=settings.azure_openai_endpoint,
-        api_key=settings.azure_openai_api_key,
-        azure_deployment=settings.azure_openai_deployment,
-        api_version=settings.azure_openai_api_version,
-        temperature=0,
-        timeout=60,
-    )
-
-
-def _openai_us():
+def _openai_probe():
     from langchain_openai import ChatOpenAI
 
     return ChatOpenAI(api_key=settings.openai_api_key, model="gpt-4o", temperature=0, timeout=60)
+
+
+def _gemini_probe():
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
+    return ChatGoogleGenerativeAI(
+        google_api_key=settings.gemini_api_key, model="gemini-1.5-pro", temperature=0, timeout=60
+    )
 
 
 def invoke_json(llm, system: str, user: str) -> dict[str, Any] | None:

@@ -45,58 +45,32 @@ class EuRoutingTest(unittest.TestCase):
 
 
 class ProbeEnginesTest(unittest.TestCase):
+    """Probe-motorerna är avsiktligt första-parts (vi mäter de publika motorerna)."""
+
     def setUp(self):
         s = llm.settings
-        self._orig = (
-            s.gcp_project, s.eu_only, s.openai_api_key, s.azure_openai_endpoint,
-            s.azure_openai_api_key, s.azure_openai_deployment,
-            llm._vertex_gemini, llm._azure_openai, llm._openai_us,
-        )
-        llm._vertex_gemini = lambda model: ("vertex-gemini", model)
-        llm._azure_openai = lambda: "azure-gpt"
-        llm._openai_us = lambda: "us-gpt"
-        # neutralt utgångsläge
-        s.gcp_project = "proj-eu"
-        s.eu_only = True
-        s.openai_api_key = ""
-        s.azure_openai_endpoint = s.azure_openai_api_key = s.azure_openai_deployment = ""
+        self._orig = (s.openai_api_key, s.gemini_api_key, llm._openai_probe, llm._gemini_probe)
+        llm._openai_probe = lambda: "gpt-4o"
+        llm._gemini_probe = lambda: "gemini"
 
     def tearDown(self):
         s = llm.settings
-        (s.gcp_project, s.eu_only, s.openai_api_key, s.azure_openai_endpoint,
-         s.azure_openai_api_key, s.azure_openai_deployment,
-         llm._vertex_gemini, llm._azure_openai, llm._openai_us) = self._orig
+        (s.openai_api_key, s.gemini_api_key, llm._openai_probe, llm._gemini_probe) = self._orig
 
-    def test_eu_gemini_only_when_azure_absent(self):
-        # EU-only utan Azure → bara Gemini-via-Vertex; GPT fail-closed (avstängd).
+    def test_both_when_keys_present(self):
+        s = llm.settings
+        s.openai_api_key, s.gemini_api_key = "sk-xxx", "g-xxx"
         engines = llm.make_probe_engines()
-        self.assertIn(llm.settings.probe_gemini_model, engines)
-        self.assertNotIn("gpt-4o", engines)
+        self.assertEqual(set(engines), {"gpt-4o", "gemini-1.5-pro"})
 
-    def test_eu_includes_gpt_via_azure_when_configured(self):
+    def test_only_configured_keys(self):
         s = llm.settings
-        s.azure_openai_endpoint = "https://x.openai.azure.com"
-        s.azure_openai_api_key = "key"
-        s.azure_openai_deployment = "gpt-4o-eu"
-        engines = llm.make_probe_engines()
-        self.assertEqual(engines["gpt-4o"], "azure-gpt")
-        self.assertIn(s.probe_gemini_model, engines)
+        s.openai_api_key, s.gemini_api_key = "", "g-xxx"
+        self.assertEqual(set(llm.make_probe_engines()), {"gemini-1.5-pro"})
 
-    def test_us_escape_hatch_only_when_eu_off(self):
+    def test_empty_without_keys(self):
         s = llm.settings
-        s.eu_only = False
-        s.openai_api_key = "sk-xxx"
-        self.assertEqual(llm.make_probe_engines()["gpt-4o"], "us-gpt")
-
-    def test_no_us_gpt_in_eu_mode_even_with_key(self):
-        s = llm.settings
-        s.eu_only = True
-        s.openai_api_key = "sk-xxx"  # finns men ska INTE användas i EU-läge
-        self.assertNotIn("gpt-4o", llm.make_probe_engines())
-
-    def test_empty_without_project_or_azure(self):
-        s = llm.settings
-        s.gcp_project = ""
+        s.openai_api_key, s.gemini_api_key = "", ""
         self.assertEqual(llm.make_probe_engines(), {})
 
 

@@ -400,10 +400,11 @@ Beslutat:
 Kvar:
 - **Publik exponering:** hur mycket av riskregistret visas i GTM-modalen vs bara i
   kundportalen? (Kan beslutas under skiva 3.)
-- **EU-only:** ✅ allt LLM routas via EU. Våra resonemangsmodeller (`make_generator`/
-  `make_validator`) via **Vertex AI EU**. Probe-motorerna vi *mäter* via en delad
-  `llm.make_probe_engines()`: **Gemini→Vertex EU**, **GPT-4o→Azure OpenAI EU** (samma
-  modeller, EU-region → mätneutralt). GPT är **fail-closed**: utan Azure OpenAI EU stängs
-  den av i `eu_only`-läge (ingen US-läcka), och vi mäter Gemini. Ingen US-fallback någonstans.
-  **Ops kvar:** sätt `GCP_PROJECT`, provisionera Azure OpenAI EU (`AZURE_OPENAI_*`), verifiera
-  Vertex-modell-id/region. Se projektminnet om dataresidens.
+- **EU-only där det betyder något:** våra resonemangsmodeller (`make_generator`/
+  `make_validator`) behandlar full kunddata internt och routas via **Vertex AI EU** (ingen
+  US-fallback — saknas `GCP_PROJECT` blir det no-op). Probe-motorerna (`make_probe_engines`:
+  gpt-4o/gemini) är **avsiktligt första-parts** — payloaden är publik (bolagsnamn + generisk
+  fråga) och poängen är att mäta de motorer användare faktiskt träffar; Azure-spåret avfört
+  (för mycket koppling, för låg vinst). **Ops kvar:** sätt `GCP_PROJECT` + verifiera
+  Vertex-modell-id/region. Caveat: probe-frågor kan innehålla publika nyckelpersonsnamn —
+  bekräfta med DPO. Se projektminnet om dataresidens.
