@@ -33,30 +33,38 @@ def run(client_id: str) -> None:
     bucket = storage.Client().bucket(settings.cdn_bucket)
     schema_blob = bucket.blob(f"clients/{client_id}/schema.json")
 
-    if schema_blob.exists() and schema_blob.download_as_text() == payload:
-        log.info("no change for %s — skipping upload", client_id)
-        return
+    # Change-agent: hoppa över de dyra uppladdningarna om grafen är oförändrad.
+    # Firestore-metadatan (URL:erna) skrivs ändå alltid — den är idempotent och
+    # billig, och måste få spegla nuvarande URL-form även när grafen inte ändrats
+    # (annars sitter äldre kunder kvar på en tidigare URL tills grafen råkar ändras).
+    unchanged = schema_blob.exists() and schema_blob.download_as_text() == payload
+    if unchanged:
+        log.info("no change for %s — skipping upload, refreshing metadata only", client_id)
+    else:
+        schema_blob.upload_from_string(payload, content_type="application/ld+json")
+        schema_blob.cache_control = "public, max-age=300"
+        schema_blob.patch()
 
-    schema_blob.upload_from_string(payload, content_type="application/ld+json")
-    schema_blob.cache_control = "public, max-age=300"
-    schema_blob.patch()
+        # Profilsidan (lager 2): statisk HTML bredvid schema.json, samma render-modell.
+        page_blob = bucket.blob(f"clients/{client_id}/index.html")
+        page_blob.upload_from_string(profile_html, content_type="text/html; charset=utf-8")
+        page_blob.cache_control = "public, max-age=300"
+        page_blob.patch()
 
-    # Profilsidan (lager 2): statisk HTML bredvid schema.json, samma render-modell.
-    page_blob = bucket.blob(f"clients/{client_id}/index.html")
-    page_blob.upload_from_string(profile_html, content_type="text/html; charset=utf-8")
-    page_blob.cache_control = "public, max-age=300"
-    page_blob.patch()
-
-    # llms.txt: markdown-summering för AI-crawlers (discoverability).
-    llms_blob = bucket.blob(f"clients/{client_id}/llms.txt")
-    llms_blob.upload_from_string(llms_txt, content_type="text/plain; charset=utf-8")
-    llms_blob.cache_control = "public, max-age=300"
-    llms_blob.patch()
+        # llms.txt: markdown-summering för AI-crawlers (discoverability).
+        llms_blob = bucket.blob(f"clients/{client_id}/llms.txt")
+        llms_blob.upload_from_string(llms_txt, content_type="text/plain; charset=utf-8")
+        llms_blob.cache_control = "public, max-age=300"
+        llms_blob.patch()
 
     fs.client_doc(client_id).update(
         {
             "cdn_url": f"{settings.cdn_base_url}/clients/{client_id}/schema.json",
-            "profile_url": f"{settings.cdn_base_url}/clients/{client_id}/",
+            # Peka direkt på objektet, inte katalog-slashen: GCS path-style-endpointen
+            # (storage.googleapis.com/BUCKET/...) översätter inte en avslutande "/" till
+            # index.html (kräver website-config bakom en HTTPS-LB). Direkt objekt-URL
+            # fungerar på den publika bucketen som den ser ut idag.
+            "profile_url": f"{settings.cdn_base_url}/clients/{client_id}/index.html",
             "last_compiled": firestore.SERVER_TIMESTAMP,
         }
     )
