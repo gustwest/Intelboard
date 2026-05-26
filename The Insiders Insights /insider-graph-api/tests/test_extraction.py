@@ -7,7 +7,6 @@ import unittest
 
 import fakefs  # installerar fake firestore_client — måste importeras först
 import services.claim_extraction as ce
-from config import settings
 
 
 class _Resp:
@@ -49,7 +48,7 @@ class ExtractionTest(unittest.TestCase):
 
     def test_grounded_validated_claim_is_written(self):
         _setup_one_source()
-        self._use(_FakeLLM([{"statement": "Acme AB lanserade en plattform 2023", "chunks": ["C1"], "confidence": 0.9}]))
+        self._use(_FakeLLM([{"statement": "Acme AB lanserade en plattform 2023", "chunks": ["C1"], "quote": "lanserade en plattform 2023", "confidence": 0.9}]))
         result = ce.extract_claims_for_client("acme")
         self.assertEqual(result["written"], 1)
         written = list(fakefs.writes().values())
@@ -57,9 +56,11 @@ class ExtractionTest(unittest.TestCase):
         self.assertTrue(written[0]["included_in_output"])
         self.assertFalse(written[0]["needs_review"])
         self.assertEqual(written[0]["source"][0]["item_id"], "src1")
-        # Validerings-stämpel: sätts när claimet klarat validator-passet.
+        # Det verifierade källspannet bevaras som proveniens.
+        self.assertEqual(written[0]["source"][0]["quote"], "lanserade en plattform 2023")
+        # Validerings-stämpel: sätts när claimet klarat källgrind + validator.
         self.assertTrue(written[0]["validated_at"])
-        self.assertEqual(written[0]["validated_by"], settings.validator_model)
+        self.assertEqual(written[0]["validated_by"], ce._validated_by())
 
     def test_ungrounded_claim_is_skipped(self):
         _setup_one_source()
@@ -71,14 +72,30 @@ class ExtractionTest(unittest.TestCase):
 
     def test_failed_validation_is_discarded(self):
         _setup_one_source()
-        self._use(_FakeLLM([{"statement": "Acme AB lanserade en plattform 2023", "chunks": ["C1"], "confidence": 0.9}], supported=False))
+        self._use(_FakeLLM([{"statement": "Acme AB lanserade en plattform 2023", "chunks": ["C1"], "quote": "lanserade en plattform 2023", "confidence": 0.9}], supported=False))
         result = ce.extract_claims_for_client("acme")
         self.assertEqual(result["written"], 0)
         self.assertEqual(fakefs.writes(), {})
 
+    def test_quote_not_in_source_is_rejected_by_grind(self):
+        # Påhittat citat (finns ej i källan) → källgrinden fäller claimet, även om LLM säger ok.
+        _setup_one_source()
+        self._use(_FakeLLM([{"statement": "Acme AB lanserade en plattform 2023", "chunks": ["C1"], "quote": "vann pris för bästa plattform", "confidence": 0.9}]))
+        result = ce.extract_claims_for_client("acme")
+        self.assertEqual(result["written"], 0)
+        self.assertEqual(result["skipped"], 1)
+
+    def test_hallucinated_number_is_rejected_by_grind(self):
+        # Siffra som inte finns i källan (2024) → fälls deterministiskt.
+        _setup_one_source()
+        self._use(_FakeLLM([{"statement": "Acme AB lanserade en plattform 2024", "chunks": ["C1"], "quote": "lanserade en plattform 2023", "confidence": 0.9}]))
+        result = ce.extract_claims_for_client("acme")
+        self.assertEqual(result["written"], 0)
+        self.assertEqual(result["skipped"], 1)
+
     def test_low_confidence_goes_to_review(self):
         _setup_one_source()
-        self._use(_FakeLLM([{"statement": "Acme AB lanserade en plattform 2023", "chunks": ["C1"], "confidence": 0.4}]))
+        self._use(_FakeLLM([{"statement": "Acme AB lanserade en plattform 2023", "chunks": ["C1"], "quote": "lanserade en plattform 2023", "confidence": 0.4}]))
         ce.extract_claims_for_client("acme")
         written = list(fakefs.writes().values())[0]
         self.assertFalse(written["included_in_output"])

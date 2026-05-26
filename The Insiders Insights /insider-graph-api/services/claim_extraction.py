@@ -25,8 +25,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 import firestore_client as fs
-from config import settings
 from schemas import Claim, ClaimSource
+from services import claim_grounding
 from services import llm as llm_factory
 
 log = logging.getLogger(__name__)
@@ -35,6 +35,9 @@ REVIEW_THRESHOLD = 0.7
 # Teckenbudget per genereringsanrop. Korpusar större än så delas i batchar, så
 # även en stor crawl ryms (med marginal mot kontextfönstret).
 BATCH_CHAR_BUDGET = 600_000
+# Självkonsistens: kör valideringen så här många gånger; ETT icke-stödt utfall fäller
+# claimet. Med temperatur (make_claim_validator) ger passen verklig variation.
+SELF_CONSISTENCY_SAMPLES = 2
 
 GENERATE_PROMPT = """Du extraherar faktapåståenden om ett företag ur källtexter.
 
@@ -48,6 +51,7 @@ Returnera ENDAST ett JSON-objekt:
     {
       "statement": "ett självbärande påstående, max 200 tecken",
       "chunks": ["C1"],            // vilka källutdrag stödjer påståendet — minst ett
+      "quote": "ett VERBATIM utdrag, ordagrant kopierat ur ett av de citerade källutdragen, som stödjer påståendet",
       "confidence": 0.0 - 1.0
     }
   ]
@@ -56,14 +60,21 @@ Returnera ENDAST ett JSON-objekt:
 Hårda regler:
 - Påstå ALDRIG något som inte uttryckligen står i ett av källutdragen.
 - Varje claim måste ange minst ett källutdrag i "chunks". Saknas stöd: ta inte med det.
+- "quote" MÅSTE vara ordagrant kopierad ur ett citerat källutdrag (kopiera, formulera inte om).
+  Varje siffra i påståendet måste finnas i källutdraget. Hittar du inget ordagrant stöd: hoppa över claimet.
 - Inkludera ALDRIG följarantal, likes eller andra sociala mätvärden.
 - Var konservativ med confidence. Returnera bara JSON, ingen annan text."""
 
-VALIDATE_PROMPT = """Du är en faktagranskare. Avgör om PÅSTÅENDET stöds direkt av KÄLLAN.
+# Adversariell granskning: be modellen aktivt leta skäl att påståendet INTE stöds innan den
+# avgör. Minskar bekräftelsebias jämfört med en rak "stöds detta?"-fråga.
+VALIDATE_PROMPT = """Du är en kritisk faktagranskare. Din uppgift är att FÖRSÖKA underkänna
+PÅSTÅENDET: leta aktivt efter varje skäl att det INTE stöds ordagrant av KÄLLAN — utelämnade
+förbehåll, siffror som inte står i källan, tolkningar utöver texten, fel subjekt.
 
-Svara ENDAST med JSON: {"supported": true|false}
+Svara ENDAST med JSON: {"reasons_against": ["..."], "supported": true|false}
 
-Stöds endast om källan uttryckligen säger det. Rimliga gissningar räknas inte."""
+Sätt supported=true ENDAST om du inte hittar något hållbart skäl emot och källan uttryckligen
+säger det. Rimliga gissningar och slutledningar räknas INTE som stöd."""
 
 
 @dataclass
@@ -94,36 +105,54 @@ def extract_claims_for_client(client_id: str) -> dict[str, Any]:
 
     for cand in _generate(generator, chunks):
         statement = (cand.get("statement") or "").strip()
+        quote = (cand.get("quote") or "").strip()
         cited = [by_label[lbl] for lbl in cand.get("chunks", []) if lbl in by_label]
         if not statement or not cited:
             skipped += 1  # ingen källa → inget claim
             continue
 
-        if not _validate(validator, statement, cited):
+        source_text = "\n\n".join(c.text for c in cited)
+
+        # Deterministisk källgrind AVGÖR (modelloberoende): citatet måste finnas i källan och
+        # alla siffror i påståendet vara grundade. LLM:en föreslår — den här regeln dömer.
+        grounded, reason = claim_grounding.verify(statement, quote, source_text)
+        if not grounded:
+            log.info("claim avvisad av källgrind (%s): %s", reason, statement[:60])
+            skipped += 1
+            continue
+
+        # Extra LLM-lager ovanpå grinden: adversariell validering med självkonsistens.
+        if not _validate(validator, statement, source_text):
             skipped += 1  # valideringen föll → kasseras
             continue
 
         confidence = float(cand.get("confidence", 0.0))
         approved = confidence >= REVIEW_THRESHOLD
+        sources = [
+            ClaimSource(kind="item", item_id=c.chunk_id, employee_id=c.employee_id)
+            for c in cited
+        ]
+        sources[0].quote = quote  # bevara det verifierade spannet som proveniens/revisionsspår
         claim = Claim(
             claim_kind="narrative",
             subject_ref="org",
             statement=statement[:200],
-            source=[
-                ClaimSource(kind="item", item_id=c.chunk_id, employee_id=c.employee_id)
-                for c in cited
-            ],
+            source=sources,
             confidence=confidence,
             included_in_output=approved,
             needs_review=not approved,
-            # Klarade validator-passet ovan → stämpla att (och när/av vad) det skedde.
+            # Klarade källgrind + validator → stämpla att (och hur) det skedde.
             validated_at=datetime.now(timezone.utc).isoformat(),
-            validated_by=settings.validator_model,
+            validated_by=_validated_by(),
         )
         _persist(client_id, claim)
         written += 1
 
     return {"client_id": client_id, "written": written, "skipped": skipped}
+
+
+def _validated_by() -> str:
+    return f"{llm_factory.GEO_VALIDATOR_MODEL} + deterministisk källgrind"
 
 
 def _gather_chunks(client_id: str) -> list[Chunk]:
@@ -172,11 +201,15 @@ def _batches(chunks: list[Chunk]):
         yield batch
 
 
-def _validate(llm, statement: str, cited: list[Chunk]) -> bool:
-    source_text = "\n\n".join(c.text for c in cited)
+def _validate(llm, statement: str, source_text: str) -> bool:
+    """Adversariell validering med självkonsistens: kör SELF_CONSISTENCY_SAMPLES pass och
+    kräv att ALLA säger supported. Ett enda icke-stött (eller felande) utfall fäller claimet."""
     payload = f"PÅSTÅENDE:\n{statement}\n\nKÄLLA:\n{source_text}"
-    data = llm_factory.invoke_json(llm, VALIDATE_PROMPT, payload)
-    return bool((data or {}).get("supported") is True)
+    for _ in range(SELF_CONSISTENCY_SAMPLES):
+        data = llm_factory.invoke_json(llm, VALIDATE_PROMPT, payload)
+        if (data or {}).get("supported") is not True:
+            return False
+    return True
 
 
 def _persist(client_id: str, claim: Claim) -> None:
@@ -191,4 +224,4 @@ def _pick_generator():
 
 
 def _pick_validator():
-    return llm_factory.make_validator()
+    return llm_factory.make_claim_validator()

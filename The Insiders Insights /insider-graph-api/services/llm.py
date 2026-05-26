@@ -5,7 +5,8 @@ Två roller, två modeller (docs/website-connector-spec.md, rekommendation):
   * generator  — generering + relevansgrindning. Stort kontextfönster (Gemini)
                  sväljer hela korpusen i ett anrop.
   * validator  — det precisionskritiska steget (klassning/validering/narrativ).
-                 Vassaste resonemanget (Claude Opus); korta anrop → låg kostnad.
+                 Gemini 2.5 Pro (Claude är inte EU-resident i projektets region). Oberoendet
+                 bärs av den deterministiska källgrinden + adversariell prompt + självkonsistens.
 
 **EU-only (hårt krav):** dessa modeller behandlar kunddata och körs därför via
 **Vertex AI i EU-region** (`settings.gcp_project` + `settings.vertex_location`) med
@@ -37,21 +38,40 @@ log = logging.getLogger(__name__)
 # Vertex i `vertex_location`. Env-överstyrbart utan kodändring; rör ej config.py.
 ESG_MODEL = os.environ.get("ESG_MODEL", "gemini-2.5-pro")
 
+# GEO-claims-pipelinen (generator/validator). Claude serveras inte EU-resident i projektets
+# region (404), så BÅDA rollerna körs på Gemini i EU. Oberoendet upprätthålls inte längre av
+# en annan leverantör utan av (a) en deterministisk källgrind (services/claim_grounding) som
+# AVGÖR, och (b) ett vassare validator-steg (pro) + adversariell prompt + självkonsistens.
+# Vill man återinföra cross-vendor-oberoende EU-lagligt: Claude via AWS Bedrock EU.
+GEO_GENERATOR_MODEL = os.environ.get("GEO_GENERATOR_MODEL", "gemini-2.5-flash")
+GEO_VALIDATOR_MODEL = os.environ.get("GEO_VALIDATOR_MODEL", "gemini-2.5-pro")
+
 
 def make_generator():
-    """Stort-kontext-modell (Gemini) för generering/relevans, via Vertex AI EU."""
+    """Generering/relevans (Gemini Flash) — snabb och billig, via Vertex AI EU."""
     if not settings.gcp_project:
         log.warning("EU-only: GCP-projekt ej satt — generator otillgänglig (ingen US-fallback)")
         return None
-    return _vertex_gemini(settings.generator_model)
+    return _vertex_gemini(GEO_GENERATOR_MODEL)
 
 
 def make_validator():
-    """Vasst resonemang (Claude) för det precisionskritiska steget, via Vertex AI EU."""
+    """Vasst resonemang (Gemini Pro) för det precisionskritiska steget, via Vertex AI EU.
+    Claude är inte EU-resident i projektets region; oberoendet bärs nu av den deterministiska
+    källgrinden (claim_grounding) som avgör, inte av en annan leverantör."""
     if not settings.gcp_project:
         log.warning("EU-only: GCP-projekt ej satt — validator otillgänglig (ingen US-fallback)")
         return None
-    return _vertex_anthropic(settings.validator_model)
+    return _vertex_gemini(GEO_VALIDATOR_MODEL)
+
+
+def make_claim_validator():
+    """Validator för claims-extraktionen, med temperatur för SJÄLVKONSISTENS (flera pass där
+    samstämmighet krävs). Gemini Pro via Vertex AI EU."""
+    if not settings.gcp_project:
+        log.warning("EU-only: GCP-projekt ej satt — claim-validator otillgänglig")
+        return None
+    return _vertex_gemini(GEO_VALIDATOR_MODEL, temperature=0.4)
 
 
 def make_esg_reasoner():
@@ -64,12 +84,12 @@ def make_esg_reasoner():
 
 
 # Konstruktions-sömmar (lazy import → modulen kan importeras utan SDK; patchas i tester).
-def _vertex_gemini(model: str):
+def _vertex_gemini(model: str, temperature: float = 0):
     from langchain_google_vertexai import ChatVertexAI
 
     return ChatVertexAI(
         model=model, project=settings.gcp_project, location=settings.vertex_location,
-        temperature=0,
+        temperature=temperature,
     )
 
 

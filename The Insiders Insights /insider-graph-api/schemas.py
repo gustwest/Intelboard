@@ -81,6 +81,9 @@ class ClaimSource(BaseModel):
     # kundens LinkedIn-sida). Se docs/claims-provenance-spec.md §4.
     attested_at: str | None = None
     url: str | None = None
+    # Verbatim källspann som den deterministiska grinden (services/claim_grounding) verifierat
+    # finns i källtexten och stödjer påståendet. Bevaras som proveniens/revisionsspår.
+    quote: str | None = None
 
 
 class Claim(BaseModel):
