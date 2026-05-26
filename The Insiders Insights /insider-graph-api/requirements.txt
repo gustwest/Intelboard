@@ -12,6 +12,10 @@ python-multipart==0.0.9
 numpy>=1.26,<2
 langchain==0.3.7
 langchain-openai==0.2.5
+# Pinna openai till en version utan hårt numpy>=2-krav. Dockers pip (25.0.1) hittar
+# den inte själv (backtrackar nedåt från 1.68), så vi pekar ut den. Verifierat med
+# pip 25.0.1 --dry-run att hela trädet löser med numpy<2.
+openai==1.109.1
 langchain-google-genai==2.0.4
 langchain-google-vertexai==2.0.7
 trafilatura==2.0.0
