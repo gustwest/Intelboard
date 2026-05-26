@@ -4,8 +4,10 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   ClipboardList, Folder, Bot, Search, Plus, X, Image as ImageIcon,
   MessageSquare, Download, Trash2, CheckCircle2, CircleDashed,
-  ArrowUpCircle, PlayCircle, Loader2, Send, Upload, Info, Paperclip
+  ArrowUpCircle, PlayCircle, Loader2, Send, Upload, Info, Paperclip, Landmark
 } from 'lucide-react';
+import ArchitectureClient from '@/app/arkitektur/ArchitectureClient';
+import { SCHEMA_MODELS_FALLBACK } from '@/app/arkitektur/data';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -68,7 +70,8 @@ const FILE_CATEGORIES = [
 // all issues, files and agent sessions to a separate workspace.
 // ============================================================
 export default function AdminWorkspace({ product = 'the-insiders' }: { product?: string }) {
-  const [activeTab, setActiveTab] = useState<'kanban' | 'files' | 'agent'>('agent');
+  const [activeTab, setActiveTab] = useState<'kanban' | 'files' | 'agent' | 'arkitektur'>('agent');
+  const showArchitecture = product === 'the-insiders';
 
   return (
     <div style={{
@@ -87,12 +90,18 @@ export default function AdminWorkspace({ product = 'the-insiders' }: { product?:
         <TabButton active={activeTab === 'kanban'} onClick={() => setActiveTab('kanban')} icon={ClipboardList} label="Ärenden" />
         <TabButton active={activeTab === 'files'} onClick={() => setActiveTab('files')} icon={Folder} label="Filer" />
         <TabButton active={activeTab === 'agent'} onClick={() => setActiveTab('agent')} icon={Bot} label="AI Agent" />
+        {showArchitecture && (
+          <TabButton active={activeTab === 'arkitektur'} onClick={() => setActiveTab('arkitektur')} icon={Landmark} label="Arkitektur" />
+        )}
       </div>
 
       <main style={{ padding: '24px 32px' }}>
         {activeTab === 'kanban' && <KanbanTab product={product} />}
         {activeTab === 'files' && <FilesTab product={product} />}
         {activeTab === 'agent' && <AgentTab product={product} />}
+        {activeTab === 'arkitektur' && showArchitecture && (
+          <ArchitectureClient schemaModels={SCHEMA_MODELS_FALLBACK} schemaSource="fallback" />
+        )}
       </main>
     </div>
   );
