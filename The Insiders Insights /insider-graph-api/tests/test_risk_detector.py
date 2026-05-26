@@ -136,6 +136,64 @@ class RunForClientTest(unittest.TestCase):
         self.assertTrue(doc["needs_review"])
         self.assertEqual(doc["status"], "open")
 
+    def test_run_marks_clean_on_safe_answer(self):
+        # En godkänd fråga som tidigare gav ett fynd svarar nu "ok" → ren-streak byggs.
+        fid = rd._finding_id("buyer", "Har Acme tvister?", "gpt-4o")
+        fakefs.reset(
+            client={"company_name": "Acme AB"},
+            risk_questions={"qh": _approved_q("buyer", "A", "Har Acme tvister?")},
+            risk_findings={fid: {"status": "open", "clean_streak": 0, "persona": "buyer"}},
+        )
+        rd.llm_factory.make_validator = lambda: object()
+        rd._build_engines = lambda: {"gpt-4o": object()}
+        rd._ask = lambda q, llm: "svar"
+        rd._should_follow_up = lambda cls: False
+        rd.classify = lambda *a: RiskFinding("buyer", "A", "Har Acme tvister?", "", "ok", "", "", "")
+        rd.run_for_client("acme")
+        self.assertEqual(fakefs.STATE["risk_findings"][fid]["clean_streak"], 1)
+        self.assertEqual(fakefs.STATE["risk_findings"][fid]["status"], "open")  # 1 < tröskel
+
+
+class ResolvedDetectionTest(unittest.TestCase):
+    def _fid(self):
+        return rd._finding_id("investor", "Vem äger Acme?", "gpt-4o")
+
+    def test_mark_clean_builds_streak_then_resolves(self):
+        fid = self._fid()
+        fakefs.reset(client={"company_name": "Acme AB"},
+                     risk_findings={fid: {"status": "open", "clean_streak": 0}})
+        rd._mark_clean("acme", "investor", "Vem äger Acme?", "gpt-4o")
+        self.assertEqual(fakefs.STATE["risk_findings"][fid]["clean_streak"], 1)
+        self.assertEqual(fakefs.STATE["risk_findings"][fid]["status"], "open")
+        rd._mark_clean("acme", "investor", "Vem äger Acme?", "gpt-4o")  # når tröskel (2)
+        self.assertEqual(fakefs.STATE["risk_findings"][fid]["status"], "resolved")
+        self.assertFalse(fakefs.STATE["risk_findings"][fid]["needs_review"])
+
+    def test_mark_clean_noop_without_finding(self):
+        fakefs.reset(client={"company_name": "Acme AB"}, risk_findings={})
+        rd._mark_clean("acme", "investor", "Vem äger Acme?", "gpt-4o")
+        self.assertEqual(fakefs.STATE["risk_findings"], {})  # skapar inget
+
+    def test_persist_preserves_actioned_and_resets_streak(self):
+        fid = self._fid()
+        fakefs.reset(client={"company_name": "Acme AB"}, risk_findings={
+            fid: {"status": "actioned", "action_taken": "reinforced_claim",
+                  "ammo_claim_ids": ["corr-x"], "clean_streak": 1}})
+        rd._persist("acme", RiskFinding("investor", "A", "Vem äger Acme?", "gpt-4o", "#1", "high", "none", "x"))
+        doc = fakefs.STATE["risk_findings"][fid]
+        self.assertEqual(doc["status"], "actioned")            # ej nedgraderad
+        self.assertEqual(doc["action_taken"], "reinforced_claim")  # action-fält bevarat
+        self.assertEqual(doc["clean_streak"], 0)               # nollställd
+
+    def test_persist_reopens_resolved_regression(self):
+        fid = self._fid()
+        fakefs.reset(client={"company_name": "Acme AB"}, risk_findings={
+            fid: {"status": "resolved", "clean_streak": 2}})
+        rd._persist("acme", RiskFinding("investor", "A", "Vem äger Acme?", "gpt-4o", "#3", "high", "none", "x"))
+        doc = fakefs.STATE["risk_findings"][fid]
+        self.assertEqual(doc["status"], "open")                # regression → återöppnad
+        self.assertTrue(doc["needs_review"])
+
 
 class GenerateAndStoreTest(unittest.TestCase):
     def setUp(self):

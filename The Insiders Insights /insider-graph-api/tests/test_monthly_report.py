@@ -73,14 +73,31 @@ class BuildModelTest(unittest.TestCase):
         self.assertEqual(m["parity_index"], 0.9)            # senaste veckan vinner
 
     def test_trend_from_previous_report(self):
-        _setup(monthly_reports={"2026-04": {"risk_exposure": {"total": {"score": 0.5}}}})
+        # Trenden följer beslutssäkerheten (högre=bättre) månad-för-månad.
+        _setup(monthly_reports={"2026-04": {"decision_confidence": {"score": 60}}})
         m = mr.build_report_model("acme", "2026-05")
-        self.assertEqual(m["trend"]["previous_month"], "2026-04")
-        self.assertEqual(m["trend"]["delta"], round(0.333 - 0.5, 3))  # förbättring (negativ)
+        t = m["trend"]
+        self.assertEqual(t["previous_month"], "2026-04")
+        self.assertEqual(t["previous_score"], 60)
+        self.assertEqual(t["delta"], 74 - 60)              # förbättring (positiv)
+        self.assertEqual([s["month"] for s in t["series"]], ["2026-04", "2026-05"])
 
-    def test_no_trend_first_report(self):
+    def test_first_report_has_no_previous(self):
         _setup()
-        self.assertIsNone(mr.build_report_model("acme", "2026-05")["trend"])
+        t = mr.build_report_model("acme", "2026-05")["trend"]
+        self.assertIsNone(t["previous_month"])
+        self.assertEqual([s["month"] for s in t["series"]], ["2026-05"])
+
+    def test_resolved_counted_and_listed(self):
+        findings = _findings()
+        findings["f4"] = {"persona": "buyer", "track": "A", "question": "Löst fråga?",
+                          "engine": "gpt-4o", "harm": "#3", "severity": "high", "status": "resolved"}
+        _setup(risk_findings=findings)
+        m = mr.build_report_model("acme", "2026-05")
+        self.assertEqual(m["resolved"]["count"], 1)
+        self.assertEqual(m["trend"]["resolved_count"], 1)
+        self.assertEqual(len(m["detected"]), 3)            # resolved syns ej bland öppna risker
+        self.assertTrue(any("lösta" in s for s in m["strengths"]))
 
     def test_decision_confidence_and_verdict(self):
         _setup()
@@ -186,6 +203,15 @@ class RenderHtmlTest(unittest.TestCase):
         self.assertIn("Tvister kring Acme?", html_out)        # detekterad risk
         self.assertIn("reinforced_claim", html_out)           # åtgärd
         self.assertIn("Förbättringsmöjligheter", html_out)    # alltid med
+
+    def test_html_shows_resolved_and_series(self):
+        findings = _findings()
+        findings["f4"] = {"persona": "buyer", "track": "A", "question": "Löst fråga?",
+                          "engine": "gpt-4o", "harm": "#3", "severity": "high", "status": "resolved"}
+        _setup(risk_findings=findings, monthly_reports={"2026-04": {"decision_confidence": {"score": 60}}})
+        html_out = mr.render_report_html(mr.build_report_model("acme", "2026-05"))
+        self.assertIn("risk(er) lösta", html_out)
+        self.assertIn("Serie:", html_out)
 
     def test_html_renders_narrative_when_present(self):
         _setup()

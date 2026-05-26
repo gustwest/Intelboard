@@ -371,10 +371,18 @@ verktyget. Därför:
 | 1 | Frågebatterier + skadeklassning (read-only) → findings i review-kö ✅ **byggd** (services/risk_detector.py) | test på klassning |
 | 2 | Korrigering: godkänd finding → förstärkt ammunition-claim → recompile + logg ✅ **byggd** (services/risk_corrector.py, POST /api/review/{id}/risks/{fid}) | compiler-test |
 | 3 | Månadsrapport: render-modell + endpoint + HTML, per persona ✅ **byggd** (services/monthly_report.py, jobs/monthly_report.py, routers/reports.py) | render-test |
-| 4 | Effekt över tid: Risk Exposure-trend + resolved-detektering | trend-test |
+| 4 | Effekt över tid: Risk Exposure-trend + resolved-detektering ✅ **byggd** (risk_detector resolved-streak + monthly_report-trend/serie) | trend-test |
 
 Varje skiva följer Definition of Done i connector-roadmap.md §3. Skiva 1 ger redan
 kundvärde (riskrapport) utan publiceringsrisk.
+
+**Skiva 4 — så fungerar det.** När `run_for_client` körs igen och en fråga som tidigare
+gav ett fynd nu klassas "ok" bygger findingen en `clean_streak`; efter
+`RESOLVED_AFTER_CLEAN_RUNS` (=2) rena cykler i rad markeras den `resolved` (§8.4). Dyker
+risken upp igen återöppnas findingen (regression); en `actioned` finding behåller sina
+action-fält vid omdetektering. Månadsrapportens "Effekt över tid" visar beslutssäkerhet
+som serie månad-för-månad (+delta) och antal lösta risker — trenden, inte ett
+kausalitetspåstående, är beviset.
 
 ## 13. Beslut & öppna frågor
 
@@ -386,8 +394,11 @@ Beslutat:
   men som svaga ledtrådar (anti-styrning, §5.1). Kräver ett `competitors`-fält i
   onboarding/client-doc.
 
+- **Resolved-tröskel:** ✅ beslutat — `RESOLVED_AFTER_CLEAN_RUNS = 2` (en bekräftande ren
+  cykel utöver den första) skyddar mot flimmer. Konfig-överstyrbart om vi vill skärpa.
+
 Kvar:
-- **Resolved-tröskel:** kräver vi N korrekta cykler i rad innan en risk räknas som löst
-  (mot flimmer)? (Kan beslutas under skiva 4.)
 - **Publik exponering:** hur mycket av riskregistret visas i GTM-modalen vs bara i
   kundportalen? (Kan beslutas under skiva 3.)
+- **EU-only:** loopens LLM-anrop (`make_validator`/motorerna) går idag via första-parts US
+  och måste routas via Vertex AI EU innan skarp drift — se project-minnet om dataresidens.

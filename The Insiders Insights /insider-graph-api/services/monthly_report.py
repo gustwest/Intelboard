@@ -65,6 +65,7 @@ def build_report_model(client_id: str, month: str | None = None) -> dict[str, An
     findings = list(fs.iter_risk_findings(client_id))
     open_f = [d for _i, d in findings if d.get("status") in (None, "open")]
     actioned_f = [d for _i, d in findings if d.get("status") == "actioned"]
+    resolved_f = [d for _i, d in findings if d.get("status") == "resolved"]
 
     summary_snap = fs.risk_run_summary_doc(client_id).get()
     summary = summary_snap.to_dict() if summary_snap.exists else {}
@@ -76,9 +77,9 @@ def build_report_model(client_id: str, month: str | None = None) -> dict[str, An
         key=lambda r: SEVERITY_WEIGHTS.get(r["severity"], 0), reverse=True,
     )
     actions = [_action_row(d) for d in actioned_f]
-    trend = _trend(client_id, month, risk_exposure["total"]["score"])
-    parity = _latest_parity(client_id)
     confidence = _decision_confidence(open_f, answers_by_persona)
+    trend = _trend(client_id, month, confidence.get("score"), len(resolved_f))
+    parity = _latest_parity(client_id)
 
     return {
         "month": month,
@@ -89,10 +90,11 @@ def build_report_model(client_id: str, month: str | None = None) -> dict[str, An
         "verdict": _verdict(confidence, open_f, answers_by_persona),
         "risk_exposure": risk_exposure,
         "parity_index": parity,
-        "strengths": _strengths(open_f, actioned_f, answers_by_persona, parity),
+        "strengths": _strengths(open_f, actioned_f, resolved_f, answers_by_persona, parity),
         "improvement_opportunities": _improvements(open_f, answers_by_persona),
         "detected": detected,
         "actions": actions,
+        "resolved": {"count": len(resolved_f), "items": [_finding_row(d) for d in resolved_f]},
         "trend": trend,
     }
 
@@ -168,9 +170,11 @@ def _worst_persona(open_findings: list[dict]) -> str | None:
     return max(weighted, key=weighted.get) if weighted else None
 
 
-def _strengths(open_findings, actioned, answers_by_persona, parity) -> list[str]:
+def _strengths(open_findings, actioned, resolved, answers_by_persona, parity) -> list[str]:
     """Uppsidan — vad som faktiskt fungerar. Ärligt, bara där data stödjer det."""
     out: list[str] = []
+    if resolved:
+        out.append(f"{len(resolved)} tidigare risk(er) är lösta — motorerna svarar nu säkert på dem.")
     total = sum(int(v or 0) for v in answers_by_persona.values())
     safe = max(0, total - len(open_findings))
     if total and safe:
@@ -270,19 +274,29 @@ def _latest_parity(client_id: str) -> float | None:
     return latest
 
 
-def _trend(client_id: str, month: str, current_score: float | None) -> dict[str, Any] | None:
-    """Lätt trend: närmast föregående persisterade rapport. Full resolved-detektering = skiva 4."""
+def _trend(client_id: str, month: str, current_score: int | None, resolved_count: int) -> dict[str, Any]:
+    """Effekt över tid (§8.4): beslutssäkerhet månad-för-månad (serie + delta mot närmast
+    föregående) plus antal lösta risker. Trenden — inte ett kausalitetspåstående — är beviset."""
+    history = []
     prev_id, prev_score = "", None
     for rid, data in fs.iter_monthly_reports(client_id):
-        if rid < month and rid > prev_id:
-            prev_id = rid
-            prev_score = ((data.get("risk_exposure") or {}).get("total") or {}).get("score")
-    if not prev_id:
-        return None
+        if rid >= month:  # hoppa över ev. redan persisterad körning för samma månad
+            continue
+        score = (data.get("decision_confidence") or {}).get("score")
+        history.append({"month": rid, "score": score})
+        if rid > prev_id:
+            prev_id, prev_score = rid, score
+    series = sorted(history, key=lambda x: x["month"]) + [{"month": month, "score": current_score}]
     delta = None
     if current_score is not None and prev_score is not None:
-        delta = round(current_score - prev_score, 3)
-    return {"previous_month": prev_id, "previous_score": prev_score, "delta": delta}
+        delta = current_score - prev_score
+    return {
+        "previous_month": prev_id or None,
+        "previous_score": prev_score,
+        "delta": delta,
+        "resolved_count": resolved_count,
+        "series": series,
+    }
 
 
 # --- Persistens + jobb --------------------------------------------------------
@@ -358,6 +372,7 @@ def _narrative_context(model: dict[str, Any]) -> dict[str, Any]:
             for r in (model.get("detected") or [])
         ],
         "åtgärder": model.get("actions"),
+        "lösta_risker": (model.get("resolved") or {}).get("count", 0),
         "trend": model.get("trend"),
     }
 
@@ -397,21 +412,34 @@ def render_report_html(report: dict[str, Any]) -> str:
         for a in (report.get("actions") or [])
     ) or "<tr><td colspan='6'>Inga åtgärder ännu.</td></tr>"
 
-    trend = report.get("trend")
-    if trend:
+    trend = report.get("trend") or {}
+    resolved_count = trend.get("resolved_count", 0)
+    resolved_line = (
+        f"<p><strong>{resolved_count} risk(er) lösta</strong> — motorerna svarar nu säkert "
+        "på frågor som tidigare gav fel. Det (inte ett kausalitetspåstående) är beviset.</p>"
+        if resolved_count else ""
+    )
+    if trend.get("previous_month"):
         d = trend.get("delta")
         arrow = "→ oförändrad"
         if d is not None:
-            arrow = "▼ förbättrad" if d < 0 else ("▲ försämrad" if d > 0 else "→ oförändrad")
+            arrow = f"▲ +{d} (förbättrad)" if d > 0 else (f"▼ {d} (försämrad)" if d < 0 else "→ oförändrad")
+        series_txt = " → ".join(
+            f"{html.escape(s['month'])}: {_fmt_int(s.get('score'))}" for s in (trend.get("series") or [])
+        )
         trend_html = (
-            f"<p>Föregående månad ({html.escape(trend.get('previous_month') or '')}): "
-            f"{_fmt_score(trend.get('previous_score'))} → nu {_fmt_score(total.get('score'))} "
-            f"<strong>{arrow}</strong></p>"
-            "<p class='note'>Ökar sannolikheten att motorerna svarar rätt — ingen garanti. "
-            "Resolved-detektering kommer i nästa skiva.</p>"
+            f"<p>Beslutssäkerhet {html.escape(trend.get('previous_month') or '')} "
+            f"→ {html.escape(month)}: {_fmt_int(trend.get('previous_score'))} → "
+            f"{_fmt_int((report.get('decision_confidence') or {}).get('score'))} <strong>{arrow}</strong></p>"
+            f"{resolved_line}"
+            f"<p class='note'>Serie: {series_txt}</p>"
+            "<p class='note'>Ökar sannolikheten att motorerna svarar rätt — ingen garanti.</p>"
         )
     else:
-        trend_html = "<p class='note'>Första rapporten — trend visas från och med nästa månad.</p>"
+        trend_html = (
+            resolved_line
+            + "<p class='note'>Första rapporten — månad-för-månad-trend visas från och med nästa körning.</p>"
+        )
 
     conf = report.get("decision_confidence") or {}
     verdict = html.escape(report.get("verdict") or "")
@@ -424,6 +452,13 @@ def render_report_html(report: dict[str, Any]) -> str:
     )
     strengths_html = _ul(report.get("strengths"), "Inga utmärkande styrkor uppmätta ännu.")
     improvements_html = _ul(report.get("improvement_opportunities"), "")
+    resolved_items = (report.get("resolved") or {}).get("items") or []
+    if resolved_items:
+        trend_html += _ul(
+            [f"{PERSONA_SV.get(r.get('persona'), r.get('persona') or '')}: {r.get('question')}"
+             for r in resolved_items],
+            "",
+        )
 
     return f"""<!doctype html>
 <html lang="sv"><head><meta charset="utf-8">

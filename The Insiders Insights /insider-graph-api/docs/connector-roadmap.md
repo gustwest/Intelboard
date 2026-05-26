@@ -20,7 +20,7 @@ Legend: ⬜ ej påbörjad · 🟡 pågår · ✅ klar (alla DoD-punkter i §3 bo
 | # | Connector | Kärna | Status |
 |---|-----------|-------|--------|
 | — | linkedin / rss / website / gleif | (redan i drift) | ✅ |
-| 1 | **GEO-riskloop** | Sondera beslutskritiska persona-frågor → skadeklassa svar → källförsedda korrigeringar + månadsrapport med Risk Exposure-trend ([spec](hallucination-loop-spec.md)) | 🟡 skiva 1–3 byggda (detektering + korrigering + månadsrapport) |
+| 1 | **GEO-riskloop** | Sondera beslutskritiska persona-frågor → skadeklassa svar → källförsedda korrigeringar + månadsrapport med Risk Exposure-trend ([spec](hallucination-loop-spec.md)) | 🟡 skiva 1–4 byggda (hela loopen); kvar före skarp drift: EU-routning av LLM + verifiering mot skarp källa |
 | 2 | Auktoritativa attesteringar | VIES (moms), EUIPO/PRV (varumärke), patent, offentlig upphandling, ISO, utmärkelser | ⬜ |
 | 3 | Wikidata/KG-förankring | sameAs-berikning + motsägelsedetektering mot Wikidata/OpenCorporates/Crunchbase | ⬜ |
 | 4 | Erbjudande-katalog | Product/Service/Offer-noder länkade till Organization | ⬜ |

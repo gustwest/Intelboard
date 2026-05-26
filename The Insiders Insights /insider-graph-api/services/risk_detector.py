@@ -43,6 +43,9 @@ log = logging.getLogger(__name__)
 ALL_PERSONAS = ("buyer", "candidate", "investor")
 HARM_MODES = {"#1", "#2", "#3", "#4", "#5", "#6"}
 MAX_QUESTIONS_PER_PERSONA = 12  # skydd mot runaway-generering
+# §13: en risk räknas som löst först efter N rena cykler i rad (mot flimmer). 2 = en
+# bekräftande cykel utöver den första rena. Resolved är beviset i skiva 4 (§8.4).
+RESOLVED_AFTER_CLEAN_RUNS = 2
 
 # --- Persona-linser + few-shots (docs/hallucination-loop-spec.md §5.1) --------
 
@@ -214,6 +217,8 @@ def run_for_client(client_id: str) -> RiskRunResult | None:
             if _should_follow_up(cls):  # §B — bunden följdfråga vid gränsfall
                 cls = follow_up(validator, engine, q, answer, cls, context) or cls
             if cls.harm == "ok":
+                # §8.4 — motorn svarar nu säkert: bygg ren-streak, lös efter N cykler.
+                _mark_clean(client_id, q.persona, q.text, engine_name)
                 continue
             cls.persona, cls.track, cls.question, cls.engine = (
                 q.persona, q.track, q.text, engine_name,
@@ -563,25 +568,57 @@ def _persist_question(client_id: str, q: Question, ctx_hash: str) -> None:
     )
 
 
+def _finding_id(persona: str, question: str, engine: str) -> str:
+    # Stabilt id per (persona|fråga|motor) → samma fynd över körningar, så resolved-
+    # detektering (skiva 4) kan jämföra mot tidigare cykler.
+    return hashlib.sha1(f"{persona}|{question}|{engine}".encode("utf-8")).hexdigest()[:16]
+
+
 def _persist(client_id: str, f: RiskFinding) -> None:
-    fid = hashlib.sha1(f"{f.persona}|{f.question}|{f.engine}".encode("utf-8")).hexdigest()[:16]
-    fs.risk_finding_doc(client_id, fid).set(
-        {
-            "persona": f.persona,
-            "track": f.track,
-            "question": f.question,
-            "engine": f.engine,
-            "harm": f.harm,
-            "severity": f.severity,
-            "sourcing": f.sourcing,
-            "engine_excerpt": f.engine_excerpt,
-            "via_follow_up": f.via_follow_up,
-            "follow_up_question": f.follow_up_question,
-            "status": "open",
-            "needs_review": True,
-            "detected_at": firestore.SERVER_TIMESTAMP,
-        }
-    )
+    ref = fs.risk_finding_doc(client_id, _finding_id(f.persona, f.question, f.engine))
+    snap = ref.get()
+    fields = {
+        "persona": f.persona,
+        "track": f.track,
+        "question": f.question,
+        "engine": f.engine,
+        "harm": f.harm,
+        "severity": f.severity,
+        "sourcing": f.sourcing,
+        "engine_excerpt": f.engine_excerpt,
+        "via_follow_up": f.via_follow_up,
+        "follow_up_question": f.follow_up_question,
+        "detected_at": firestore.SERVER_TIMESTAMP,
+        "clean_streak": 0,  # risken syns igen → nollställ ren-streak
+    }
+    if not snap.exists:
+        ref.set({**fields, "status": "open", "needs_review": True})
+        return
+    # Re-detektering: behåll 'actioned' (åtgärd pågår, bevara action-fälten); en
+    # 'resolved' risk som dyker upp igen är en regression → (åter)öppna.
+    if (snap.to_dict() or {}).get("status") == "actioned":
+        ref.update(fields)
+    else:
+        ref.update({**fields, "status": "open", "needs_review": True})
+
+
+def _mark_clean(client_id: str, persona: str, question: str, engine: str) -> None:
+    """Motorn svarade säkert på en fråga som tidigare gav ett fynd → bygg ren-streak,
+    och markera resolved efter RESOLVED_AFTER_CLEAN_RUNS cykler (§8.4, §13)."""
+    ref = fs.risk_finding_doc(client_id, _finding_id(persona, question, engine))
+    snap = ref.get()
+    if not snap.exists:
+        return  # var aldrig en risk
+    data = snap.to_dict() or {}
+    if data.get("status") == "resolved":
+        return  # redan löst
+    streak = int(data.get("clean_streak") or 0) + 1
+    update: dict[str, Any] = {"clean_streak": streak}
+    if streak >= RESOLVED_AFTER_CLEAN_RUNS:
+        update["status"] = "resolved"
+        update["needs_review"] = False
+        update["resolved_at"] = firestore.SERVER_TIMESTAMP
+    ref.update(update)
 
 
 # --- Motoranrop (samma mönster som services/polling.py) -----------------------
