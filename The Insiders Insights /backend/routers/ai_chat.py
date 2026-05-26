@@ -359,12 +359,61 @@ def _get_live_connectors() -> Tuple[List[str], bool]:
 
 
 # ------------------------------------------------------------------
+# Live Geogiraph-klienter — sanningskällan är Firestore, exponerad via
+# Geogiraphs GET /api/clients. I graph-läge får agenten ALDRIG se Insiders
+# PostgreSQL-kunder (det är en annan datamängd) — den ska bara känna till
+# riktiga Geogiraph-klienter, annars hittar den på status.
+# ------------------------------------------------------------------
+_GRAPH_CLIENTS_CACHE: Dict[str, object] = {"ts": 0.0, "data": None}
+_GRAPH_CLIENTS_CACHE_TTL = 300  # sekunder
+
+
+def _get_live_graph_clients() -> Tuple[List[Dict], bool]:
+    """Hämta riktiga Geogiraph-klienter (Firestore via API).
+
+    Returnerar (klientlista, is_live). is_live=False betyder att API:t saknar
+    konfiguration eller inte svarade — då injicerar vi INGA klienter (hellre
+    tomt än Insiders-kunder).
+    """
+    import time
+
+    now = time.time()
+    cached = _GRAPH_CLIENTS_CACHE.get("data")
+    if cached is not None and now - float(_GRAPH_CLIENTS_CACHE["ts"]) < _GRAPH_CLIENTS_CACHE_TTL:
+        return list(cached), True  # type: ignore[arg-type]
+
+    base = os.environ.get("GRAPH_API_URL")
+    key = os.environ.get("GRAPH_API_KEY")  # valfri (open-mode)
+    if base:
+        try:
+            import json as _json
+            import urllib.request
+
+            headers = {"x-api-key": key} if key else {}
+            request = urllib.request.Request(
+                f"{base.rstrip('/')}/api/clients",
+                headers=headers,
+            )
+            with urllib.request.urlopen(request, timeout=3) as resp:
+                payload = _json.loads(resp.read().decode("utf-8"))
+            clients = payload.get("clients", [])
+            _GRAPH_CLIENTS_CACHE["data"] = clients
+            _GRAPH_CLIENTS_CACHE["ts"] = now
+            return list(clients), True
+        except Exception as e:
+            log.warn("ai_chat.graph_clients_fetch_failed", error=str(e)[:200])
+
+    return [], False
+
+
+# ------------------------------------------------------------------
 # Context builder — assembles relevant data from DB
 # ------------------------------------------------------------------
 def _build_context(db: Session, customer_id: Optional[str], page_context: Optional[str]) -> Tuple[str, List[str]]:
     """Build contextual information for the AI based on current page and customer."""
     sections = []
     context_labels = []
+    in_graph = bool(page_context and page_context.startswith("graph_"))
 
     # Customer-specific context
     if customer_id:
@@ -439,8 +488,10 @@ def _build_context(db: Session, customer_id: Optional[str], page_context: Option
                 sections.append(f"\n### Anteckningar ({len(notes)} st)")
                 for n in notes:
                     sections.append(f"- **{n.title}**: {(n.body or '')[:150]}")
-    else:
-        # Not in a specific customer context
+    elif not in_graph:
+        # Not in a specific customer context — lista Insiders-kunder.
+        # ALDRIG i graph-läge: Insiders PostgreSQL-kunder är en annan datamängd
+        # än Geogiraph-klienterna och får inte läcka in där.
         all_customers = db.query(models.Customer).all()
         if all_customers:
             context_labels.append("all_customers")
@@ -480,6 +531,41 @@ def _build_context(db: Session, customer_id: Optional[str], page_context: Option
             + "\n_Detta är den enda korrekta listan över implementerade connectors. "
             "Räkna aldrig upp andra som implementerade, och nämn inte connectors som inte står här._"
         )
+
+        # Live-injicerade RIKTIGA Geogiraph-klienter (Firestore). Ersätter helt
+        # Insiders-kundlistan, som inte får synas i graph-läge.
+        clients, clients_live = _get_live_graph_clients()
+        if clients_live:
+            context_labels.append(f"graph_clients:{len(clients)}")
+            if clients:
+                sections.append(f"\n### Geogiraph-klienter (AKTUELL data från Firestore, {len(clients)} st)")
+                for c in clients[:25]:
+                    nt = c.get("node_types") or {}
+                    parts = []
+                    if c.get("employee_count") is not None:
+                        parts.append(f"{c['employee_count']} medarbetare")
+                    if nt:
+                        parts.append("noder: " + ", ".join(f"{k} {v}" for k, v in nt.items()))
+                    if c.get("active_connectors"):
+                        parts.append("aktiva connectors: " + ", ".join(c["active_connectors"]))
+                    parts.append("senast kompilerad: " + (c.get("last_compiled") or "aldrig"))
+                    name = c.get("company_name") or c.get("client_id") or "Okänd"
+                    sections.append(f"- **{name}** (client_id: {c.get('client_id')}) — " + "; ".join(parts))
+            else:
+                sections.append("\n### Geogiraph-klienter\nInga klienter finns ännu i Geogiraph (Firestore är tom).")
+            sections.append(
+                "_Ovanstående är den ENDA korrekta källan till vilka klienter som finns i Geogiraph och deras status. "
+                "Använd ALDRIG kundlistan från The Insiders här. Hitta aldrig på klienter, medarbetare/noder, "
+                "pipeline-, kompilerings-, GTM- eller polling-status — håll dig till datan ovan, och hänvisa till "
+                "rätt sida (t.ex. /insider-graph/polling, /insider-graph/schema) för det som inte står här._"
+            )
+        else:
+            context_labels.append("graph_clients:unavailable")
+            sections.append(
+                "\n### Geogiraph-klienter\n_Live-data om Geogiraph-klienter är inte tillgänglig just nu. "
+                "Lista INTE några klienter och hitta inte på status — hänvisa användaren till /insider-graph/kunder "
+                "och /insider-graph/polling. Använd ALDRIG kundlistan från The Insiders som om de vore Geogiraph-klienter._"
+            )
 
         graph_page_hints = {
             "graph_home": "På översiktssidan — pipeline-status och förklaring av tjänsten.",
