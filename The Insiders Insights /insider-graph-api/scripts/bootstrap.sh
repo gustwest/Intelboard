@@ -20,6 +20,10 @@ set -euo pipefail
 
 PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}"
 REGION="${REGION:-europe-north1}"
+# EU-region för Vertex AI (våra resonemangsmodeller, EU-only). europe-west1 har både
+# Gemini och Claude på Vertex. OBS: Claude måste aktiveras i Vertex Model Garden (engångs),
+# och VALIDATOR_MODEL/GENERATOR_MODEL måste sättas till giltiga Vertex-modell-id.
+VERTEX_LOCATION="${VERTEX_LOCATION:-europe-west1}"
 SERVICE="insider-graph-api"
 SA_NAME="insider-graph-sa"
 SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
@@ -45,6 +49,7 @@ gcloud services enable \
   firestore.googleapis.com \
   secretmanager.googleapis.com \
   storage.googleapis.com \
+  aiplatform.googleapis.com \
   --project="$PROJECT_ID"
 
 # ---- 2. Artifact Registry --------------------------------------------------
@@ -81,6 +86,7 @@ for ROLE in \
   roles/storage.objectAdmin \
   roles/secretmanager.secretAccessor \
   roles/run.invoker \
+  roles/aiplatform.user \
   roles/logging.logWriter; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="serviceAccount:$SA_EMAIL" --role="$ROLE" --condition=None >/dev/null
@@ -92,7 +98,7 @@ done
 echo "==> Uppdaterar service-env för $SERVICE"
 gcloud run services update "$SERVICE" --region="$REGION" --project="$PROJECT_ID" \
   --service-account="$SA_EMAIL" \
-  --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},CDN_BUCKET=${BUCKET},CDN_BASE_URL=https://storage.googleapis.com/${BUCKET}" \
+  --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=https://storage.googleapis.com/${BUCKET}" \
   --update-secrets="ANTHROPIC_API_KEY=insider-graph-anthropic-api-key:latest,OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,BRIGHTDATA_API_KEY=insider-graph-brightdata-api-key:latest,BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID=insider-graph-brightdata-linkedin-profile-dataset-id:latest,BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID=insider-graph-brightdata-linkedin-company-dataset-id:latest" \
   || echo "==> Service finns ej ännu — kör cloudbuild först"
 
@@ -106,7 +112,7 @@ create_or_update_job() {
       --image="$IMAGE" --region="$REGION" --project="$PROJECT_ID" \
       --service-account="$SA_EMAIL" \
       --command="python" --args="-m,$CMD" \
-      --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},CDN_BUCKET=${BUCKET},CDN_BASE_URL=https://storage.googleapis.com/${BUCKET}" \
+      --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=https://storage.googleapis.com/${BUCKET}" \
       --update-secrets="ANTHROPIC_API_KEY=insider-graph-anthropic-api-key:latest,OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,BRIGHTDATA_API_KEY=insider-graph-brightdata-api-key:latest,BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID=insider-graph-brightdata-linkedin-profile-dataset-id:latest,BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID=insider-graph-brightdata-linkedin-company-dataset-id:latest"
   else
     echo "==> Skapar job: $NAME"
@@ -115,7 +121,7 @@ create_or_update_job() {
       --service-account="$SA_EMAIL" \
       --command="python" --args="-m,$CMD" \
       --max-retries=1 \
-      --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},CDN_BUCKET=${BUCKET},CDN_BASE_URL=https://storage.googleapis.com/${BUCKET}" \
+      --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=https://storage.googleapis.com/${BUCKET}" \
       --set-secrets="ANTHROPIC_API_KEY=insider-graph-anthropic-api-key:latest,OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,BRIGHTDATA_API_KEY=insider-graph-brightdata-api-key:latest,BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID=insider-graph-brightdata-linkedin-profile-dataset-id:latest,BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID=insider-graph-brightdata-linkedin-company-dataset-id:latest"
   fi
 }
