@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Inbox, Check, X, Mail, Calendar, Award, FileText, AlertCircle, Quote } from 'lucide-react';
+import { Inbox, Check, X, Mail, Calendar, Award, FileText, AlertCircle, Quote, Network } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
-import { graphFetch } from '../_lib/api';
+import { graphFetch, graphFetchBlob } from '../_lib/api';
 
 type Client = { client_id: string; company_name: string | null };
 
@@ -38,7 +38,17 @@ type ClaimItem = {
   validated_by: string | null;
 };
 
-type Tab = 'items' | 'claims';
+type Snapshot = {
+  id: string;
+  skills: string[];
+  followers: number | null;
+  quarter: string | null;
+  filename: string | null;
+  has_file: boolean;
+  uploaded_at: string | null;
+};
+
+type Tab = 'items' | 'claims' | 'linkedin';
 
 const TYPE_ICON: Record<string, typeof FileText> = {
   Event: Calendar,
@@ -53,7 +63,10 @@ export default function GraphReviewPage() {
   const [tab, setTab] = useState<Tab>('claims');
   const [items, setItems] = useState<ReviewItem[] | null>(null);
   const [claims, setClaims] = useState<ClaimItem[] | null>(null);
+  const [snapshots, setSnapshots] = useState<Snapshot[] | null>(null);
   const [edits, setEdits] = useState<Record<string, string>>({});
+  // LinkedIn-snapshot: redigerbar kompetenslista (komma-/radseparerad) före godkännande.
+  const [skillEdits, setSkillEdits] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   // Godkända claims stannar kvar i vyn med en valideringsnotis (id → godkänt-tid).
@@ -75,6 +88,10 @@ export default function GraphReviewPage() {
         setItems(null);
         const data = await graphFetch<{ items: ReviewItem[] }>(`/api/review/${clientId}`);
         setItems(data.items);
+      } else if (which === 'linkedin') {
+        setSnapshots(null);
+        const data = await graphFetch<{ snapshots: Snapshot[] }>(`/api/review/${clientId}/linkedin`);
+        setSnapshots(data.snapshots);
       } else {
         setClaims(null);
         const data = await graphFetch<{ items: ClaimItem[] }>(`/api/review/${clientId}/claims`);
@@ -83,6 +100,7 @@ export default function GraphReviewPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       if (which === 'items') setItems([]);
+      else if (which === 'linkedin') setSnapshots([]);
       else setClaims([]);
     }
   }, []);
@@ -135,6 +153,42 @@ export default function GraphReviewPage() {
     }
   }
 
+  async function decideSnapshot(snap: Snapshot, decision: 'approve' | 'reject') {
+    if (!selected) return;
+    setBusyId(snap.id);
+    const body: Record<string, unknown> = { decision };
+    if (decision === 'approve') {
+      const edited = skillEdits[snap.id];
+      const skills = (edited ?? snap.skills.join(', '))
+        .split(/[\n,]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      body.skills = skills;
+    }
+    try {
+      await graphFetch(`/api/review/${selected}/linkedin/${snap.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      setSnapshots((prev) => (prev ? prev.filter((s) => s.id !== snap.id) : prev));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function viewFile(snap: Snapshot) {
+    if (!selected) return;
+    try {
+      const blob = await graphFetchBlob(`/api/linkedin/${selected}/snapshots/${snap.id}/file`);
+      window.open(URL.createObjectURL(blob), '_blank');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   return (
     <GraphPageShell
       title="Granska inkommande"
@@ -153,7 +207,7 @@ export default function GraphReviewPage() {
         </select>
 
         <div style={{ display: 'inline-flex', border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', marginLeft: 'auto' }}>
-          {([['claims', 'Claims'], ['items', 'Mail-items']] as [Tab, string][]).map(([v, label]) => (
+          {([['claims', 'Claims'], ['items', 'Mail-items'], ['linkedin', 'LinkedIn']] as [Tab, string][]).map(([v, label]) => (
             <button
               key={v}
               onClick={() => setTab(v)}
@@ -180,9 +234,75 @@ export default function GraphReviewPage() {
         </div>
       )}
 
-      {tab === 'items' ? renderItems() : renderClaims()}
+      {tab === 'items' ? renderItems() : tab === 'linkedin' ? renderLinkedIn() : renderClaims()}
     </GraphPageShell>
   );
+
+  function renderLinkedIn() {
+    if (snapshots === null) return <Loading />;
+    if (snapshots.length === 0)
+      return <Empty hint="Inga LinkedIn-snapshots väntar på verifiering. Kunden laddar upp sin kvartalsdata under fliken LinkedIn." />;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {snapshots.map((snap) => {
+          const skillText = skillEdits[snap.id] ?? snap.skills.join(', ');
+          return (
+            <div key={snap.id} style={{ ...cardStyle, opacity: busyId === snap.id ? 0.5 : 1 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 12 }}>
+                <div style={{ display: 'flex', gap: 12, flex: 1, minWidth: 0 }}>
+                  <IconBox><Network size={16} /></IconBox>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56' }}>
+                      {snap.quarter || 'LinkedIn-kapacitetsdata'}
+                    </div>
+                    <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                      {snap.filename ? `${snap.filename} · ` : ''}
+                      {snap.followers != null ? `${snap.followers.toLocaleString('sv-SE')} följare · ` : ''}
+                      {snap.uploaded_at ? new Date(snap.uploaded_at).toLocaleDateString('sv-SE') : ''}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  {snap.has_file && (
+                    <button onClick={() => viewFile(snap)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', background: 'transparent', color: '#3a4b56', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                      <FileText size={12} /> Visa underlag
+                    </button>
+                  )}
+                  <button onClick={() => decideSnapshot(snap, 'approve')} disabled={busyId === snap.id} style={approveBtn}>
+                    <Check size={12} /> Verifiera
+                  </button>
+                  <button onClick={() => decideSnapshot(snap, 'reject')} disabled={busyId === snap.id} style={rejectBtn}>
+                    <X size={12} /> Avvisa
+                  </button>
+                </div>
+              </div>
+              <div style={{ fontSize: 11, color: C.muted, marginBottom: 6 }}>
+                Aggregerade kompetenser (redigera vid behov före verifiering — komma-/radseparerade):
+              </div>
+              <textarea
+                value={skillText}
+                onChange={(e) => setSkillEdits((prev) => ({ ...prev, [snap.id]: e.target.value }))}
+                rows={3}
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  fontSize: 13,
+                  color: '#3a4b56',
+                  background: '#eef0f1',
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 6,
+                  padding: '10px 14px',
+                  lineHeight: 1.55,
+                  resize: 'vertical',
+                  fontFamily: 'inherit',
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
 
   function renderItems() {
     if (items === null) return <Loading />;

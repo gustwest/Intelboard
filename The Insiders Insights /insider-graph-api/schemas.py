@@ -48,6 +48,17 @@ class OnboardResponse(BaseModel):
     employee_ids: list[str]
 
 
+# --- LinkedIn-kvartalssnapshot: statusvärden (spec §4) ---------------------
+# Delas av uppladdning (routers/linkedin.py), intern verifiering (routers/review.py)
+# och korsvalideringen (schema_org/claims.py) så ingen stavar fel på egen hand.
+
+
+class LinkedInStatus:
+    PENDING = "PENDING_INTERNAL_VERIFICATION"
+    VERIFIED = "VERIFIED"
+    REJECTED = "REJECTED"
+
+
 # --- Claims & proveniens (se docs/claims-provenance-spec.md) ---------------
 
 

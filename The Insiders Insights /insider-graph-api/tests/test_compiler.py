@@ -90,6 +90,66 @@ class CompileClientTest(unittest.TestCase):
             {"@type": "Organization", "name": "Acme Tech AB", "leiCode": "T1"},
         )
 
+    def test_knowsabout_ordered_strongest_first(self):
+        # Aktiv annons (1.0) + stängd annons som avklingat (0.7). Den fullt bevisade
+        # kompetensen ska stå först i knowsAbout-listan; vikten visas aldrig som siffra.
+        from datetime import timedelta
+
+        closed_8mo = datetime.now(timezone.utc) - timedelta(days=int(8 * 30.4375))
+        _graph_setup(
+            company_items={
+                "jp-active": {
+                    "schema_type": "JobPosting",
+                    "included_in_output": True,
+                    "extra": {"name": "Cloud Eng", "skills": ["Kubernetes"]},
+                },
+                "jp-closed": {
+                    "schema_type": "JobPosting",
+                    "included_in_output": False,
+                    "closed_at": closed_8mo,
+                    "extra": {"name": "Sec", "skills": ["ISO 27001"]},
+                },
+            },
+            claims={},
+        )
+        org = _nodes(compile_client("acme"), "Organization")[0]
+        self.assertEqual(org["knowsAbout"], ["Kubernetes", "ISO 27001"])  # 1.0 före 0.7
+        # ingen rå confidence-siffra läcker ut i grafen
+        self.assertNotIn("confidence", repr(org).lower())
+
+    def test_active_job_emits_jobposting_node_closed_does_not(self):
+        from datetime import timedelta
+
+        closed = datetime.now(timezone.utc) - timedelta(days=int(8 * 30.4375))
+        _graph_setup(
+            company_items={
+                "jp-open": {
+                    "schema_type": "JobPosting",
+                    "included_in_output": True,
+                    "url": "https://acme.se/jobs/1",
+                    "published_at": datetime(2025, 5, 1, tzinfo=timezone.utc),
+                    "global_title": "Digital Transformation Manager",
+                    "extra": {"name": "Uppdragsledare", "skills": ["AWS"], "jobLocation": "Stockholm"},
+                },
+                "jp-closed": {
+                    "schema_type": "JobPosting",
+                    "included_in_output": False,
+                    "closed_at": closed,
+                    "extra": {"name": "Gammal roll", "skills": ["Go"]},
+                },
+            },
+            claims={},
+        )
+        graph = compile_client("acme")
+        jobs = _nodes(graph, "JobPosting")
+        self.assertEqual(len(jobs), 1)  # bara den öppna
+        job = jobs[0]
+        self.assertEqual(job["title"], "Digital Transformation Manager")  # global_title vinner
+        self.assertEqual(job["skills"], ["AWS"])
+        self.assertEqual(job["hiringOrganization"], {"@id": "https://profiles.geogiraph.com/acme#org"})
+        self.assertEqual(job["jobLocation"], {"@type": "Place", "address": "Stockholm"})
+        self.assertEqual(job["datePosted"], "2025-05-01T00:00:00+00:00")
+
     def test_description_built_from_narrative_claims(self):
         _graph_setup()
         org = _nodes(compile_client("acme"), "Organization")[0]

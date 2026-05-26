@@ -56,8 +56,27 @@ insider-graph-api/
 | `scrape-episodic` | Cloud Scheduler måndagar 04:30 | job |
 | `compile-all-schemas` | Cloud Scheduler dagligen 05:00 + Eventarc | job |
 | `polling-weekly` | Cloud Scheduler tisdagar 06:00 | job |
+| `xml-sync` | Cloud Scheduler dagligen 03:30 | job |
+| `sunset-skills` | Cloud Scheduler måndagar 02:00 | job |
+| `quarterly-linkedin-todo` | Cloud Scheduler dagligen 07:00 | job |
 
 Alla bygger från samma image. Service och jobs kör olika `command` (uvicorn vs `python -m jobs.<namn>`).
+
+### Jobfeed- + LinkedIn-pipelinen (platsannonser → kunskapsgraf)
+
+- **`xml-sync`** hämtar kundens ATS-XML (jobfeed-connectorn), diffar mot gårdagens
+  annons-id och markerar försvunna jobb som stängda. Berikar nya annonser via Vertex
+  AI EU (ontologisk titel + filtrering av generiska roller).
+- Stängda jobbs kompetenser klingar av (1.0 → 0.7 → 0.4) och `sunset-skills`
+  hard-deletar noden efter 24 mån — om den inte re-verifierats.
+- Vi samlar in kundens kvartalsvisa LinkedIn-kapacitetsdata själva och laddar upp den
+  internt (`/insider-graph/linkedin`); en admin verifierar den under **Granska → LinkedIn**.
+  Kompetenser som matchas i BÅDE XML och LinkedIn lyfts till confidence 1.0
+  ("Dual-Source Truth"). `quarterly-linkedin-todo` påminner ops-teamet var ~90:e dag.
+
+Valfri config (alla self-no-op om de saknas): `NOTIFY_FROM_EMAIL` + `OPS_NOTIFY_EMAIL`
++ `SENDGRID_API_KEY` för den **interna** kvartals-påminnelsen, `UPLOAD_BUCKET` (privat
+GCS-bucket, **ej** publika CDN-bucketen) för uppladdat verifieringsunderlag.
 
 ## Lokal körning
 
@@ -132,7 +151,7 @@ PROJECT_ID=$(gcloud config get-value project) ./scripts/bootstrap.sh
 Det skapar:
 - Artifact Registry-repo + GCS-bucket bakom Cloud CDN
 - Service-account `insider-graph-sa@…` med rätt IAM-roller
-- Cloud Run Jobs (4 st) + Cloud Scheduler-triggers
+- Cloud Run Jobs (7 st) + Cloud Scheduler-triggers
 - Eventarc-trigger för `compile-all-schemas` vid Firestore-writes (best-effort)
 
 ## Loopen "deploy"

@@ -32,7 +32,9 @@ class _DocRef:
     def get(self) -> _Snap:
         return _Snap(self._id, self._data)
 
-    def set(self, payload: dict) -> None:
+    def set(self, payload: dict, merge: bool = False) -> None:
+        # merge ignoreras i fejken — collections som stödjer set använder en
+        # merge-uppdatering ändå (räcker för testernas fält-assertioner).
         if self._on_set:
             self._on_set(self._id, payload)
 
@@ -46,14 +48,18 @@ class _DocRef:
 
 
 class _Col:
-    def __init__(self, docs: dict[str, dict] | None):
-        self._docs = docs or {}
+    def __init__(self, docs: dict[str, dict] | None, *, deletable: bool = False, writable: bool = False):
+        self._docs = docs if docs is not None else {}
+        self._deletable = deletable  # → document().delete() muterar dict:en
+        self._writable = writable    # → document().set() merge-uppdaterar dict:en
 
     def stream(self) -> list[_Snap]:
         return [_Snap(i, d) for i, d in self._docs.items()]
 
     def document(self, _id: str) -> _DocRef:
-        return _DocRef(_id, self._docs.get(_id))
+        on_delete = (lambda i: self._docs.pop(i, None)) if self._deletable else None
+        on_set = (lambda i, p: self._docs.setdefault(i, {}).update(p)) if self._writable else None
+        return _DocRef(_id, self._docs.get(_id), on_set=on_set, on_delete=on_delete)
 
 
 STATE: dict[str, Any] = {}
@@ -76,6 +82,8 @@ def reset(
     esg_run_summary: dict | None = None,
     esg_submissions: dict[str, dict] | None = None,
     esg_reports: dict[str, dict] | None = None,
+    linkedin_snapshots: dict[str, dict] | None = None,
+    todos: dict[str, dict] | None = None,
     clients: dict[str, dict] | None = None,
 ) -> None:
     STATE.clear()
@@ -96,6 +104,8 @@ def reset(
         esg_run_summary=esg_run_summary,  # None → "finns inte"
         esg_submissions=esg_submissions or {},
         esg_reports=esg_reports or {},
+        linkedin_snapshots=linkedin_snapshots or {},
+        todos=todos or {},
         writes={},
     )
 
@@ -133,7 +143,15 @@ def iter_claims(client_id: str):
 
 
 def raw_items_company_col(client_id: str) -> _Col:
-    return _Col(STATE.get("company_items"))
+    return _Col(STATE.get("company_items"), deletable=True, writable=True)
+
+
+def job_feed_state_doc(client_id: str) -> _DocRef:
+    return _DocRef(
+        "latest",
+        STATE.get("job_feed_state"),
+        on_set=lambda _i, p: STATE.__setitem__("job_feed_state", p),
+    )
 
 
 def raw_items_col(client_id: str, employee_id: str) -> _Col:
@@ -293,6 +311,40 @@ def esg_report_doc(client_id: str, month: str) -> _DocRef:
 
 def iter_esg_reports(client_id: str):
     return list(STATE.get("esg_reports", {}).items())
+
+
+def linkedin_snapshots_col(client_id: str) -> _Col:
+    return _Col(STATE.get("linkedin_snapshots"), writable=True)
+
+
+def linkedin_snapshot_doc(client_id: str, snapshot_id: str) -> _DocRef:
+    return _DocRef(
+        snapshot_id,
+        STATE.get("linkedin_snapshots", {}).get(snapshot_id),
+        on_set=lambda i, p: STATE.setdefault("linkedin_snapshots", {}).__setitem__(i, p),
+        on_update=lambda i, p: STATE["linkedin_snapshots"].setdefault(i, {}).update(p),
+    )
+
+
+def iter_linkedin_snapshots(client_id: str):
+    return list(STATE.get("linkedin_snapshots", {}).items())
+
+
+def todos_col(client_id: str) -> _Col:
+    return _Col(STATE.get("todos"), writable=True)
+
+
+def todo_doc(client_id: str, todo_id: str) -> _DocRef:
+    return _DocRef(
+        todo_id,
+        STATE.get("todos", {}).get(todo_id),
+        on_set=lambda i, p: STATE.setdefault("todos", {}).__setitem__(i, p),
+        on_update=lambda i, p: STATE["todos"].setdefault(i, {}).update(p),
+    )
+
+
+def iter_todos(client_id: str):
+    return list(STATE.get("todos", {}).items())
 
 
 def writes() -> dict[str, dict]:

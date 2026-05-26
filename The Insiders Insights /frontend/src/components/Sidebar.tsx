@@ -17,6 +17,7 @@ import {
   Inbox,
   Rocket,
   Landmark,
+  Network,
 } from 'lucide-react';
 import ProductSwitcher, { activeProductId } from './ProductSwitcher';
 
@@ -35,6 +36,7 @@ const GRAPH_LINKS = [
   { href: '/insider-graph', label: 'Översikt', icon: LayoutDashboard },
   { href: '/insider-graph/kunder', label: 'Kunder', icon: Users },
   { href: '/insider-graph/connectors', label: 'Connectors', icon: Plug },
+  { href: '/insider-graph/linkedin', label: 'LinkedIn', icon: Network },
   { href: '/insider-graph/review', label: 'Granska', icon: Inbox },
   { href: '/insider-graph/leverans', label: 'Leverans', icon: Rocket },
   { href: '/insider-graph/polling', label: 'AI-synlighet', icon: Radar },

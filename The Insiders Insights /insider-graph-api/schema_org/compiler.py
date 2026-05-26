@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterator
 
 import firestore_client as fs
-from schema_org.claims import derive_property_claims
+from schema_org.claims import derive_property_claims, derive_skill_claims
 from schemas import Claim, ClaimSource
 
 DEFAULT_BASE = "https://profiles.geogiraph.com"
@@ -33,8 +33,9 @@ DEFAULT_ATTESTED_LABEL = "verifierad av Geogiraph"
 ATTESTED_PUBLISHER = "Geogiraph"
 
 # Källans raw-schema_type beskriver subjektet den gav, inte själva källdokumentet.
-# Org/Person-källor är i praktiken webbsidor vi läst.
-_PAGE_TYPES = {"Organization", "Person"}
+# Org/Person/JobPosting-källor är i praktiken webbsidor vi läst — JobPosting-TYPEN är
+# reserverad för de dedikerade rollnoderna (#job-…), inte för källnoder (#src-…).
+_PAGE_TYPES = {"Organization", "Person", "JobPosting"}
 
 
 @dataclass
@@ -55,6 +56,10 @@ class Fact:
     statement: str | None
     footnotes: list[int] = field(default_factory=list)
     manual_label: str | None = None
+    # Tillitsvikt (1.0 = fullt bevisad; lägre = avklingad kapacitet, spec §3.2).
+    # Visas aldrig som siffra publikt — styr bara ordningen så starkast bevisade
+    # värden hamnar först (prominens = signal för AI-motorer/llms.txt).
+    confidence: float = 1.0
 
 
 @dataclass
@@ -72,6 +77,19 @@ class FaqEntry:
 
 
 @dataclass
+class JobPosting:
+    """En aktiv platsannons (spec §1–§2). Stängda annonser blir INGEN JobPosting-nod —
+    deras kompetenser klingar av till org-nivå knowsAbout (spec §3.1)."""
+
+    node_id: str
+    title: str | None
+    skills: list[str]
+    location: str | None
+    url: str | None
+    date: str | None
+
+
+@dataclass
 class RenderModel:
     client_id: str
     base: str
@@ -84,6 +102,7 @@ class RenderModel:
     persons: list[dict[str, Any]]
     description: str | None
     last_updated: str | None
+    job_postings: list[JobPosting] = field(default_factory=list)
 
 
 def build_render_model(client_id: str) -> RenderModel:
@@ -161,9 +180,15 @@ def build_render_model(client_id: str) -> RenderModel:
                 manual_label = label
 
         if claim.claim_kind == "property" and claim.predicate:
-            facts.append(Fact(claim.predicate, claim.value, claim.statement, footnotes, manual_label))
+            facts.append(Fact(claim.predicate, claim.value, claim.statement, footnotes, manual_label, claim.confidence))
         elif claim.claim_kind == "narrative" and claim.statement:
             _merge_prose(prose_by_key, claim.statement.strip(), footnotes, manual_label)
+
+    # Starkast bevisade fakta först. Stabil sortering → värden med samma vikt
+    # behåller upptäcktsordningen. Avgör ordningen på t.ex. knowsAbout-listan
+    # (aktiva/fullt bevisade kompetenser före avklingade) — vikten visas aldrig
+    # som siffra, den styr bara prominensen.
+    facts.sort(key=lambda f: f.confidence, reverse=True)
 
     # Dedup: snarlika påståenden (samma normaliserade text) är sammanslagna; deras
     # källor är förenade → ett påstående som bekräftas av flera källor citerar alla.
@@ -186,7 +211,33 @@ def build_render_model(client_id: str) -> RenderModel:
         persons=persons,
         description=description,
         last_updated=last_updated,
+        job_postings=_gather_job_postings(client_id, base),
     )
+
+
+def _gather_job_postings(client_id: str, base: str) -> list[JobPosting]:
+    """Aktiva (ej stängda, ej generiska) platsannonser → JobPosting-vyer."""
+    out: list[JobPosting] = []
+    for snap in fs.raw_items_company_col(client_id).stream():
+        raw = snap.to_dict() or {}
+        if raw.get("schema_type") != "JobPosting":
+            continue
+        if raw.get("closed_at") is not None:
+            continue  # stängd → ingen nod (spec §3.1)
+        if not raw.get("included_in_output", True) or raw.get("strategic") is False:
+            continue
+        extra = raw.get("extra") or {}
+        out.append(
+            JobPosting(
+                node_id=f"{base}#job-{snap.id}",
+                title=raw.get("global_title") or extra.get("name"),
+                skills=raw.get("skills_enriched") or extra.get("skills") or [],
+                location=extra.get("jobLocation"),
+                url=raw.get("url"),
+                date=_iso(raw.get("published_at")),
+            )
+        )
+    return out
 
 
 def compile_client(client_id: str) -> dict[str, Any]:
@@ -254,7 +305,26 @@ def compile_client(client_id: str) -> dict[str, Any]:
             main_entity.append({"@type": "Question", "name": entry.question, "acceptedAnswer": answer})
         faq_nodes.append({"@type": "FAQPage", "@id": f"{model.base}#faq", "mainEntity": main_entity})
 
-    graph = [organization, *model.persons, *source_nodes, *claim_nodes, *faq_nodes]
+    job_nodes: list[dict[str, Any]] = []
+    for jp in model.job_postings:
+        node: dict[str, Any] = {
+            "@type": "JobPosting",
+            "@id": jp.node_id,
+            "hiringOrganization": {"@id": model.org_id},
+        }
+        if jp.title:
+            node["title"] = jp.title
+        if jp.skills:
+            node["skills"] = jp.skills
+        if jp.location:
+            node["jobLocation"] = {"@type": "Place", "address": jp.location}
+        if jp.date:
+            node["datePosted"] = jp.date
+        if jp.url:
+            node["url"] = jp.url
+        job_nodes.append(node)
+
+    graph = [organization, *model.persons, *source_nodes, *claim_nodes, *faq_nodes, *job_nodes]
     return {"@context": "https://schema.org", "@graph": graph}
 
 
@@ -307,6 +377,7 @@ def _iter_output_claims(client_id: str) -> Iterator[Claim]:
             continue
         yield Claim(**raw)
     yield from derive_property_claims(client_id)
+    yield from derive_skill_claims(client_id)
 
 
 def _apply_property(node: dict[str, Any], predicate: str, value: Any) -> None:

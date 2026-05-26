@@ -176,6 +176,43 @@ def iter_esg_reports(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
         yield doc.id, doc.to_dict() or {}
 
 
+def job_feed_state_doc(client_id: str):
+    """Senast sedda annons-id för jobfeed-connectorn (spec §1.2 / §3).
+
+    jobs/xml_sync.py jämför dagens id-mängd mot den som ligger här för att
+    upptäcka stängda jobb. Form: {"jobs": {job_id: {item_id, name}}, "synced_at": ...}.
+    """
+    return client_doc(client_id).collection("job_feed_state").document("latest")
+
+
+def linkedin_snapshots_col(client_id: str):
+    """Kvartalsvisa LinkedIn-kapacitetssnapshots (spec §4). Ett aktivt VERIFIED i taget."""
+    return client_doc(client_id).collection("linkedin_snapshots")
+
+
+def linkedin_snapshot_doc(client_id: str, snapshot_id: str):
+    return linkedin_snapshots_col(client_id).document(snapshot_id)
+
+
+def iter_linkedin_snapshots(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
+    for doc in linkedin_snapshots_col(client_id).stream():
+        yield doc.id, doc.to_dict() or {}
+
+
+def todos_col(client_id: str):
+    """Kund-dashboardens To-Do-aktiviteter (t.ex. kvartalsvis LinkedIn-uppladdning)."""
+    return client_doc(client_id).collection("todos")
+
+
+def todo_doc(client_id: str, todo_id: str):
+    return todos_col(client_id).document(todo_id)
+
+
+def iter_todos(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
+    for doc in todos_col(client_id).stream():
+        yield doc.id, doc.to_dict() or {}
+
+
 def connector_logs_col():
     return db().collection("connector_logs")
 

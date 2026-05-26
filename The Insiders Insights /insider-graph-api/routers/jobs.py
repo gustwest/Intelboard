@@ -16,7 +16,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 import firestore_client as fs
-from jobs import compile_schema, polling_weekly, scrape_active, scrape_episodic
+from jobs import compile_schema, polling_weekly, quarterly_todo, scrape_active, scrape_episodic, sunset_skills, xml_sync
 
 log = logging.getLogger(__name__)
 
@@ -41,6 +41,27 @@ def trigger_scrape_episodic(background: BackgroundTasks) -> dict[str, Any]:
 def trigger_polling(background: BackgroundTasks) -> dict[str, Any]:
     background.add_task(polling_weekly.run)
     return {"status": "queued", "job": "polling_weekly"}
+
+
+@router.post("/xml-sync")
+def trigger_xml_sync(background: BackgroundTasks) -> dict[str, Any]:
+    """Jobfeed: hämta ATS-annonser + diffa stängda jobb (spec §1.2)."""
+    background.add_task(xml_sync.run)
+    return {"status": "queued", "job": "xml_sync"}
+
+
+@router.post("/sunset-skills")
+def trigger_sunset_skills(background: BackgroundTasks) -> dict[str, Any]:
+    """Hard-deleta stängda annons-noder äldre än 24 mån (spec §3.3)."""
+    background.add_task(sunset_skills.run)
+    return {"status": "queued", "job": "sunset_skills"}
+
+
+@router.post("/quarterly-todo")
+def trigger_quarterly_todo(background: BackgroundTasks) -> dict[str, Any]:
+    """Skapa kvartals-LinkedIn-To-Dos för kunder som inte laddat upp på ~90 dagar (spec §4.1)."""
+    background.add_task(quarterly_todo.run)
+    return {"status": "queued", "job": "quarterly_todo"}
 
 
 @router.post("/compile/{client_id}")

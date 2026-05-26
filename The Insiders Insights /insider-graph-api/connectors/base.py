@@ -13,8 +13,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, ClassVar, Literal
 
-FetchMethod = Literal["api", "rss", "scrape", "email"]
-Frequency = Literal["realtime", "daily", "weekly", "monthly"]
+FetchMethod = Literal["api", "rss", "scrape", "email", "upload"]
+Frequency = Literal["realtime", "daily", "weekly", "monthly", "quarterly"]
 Tier = Literal["standard", "optional", "custom"]
 FieldType = Literal["text", "url", "bool", "feed_list"]
 

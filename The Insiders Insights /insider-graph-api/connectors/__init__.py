@@ -2,13 +2,17 @@ from dataclasses import asdict
 
 from connectors.base import BaseConnector, ConnectorConfig, InputField, RawItem
 from connectors.gleif import GleifConnector
+from connectors.jobfeed import JobFeedConnector
 from connectors.linkedin import LinkedInConnector
+from connectors.linkedin_capacity import LinkedInCapacityConnector
 from connectors.rss import RssConnector
 from connectors.website import WebsiteConnector
 
 REGISTRY: dict[str, type[BaseConnector]] = {
     LinkedInConnector.id: LinkedInConnector,
+    LinkedInCapacityConnector.id: LinkedInCapacityConnector,
     RssConnector.id: RssConnector,
+    JobFeedConnector.id: JobFeedConnector,
     GleifConnector.id: GleifConnector,
     WebsiteConnector.id: WebsiteConnector,
 }

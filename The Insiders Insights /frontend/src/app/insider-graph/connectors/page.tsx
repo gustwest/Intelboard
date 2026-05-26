@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plug, Play, Plus, Trash2, Save, AlertCircle, CheckCircle2, Users } from 'lucide-react';
+import Link from 'next/link';
+import { Plug, Play, Plus, Trash2, Save, AlertCircle, CheckCircle2, Users, ArrowRight } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import { graphFetch } from '../_lib/api';
 
@@ -16,12 +17,14 @@ type ConnectorMeta = {
 type Client = { client_id: string; company_name: string | null };
 
 type RssFeed = { url: string; schema_type: string; label?: string };
+type JobFeed = { url: string; label?: string };
 
 type ClientConnectors = {
   client_id: string;
   available: ConnectorMeta[];
   active_connectors: string[];
   rss_feeds: RssFeed[];
+  job_feeds: JobFeed[];
   scrape_employee_profiles: boolean;
 };
 
@@ -44,7 +47,9 @@ const STATIC_PLANNED: ConnectorMeta[] = [
 
 const NAME: Record<string, string> = {
   linkedin: 'LinkedIn',
+  linkedin_capacity: 'LinkedIn-kapacitet (kvartal)',
   rss: 'RSS-feeds (kund)',
+  jobfeed: 'Platsannonser (ATS)',
   pressrum: 'Pressrum',
   careers: 'Karriärsida',
   email: 'E-post (episodisk)',
@@ -69,6 +74,7 @@ export default function GraphConnectorsPage() {
   const [state, setState] = useState<ClientConnectors | null>(null);
   const [active, setActive] = useState<string[]>([]);
   const [feeds, setFeeds] = useState<RssFeed[]>([]);
+  const [jobFeeds, setJobFeeds] = useState<JobFeed[]>([]);
   const [scrapeEmployees, setScrapeEmployees] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -90,6 +96,7 @@ export default function GraphConnectorsPage() {
         setState(d);
         setActive(d.active_connectors);
         setFeeds(d.rss_feeds || []);
+        setJobFeeds(d.job_feeds || []);
         setScrapeEmployees(!!d.scrape_employee_profiles);
         setDirty(false);
       })
@@ -116,6 +123,21 @@ export default function GraphConnectorsPage() {
     setDirty(true);
   }
 
+  function updateJobFeed(i: number, patch: Partial<JobFeed>) {
+    setJobFeeds((prev) => prev.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
+    setDirty(true);
+  }
+
+  function addJobFeed() {
+    setJobFeeds((prev) => [...prev, { url: '', label: '' }]);
+    setDirty(true);
+  }
+
+  function removeJobFeed(i: number) {
+    setJobFeeds((prev) => prev.filter((_, idx) => idx !== i));
+    setDirty(true);
+  }
+
   async function save() {
     if (!selected) return;
     setSaving(true);
@@ -127,6 +149,7 @@ export default function GraphConnectorsPage() {
         body: JSON.stringify({
           active_connectors: active,
           rss_feeds: feeds.filter((f) => f.url),
+          job_feeds: jobFeeds.filter((f) => f.url),
           scrape_employee_profiles: scrapeEmployees,
         }),
       });
@@ -189,6 +212,12 @@ export default function GraphConnectorsPage() {
           style={btn(C, 'subtle')}
         >
           <Play size={12} /> Kör scrape-active
+        </button>
+        <button
+          onClick={() => trigger('xml-sync', '/api/jobs/xml-sync')}
+          style={btn(C, 'subtle')}
+        >
+          <Play size={12} /> Kör xml-sync
         </button>
         <button
           onClick={() => trigger('compile', `/api/jobs/compile/${selected}`)}
@@ -374,6 +403,62 @@ export default function GraphConnectorsPage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {active.includes('jobfeed') && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px', marginTop: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56', margin: 0 }}>Platsannons-feeds (ATS) för {state?.client_id}</h2>
+            <button onClick={addJobFeed} style={btn(C, 'subtle')}>
+              <Plus size={12} /> Lägg till
+            </button>
+          </div>
+          <div style={{ fontSize: 12, color: C.muted, marginBottom: 12, lineHeight: 1.55 }}>
+            XML/RSS-feed från rekryteringssystemet (Teamtailor, Jobylon …). Stängda annonser upptäcks
+            automatiskt och deras kompetenser klingar av över tid.
+          </div>
+          {jobFeeds.length === 0 ? (
+            <div style={{ fontSize: 12, color: C.muted, padding: '12px 0' }}>Inga feeds. Klistra in kundens ATS-XML-länk.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {jobFeeds.map((f, i) => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 200px 40px', gap: 8 }}>
+                  <input
+                    value={f.url}
+                    onChange={(e) => updateJobFeed(i, { url: e.target.value })}
+                    placeholder="https://kund.teamtailor.com/jobs.xml"
+                    style={inp(C)}
+                  />
+                  <input
+                    value={f.label || ''}
+                    onChange={(e) => updateJobFeed(i, { label: e.target.value })}
+                    placeholder="Etikett"
+                    style={inp(C)}
+                  />
+                  <button onClick={() => removeJobFeed(i)} style={{ ...btn(C, 'subtle'), padding: '8px' }}>
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {active.includes('linkedin_capacity') && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px', marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <div style={{ minWidth: 0 }}>
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56', margin: 0 }}>LinkedIn-kapacitetsdata för {state?.client_id}</h2>
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 4, lineHeight: 1.55 }}>
+              Vi samlar in och laddar upp kundens kvartalsvisa kompetensstatistik själva,
+              verifierar den internt och korsvaliderar mot platsannonserna. Påslaget styr den
+              kvartalsvisa interna påminnelsen.
+            </div>
+          </div>
+          <Link href="/insider-graph/linkedin" style={{ ...btn(C, 'primary'), textDecoration: 'none', whiteSpace: 'nowrap' }}>
+            Öppna LinkedIn-flödet <ArrowRight size={12} />
+          </Link>
         </div>
       )}
     </GraphPageShell>

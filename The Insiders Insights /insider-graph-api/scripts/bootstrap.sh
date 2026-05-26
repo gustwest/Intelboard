@@ -24,6 +24,8 @@ REGION="${REGION:-europe-north1}"
 # Gemini och Claude på Vertex. OBS: Claude måste aktiveras i Vertex Model Garden (engångs),
 # och VALIDATOR_MODEL/GENERATOR_MODEL måste sättas till giltiga Vertex-modell-id.
 VERTEX_LOCATION="${VERTEX_LOCATION:-europe-west1}"
+# Cloud Scheduler är inte tillgängligt i europe-north1 — vi lägger schemaläggarna i europe-west1.
+SCHEDULER_LOCATION="${SCHEDULER_LOCATION:-europe-west1}"
 SERVICE="insider-graph-api"
 SA_NAME="insider-graph-sa"
 SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
@@ -68,10 +70,11 @@ if ! gsutil ls -b "gs://$BUCKET" >/dev/null 2>&1; then
 fi
 echo "==> Sätter publik läsåtkomst på bucketen"
 gsutil iam ch allUsers:objectViewer "gs://$BUCKET" || true
-gsutil cors set <(cat <<'JSON'
+cat <<'JSON' > cors.json
 [{"origin":["*"],"method":["GET","HEAD"],"responseHeader":["Content-Type"],"maxAgeSeconds":300}]
 JSON
-) "gs://$BUCKET"
+gsutil cors set cors.json "gs://$BUCKET"
+rm cors.json
 
 # ---- 4. Service account + IAM ---------------------------------------------
 if ! gcloud iam service-accounts describe "$SA_EMAIL" --project="$PROJECT_ID" >/dev/null 2>&1; then
@@ -126,26 +129,29 @@ create_or_update_job() {
   fi
 }
 
-create_or_update_job scrape-active        jobs.scrape_active
-create_or_update_job scrape-episodic      jobs.scrape_episodic
-create_or_update_job compile-all-schemas  jobs.compile_all_schemas
-create_or_update_job polling-weekly       jobs.polling_weekly
+create_or_update_job scrape-active           jobs.scrape_active
+create_or_update_job scrape-episodic         jobs.scrape_episodic
+create_or_update_job compile-all-schemas     jobs.compile_all_schemas
+create_or_update_job polling-weekly          jobs.polling_weekly
+create_or_update_job xml-sync                jobs.xml_sync
+create_or_update_job sunset-skills           jobs.sunset_skills
+create_or_update_job quarterly-linkedin-todo jobs.quarterly_todo
 
 # ---- 7. Cloud Scheduler-triggers ------------------------------------------
 schedule_job() {
   local NAME="$1"; local CRON="$2"; local TARGET_JOB="$3"
   local URI="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT_ID}/jobs/${TARGET_JOB}:run"
-  if gcloud scheduler jobs describe "$NAME" --location="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1; then
+  if gcloud scheduler jobs describe "$NAME" --location="$SCHEDULER_LOCATION" --project="$PROJECT_ID" >/dev/null 2>&1; then
     echo "==> Uppdaterar scheduler: $NAME"
     gcloud scheduler jobs update http "$NAME" \
-      --location="$REGION" --project="$PROJECT_ID" \
+      --location="$SCHEDULER_LOCATION" --project="$PROJECT_ID" \
       --schedule="$CRON" --time-zone="Europe/Stockholm" \
       --uri="$URI" --http-method=POST \
       --oauth-service-account-email="$SA_EMAIL"
   else
     echo "==> Skapar scheduler: $NAME"
     gcloud scheduler jobs create http "$NAME" \
-      --location="$REGION" --project="$PROJECT_ID" \
+      --location="$SCHEDULER_LOCATION" --project="$PROJECT_ID" \
       --schedule="$CRON" --time-zone="Europe/Stockholm" \
       --uri="$URI" --http-method=POST \
       --oauth-service-account-email="$SA_EMAIL"
@@ -158,6 +164,12 @@ schedule_job scrape-active-daily     "0 4 * * *"  scrape-active
 schedule_job scrape-episodic-weekly  "30 4 * * 1" scrape-episodic
 schedule_job compile-all-daily       "0 5 * * *"  compile-all-schemas
 schedule_job polling-weekly-tue      "0 6 * * 2"  polling-weekly
+# Jobfeed-pipelinen: xml-sync dagligen 03:30 (före compile-all så stängningar hinner
+# slå igenom), sunset-skills måndagar 02:00, kvartals-To-Do-check dagligen 07:00
+# (idempotent — skapar bara To-Do när det gått ~90 dagar).
+schedule_job xml-sync-daily          "30 3 * * *" xml-sync
+schedule_job sunset-skills-weekly    "0 2 * * 1"  sunset-skills
+schedule_job quarterly-todo-daily    "0 7 * * *"  quarterly-linkedin-todo
 
 # ---- 8. Eventarc-trigger: compile vid Firestore-skrivningar ---------------
 # (frivilligt — skapas bara om det inte redan finns, kräver att firestore-db

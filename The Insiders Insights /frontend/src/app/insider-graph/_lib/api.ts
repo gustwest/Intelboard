@@ -15,3 +15,12 @@ export async function graphFetch<T>(path: string, init?: RequestInit): Promise<T
   }
   return res.json();
 }
+
+/** Hämtar binärt innehåll (t.ex. uppladdat verifieringsunderlag) med API-nyckeln. */
+export async function graphFetchBlob(path: string): Promise<Blob> {
+  const headers = new Headers();
+  if (GRAPH_API_KEY) headers.set('x-api-key', GRAPH_API_KEY);
+  const res = await fetch(`${GRAPH_API}${path}`, { headers });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.blob();
+}

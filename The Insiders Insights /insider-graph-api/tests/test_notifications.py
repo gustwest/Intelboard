@@ -1,0 +1,52 @@
+"""Enhetstester för utgående notifieringar (services/notifications.py). Inget nätverk."""
+import unittest
+
+from services import notifications as n
+
+
+class NotificationsTest(unittest.TestCase):
+    def setUp(self):
+        self._orig = (n.settings.sendgrid_api_key, n.settings.notify_from_email, n.settings.ops_notify_email, n._deliver)
+
+    def tearDown(self):
+        n.settings.sendgrid_api_key, n.settings.notify_from_email, n.settings.ops_notify_email, n._deliver = self._orig
+
+    def _configure(self):
+        n.settings.sendgrid_api_key = "SG.x"
+        n.settings.notify_from_email = "noreply@geogiraph.com"
+        n.settings.ops_notify_email = "ops@geogiraph.com"
+
+    def test_noop_when_unconfigured(self):
+        n.settings.sendgrid_api_key = ""
+        result = n.send_quarterly_reminder("acme", {"company_name": "Acme AB"}, "msg")
+        self.assertEqual(result, {"sent": False, "reason": "not_configured"})
+
+    def test_noop_when_no_ops_recipient(self):
+        self._configure()
+        n.settings.ops_notify_email = ""
+        result = n.send_quarterly_reminder("acme", {"company_name": "Acme AB"}, "msg")
+        self.assertEqual(result["reason"], "not_configured")
+
+    def test_sends_to_internal_ops_and_names_customer(self):
+        self._configure()
+        sent: list = []
+        n._deliver = lambda to, subject, body: sent.append((to, subject, body))
+        result = n.send_quarterly_reminder("acme", {"company_name": "Acme AB"}, "msg")
+        self.assertTrue(result["sent"])
+        self.assertEqual(result["to"], "ops@geogiraph.com")  # internt, ej kunden
+        to, subject, body = sent[0]
+        self.assertEqual(to, "ops@geogiraph.com")
+        self.assertIn("Acme AB", subject)  # ops ser vilken kund
+        self.assertIn("acme", body)
+
+    def test_send_failure_is_caught(self):
+        self._configure()
+        def boom(*a):
+            raise RuntimeError("sendgrid nere")
+        n._deliver = boom
+        result = n.send_quarterly_reminder("acme", {"company_name": "Acme AB"}, "msg")
+        self.assertEqual(result, {"sent": False, "reason": "send_failed"})
+
+
+if __name__ == "__main__":
+    unittest.main()

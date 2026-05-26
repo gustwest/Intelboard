@@ -14,6 +14,7 @@ from google.cloud import firestore
 from pydantic import BaseModel
 
 import firestore_client as fs
+from schemas import LinkedInStatus
 
 router = APIRouter(prefix="/api/review", tags=["review"])
 
@@ -166,6 +167,84 @@ def decide_risk_question(client_id: str, question_id: str, action: RiskQuestionA
         update["text"] = action.text
     doc_ref.update(update)
     return {"status": "ok", "decision": action.decision}
+
+
+@router.get("/{client_id}/linkedin")
+def list_pending_linkedin(client_id: str) -> dict[str, Any]:
+    """Kvartals-LinkedIn-snapshots som väntar på intern verifiering (spec §4.2)."""
+    if not fs.client_doc(client_id).get().exists:
+        raise HTTPException(404, f"client not found: {client_id}")
+
+    items: list[dict[str, Any]] = []
+    for sid, s in fs.iter_linkedin_snapshots(client_id):
+        if s.get("status") != LinkedInStatus.PENDING:
+            continue
+        items.append(
+            {
+                "id": sid,
+                "skills": s.get("skills", []),
+                "followers": s.get("followers"),
+                "quarter": s.get("quarter"),
+                "filename": s.get("filename"),
+                "has_file": bool(s.get("file_path")),
+                "uploaded_at": _iso(s.get("uploaded_at")),
+            }
+        )
+    items.sort(key=lambda x: x.get("uploaded_at") or "", reverse=True)
+    return {"client_id": client_id, "snapshots": items}
+
+
+class LinkedInVerifyAction(BaseModel):
+    """Beslut på ett LinkedIn-snapshot (spec §4.2–4.3).
+
+    decision="approve": admin har kontrollerat att filen/skärmklippet matchar bolaget.
+    Status → VERIFIED, snapshottet blir aktivt och ersätter det gamla; `skills` kan
+    finslipas före godkännande. decision="reject": snapshottet förkastas.
+    """
+
+    decision: Literal["approve", "reject"]
+    skills: list[str] | None = None  # valfri finslipning av kompetenslistan
+    note: str | None = None
+
+
+@router.post("/{client_id}/linkedin/{snapshot_id}")
+def verify_linkedin(
+    client_id: str, snapshot_id: str, action: LinkedInVerifyAction, background: BackgroundTasks
+) -> dict[str, Any]:
+    """Godkänn/avvisa ett snapshot. Godkänt → korsvalidering aktiveras vid nästa kompilering."""
+    doc_ref = fs.linkedin_snapshot_doc(client_id, snapshot_id)
+    if not doc_ref.get().exists:
+        raise HTTPException(404, "linkedin snapshot not found")
+
+    if action.decision == "reject":
+        doc_ref.update(
+            {"status": LinkedInStatus.REJECTED, "is_active": False, "review_note": action.note,
+             "verified_at": firestore.SERVER_TIMESTAMP}
+        )
+        return {"status": "ok", "decision": "reject"}
+
+    # Godkännande: det nya snapshottet ersätter det gamla (spec §4.3) — avaktivera alla
+    # tidigare aktiva först, aktivera sedan detta.
+    for sid, s in fs.iter_linkedin_snapshots(client_id):
+        if sid != snapshot_id and s.get("is_active"):
+            fs.linkedin_snapshot_doc(client_id, sid).update({"is_active": False})
+
+    update: dict[str, Any] = {
+        "status": LinkedInStatus.VERIFIED,
+        "is_active": True,
+        "review_note": action.note,
+        "verified_at": firestore.SERVER_TIMESTAMP,
+        "verified_by": "granskare (manuellt godkänd)",
+    }
+    if action.skills is not None:
+        update["skills"] = action.skills
+    doc_ref.update(update)
+
+    # Korsvalideringen (confidence 1.0 vid dual-source) slår igenom vid omkompilering.
+    from jobs import compile_schema
+
+    background.add_task(compile_schema.run, client_id)
+    return {"status": "ok", "decision": "approve"}
 
 
 @router.get("/{client_id}")

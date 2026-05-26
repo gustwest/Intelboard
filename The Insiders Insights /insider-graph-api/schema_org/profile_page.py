@@ -54,6 +54,13 @@ def render_llms_txt(client_id: str) -> str:
             lines.append(f"- {label}: {value}")
         lines.append("")
 
+    if model.job_postings:
+        lines.append("## Aktuella roller")
+        for jp in model.job_postings:
+            skills = f" — {', '.join(jp.skills)}" if jp.skills else ""
+            lines.append(f"- {jp.title or 'Roll'}{skills}")
+        lines.append("")
+
     faq = build_faq(model)
     if faq:
         lines.append("## Frågor & svar")
@@ -82,6 +89,7 @@ def _render(model: RenderModel, graph: dict) -> str:
     prose_html = "".join(_prose_sentence(p) for p in model.prose).strip()
     sources_html = "\n".join(_source_item(s) for s in model.sources)
     faq_html = _faq_section(model)
+    roles_html = _roles_section(model)
     trust = _trust_line(model)
 
     return f"""<!doctype html>
@@ -131,6 +139,7 @@ def _render(model: RenderModel, graph: dict) -> str:
 <section class="about">
 <p>{prose_html}</p>
 </section>
+{roles_html}
 {faq_html}
 <section class="sources">
 <h2 style="font-size:1rem">Källor</h2>
@@ -143,6 +152,19 @@ def _render(model: RenderModel, graph: dict) -> str:
 </body>
 </html>
 """
+
+
+def _roles_section(model: RenderModel) -> str:
+    """Aktiva platsannonser — synlig spegling av JobPosting-noderna i grafen."""
+    if not model.job_postings:
+        return ""
+    rows = "".join(
+        f"<li>{html.escape(jp.title or 'Roll')}"
+        + (f' — <span class="roleskills">{html.escape(", ".join(jp.skills))}</span>' if jp.skills else "")
+        + "</li>"
+        for jp in model.job_postings
+    )
+    return f'<section class="roles"><h2 style="font-size:1rem">Aktuella roller</h2><ul>{rows}</ul></section>'
 
 
 def _faq_section(model: RenderModel) -> str:

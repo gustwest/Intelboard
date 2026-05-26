@@ -33,7 +33,7 @@ steps:
       - '-c'
       - |
         IMAGE=europe-north1-docker.pkg.dev/$PROJECT_ID/insider-graph-repo/insider-graph-api:$COMMIT_SHA
-        for JOB in scrape-active scrape-episodic compile-all-schemas polling-weekly; do
+        for JOB in scrape-active scrape-episodic compile-all-schemas polling-weekly xml-sync sunset-skills quarterly-linkedin-todo; do
           gcloud run jobs update $$JOB --image=$$IMAGE --region=europe-north1 || \
             echo "job $$JOB not yet created — run scripts/bootstrap.sh first"
         done

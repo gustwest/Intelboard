@@ -37,6 +37,15 @@ class Settings(BaseSettings):
 
     admin_api_key: str = ""
     sendgrid_webhook_secret: str = ""
+    # Kvartals-påminnelsen (spec §4.1) är INTERN — vi samlar in LinkedIn-datan själva.
+    # notify_from_email = avsändare, ops_notify_email = vårt interna mottagar-team.
+    # Saknas någon → inget mejl skickas (To-Do:n i dashboarden skapas ändå).
+    notify_from_email: str = ""
+    ops_notify_email: str = ""
+    # Privat GCS-bucket för kunduppladdat verifieringsunderlag (LinkedIn-skärmklipp,
+    # spec §4.2). EU-only: ska INTE vara den publika CDN-bucketen. Tom → underlaget
+    # lagras inte (endast filnamnet sparas, som tidigare).
+    upload_bucket: str = ""
 
     # MVP: hämta bara bolagets LinkedIn-sida, inte individuella personprofiler.
     # Sätt SCRAPE_EMPLOYEE_LINKEDIN=true för att slå på per-medarbetare-scrape igen.
