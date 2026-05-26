@@ -1,16 +1,28 @@
 """GEO-riskloop, skiva 1 — frågegenerering + skadeklassning (read-only).
 
-Se docs/hallucination-loop-spec.md. Flöde per kund:
-  1. Bygg kontext ur kunskapsgrafen (facit + profil).
-  2. Generera persona-frågebatterier (köpare/kandidat/investerare) i två spår
-     (A om bolaget, B om branschen) med en djup expert-prompt — opus, §5.1.
-  3. Ställ frågorna till motorerna (gpt-4o + gemini), som i polling.
-  4. Klassa varje svar mot skademodell #1–6 (opus, §6). "ok" → ingen risk.
-  5. Persistera findings (harm != ok) i clients/{id}/risk_findings, needs_review.
+Se docs/hallucination-loop-spec.md. Flödet är tvådelat (§5.1: batterier granskas
+innan de körs skarpt):
 
-Read-only: vi rör inte den publika grafen här (korrigering = skiva 2). No-op om
-ingen LLM är konfigurerad. Skadeklassning och generering kräver högsta kvalitet →
-validator-modellen (claude-opus).
+  Generering (generate_and_store_questions):
+  1. Bygg kontext ur kunskapsgrafen (facit + profil).
+  2. Cache: hoppa över om ett icke-avvisat batteri redan finns för samma
+     kontext-hash (frågorna regenereras inte varje körning — krävs för att skiva 4:s
+     trend ska kunna jämföra månad mot månad).
+  3. Annars generera persona-frågebatterier (köpare/kandidat/investerare) i två spår
+     (A om bolaget, B om branschen) med en djup expert-prompt — opus, §5.1 — och
+     persistera dem i clients/{id}/risk_questions som needs_review (review-grind).
+
+  Detektering (run_for_client):
+  4. Ställ de GODKÄNDA frågorna till motorerna (gpt-4o + gemini), som i polling.
+  5. Klassa varje svar mot skademodell #1–6 (opus, §6). "ok" → ingen risk.
+  6. Vid gränsfall (#1 förväxling / #5 tystnad / osäker klassning) ställs EN
+     bunden följdfråga till samma motor med samtalshistorik, och det allvarligare
+     utfallet behålls — så som en verklig persona förhör motorn (§B).
+  7. Persistera findings (harm != ok) i clients/{id}/risk_findings, needs_review.
+
+Read-only: vi rör inte den publika grafen här (korrigering = skiva 2,
+services/risk_corrector.py). No-op om ingen LLM är konfigurerad. Generering och
+klassning kräver högsta kvalitet → validator-modellen (claude-opus).
 """
 from __future__ import annotations
 
@@ -112,6 +124,9 @@ class RiskFinding:
     severity: str         # high|medium|low
     sourcing: str         # cites_customer|web|none
     engine_excerpt: str
+    uncertain: bool = False        # klassaren var osäker → kandidat för följdfråga (§B)
+    via_follow_up: bool = False    # utfallet kom/skärptes via en följdfråga
+    follow_up_question: str = ""    # följdfrågans text (för rapport/revision)
 
 
 @dataclass
@@ -121,10 +136,52 @@ class RiskRunResult:
     findings: list[RiskFinding]
 
 
+_SEVERITY_RANK = {"high": 3, "medium": 2, "low": 1}
+
+
 # --- Orkestrering -------------------------------------------------------------
 
 
+def generate_and_store_questions(client_id: str) -> dict | None:
+    """Generera + persistera frågebatteriet (needs_review). Cachas per kontext-hash
+    så frågorna inte regenereras varje körning (§5.1). No-op utan validator-LLM."""
+    snap = fs.client_doc(client_id).get()
+    if not snap.exists:
+        log.warning("risk loop: klient %s saknas", client_id)
+        return None
+    client = snap.to_dict() or {}
+
+    validator = llm_factory.make_validator()
+    if validator is None:
+        log.warning("risk loop: ingen validator-LLM — hoppar över generering %s", client_id)
+        return None
+
+    context = build_context(client_id, client)
+    ctx_hash = _context_hash(context)
+    cached = [
+        qid
+        for qid, q in fs.iter_risk_questions(client_id)
+        if q.get("context_hash") == ctx_hash and q.get("status") != "rejected"
+    ]
+    if cached:
+        log.info("risk loop %s: cache-träff (%d frågor) — regenererar inte", client_id, len(cached))
+        return {"client_id": client_id, "generated": 0, "cached": len(cached)}
+
+    competitors = [c for c in (client.get("competitors") or []) if c]
+    homonyms = _find_homonyms(context.company_name, client.get("lei"))
+
+    written = 0
+    for persona in _active_personas(client):
+        for q in generate_questions(validator, persona, context, competitors, homonyms):
+            _persist_question(client_id, q, ctx_hash)
+            written += 1
+    log.info("risk loop %s: genererade %d frågor (väntar på review)", client_id, written)
+    return {"client_id": client_id, "generated": written, "cached": 0}
+
+
 def run_for_client(client_id: str) -> RiskRunResult | None:
+    """Ställ de GODKÄNDA frågorna till motorerna och klassa svaren. Frågor som inte
+    granskats körs aldrig skarpt (§5.1) — kör generering + review först."""
     snap = fs.client_doc(client_id).get()
     if not snap.exists:
         log.warning("risk loop: klient %s saknas", client_id)
@@ -138,14 +195,10 @@ def run_for_client(client_id: str) -> RiskRunResult | None:
         return None
 
     context = build_context(client_id, client)
-    competitors = [c for c in (client.get("competitors") or []) if c]
-    homonyms = _find_homonyms(context.company_name, client.get("lei"))
-
-    questions: list[Question] = []
-    for persona in _active_personas(client):
-        questions.extend(
-            generate_questions(validator, persona, context, competitors, homonyms)
-        )
+    questions = _load_approved_questions(client_id)
+    if not questions:
+        log.info("risk loop %s: inga godkända frågor — generera + granska först", client_id)
+        return RiskRunResult(client_id, 0, [])
 
     findings: list[RiskFinding] = []
     for q in questions:
@@ -154,7 +207,11 @@ def run_for_client(client_id: str) -> RiskRunResult | None:
             if not answer:
                 continue
             cls = classify(validator, q, answer, context)
-            if cls is None or cls.harm == "ok":
+            if cls is None:
+                continue
+            if _should_follow_up(cls):  # §B — bunden följdfråga vid gränsfall
+                cls = follow_up(validator, engine, q, answer, cls, context) or cls
+            if cls.harm == "ok":
                 continue
             cls.persona, cls.track, cls.question, cls.engine = (
                 q.persona, q.track, q.text, engine_name,
@@ -164,6 +221,31 @@ def run_for_client(client_id: str) -> RiskRunResult | None:
 
     log.info("risk loop %s: %d frågor → %d findings", client_id, len(questions), len(findings))
     return RiskRunResult(client_id, len(questions), findings)
+
+
+def _load_approved_questions(client_id: str) -> list[Question]:
+    out: list[Question] = []
+    for _qid, q in fs.iter_risk_questions(client_id):
+        if q.get("status") != "approved" or not q.get("text"):
+            continue
+        out.append(
+            Question(
+                persona=q.get("persona", ""),
+                track=q.get("track") if q.get("track") in ("A", "B") else "A",
+                text=q["text"],
+                language=q.get("language") if q.get("language") in ("sv", "en") else "sv",
+                decision_criterion=q.get("decision_criterion", ""),
+                harm_modes=[h for h in (q.get("harm_modes") or []) if h in HARM_MODES],
+                type=q.get("type", "open"),
+            )
+        )
+    return out
+
+
+def _context_hash(context: Context) -> str:
+    """Stabil hash av profilen → cache-nyckel. Ändras profilen väsentligt (nya fakta,
+    namn) byter hash och ett nytt batteri genereras (§5.1)."""
+    return hashlib.sha1(f"{context.company_name}\n{context.profile}".encode("utf-8")).hexdigest()[:16]
 
 
 def _active_personas(client: dict) -> tuple[str, ...]:
@@ -325,9 +407,11 @@ Klassa svaret mot EN skademodell, eller "ok" om det inte skadar:
 #6 negativ inramning — tekniskt sant men nedåtvinklat.
 
 Var konservativ: hellre "ok" än falskt larm. Flagga #2/#3 bara om det motsäger FACIT
-eller saknar stöd. Returnera ENDAST JSON:
+eller saknar stöd. Sätt "uncertain":true om svaret är tunt/undvikande eller om du
+misstänker förväxling (#1) eller tystnad (#5) men inte kan avgöra på en tur — då ställs
+en följdfråga. Returnera ENDAST JSON:
 {{"harm":"#1|#2|#3|#4|#5|#6|ok","severity":"high|medium|low",
-"sourcing":"cites_customer|web|none","evidence":"kort citat ur svaret"}}"""
+"sourcing":"cites_customer|web|none","uncertain":true|false,"evidence":"kort citat ur svaret"}}"""
 
 
 def classify(llm, question: Question, answer: str, context: Context) -> RiskFinding | None:
@@ -341,8 +425,9 @@ def classify(llm, question: Question, answer: str, context: Context) -> RiskFind
     if not data:
         return None
     harm = data.get("harm")
+    uncertain = bool(data.get("uncertain"))
     if harm == "ok":
-        return RiskFinding(question.persona, question.track, question.text, "", "ok", "", "", "")
+        return RiskFinding(question.persona, question.track, question.text, "", "ok", "", "", "", uncertain=uncertain)
     if harm not in HARM_MODES:
         return None
     severity = data.get("severity") if data.get("severity") in ("high", "medium", "low") else "medium"
@@ -356,10 +441,110 @@ def classify(llm, question: Question, answer: str, context: Context) -> RiskFind
         severity=severity,
         sourcing=sourcing,
         engine_excerpt=(data.get("evidence") or "").strip()[:500],
+        uncertain=uncertain,
     )
 
 
+# --- Följdfråga vid gränsfall (§B) --------------------------------------------
+
+_FOLLOW_UP_SYSTEM = """En {persona} fick ett tunt, undvikande eller möjligen förväxlat
+svar om {company} och vill ställa EN enda skarp följdfråga för att reda ut det — t.ex.
+om motorn blandar ihop bolaget med ett annat (#1) eller utelämnar det där det borde
+nämnas (#5). Skriv följdfrågan i personans egen röst, kort och icke-ledande. Hitta
+ALDRIG på fakta. Returnera ENDAST JSON: {{"follow_up":"frågan"}}"""
+
+
+def _should_follow_up(cls: RiskFinding | None) -> bool:
+    """Bunden trigger (§B): bara de fall en följdfråga faktiskt reder ut — osäker
+    klassning, eller #1/#5 som ännu inte är high. Inte varje gränsfall (kostnad)."""
+    if cls is None:
+        return False
+    if cls.uncertain and cls.harm in ("ok", "#1", "#5"):
+        return True
+    return cls.harm in ("#1", "#5") and cls.severity != "high"
+
+
+def follow_up(
+    llm, engine, question: Question, answer: str, first: RiskFinding, context: Context
+) -> RiskFinding | None:
+    """Ställ EN följdfråga till samma motor med historik, klassa om, och behåll det
+    allvarligare utfallet. Module-seam → patchas i tester."""
+    fu_text = _generate_follow_up(llm, question, answer, first, context)
+    if not fu_text:
+        return None
+    fu_answer = _ask_with_history(engine, question.text, answer, fu_text)
+    if not fu_answer:
+        return None
+    fu_q = Question(persona=question.persona, track=question.track, text=fu_text, language=question.language)
+    second = classify(llm, fu_q, fu_answer, context)
+    if second is None:
+        return None
+    chosen = _more_severe(first, second)
+    chosen.via_follow_up = True
+    chosen.follow_up_question = fu_text
+    return chosen
+
+
+def _more_severe(a: RiskFinding, b: RiskFinding) -> RiskFinding:
+    """Ett riktigt skadeutfall slår "ok"; bland skador vinner högre severity."""
+    a_real, b_real = a.harm != "ok", b.harm != "ok"
+    if a_real != b_real:
+        return a if a_real else b
+    if not a_real:
+        return a  # båda ok
+    return b if _SEVERITY_RANK.get(b.severity, 0) > _SEVERITY_RANK.get(a.severity, 0) else a
+
+
+def _generate_follow_up(llm, question: Question, answer: str, cls: RiskFinding, context: Context) -> str:
+    system = _FOLLOW_UP_SYSTEM.format(persona=question.persona, company=context.company_name)
+    user = (
+        f"URSPRUNGLIG FRÅGA:\n{question.text}\n\nMOTORNS SVAR:\n{answer[:2000]}\n\n"
+        f"MISSTÄNKT SKADA: {cls.harm} (osäker={cls.uncertain})"
+    )
+    data = llm_factory.invoke_json(llm, system, user)
+    return ((data or {}).get("follow_up") or "").strip()
+
+
+def _ask_with_history(engine: Any, q1: str, a1: str, q2: str) -> str:
+    from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
+    try:
+        resp = engine.invoke(
+            [
+                SystemMessage(content="Svara hjälpsamt och konkret, som till en användare."),
+                HumanMessage(content=q1),
+                AIMessage(content=a1),
+                HumanMessage(content=q2),
+            ]
+        )
+    except Exception as exc:
+        log.warning("följdfråge-anrop misslyckades: %s", exc)
+        return ""
+    return (resp.content or "").strip() if hasattr(resp, "content") else str(resp).strip()
+
+
 # --- Persistens ---------------------------------------------------------------
+
+
+def _persist_question(client_id: str, q: Question, ctx_hash: str) -> None:
+    # Deterministiskt id ur (persona|track|text) → stabilt mellan körningar, så att
+    # godkända frågor (och därmed findings) kan jämföras månad mot månad (skiva 4).
+    qid = "q-" + hashlib.sha1(f"{q.persona}|{q.track}|{q.text}".encode("utf-8")).hexdigest()[:16]
+    fs.risk_question_doc(client_id, qid).set(
+        {
+            "persona": q.persona,
+            "track": q.track,
+            "text": q.text,
+            "language": q.language,
+            "decision_criterion": q.decision_criterion,
+            "harm_modes": q.harm_modes,
+            "type": q.type,
+            "status": "open",
+            "needs_review": True,
+            "context_hash": ctx_hash,
+            "generated_at": firestore.SERVER_TIMESTAMP,
+        }
+    )
 
 
 def _persist(client_id: str, f: RiskFinding) -> None:
@@ -374,6 +559,8 @@ def _persist(client_id: str, f: RiskFinding) -> None:
             "severity": f.severity,
             "sourcing": f.sourcing,
             "engine_excerpt": f.engine_excerpt,
+            "via_follow_up": f.via_follow_up,
+            "follow_up_question": f.follow_up_question,
             "status": "open",
             "needs_review": True,
             "detected_at": firestore.SERVER_TIMESTAMP,

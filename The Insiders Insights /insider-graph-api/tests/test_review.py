@@ -62,5 +62,38 @@ class ClaimReviewTest(unittest.TestCase):
         self.assertEqual(stored["review_status"], "rejected")
 
 
+def _pending_q(**over):
+    base = {"persona": "buyer", "track": "A", "text": "Har Acme tvister?", "language": "sv", "status": "open"}
+    base.update(over)
+    return base
+
+
+class RiskQuestionReviewTest(unittest.TestCase):
+    def test_list_only_pending(self):
+        fakefs.reset(
+            client={"company_name": "Acme AB"},
+            risk_questions={"a": _pending_q(), "b": _pending_q(status="approved"), "c": _pending_q(status="rejected")},
+        )
+        out = review.list_pending_risk_questions("acme")
+        self.assertEqual([i["id"] for i in out["questions"]], ["a"])
+
+    def test_approve_marks_approved(self):
+        fakefs.reset(client={"company_name": "Acme AB"}, risk_questions={"a": _pending_q()})
+        review.decide_risk_question("acme", "a", review.RiskQuestionAction(decision="approve"))
+        stored = fakefs.STATE["risk_questions"]["a"]
+        self.assertEqual(stored["status"], "approved")
+        self.assertFalse(stored["needs_review"])
+
+    def test_approve_with_edited_text(self):
+        fakefs.reset(client={"company_name": "Acme AB"}, risk_questions={"a": _pending_q()})
+        review.decide_risk_question("acme", "a", review.RiskQuestionAction(decision="approve", text="Omformulerad fråga?"))
+        self.assertEqual(fakefs.STATE["risk_questions"]["a"]["text"], "Omformulerad fråga?")
+
+    def test_reject(self):
+        fakefs.reset(client={"company_name": "Acme AB"}, risk_questions={"a": _pending_q()})
+        review.decide_risk_question("acme", "a", review.RiskQuestionAction(decision="reject"))
+        self.assertEqual(fakefs.STATE["risk_questions"]["a"]["status"], "rejected")
+
+
 if __name__ == "__main__":
     unittest.main()

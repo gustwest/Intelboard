@@ -209,7 +209,12 @@ seriösa?") — verkliga användare skriver inte bara analytiker-prosa. Prompten
 *spännvidden*, inte bara den längsta formen.
 
 Genererade batterier granskas/godkänns (samma review-disciplin) innan de körs skarpt,
-och cachas per kund tills profilen ändras väsentligt.
+och cachas per kund tills profilen ändras väsentligt. ✅ **byggt:** flödet är tvådelat
+— `generate_and_store_questions` persisterar batteriet i `clients/{id}/risk_questions`
+(needs_review, deterministiskt `q-`-id, `context_hash` som cache-nyckel så frågorna inte
+regenereras varje körning), godkänns via `POST /api/review/{id}/risk-questions/{qid}`,
+och `run_for_client` ställer bara **godkända** frågor skarpt. De stabila id:na är det som
+gör skiva 4:s trend jämförbar månad-över-månad.
 
 ## 6. Scoring → Risk Exposure-score
 
@@ -227,6 +232,15 @@ Spåren poängsätts olika (§5.1):
 - **Risk Exposure-score** = severity-vägd andel svar med en skademodell, per persona och
   totalt. Det är huvud-KPI:t som trendar månad-över-månad.
 - Konservativt: hellre missa än falskt larma. Endast svar med tydlig skademodell räknas.
+
+### 6.1 Bunden följdfråga (flerturs-probning)
+Klassaren sätter `uncertain` när svaret är tunt/undvikande eller en misstänkt förväxling
+(#1)/tystnad (#5) inte går att avgöra på en tur. ✅ **byggt:** vid gränsfall (`uncertain`,
+eller #1/#5 som ännu inte är high) ställer `run_for_client` **en** följdfråga till samma
+motor med samtalshistorik och klassar om — det allvarligare utfallet behålls och
+findingen flaggas `via_follow_up` med följdfrågans text. Bundet till just de fall en
+extra tur faktiskt reder ut, så kostnad och reproducerbarhet hålls i schack; findingen
+kvarstår nyckelad på den ursprungliga (stabila) frågan.
 
 ## 7. Canonical-15 — grundning + ammunition (inte tavla)
 

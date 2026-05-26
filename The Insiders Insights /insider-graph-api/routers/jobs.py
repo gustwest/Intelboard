@@ -51,9 +51,24 @@ def trigger_compile(client_id: str, background: BackgroundTasks) -> dict[str, An
     return {"status": "queued", "job": "compile_schema", "client_id": client_id}
 
 
+@router.post("/risk-generate/{client_id}")
+def trigger_risk_generate(client_id: str, background: BackgroundTasks) -> dict[str, Any]:
+    """GEO-riskloop — generera (+cacha) frågebatteriet för review. Körs före risk-detect."""
+    if not fs.client_doc(client_id).get().exists:
+        raise HTTPException(404, "client not found")
+    from services.risk_detector import generate_and_store_questions
+
+    background.add_task(generate_and_store_questions, client_id)
+    return {"status": "queued", "job": "risk_generate", "client_id": client_id}
+
+
 @router.post("/risk-detect/{client_id}")
 def trigger_risk_detect(client_id: str, background: BackgroundTasks) -> dict[str, Any]:
-    """GEO-riskloop skiva 1 — generera frågor + klassa motorsvar för en kund."""
+    """GEO-riskloop skiva 1 — klassa motorsvar på de GODKÄNDA frågorna för en kund.
+
+    Kräver att frågor genererats (risk-generate) och godkänts i review. Utan godkända
+    frågor blir det en no-op.
+    """
     if not fs.client_doc(client_id).get().exists:
         raise HTTPException(404, "client not found")
     from services.risk_detector import run_for_client

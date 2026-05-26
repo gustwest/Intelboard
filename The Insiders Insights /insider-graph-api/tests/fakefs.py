@@ -67,6 +67,7 @@ def reset(
     employee_items: dict[str, dict[str, dict]] | None = None,
     claims: dict[str, dict] | None = None,
     risk_findings: dict[str, dict] | None = None,
+    risk_questions: dict[str, dict] | None = None,
 ) -> None:
     STATE.clear()
     STATE.update(
@@ -76,6 +77,7 @@ def reset(
         employee_items=employee_items or {},
         claims=claims or {},
         risk_findings=risk_findings or {},
+        risk_questions=risk_questions or {},
         writes={},
     )
 
@@ -144,11 +146,29 @@ def risk_finding_doc(client_id: str, finding_id: str) -> _DocRef:
         finding_id,
         STATE.get("risk_findings", {}).get(finding_id),
         on_set=lambda i, p: STATE.setdefault("risk_findings", {}).__setitem__(i, p),
+        on_update=lambda i, p: STATE["risk_findings"].setdefault(i, {}).update(p),  # skiva 2 agerar
     )
 
 
 def iter_risk_findings(client_id: str):
     return list(STATE.get("risk_findings", {}).items())
+
+
+def risk_questions_col(client_id: str) -> _Col:
+    return _Col(STATE.get("risk_questions"))
+
+
+def risk_question_doc(client_id: str, question_id: str) -> _DocRef:
+    return _DocRef(
+        question_id,
+        STATE.get("risk_questions", {}).get(question_id),
+        on_set=lambda i, p: STATE.setdefault("risk_questions", {}).__setitem__(i, p),
+        on_update=lambda i, p: STATE["risk_questions"].setdefault(i, {}).update(p),
+    )
+
+
+def iter_risk_questions(client_id: str):
+    return list(STATE.get("risk_questions", {}).items())
 
 
 def writes() -> dict[str, dict]:

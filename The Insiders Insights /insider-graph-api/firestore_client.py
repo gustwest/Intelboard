@@ -82,6 +82,19 @@ def iter_risk_findings(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
         yield doc.id, doc.to_dict() or {}
 
 
+def risk_questions_col(client_id: str):
+    return client_doc(client_id).collection("risk_questions")
+
+
+def risk_question_doc(client_id: str, question_id: str):
+    return risk_questions_col(client_id).document(question_id)
+
+
+def iter_risk_questions(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
+    for doc in risk_questions_col(client_id).stream():
+        yield doc.id, doc.to_dict() or {}
+
+
 def connector_logs_col():
     return db().collection("connector_logs")
 
