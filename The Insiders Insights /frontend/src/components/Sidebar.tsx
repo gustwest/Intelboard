@@ -16,6 +16,7 @@ import {
   Radar,
   Inbox,
   Rocket,
+  Landmark,
 } from 'lucide-react';
 import ProductSwitcher, { activeProductId } from './ProductSwitcher';
 
@@ -26,6 +27,7 @@ const INSIDERS_LINKS = [
   { href: '/rapporter', label: 'Rapporter', icon: BarChart3 },
   { href: '/engine', label: 'Engine', icon: Zap },
   { href: '/loggar', label: 'Loggar', icon: Terminal },
+  { href: '/arkitektur', label: 'Arkitektur', icon: Landmark },
   { href: '/admin', label: 'Admin', icon: ShieldAlert },
 ];
 
