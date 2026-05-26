@@ -22,7 +22,6 @@ type ClientDetail = {
   client_id: string;
   company_name: string | null;
   company_linkedin_url: string | null;
-  org_number: string | null;
   active_connectors: string[];
   cdn_url: string | null;
   profile_url: string | null;
@@ -132,7 +131,6 @@ export default function ClientDetailPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: C.muted }}>
               <Row label="client_id" value={client.client_id} mono />
               <Row label="Tier" value={client.tier} />
-              <Row label="Org.nummer" value={client.org_number || '—'} />
               <Row label="Connectors" value={client.active_connectors.join(', ') || '—'} />
               {client.company_linkedin_url && (
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>

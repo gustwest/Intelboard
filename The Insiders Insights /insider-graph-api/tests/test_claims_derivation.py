@@ -16,7 +16,6 @@ class DerivePropertyClaimsTest(unittest.TestCase):
                         "founded": "2014",
                         "address": "Göteborg",
                         "industries": "Mjukvara",
-                        "org_number": "5566778899",
                         "baseline_followers": 5000,  # ska ALDRIG bli ett claim
                     },
                 }
@@ -28,9 +27,8 @@ class DerivePropertyClaimsTest(unittest.TestCase):
         self.assertEqual(preds.get("foundingDate"), "2014")
         self.assertEqual(preds.get("address"), "Göteborg")
         self.assertEqual(preds.get("knowsAbout"), "Mjukvara")
-        self.assertEqual(preds.get("identifier"), "5566778899")
         self.assertNotIn("baseline_followers", preds)
-        self.assertEqual(len(claims), 4)
+        self.assertEqual(len(claims), 3)
         # alla härledda claims är källförsedda (item-källa)
         for c in claims:
             self.assertEqual(c.claim_kind, "property")

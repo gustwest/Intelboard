@@ -20,7 +20,6 @@ _FACT_LABELS = {
     "foundingDate": "Grundat",
     "address": "Säte",
     "knowsAbout": "Verksamhet",
-    "identifier": "Organisationsnummer",
     "numberOfEmployees": "Antal anställda",
 }
 

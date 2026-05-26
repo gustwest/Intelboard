@@ -75,7 +75,6 @@ def get_client(client_id: str) -> dict[str, Any]:
         "client_id": client_id,
         "company_name": data.get("company_name"),
         "company_linkedin_url": data.get("company_linkedin_url"),
-        "org_number": data.get("org_number"),
         "active_connectors": data.get("active_connectors", []),
         "cdn_url": data.get("cdn_url"),
         "profile_url": data.get("profile_url"),

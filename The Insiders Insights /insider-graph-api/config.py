@@ -25,7 +25,6 @@ class Settings(BaseSettings):
 
     admin_api_key: str = ""
     sendgrid_webhook_secret: str = ""
-    bolagsverket_api_key: str = ""
 
     # MVP: hämta bara bolagets LinkedIn-sida, inte individuella personprofiler.
     # Sätt SCRAPE_EMPLOYEE_LINKEDIN=true för att slå på per-medarbetare-scrape igen.

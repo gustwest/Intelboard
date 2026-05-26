@@ -264,9 +264,8 @@ _FAQ_TEMPLATES: dict[str, tuple[str, str]] = {
     "address": ("Var har {name} sitt säte?", "{name} har sitt säte i {value}."),
     "knowsAbout": ("Vad är {name} verksamt inom?", "{name} är verksamt inom {value}."),
     "numberOfEmployees": ("Hur många anställda har {name}?", "{name} har {value} anställda."),
-    "identifier": ("Vad är {name}s organisationsnummer?", "Organisationsnumret är {value}."),
 }
-_FAQ_ORDER = ["foundingDate", "address", "knowsAbout", "numberOfEmployees", "identifier"]
+_FAQ_ORDER = ["foundingDate", "address", "knowsAbout", "numberOfEmployees"]
 
 
 def build_faq(model: RenderModel) -> list[FaqEntry]:

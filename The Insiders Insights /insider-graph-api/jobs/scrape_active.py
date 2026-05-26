@@ -61,13 +61,12 @@ def _employee_linkedin_enabled(client: dict) -> bool:
 
 
 def _run_company_level(client_id: str, client: dict, active: list[str]) -> None:
-    """Connectors som körs en gång per kund (LinkedIn-företagssida, Bolagsverket, RSS).
+    """Connectors som körs en gång per kund (LinkedIn-företagssida, GLEIF, RSS).
 
     employee_id är None här → LinkedIn-connectorn använder company-datasetet och
     hämtar bolagets sida, inte en personprofil.
     """
     params = {
-        "org_number": client.get("org_number"),
         "lei": client.get("lei"),
         "linkedin_url": client.get("company_linkedin_url"),
         "rss_feeds": (client.get("settings") or {}).get("rss_feeds") or [],
@@ -111,7 +110,7 @@ def _payload(item) -> dict:
         "included_in_output": True,
         # extra nestas (inte utplattat) — property-härledningen i
         # schema_org/claims.py läser raw["extra"]. Plattas den ut härleds inga
-        # property-claims (Bolagsverket/GLEIF).
+        # property-claims (GLEIF/LinkedIn).
         "extra": item.extra,
     }
 

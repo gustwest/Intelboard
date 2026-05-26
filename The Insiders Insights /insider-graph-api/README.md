@@ -14,8 +14,7 @@ insider-graph-api/
 ├── connectors/             pluggbara datakällor
 │   ├── base.py             BaseConnector (interface)
 │   ├── linkedin.py         LinkedIn (Bright Data)
-│   ├── rss.py              Generisk RSS (pressrum, podcast, careers)
-│   └── bolagsverket.py     Bolagsverket organisationsdata
+│   └── rss.py              Generisk RSS (pressrum, podcast, careers)
 ├── schema_org/             claims → JSON-LD + profilsida (se docs/claims-provenance-spec.md)
 │   ├── compiler.py         render-modell → JSON-LD-graf (proveniens via claims)
 │   ├── claims.py           deterministisk connector-extra → property-claims
@@ -106,7 +105,6 @@ Namnen i parentes är de Secret Manager-secrets som `bootstrap.sh` binder in:
 | `BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID` | `brightdata-company-dataset` | LinkedIn företag |
 | `BRIGHTDATA_LINKEDIN_POSTS_DATASET_ID` | `brightdata-posts-dataset` | LinkedIn posts (framtida) |
 | `SENDGRID_API_KEY` | `sendgrid-api-key` | SendGrid outbound (valfritt) |
-| `BOLAGSVERKET_API_KEY` | `bolagsverket-api-key` | Bolagsverket-connector (valfritt) |
 
 Skapa secrets så här:
 

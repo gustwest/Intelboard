@@ -1,10 +1,10 @@
 """Deterministisk härledning av property-claims ur connector-data.
 
-Strukturerade fält från connectorerna (Bolagsverket, LinkedIn-företagssida) är
-*sourcade by construction* — vet vi att `founded` kom från Bolagsverket är claimet
+Strukturerade fält från connectorerna (GLEIF, LinkedIn-företagssida) är
+*sourcade by construction* — vet vi att `founded` kom från en connector är claimet
 källförsett utan LLM. Den här modulen mappar `raw_item.extra` → property-claims.
 
-Fritext (`content`: verksamhetsbeskrivning, about, inlägg) hanteras INTE här — den
+Fritext (`content`: about, inlägg) hanteras INTE här — den
 kräver narrativ extraktion (se docs/claims-provenance-spec.md §5.2–5.3).
 
 Sociala mätvärden (followers m.m.) mappas aldrig — de utelämnas helt enkelt.
@@ -24,7 +24,6 @@ _COMPANY_FIELD_MAP: dict[str, tuple[str, str]] = {
     "address": ("address", "Säte: {value}"),
     "industry": ("knowsAbout", "Verksam inom {value}"),
     "industries": ("knowsAbout", "Verksam inom {value}"),
-    "org_number": ("identifier", "Organisationsnummer {value}"),
     "lei": ("leiCode", "LEI-kod {value}"),
 }
 

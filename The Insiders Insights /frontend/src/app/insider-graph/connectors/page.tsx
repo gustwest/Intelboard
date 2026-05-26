@@ -45,7 +45,6 @@ const STATIC_PLANNED: ConnectorMeta[] = [
 const NAME: Record<string, string> = {
   linkedin: 'LinkedIn',
   rss: 'RSS-feeds (kund)',
-  bolagsverket: 'Bolagsverket',
   pressrum: 'Pressrum',
   careers: 'Karriärsida',
   email: 'E-post (episodisk)',

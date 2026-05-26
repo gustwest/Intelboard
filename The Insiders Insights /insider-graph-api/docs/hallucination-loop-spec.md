@@ -235,11 +235,11 @@ Faktan poängsätts **inte** direkt. De (a) grundar grafen så motorn inte förv
 
 | Fakta | Källa/connector | Tier | Roll (motverkar skademodell) |
 |-------|-----------------|------|------------------------------|
-| Legalt namn + LEI | GLEIF/Bolagsverket | A | Grundning (#1) |
+| Legalt namn + LEI | GLEIF | A | Grundning (#1) |
 | Koncernstruktur parent/sub | GLEIF | A | Grundning (#1) |
-| Huvudsäte | Bolagsverket/GLEIF | A | Grundning + ammunition |
-| Grundår | Bolagsverket | A | Ammunition (#2, #3) |
-| Bransch/SNI | Bolagsverket | A | Ammunition (#4, #5) |
+| Huvudsäte | GLEIF | A | Grundning + ammunition |
+| Grundår | LinkedIn | A | Ammunition (#2, #3) |
+| Bransch | LinkedIn | A | Ammunition (#4, #5) |
 | Molnpartnerskap (AWS/Azure/GCP) | Partner-directories (#2) | A | Ammunition (#4) |
 | Säkerhetscert (ISO 27001/SOC2) | Cert-register (#2) | A | Ammunition (#3 investerare) |
 | Kärnerbjudande (en mening) | Website | B | Ammunition (#4, #5) |
@@ -328,7 +328,7 @@ risker) som social proof — bara aggregat, inget känsligt.
 | Skiva | Innehåll | DoD-koppling |
 |-------|----------|--------------|
 | 1 | Frågebatterier + skadeklassning (read-only) → findings i review-kö ✅ **byggd** (services/risk_detector.py) | test på klassning |
-| 2 | Korrigering: godkänd finding → förstärkt ammunition-claim → recompile + logg | compiler-test |
+| 2 | Korrigering: godkänd finding → förstärkt ammunition-claim → recompile + logg ✅ **byggd** (services/risk_corrector.py, POST /api/review/{id}/risks/{fid}) | compiler-test |
 | 3 | Månadsrapport: render-modell + endpoint + HTML, per persona | render-test |
 | 4 | Effekt över tid: Risk Exposure-trend + resolved-detektering | trend-test |
 

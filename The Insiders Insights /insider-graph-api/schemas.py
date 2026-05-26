@@ -27,7 +27,6 @@ class OnboardRequest(BaseModel):
     client_id: str = Field(..., description="slug matching the Insiders Insights customer")
     company_name: str
     company_linkedin_url: str | None = None
-    org_number: str | None = None
     # LEI-kod (Legal Entity Identifier) — matar GLEIF-connectorn (koncernstruktur).
     lei: str | None = None
     active_connectors: list[str] | None = None

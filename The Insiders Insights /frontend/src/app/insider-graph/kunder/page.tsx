@@ -363,7 +363,6 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
         company_name: companyName.trim(),
         active_connectors: [...active],
         company_linkedin_url: active.has('linkedin') ? (fieldValues['company_linkedin_url'] as string) || null : null,
-        org_number: active.has('bolagsverket') ? (fieldValues['org_number'] as string) || null : null,
         lei: active.has('gleif') ? (fieldValues['lei'] as string) || null : null,
         website_start_url: active.has('website') ? (fieldValues['website_start_url'] as string) || null : null,
         scrape_employee_profiles: active.has('linkedin') ? !!fieldValues['scrape_employee_profiles'] : false,
