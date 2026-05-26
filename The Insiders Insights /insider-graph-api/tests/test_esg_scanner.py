@@ -134,19 +134,19 @@ class ExpansionPromptTest(unittest.TestCase):
 
 class GenerateAndStoreTest(unittest.TestCase):
     def setUp(self):
-        self._orig = (es.llm_factory.make_validator, es.generate_expansions)
+        self._orig = (es.llm_factory.make_esg_reasoner, es.generate_expansions)
 
     def tearDown(self):
-        (es.llm_factory.make_validator, es.generate_expansions) = self._orig
+        (es.llm_factory.make_esg_reasoner, es.generate_expansions) = self._orig
 
     def test_no_validator_is_noop(self):
         fakefs.reset(client={"company_name": "Acme AB"})
-        es.llm_factory.make_validator = lambda: None
+        es.llm_factory.make_esg_reasoner = lambda: None
         self.assertIsNone(es.generate_and_store_esg_questions("acme"))
 
     def test_seeds_examples_floor_and_expansions(self):
         fakefs.reset(client={"company_name": "Acme AB", "industry": "SaaS"})
-        es.llm_factory.make_validator = lambda: object()
+        es.llm_factory.make_esg_reasoner = lambda: object()
         # En expansion per pelare; exempelfrågorna (golvet) ska alltid med.
         es.generate_expansions = lambda llm, pillar, ctx, ind: [
             ESGQuestion(pillar, "expansion", f"Djup {pillar}?", "sv")
@@ -168,7 +168,7 @@ class GenerateAndStoreTest(unittest.TestCase):
 
     def test_cache_hit_skips_regeneration(self):
         fakefs.reset(client={"company_name": "Acme AB"})
-        es.llm_factory.make_validator = lambda: object()
+        es.llm_factory.make_esg_reasoner = lambda: object()
         ctx = es.build_context("acme", {"company_name": "Acme AB"})
         h = es._context_hash(ctx)
         fakefs.STATE["esg_questions"] = {"q1": {"text": "x", "status": "approved", "context_hash": h}}
@@ -182,10 +182,10 @@ class GenerateAndStoreTest(unittest.TestCase):
 
 class RunScanTest(unittest.TestCase):
     def setUp(self):
-        self._orig = (es.llm_factory.make_validator, es._build_engines, es._ask, es.classify_esg)
+        self._orig = (es.llm_factory.make_esg_reasoner, es._build_engines, es._ask, es.classify_esg)
 
     def tearDown(self):
-        (es.llm_factory.make_validator, es._build_engines, es._ask, es.classify_esg) = self._orig
+        (es.llm_factory.make_esg_reasoner, es._build_engines, es._ask, es.classify_esg) = self._orig
 
     def test_missing_client(self):
         fakefs.reset(client=None)
@@ -193,7 +193,7 @@ class RunScanTest(unittest.TestCase):
 
     def test_no_llm_configured(self):
         fakefs.reset(client={"company_name": "Acme AB"})
-        es.llm_factory.make_validator = lambda: None
+        es.llm_factory.make_esg_reasoner = lambda: None
         es._build_engines = lambda: {}
         self.assertIsNone(es.run_esg_scan("acme"))
 
@@ -202,7 +202,7 @@ class RunScanTest(unittest.TestCase):
             client={"company_name": "Acme AB"},
             esg_questions={"q1": _approved_q("E", "example", "Scope?", status="open")},
         )
-        es.llm_factory.make_validator = lambda: object()
+        es.llm_factory.make_esg_reasoner = lambda: object()
         es._build_engines = lambda: {"gpt-4o": object()}
         result = es.run_esg_scan("acme")
         self.assertEqual(result.questions_asked, 0)
@@ -213,7 +213,7 @@ class RunScanTest(unittest.TestCase):
         n = es.MAX_QUESTIONS_PER_SCAN + 5
         qs = {f"q{i}": _approved_q("E", "expansion", f"Fråga {i} om Acme?") for i in range(n)}
         fakefs.reset(client={"company_name": "Acme AB"}, esg_questions=qs)
-        es.llm_factory.make_validator = lambda: object()
+        es.llm_factory.make_esg_reasoner = lambda: object()
         es._build_engines = lambda: {"gpt-4o": object()}
         es._ask = lambda q, llm: ""  # inga svar → ingen klassning behövs
         result = es.run_esg_scan("acme")
@@ -228,7 +228,7 @@ class RunScanTest(unittest.TestCase):
                 "qp": _approved_q("G", "example", "Ej godkänd", status="open"),  # skippas
             },
         )
-        es.llm_factory.make_validator = lambda: object()
+        es.llm_factory.make_esg_reasoner = lambda: object()
         es._build_engines = lambda: {"gpt-4o": object()}
         es._ask = lambda q, llm: "blint svar om Acme"
 

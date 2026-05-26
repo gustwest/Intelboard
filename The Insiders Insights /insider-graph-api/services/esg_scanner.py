@@ -10,6 +10,8 @@ bolags HÅLLBARHETSRYKTE i AI-motorer, uppdelat på de tre ESRS-pelarna E/S/G. F
      (golvet, kind="example") och en validator-LLM (claude-opus via Vertex EU) genererar
      strukturerade/intuitiva djupdykningar (kind="expansion") utifrån branschkontext.
      Allt persisteras i clients/{id}/esg_questions som needs_review (review-grind).
+     Resonemangsmodell: make_esg_reasoner() = Gemini 2.5 Pro via Vertex AI EU (skild från
+     GEO-pipelinens Claude-validator; Claude serveras ej EU-resident i projektets region).
 
   Detektering (run_esg_scan):
   4. Ställ de GODKÄNDA frågorna blint till probe-motorerna (gpt-4o + gemini, första-parts
@@ -23,7 +25,7 @@ bolags HÅLLBARHETSRYKTE i AI-motorer, uppdelat på de tre ESRS-pelarna E/S/G. F
      körningens denominator i esg_runs/latest. AI ESG Risk Score byggs i services/esg_report.
 
 Read-only: korrigering sker i ingestion-flödet (services/esg_ingestion.py, "Borde svaret
-varit annorlunda?"). EU-only: full kunddata behandlas av validatorn via Vertex AI EU;
+varit annorlunda?"). EU-only: full kunddata behandlas av ESG-resoneraren via Vertex AI EU;
 probe-motorerna är avsiktligt första-parts (publik payload). Se services/llm.py.
 """
 from __future__ import annotations
@@ -146,9 +148,9 @@ def generate_and_store_esg_questions(client_id: str) -> dict | None:
         return None
     client = snap.to_dict() or {}
 
-    validator = llm_factory.make_validator()
-    if validator is None:
-        log.warning("ESG-loop: ingen validator-LLM — hoppar över generering %s", client_id)
+    reasoner = llm_factory.make_esg_reasoner()
+    if reasoner is None:
+        log.warning("ESG-loop: ingen resonemangs-LLM — hoppar över generering %s", client_id)
         return None
 
     context = build_context(client_id, client)
@@ -176,7 +178,7 @@ def generate_and_store_esg_questions(client_id: str) -> dict | None:
             _persist_question(client_id, q, ctx_hash)
             written += 1
         # Prompt Expansion Engine: branschanpassade djupdykningar.
-        for q in generate_expansions(validator, pillar, context, industry):
+        for q in generate_expansions(reasoner, pillar, context, industry):
             _persist_question(client_id, q, ctx_hash)
             written += 1
 
@@ -193,9 +195,9 @@ def run_esg_scan(client_id: str) -> ESGScanResult | None:
         return None
     client = snap.to_dict() or {}
 
-    validator = llm_factory.make_validator()
+    reasoner = llm_factory.make_esg_reasoner()
     engines = _build_engines()
-    if validator is None or not engines:
+    if reasoner is None or not engines:
         log.warning("ESG-loop: ingen LLM konfigurerad — hoppar över %s", client_id)
         return None
 
@@ -212,7 +214,7 @@ def run_esg_scan(client_id: str) -> ESGScanResult | None:
             answer = _ask(q.text, engine)
             if not answer:
                 continue
-            cls = classify_esg(validator, q, answer, context)
+            cls = classify_esg(reasoner, q, answer, context)
             if cls is None:
                 continue
             answers_by_pillar[q.pillar] = answers_by_pillar.get(q.pillar, 0) + 1

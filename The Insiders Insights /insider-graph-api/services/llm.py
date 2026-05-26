@@ -22,12 +22,20 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from typing import Any
 
 from config import settings
 
 log = logging.getLogger(__name__)
+
+# ESG-loopens egen resonemangsmodell (riskloopens ESG-spår). Avsiktligt SKILD från
+# make_validator: Claude opus serveras inte EU-resident i projektets region, och ESG-loopen
+# behöver ingen leverantörs-oberoende granskare (den bedömer EXTERNA probe-motorers svar,
+# inte sin egen output — så ingen självvalidering). Gemini 2.5 Pro körs EU-resident via
+# Vertex i `vertex_location`. Env-överstyrbart utan kodändring; rör ej config.py.
+ESG_MODEL = os.environ.get("ESG_MODEL", "gemini-2.5-pro")
 
 
 def make_generator():
@@ -44,6 +52,15 @@ def make_validator():
         log.warning("EU-only: GCP-projekt ej satt — validator otillgänglig (ingen US-fallback)")
         return None
     return _vertex_anthropic(settings.validator_model)
+
+
+def make_esg_reasoner():
+    """ESG-loopens resonemangsmodell (Gemini), via Vertex AI EU. Genererar ESG-frågor och
+    klassar probe-motorernas svar. Skild från make_validator — se ESG_MODEL ovan."""
+    if not settings.gcp_project:
+        log.warning("EU-only: GCP-projekt ej satt — ESG-reasoner otillgänglig (ingen US-fallback)")
+        return None
+    return _vertex_gemini(ESG_MODEL)
 
 
 # Konstruktions-sömmar (lazy import → modulen kan importeras utan SDK; patchas i tester).
