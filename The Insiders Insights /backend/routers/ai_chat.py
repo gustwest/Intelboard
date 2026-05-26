@@ -177,12 +177,12 @@ navigerar till källdetaljsidan vid klick. Pilen (▼) expanderar listan med ens
 """
 
 
-GEOGRAPH_KNOWLEDGE = """
+GEOGIRAPH_KNOWLEDGE = """
 ## Om Geogiraph
 
 Geogiraph är en **separat tjänst** som lever bredvid The Insiders Insights i samma
 plattform. Användare växlar mellan produkterna via en ProductSwitcher högst upp i sidebar
-("THE INSIDERS." ↔ "GEOGRAPH"). När pathname börjar med `/insider-graph/` är användaren
+("THE INSIDERS." ↔ "GEOGIRAPH"). När pathname börjar med `/insider-graph/` är användaren
 i Graph-läget och sidebarens nav-länkar ändras.
 
 **Kunder är samma bolag** i båda produkterna — `client_id` i Geogiraph är samma slug
@@ -286,7 +286,7 @@ Begrepp: Kund, Källa, Dataset, Modul (KPI), Mål. Data i PostgreSQL. Mätvärde
 Clicks, CTR, Engagement Rate, CPC, CPM m.fl. Sidor: /kunder, /sources, /moduler, /rapporter.
 """
 
-GEOGRAPH_SUMMARY = """
+GEOGIRAPH_SUMMARY = """
 **Geogiraph** (den ANDRA produkten): separat tjänst för Generative Engine Optimization (GEO).
 Gör en kunds organisation maskinläsbar för AI-sökmotorer (ChatGPT, Perplexity, Gemini) via en
 JSON-LD-graf (Schema.org) som distribueras över CDN och injiceras med GTM. Data i Firestore.
@@ -304,8 +304,8 @@ def _select_product_knowledge(page_context: Optional[str]) -> Tuple[str, str, st
     """
     in_graph = bool(page_context and page_context.startswith("graph_"))
     if in_graph:
-        return "Geogiraph", GEOGRAPH_KNOWLEDGE, INSIDERS_SUMMARY
-    return "The Insiders Insights", INSIDERS_KNOWLEDGE, GEOGRAPH_SUMMARY
+        return "Geogiraph", GEOGIRAPH_KNOWLEDGE, INSIDERS_SUMMARY
+    return "The Insiders Insights", INSIDERS_KNOWLEDGE, GEOGIRAPH_SUMMARY
 
 
 # ------------------------------------------------------------------

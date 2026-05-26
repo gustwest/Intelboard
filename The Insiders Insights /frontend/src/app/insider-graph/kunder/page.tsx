@@ -85,7 +85,7 @@ export default function GraphKunderPage() {
     <GraphPageShell
       title="Kunder"
       icon={<Users size={22} />}
-      subtitle="geograph-kunder är samma bolag som i The Insiders. Här onboardas medarbetare och datakällor."
+      subtitle="geogiraph-kunder är samma bolag som i The Insiders. Här onboardas medarbetare och datakällor."
     >
       <div
         style={{
