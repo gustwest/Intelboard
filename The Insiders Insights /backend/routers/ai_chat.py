@@ -197,7 +197,7 @@ i de AI-svar som ges till frågor som "Vilka är de ledande bolagen inom X i Sve
 
 Pipeline i fem steg:
 1. **Samla** rådata om kundens medarbetare och företag från LinkedIn (via Bright Data),
-   Bolagsverket, pressrum, e-post m.fl.
+   pressrum, e-post m.fl.
 2. **Lagra** i Firestore (NB: separat databas — *inte* PostgreSQL som resten av plattformen).
 3. **Kompilera** all data till en JSON-LD-graf enligt Schema.org-standarden (Organization
    som rotnod, Person/JobPosting/SocialMediaPosting/Event som barn).
@@ -214,7 +214,8 @@ Pipeline i fem steg:
 - **Connectors** (`/insider-graph/connectors`): Live-katalog över alla datakällor. Per kund
   kan man slå på/av aktiva connectors, lägga till RSS-feeds (pressrum/karriär/podcast),
   och manuellt trigga **Kör scrape-active** eller **Kompilera**. Implementerade connectors
-  är `linkedin`, `rss` och `bolagsverket`; övriga visas som "Ej implementerad".
+  visas med grön status; övriga visas som "Ej implementerad". (Den AKTUELLA listan över
+  implementerade connectors injiceras separat nedan — utgå alltid från den, inte från minnet.)
 - **Granska** (`/insider-graph/review`): Items som LLM-extraktionen plockat in från
   inkommande mail med confidence < 0,7. Ops-användaren godkänner eller avvisar.
 - **JSON-LD** (`/insider-graph/schema`): Förhandsvisning av den kompilerade Schema.org-grafen.
@@ -232,10 +233,11 @@ Pipeline i fem steg:
 - **Passiv nod**: djup engångsstrukturering. Scrapeas månadsvis, ytligt.
 
 **Connector** — en pluggbar datakälla som implementerar `BaseConnector` (`fetch(config)
-→ list[RawItem]`). Live i MVP: `linkedin` (via Bright Data), `rss` (generisk; konfigurera
-feeds per kund för pressrum/karriär/podcast), `bolagsverket` (öppna org-data). Webhook-baserat:
-`email` (SendGrid Inbound Parse → LLM-extraktion). Planerade: YouTube, Instagram, Glassdoor,
-Substack, GitHub, Crunchbase, Vinnova, PRV, Scholar.
+→ list[RawItem]`). Exempel på hur de fungerar: `linkedin` hämtar via Bright Data, `rss` är
+generisk (konfigurera feeds per kund för pressrum/karriär/podcast), `email` är webhook-baserad
+(SendGrid Inbound Parse → LLM-extraktion). **Vilka connectors som faktiskt är implementerade
+just nu står i den live-injicerade listan nedan — räkna aldrig upp implementerade connectors
+ur minnet.**
 
 **Mätningsdimensioner**:
 - **Share of Voice (SoV)**: Andel AI-frågor (av 4 kategorier × 3 frågor × 2 modeller = 24)
@@ -304,6 +306,56 @@ def _select_product_knowledge(page_context: Optional[str]) -> Tuple[str, str, st
     if in_graph:
         return "Geogiraph", GEOGRAPH_KNOWLEDGE, INSIDERS_SUMMARY
     return "The Insiders Insights", INSIDERS_KNOWLEDGE, GEOGRAPH_SUMMARY
+
+
+# ------------------------------------------------------------------
+# Live connector list — single source of truth is Geogiraphs REGISTRY,
+# exponerad via dess API (GET /api/connectors). Vi hämtar listan i stället för
+# att hårdkoda den i prompten, så att agenten aldrig kan hitta på eller missa
+# en connector. Faller tillbaka på en säker inbyggd lista om API:t saknar
+# konfiguration eller inte svarar — då går chatten aldrig sönder.
+# ------------------------------------------------------------------
+_CONNECTOR_CACHE: Dict[str, object] = {"ts": 0.0, "ids": None}
+_CONNECTOR_CACHE_TTL = 300  # sekunder
+_CONNECTOR_FALLBACK = ["linkedin", "rss", "gleif", "website"]
+
+
+def _get_live_connectors() -> Tuple[List[str], bool]:
+    """Hämta listan av implementerade Geogiraph-connectors.
+
+    Returnerar (connector_ids, is_live). is_live=False betyder att vi använde
+    fallback-listan (API ej konfigurerat eller onåbart).
+    """
+    import time
+
+    now = time.time()
+    cached = _CONNECTOR_CACHE.get("ids")
+    if cached is not None and now - float(_CONNECTOR_CACHE["ts"]) < _CONNECTOR_CACHE_TTL:
+        return list(cached), True  # type: ignore[arg-type]
+
+    base = os.environ.get("GRAPH_API_URL")
+    key = os.environ.get("GRAPH_API_KEY")  # valfri — graph-API:t kör open-mode om ADMIN_API_KEY ej satt
+    if base:
+        try:
+            import json as _json
+            import urllib.request
+
+            headers = {"x-api-key": key} if key else {}
+            request = urllib.request.Request(
+                f"{base.rstrip('/')}/api/connectors",
+                headers=headers,
+            )
+            with urllib.request.urlopen(request, timeout=3) as resp:
+                payload = _json.loads(resp.read().decode("utf-8"))
+            ids = [c["id"] for c in payload.get("connectors", []) if c.get("id")]
+            if ids:
+                _CONNECTOR_CACHE["ids"] = ids
+                _CONNECTOR_CACHE["ts"] = now
+                return list(ids), True
+        except Exception as e:  # nätverk, auth, parsing — falla tillbaka tyst
+            log.warn("ai_chat.connectors_fetch_failed", error=str(e)[:200])
+
+    return list(_CONNECTOR_FALLBACK), False
 
 
 # ------------------------------------------------------------------
@@ -418,6 +470,17 @@ def _build_context(db: Session, customer_id: Optional[str], page_context: Option
     elif page_context and page_context.startswith("graph_"):
         context_labels.append(page_context)
         sections.append("\n## Användaren är i Geogiraph-produkten")
+
+        # Live-injicerad sanningskälla för implementerade connectors.
+        conn_ids, is_live = _get_live_connectors()
+        context_labels.append("connectors:live" if is_live else "connectors:fallback")
+        sections.append(
+            "\n### Implementerade connectors (AKTUELL lista)\n"
+            + ", ".join(f"`{c}`" for c in conn_ids)
+            + "\n_Detta är den enda korrekta listan över implementerade connectors. "
+            "Räkna aldrig upp andra som implementerade, och nämn inte connectors som inte står här._"
+        )
+
         graph_page_hints = {
             "graph_home": "På översiktssidan — pipeline-status och förklaring av tjänsten.",
             "graph_customers": (
@@ -426,8 +489,8 @@ def _build_context(db: Session, customer_id: Optional[str], page_context: Option
                 "(aktiv/episodisk/passiv)."
             ),
             "graph_connectors": (
-                "På connectors-sidan — översikt över datakällor (LinkedIn, Bolagsverket, "
-                "pressrum, e-post, m.fl.) och deras tier/frekvens."
+                "På connectors-sidan — översikt över datakällor (LinkedIn, RSS/pressrum, "
+                "e-post, m.fl.) och deras tier/frekvens."
             ),
             "graph_schema": (
                 "På JSON-LD-sidan — förhandsvisning av Schema.org-grafen som distribueras "
