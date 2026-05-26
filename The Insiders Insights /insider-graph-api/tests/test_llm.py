@@ -12,7 +12,7 @@ from services import llm
 class EuRoutingTest(unittest.TestCase):
     def setUp(self):
         self._orig = (
-            llm.settings.gcp_project, llm.settings.anthropic_api_key,
+            llm.settings.gcp_project,
             llm.settings.openai_api_key, llm.settings.gemini_api_key,
             llm._vertex_gemini, llm._vertex_anthropic,
         )
@@ -20,7 +20,7 @@ class EuRoutingTest(unittest.TestCase):
         llm._vertex_anthropic = lambda model: ("anthropic", model)
 
     def tearDown(self):
-        (llm.settings.gcp_project, llm.settings.anthropic_api_key,
+        (llm.settings.gcp_project,
          llm.settings.openai_api_key, llm.settings.gemini_api_key,
          llm._vertex_gemini, llm._vertex_anthropic) = self._orig
 
@@ -32,7 +32,6 @@ class EuRoutingTest(unittest.TestCase):
     def test_no_us_fallback_even_with_keys(self):
         # US-nycklar satta men inget GCP-projekt → fortfarande None (ingen US-väg).
         llm.settings.gcp_project = ""
-        llm.settings.anthropic_api_key = "sk-ant-xxx"
         llm.settings.openai_api_key = "sk-xxx"
         llm.settings.gemini_api_key = "g-xxx"
         self.assertIsNone(llm.make_validator())

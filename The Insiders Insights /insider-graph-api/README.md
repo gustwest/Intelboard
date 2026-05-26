@@ -98,11 +98,16 @@ Namnen i parentes är de Secret Manager-secrets som `bootstrap.sh` binder in:
 Secret-namnen har prefixet `insider-graph-` (matchar Secret Manager + de bindningar
 servicen faktiskt kör).
 
+> **Resonemangsmodellerna kräver ingen secret.** Generator (Gemini) och validator
+> (Claude) — som behandlar full kunddata — går via **Vertex AI EU** med
+> service-account-auth (ADC), inte förstaparts-API. EU-only-beslut 2026-05-26. Styrs
+> av env `GCP_PROJECT` + `VERTEX_LOCATION` (sätts av `bootstrap.sh`), inte Secret Manager.
+> Secret-nycklarna nedan är enbart för **probe-motorerna** vi mäter + connectors.
+
 | Env | Secret | Krävs av |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | `insider-graph-anthropic-api-key` | **validator (claude-opus): claims-klassning + GEO-riskloop.** Saknas nyckeln faller validatorn tillbaka till Gemini (lägre kvalitet). |
-| `GEMINI_API_KEY` | `insider-graph-gemini-api-key` | generator (claims/relevansgrind), polling |
-| `OPENAI_API_KEY` | `insider-graph-openai-api-key` | polling, email-extraktion |
+| `GEMINI_API_KEY` | `insider-graph-gemini-api-key` | probe-motor (gemini) i polling + riskloopens detektering |
+| `OPENAI_API_KEY` | `insider-graph-openai-api-key` | probe-motor (gpt-4o) i polling, email-extraktion |
 | `BRIGHTDATA_API_KEY` | `insider-graph-brightdata-api-key` | LinkedIn-connector |
 | `BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID` | `insider-graph-brightdata-linkedin-profile-dataset-id` | LinkedIn person |
 | `BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID` | `insider-graph-brightdata-linkedin-company-dataset-id` | LinkedIn företag |
@@ -113,7 +118,6 @@ LinkedIn-posts-datasetet. Lägg till dem i `bootstrap.sh` igen vid behov.
 Skapa secrets så här:
 
 ```bash
-echo -n "<value>" | gcloud secrets create insider-graph-anthropic-api-key --data-file=-
 echo -n "<value>" | gcloud secrets create insider-graph-openai-api-key --data-file=-
 # ...etc (samma prefix för alla, se tabellen ovan)
 ```

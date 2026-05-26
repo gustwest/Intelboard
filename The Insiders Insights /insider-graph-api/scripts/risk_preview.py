@@ -4,7 +4,9 @@ Syfte: inspektera promptkvaliteten innan vi bygger korrigeringen (skiva 2). Fris
 — bygger en Context ur inmatade fakta (ingen Firestore-kund behövs) och kör BARA
 genereringen (opus) per persona. Inga motoranrop, inget skrivs till grafen.
 
-Kräver ANTHROPIC_API_KEY (validator-modellen). GLEIF-homonymsökningen körs utan nyckel.
+Validatorn (Claude) går via Vertex AI EU: kräver env GCP_PROJECT (+ VERTEX_LOCATION) och
+lokala ADC-credentials (`gcloud auth application-default login`). GLEIF-homonymsökningen
+körs utan det.
 
     python scripts/risk_preview.py "Volvo Cars" \\
         --industry "fordonsindustri" --category "elbilar i premiumsegmentet" \\
@@ -42,7 +44,7 @@ def main() -> None:
 
     validator = llm_factory.make_validator()
     if validator is None:
-        raise SystemExit("Ingen ANTHROPIC_API_KEY konfigurerad — kan inte generera frågor.")
+        raise SystemExit("GCP_PROJECT ej satt — validatorn (Vertex EU) otillgänglig, kan inte generera frågor.")
 
     facts = [f.strip() for f in args.facts.split(";") if f.strip()]
     meta = [f"Bolag: {args.company}"]

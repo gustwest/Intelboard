@@ -11,7 +11,8 @@ class Settings(BaseSettings):
     # är att mäta de motorer användare faktiskt träffar. Se services/llm.py + projektminne.
     openai_api_key: str = ""
     gemini_api_key: str = ""
-    anthropic_api_key: str = ""  # legacy; våra resonemangsmodeller går via Vertex EU.
+    # (Ingen anthropic_api_key: validatorn (Claude) går via Vertex AI EU, inte
+    # förstaparts-API. EU-only-beslut 2026-05-26. Se services/llm.py.)
 
     # EU-only där det betyder något: våra egna resonemangsmodeller (generator/validator)
     # behandlar full kunddata internt och körs via Vertex AI i EU-region — ingen
