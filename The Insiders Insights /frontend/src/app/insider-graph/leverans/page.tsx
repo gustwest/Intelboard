@@ -88,9 +88,11 @@ export default function LeveransPage() {
   const [useAccent, setUseAccent] = useState(false);
   const [accent, setAccent] = useState('#9f51b6');
 
-  // Full kompilerad JSON-LD-graf (QA-vy, hopfällbar)
+  // Full kompilerad JSON-LD-graf (QA-vy, hopfällbar) — egen felhantering
+  // så att en CDN-miss inte förorenar sidans huvud-fel-banner.
   const [showOutput, setShowOutput] = useState(false);
   const [output, setOutput] = useState<{ clientId: string; json: string } | null>(null);
+  const [outputError, setOutputError] = useState<string | null>(null);
 
   useEffect(() => {
     graphFetch<{ clients: Client[] }>('/api/clients')
@@ -133,8 +135,9 @@ export default function LeveransPage() {
           /* lämna rå text om parsning misslyckas */
         }
         setOutput({ clientId: c.client_id, json });
+        setOutputError(null);
       })
-      .catch((e) => !cancelled && setError(String(e)));
+      .catch((e) => !cancelled && setOutputError(String(e)));
     return () => {
       cancelled = true;
     };
@@ -297,6 +300,11 @@ export default function LeveransPage() {
             <div style={{ fontSize: 12, color: C.muted, margin: '14px 0 8px' }}>
               {fullJson ? `Aktuell JSON-LD för ${selectedClient?.company_name || selected}` : 'Exempel-output (ej kompilerad)'}
             </div>
+            {outputError && (
+              <div style={{ ...errorStyle, marginTop: 0, marginBottom: 8 }}>
+                Kunde inte hämta kompilerad JSON-LD från CDN: {outputError}. Visar exempel-output.
+              </div>
+            )}
             <pre style={{ ...preStyle, maxHeight: 480, whiteSpace: 'pre', wordBreak: 'normal' }}>
               {fullJson || JSON.stringify(SAMPLE_JSON, null, 2)}
             </pre>
