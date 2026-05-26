@@ -76,10 +76,12 @@ def reset(
     esg_run_summary: dict | None = None,
     esg_submissions: dict[str, dict] | None = None,
     esg_reports: dict[str, dict] | None = None,
+    clients: dict[str, dict] | None = None,
 ) -> None:
     STATE.clear()
     STATE.update(
         client=client,  # None → klientdokumentet "finns inte" (exists=False)
+        clients=clients or {},  # för iter_clients (fan-out-jobb)
         employees=employees or {},
         company_items=company_items or {},
         employee_items=employee_items or {},
@@ -108,6 +110,10 @@ def client_doc(client_id: str) -> _DocRef:
         on_set=lambda _i, p: STATE.__setitem__("client", p),
         on_update=lambda _i, p: (STATE.get("client") or {}).update(p),
     )
+
+
+def iter_clients():
+    return list(STATE.get("clients", {}).items())
 
 
 def iter_employees(client_id: str):

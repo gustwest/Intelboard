@@ -88,6 +88,32 @@ def trigger_monthly_report(client_id: str, background: BackgroundTasks, month: s
     return {"status": "queued", "job": "monthly_report", "client_id": client_id, "month": month}
 
 
+@router.post("/esg-monthly")
+def trigger_esg_monthly(background: BackgroundTasks) -> dict[str, Any]:
+    """Riskloopens ESG-spår — månatlig fan-out: kör blind skanning + rapport för ALLA
+    kunder med ESG-tillägget påslaget. Skanning körs på redan GODKÄNDA frågor (generering
+    + review är manuellt/separat, som GEO-riskloopens generate vs detect)."""
+    background.add_task(_run_esg_monthly)
+    return {"status": "queued", "job": "esg_monthly"}
+
+
+def _run_esg_monthly() -> None:
+    from services import esg_report
+    from services.esg_scanner import run_esg_scan
+
+    ran = 0
+    for cid, data in fs.iter_clients():
+        if not data.get("esg_audit_enabled"):
+            continue
+        try:
+            run_esg_scan(cid)
+            esg_report.run(cid)
+            ran += 1
+        except Exception as exc:  # en kund får inte fälla hela fan-outen
+            log.warning("esg_monthly: kund %s misslyckades: %s", cid, exc)
+    log.info("esg_monthly: körde %d kund(er) med ESG-tillägg", ran)
+
+
 @router.post("/compile-via-eventarc")
 async def compile_via_eventarc(request: Request, background: BackgroundTasks) -> dict[str, Any]:
     """Eventarc-target: triggas av Firestore-writes på raw_items/.

@@ -46,6 +46,9 @@ PILLARS = ("E", "S", "G")
 PILLAR_LABELS = {"E": "Miljö (Environmental)", "S": "Socialt (Social)", "G": "Styrning (Governance)"}
 ESG_STATUSES = ("CRITICAL_OMISSION_RISK", "HIGH_REPUTATION_RISK", "ok")
 MAX_EXPANSIONS_PER_PILLAR = 4  # skydd mot runaway-generering
+# Kostnadsskydd vid skarp körning: en skanning gör (frågor × motorer) probe-anrop.
+# Taket håller en körning förutsägbar även om många frågor godkänts.
+MAX_QUESTIONS_PER_SCAN = 30
 
 # Hur varje pelare ska expanderas av Prompt Expansion Engine (styr genereringsprompten).
 _PILLAR_EXPANSION_THEME = {
@@ -197,7 +200,7 @@ def run_esg_scan(client_id: str) -> ESGScanResult | None:
         return None
 
     context = build_context(client_id, client)
-    questions = _load_approved_questions(client_id)
+    questions = _load_approved_questions(client_id)[:MAX_QUESTIONS_PER_SCAN]
     if not questions:
         log.info("ESG-loop %s: inga godkända frågor — generera + granska först", client_id)
         return ESGScanResult(client_id, 0, [])

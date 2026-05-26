@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Users, ArrowLeft, Trash2, X, AlertCircle, ExternalLink } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../../_components/GraphPageShell';
 import AttestedUpload from '../../_components/AttestedUpload';
+import ESGAddon from '../../_components/ESGAddon';
 import { graphFetch } from '../../_lib/api';
 
 type Employee = {
@@ -143,6 +144,9 @@ export default function ClientDetailPage() {
               )}
             </div>
           </div>
+
+          {/* AI-synlighet — ESG & CSRD Perception Audit (valbart tillägg, per kund) */}
+          <ESGAddon clientId={clientId} />
 
           {/* Officiell attesterad data (uppladdning) */}
           <AttestedUpload clientId={clientId} />

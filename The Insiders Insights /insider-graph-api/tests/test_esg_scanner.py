@@ -208,6 +208,17 @@ class RunScanTest(unittest.TestCase):
         self.assertEqual(result.questions_asked, 0)
         self.assertEqual(result.findings, [])
 
+    def test_scan_caps_questions(self):
+        # Fler godkända frågor än taket → bara MAX_QUESTIONS_PER_SCAN körs (kostnadsskydd).
+        n = es.MAX_QUESTIONS_PER_SCAN + 5
+        qs = {f"q{i}": _approved_q("E", "expansion", f"Fråga {i} om Acme?") for i in range(n)}
+        fakefs.reset(client={"company_name": "Acme AB"}, esg_questions=qs)
+        es.llm_factory.make_validator = lambda: object()
+        es._build_engines = lambda: {"gpt-4o": object()}
+        es._ask = lambda q, llm: ""  # inga svar → ingen klassning behövs
+        result = es.run_esg_scan("acme")
+        self.assertEqual(result.questions_asked, es.MAX_QUESTIONS_PER_SCAN)
+
     def test_persists_risky_findings_only(self):
         fakefs.reset(
             client={"company_name": "Acme AB"},
