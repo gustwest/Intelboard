@@ -95,23 +95,27 @@ Webhooks (`/api/webhooks/*`), `/health` och Eventarc-targets (`/api/jobs/compile
 
 Namnen i parentes är de Secret Manager-secrets som `bootstrap.sh` binder in:
 
+Secret-namnen har prefixet `insider-graph-` (matchar Secret Manager + de bindningar
+servicen faktiskt kör).
+
 | Env | Secret | Krävs av |
 |---|---|---|
-| `ADMIN_API_KEY` | `insider-graph-admin-key` | service |
-| `OPENAI_API_KEY` | `openai-api-key` | polling, email-extraktion |
-| `GEMINI_API_KEY` | `gemini-api-key` | polling, email-extraktion (fallback) |
-| `BRIGHTDATA_API_KEY` | `brightdata-api-key` | LinkedIn-connector |
-| `BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID` | `brightdata-profile-dataset` | LinkedIn person |
-| `BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID` | `brightdata-company-dataset` | LinkedIn företag |
-| `BRIGHTDATA_LINKEDIN_POSTS_DATASET_ID` | `brightdata-posts-dataset` | LinkedIn posts (framtida) |
-| `SENDGRID_API_KEY` | `sendgrid-api-key` | SendGrid outbound (valfritt) |
+| `ANTHROPIC_API_KEY` | `insider-graph-anthropic-api-key` | **validator (claude-opus): claims-klassning + GEO-riskloop.** Saknas nyckeln faller validatorn tillbaka till Gemini (lägre kvalitet). |
+| `GEMINI_API_KEY` | `insider-graph-gemini-api-key` | generator (claims/relevansgrind), polling |
+| `OPENAI_API_KEY` | `insider-graph-openai-api-key` | polling, email-extraktion |
+| `BRIGHTDATA_API_KEY` | `insider-graph-brightdata-api-key` | LinkedIn-connector |
+| `BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID` | `insider-graph-brightdata-linkedin-profile-dataset-id` | LinkedIn person |
+| `BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID` | `insider-graph-brightdata-linkedin-company-dataset-id` | LinkedIn företag |
+
+Ej bundna på körande service idag: `ADMIN_API_KEY` (API-auth), `SENDGRID_API_KEY`,
+LinkedIn-posts-datasetet. Lägg till dem i `bootstrap.sh` igen vid behov.
 
 Skapa secrets så här:
 
 ```bash
-echo -n "<value>" | gcloud secrets create insider-graph-admin-key --data-file=-
-echo -n "<value>" | gcloud secrets create openai-api-key --data-file=-
-# ...etc
+echo -n "<value>" | gcloud secrets create insider-graph-anthropic-api-key --data-file=-
+echo -n "<value>" | gcloud secrets create insider-graph-openai-api-key --data-file=-
+# ...etc (samma prefix för alla, se tabellen ovan)
 ```
 
 ## Engångs-bootstrap

@@ -93,7 +93,7 @@ echo "==> Uppdaterar service-env för $SERVICE"
 gcloud run services update "$SERVICE" --region="$REGION" --project="$PROJECT_ID" \
   --service-account="$SA_EMAIL" \
   --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},CDN_BUCKET=${BUCKET},CDN_BASE_URL=https://storage.googleapis.com/${BUCKET}" \
-  --update-secrets="ADMIN_API_KEY=insider-graph-admin-key:latest,OPENAI_API_KEY=openai-api-key:latest,GEMINI_API_KEY=gemini-api-key:latest,BRIGHTDATA_API_KEY=brightdata-api-key:latest,SENDGRID_API_KEY=sendgrid-api-key:latest,BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID=brightdata-profile-dataset:latest,BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID=brightdata-company-dataset:latest,BRIGHTDATA_LINKEDIN_POSTS_DATASET_ID=brightdata-posts-dataset:latest" \
+  --update-secrets="ANTHROPIC_API_KEY=insider-graph-anthropic-api-key:latest,OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,BRIGHTDATA_API_KEY=insider-graph-brightdata-api-key:latest,BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID=insider-graph-brightdata-linkedin-profile-dataset-id:latest,BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID=insider-graph-brightdata-linkedin-company-dataset-id:latest" \
   || echo "==> Service finns ej ännu — kör cloudbuild först"
 
 # ---- 6. Cloud Run Jobs -----------------------------------------------------
@@ -107,7 +107,7 @@ create_or_update_job() {
       --service-account="$SA_EMAIL" \
       --command="python" --args="-m,$CMD" \
       --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},CDN_BUCKET=${BUCKET},CDN_BASE_URL=https://storage.googleapis.com/${BUCKET}" \
-      --update-secrets="OPENAI_API_KEY=openai-api-key:latest,GEMINI_API_KEY=gemini-api-key:latest,BRIGHTDATA_API_KEY=brightdata-api-key:latest,BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID=brightdata-profile-dataset:latest,BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID=brightdata-company-dataset:latest,BRIGHTDATA_LINKEDIN_POSTS_DATASET_ID=brightdata-posts-dataset:latest"
+      --update-secrets="ANTHROPIC_API_KEY=insider-graph-anthropic-api-key:latest,OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,BRIGHTDATA_API_KEY=insider-graph-brightdata-api-key:latest,BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID=insider-graph-brightdata-linkedin-profile-dataset-id:latest,BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID=insider-graph-brightdata-linkedin-company-dataset-id:latest"
   else
     echo "==> Skapar job: $NAME"
     gcloud run jobs create "$NAME" \
@@ -116,7 +116,7 @@ create_or_update_job() {
       --command="python" --args="-m,$CMD" \
       --max-retries=1 \
       --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},CDN_BUCKET=${BUCKET},CDN_BASE_URL=https://storage.googleapis.com/${BUCKET}" \
-      --set-secrets="OPENAI_API_KEY=openai-api-key:latest,GEMINI_API_KEY=gemini-api-key:latest,BRIGHTDATA_API_KEY=brightdata-api-key:latest,BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID=brightdata-profile-dataset:latest,BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID=brightdata-company-dataset:latest,BRIGHTDATA_LINKEDIN_POSTS_DATASET_ID=brightdata-posts-dataset:latest"
+      --set-secrets="ANTHROPIC_API_KEY=insider-graph-anthropic-api-key:latest,OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,BRIGHTDATA_API_KEY=insider-graph-brightdata-api-key:latest,BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID=insider-graph-brightdata-linkedin-profile-dataset-id:latest,BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID=insider-graph-brightdata-linkedin-company-dataset-id:latest"
   fi
 }
 
