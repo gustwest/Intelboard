@@ -77,6 +77,17 @@ def trigger_risk_detect(client_id: str, background: BackgroundTasks) -> dict[str
     return {"status": "queued", "job": "risk_detect", "client_id": client_id}
 
 
+@router.post("/monthly-report/{client_id}")
+def trigger_monthly_report(client_id: str, background: BackgroundTasks, month: str | None = None) -> dict[str, Any]:
+    """GEO-riskloop skiva 3 — bygg + persistera månadsrapporten (default innevarande månad)."""
+    if not fs.client_doc(client_id).get().exists:
+        raise HTTPException(404, "client not found")
+    from jobs import monthly_report
+
+    background.add_task(monthly_report.run, client_id, month)
+    return {"status": "queued", "job": "monthly_report", "client_id": client_id, "month": month}
+
+
 @router.post("/compile-via-eventarc")
 async def compile_via_eventarc(request: Request, background: BackgroundTasks) -> dict[str, Any]:
     """Eventarc-target: triggas av Firestore-writes på raw_items/.

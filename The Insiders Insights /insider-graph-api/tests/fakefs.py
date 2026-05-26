@@ -68,6 +68,9 @@ def reset(
     claims: dict[str, dict] | None = None,
     risk_findings: dict[str, dict] | None = None,
     risk_questions: dict[str, dict] | None = None,
+    risk_run_summary: dict | None = None,
+    monthly_reports: dict[str, dict] | None = None,
+    polling_results: dict[str, dict] | None = None,
 ) -> None:
     STATE.clear()
     STATE.update(
@@ -78,6 +81,9 @@ def reset(
         claims=claims or {},
         risk_findings=risk_findings or {},
         risk_questions=risk_questions or {},
+        risk_run_summary=risk_run_summary,  # None → "finns inte"
+        monthly_reports=monthly_reports or {},
+        polling_results=polling_results or {},
         writes={},
     )
 
@@ -169,6 +175,34 @@ def risk_question_doc(client_id: str, question_id: str) -> _DocRef:
 
 def iter_risk_questions(client_id: str):
     return list(STATE.get("risk_questions", {}).items())
+
+
+def risk_run_summary_doc(client_id: str) -> _DocRef:
+    return _DocRef(
+        "latest",
+        STATE.get("risk_run_summary"),
+        on_set=lambda _i, p: STATE.__setitem__("risk_run_summary", p),
+    )
+
+
+def polling_results_col(client_id: str) -> _Col:
+    return _Col(STATE.get("polling_results"))
+
+
+def monthly_reports_col(client_id: str) -> _Col:
+    return _Col(STATE.get("monthly_reports"))
+
+
+def monthly_report_doc(client_id: str, month: str) -> _DocRef:
+    return _DocRef(
+        month,
+        STATE.get("monthly_reports", {}).get(month),
+        on_set=lambda i, p: STATE.setdefault("monthly_reports", {}).__setitem__(i, p),
+    )
+
+
+def iter_monthly_reports(client_id: str):
+    return list(STATE.get("monthly_reports", {}).items())
 
 
 def writes() -> dict[str, dict]:

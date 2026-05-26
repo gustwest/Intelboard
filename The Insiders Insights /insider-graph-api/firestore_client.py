@@ -95,6 +95,25 @@ def iter_risk_questions(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
         yield doc.id, doc.to_dict() or {}
 
 
+def risk_run_summary_doc(client_id: str):
+    """Senaste detekteringskörningens totaler (denominator för Risk Exposure-andelen)."""
+    return client_doc(client_id).collection("risk_runs").document("latest")
+
+
+def monthly_reports_col(client_id: str):
+    return client_doc(client_id).collection("monthly_reports")
+
+
+def monthly_report_doc(client_id: str, month: str):
+    """Månadsrapporten landar här fysiskt (id = YYYY-MM)."""
+    return monthly_reports_col(client_id).document(month)
+
+
+def iter_monthly_reports(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
+    for doc in monthly_reports_col(client_id).stream():
+        yield doc.id, doc.to_dict() or {}
+
+
 def connector_logs_col():
     return db().collection("connector_logs")
 

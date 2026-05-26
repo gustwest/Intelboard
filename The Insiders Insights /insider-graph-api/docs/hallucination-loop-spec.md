@@ -337,13 +337,40 @@ Render-modell-mönster som profile_page. Sektioner:
 GTM-modalen får visa en publik delmängd (t.ex. Risk Exposure-trend + antal lösta
 risker) som social proof — bara aggregat, inget känsligt.
 
+✅ **byggt:** rapporten landar fysiskt i `clients/{cid}/monthly_reports/{YYYY-MM}`
+(byggs av `jobs/monthly_report.py`, trigg `POST /api/jobs/monthly-report/{cid}`) och
+exponeras för påsyn via `routers/reports.py`: `GET /api/reports/{cid}` (lista),
+`/{month}` (JSON) och `/{month}/html` (renderad vy). Risk Exposure beräknas severity-vägt
+per persona + totalt med körningens svar (`risk_runs/latest`) som denominator (§6).
+Sektion 4 visar nu en lätt trend mot föregående rapport; full resolved-detektering = skiva 4.
+
+**Pedagogisk presentation (hybrid).** Mottagaren är en icke-teknisk ledningsgrupp, och
+verktygets output är ett *internt utkast* som teamet synar och färdigställer utanför
+verktyget. Därför:
+- **Strukturerad modell (backbone, ingen LLM):** `decision_confidence` 0–100 (intuitivt
+  headline-tal, högre=bättre; Risk Exposure kvar som tekniskt undermått), klartext-`verdict`,
+  `strengths` (uppsidan), och `improvement_opportunities` som är **invariant icke-tom** —
+  rapporten påstår aldrig att allt är perfekt (motverkar mission: ständig förbättring).
+- **Graderad skala, inte binärt bra/dåligt:** beslutssäkerheten är en *resa* med fem
+  namngivna nivåer (Tidigt läge → På väg → God grund → Stark → Mycket stark; `GEO_STAGES`).
+  Taket hålls medvetet under 100 (`CONFIDENCE_CEILING=95`) — GEO blir aldrig "klart"
+  eftersom motorerna ändras, så gapet till idealet är alltid synligt. Tunn mätning (ej alla
+  tre personas) kan inte nå över "God grund" (`COVERAGE_CEILING=74`). Ett `next_step` pekar
+  alltid framåt (närmaste nivå / bredda täckning / i toppen: bevaka & försvara). HTML-vyn
+  visar en visuell skala med taket markerat.
+- **Narrativt utkast (opus, ovanpå):** `generate_narrative_draft` gör ETT aggregerat anrop
+  ur den strukturerade modellen → en flytande klartext-text (vad motorn svarar / varför det
+  skadar personan / konsekvens / vad som sannolikt förbättrar det). Guardrails i prompten
+  (ingen kausalitet, inget känsligt). Begränsas av människans review-grind före extern
+  färdigställning. No-op utan LLM — strukturen står ändå.
+
 ## 12. Leverans i skivor
 
 | Skiva | Innehåll | DoD-koppling |
 |-------|----------|--------------|
 | 1 | Frågebatterier + skadeklassning (read-only) → findings i review-kö ✅ **byggd** (services/risk_detector.py) | test på klassning |
 | 2 | Korrigering: godkänd finding → förstärkt ammunition-claim → recompile + logg ✅ **byggd** (services/risk_corrector.py, POST /api/review/{id}/risks/{fid}) | compiler-test |
-| 3 | Månadsrapport: render-modell + endpoint + HTML, per persona | render-test |
+| 3 | Månadsrapport: render-modell + endpoint + HTML, per persona ✅ **byggd** (services/monthly_report.py, jobs/monthly_report.py, routers/reports.py) | render-test |
 | 4 | Effekt över tid: Risk Exposure-trend + resolved-detektering | trend-test |
 
 Varje skiva följer Definition of Done i connector-roadmap.md §3. Skiva 1 ger redan

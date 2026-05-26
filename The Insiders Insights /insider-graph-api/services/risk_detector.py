@@ -201,6 +201,7 @@ def run_for_client(client_id: str) -> RiskRunResult | None:
         return RiskRunResult(client_id, 0, [])
 
     findings: list[RiskFinding] = []
+    answers_by_persona: dict[str, int] = {p: 0 for p in ALL_PERSONAS}
     for q in questions:
         for engine_name, engine in engines.items():
             answer = _ask(q.text, engine)
@@ -209,6 +210,7 @@ def run_for_client(client_id: str) -> RiskRunResult | None:
             cls = classify(validator, q, answer, context)
             if cls is None:
                 continue
+            answers_by_persona[q.persona] = answers_by_persona.get(q.persona, 0) + 1
             if _should_follow_up(cls):  # §B — bunden följdfråga vid gränsfall
                 cls = follow_up(validator, engine, q, answer, cls, context) or cls
             if cls.harm == "ok":
@@ -219,8 +221,22 @@ def run_for_client(client_id: str) -> RiskRunResult | None:
             _persist(client_id, cls)
             findings.append(cls)
 
+    _persist_run_summary(client_id, answers_by_persona, len(findings))
     log.info("risk loop %s: %d frågor → %d findings", client_id, len(questions), len(findings))
     return RiskRunResult(client_id, len(questions), findings)
+
+
+def _persist_run_summary(client_id: str, answers_by_persona: dict[str, int], findings_count: int) -> None:
+    """Skriv körningens totaler — månadsrapporten (skiva 3) använder dem som denominator
+    för Risk Exposure-andelen (§6)."""
+    fs.risk_run_summary_doc(client_id).set(
+        {
+            "answers_by_persona": answers_by_persona,
+            "total_answers": sum(answers_by_persona.values()),
+            "findings_count": findings_count,
+            "ran_at": firestore.SERVER_TIMESTAMP,
+        }
+    )
 
 
 def _load_approved_questions(client_id: str) -> list[Question]:
