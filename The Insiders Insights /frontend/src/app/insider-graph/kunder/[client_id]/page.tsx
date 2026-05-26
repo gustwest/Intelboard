@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Users, ArrowLeft, Trash2, X, AlertCircle, ExternalLink } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../../_components/GraphPageShell';
+import AttestedUpload from '../../_components/AttestedUpload';
 import { graphFetch } from '../../_lib/api';
 
 type Employee = {
@@ -142,6 +143,9 @@ export default function ClientDetailPage() {
               )}
             </div>
           </div>
+
+          {/* Officiell attesterad data (uppladdning) */}
+          <AttestedUpload clientId={clientId} />
 
           {/* Medarbetare */}
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>

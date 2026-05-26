@@ -73,6 +73,42 @@ class AttestedIngestTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             ai.ingest_attested_csv("acme", "linkedin_follower_demographics", "fel,kolumner\n1,2\n", attested_at="2026-05-01")
 
+    def test_replace_mode_reported_in_result(self):
+        _setup()
+        res = ai.ingest_attested_csv("acme", "linkedin_follower_demographics", CSV, attested_at="2026-05-01")
+        self.assertEqual(res["mode"], "replace")
+
+    def test_replace_deletes_prior_claims_same_source(self):
+        # Tidigare attesterade claims från samma källtyp ska raderas; andra origin lämnas.
+        fakefs.reset(
+            client={"company_name": "Acme AB"},
+            claims={
+                "old1": {"origin": "attested:linkedin_follower_demographics",
+                         "statement": "gammalt", "source": [{"kind": "attested", "attested_at": "2026-04-01"}]},
+                "keep": {"origin": "attested:linkedin_posts", "statement": "annan källa"},
+            },
+        )
+        res = ai.ingest_attested_csv(
+            "acme", "linkedin_follower_demographics",
+            "dimension,segment,value\nseniority,Director,1500\n", attested_at="2026-05-01",
+        )
+        self.assertEqual(res["removed"], 1)
+        self.assertNotIn("old1", fakefs.STATE["claims"])  # raderad (replace)
+        self.assertIn("keep", fakefs.STATE["claims"])      # annan källtyp → orörd
+
+    def test_status_reports_counts_and_latest_date(self):
+        fakefs.reset(
+            client={"company_name": "Acme AB"},
+            claims={
+                "a": {"origin": "attested:linkedin_follower_demographics", "source": [{"attested_at": "2026-04-01"}]},
+                "b": {"origin": "attested:linkedin_follower_demographics", "source": [{"attested_at": "2026-05-01"}]},
+            },
+        )
+        row = [s for s in ai.attested_status("acme") if s["key"] == "linkedin_follower_demographics"][0]
+        self.assertEqual(row["claims"], 2)
+        self.assertEqual(row["last_attested_at"], "2026-05-01")
+        self.assertEqual(row["mode"], "replace")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -114,6 +114,68 @@ def iter_monthly_reports(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]
         yield doc.id, doc.to_dict() or {}
 
 
+# --- ESG & CSRD Perception Audit (riskloopens ESG-spår) -----------------------
+# Speglar risk_questions/risk_findings/risk_runs/monthly_reports men i egna
+# collections så ESG-loopen kan köras och granskas parallellt med GEO-riskloopen.
+
+
+def esg_questions_col(client_id: str):
+    return client_doc(client_id).collection("esg_questions")
+
+
+def esg_question_doc(client_id: str, question_id: str):
+    return esg_questions_col(client_id).document(question_id)
+
+
+def iter_esg_questions(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
+    for doc in esg_questions_col(client_id).stream():
+        yield doc.id, doc.to_dict() or {}
+
+
+def esg_findings_col(client_id: str):
+    return client_doc(client_id).collection("esg_findings")
+
+
+def esg_finding_doc(client_id: str, finding_id: str):
+    return esg_findings_col(client_id).document(finding_id)
+
+
+def iter_esg_findings(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
+    for doc in esg_findings_col(client_id).stream():
+        yield doc.id, doc.to_dict() or {}
+
+
+def esg_run_summary_doc(client_id: str):
+    """Senaste ESG-skanningens totaler (denominator för AI ESG Risk Score)."""
+    return client_doc(client_id).collection("esg_runs").document("latest")
+
+
+def esg_submissions_col(client_id: str):
+    return client_doc(client_id).collection("esg_submissions")
+
+
+def esg_submission_doc(client_id: str, submission_id: str):
+    return esg_submissions_col(client_id).document(submission_id)
+
+
+def iter_esg_submissions(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
+    for doc in esg_submissions_col(client_id).stream():
+        yield doc.id, doc.to_dict() or {}
+
+
+def esg_reports_col(client_id: str):
+    return client_doc(client_id).collection("esg_reports")
+
+
+def esg_report_doc(client_id: str, month: str):
+    return esg_reports_col(client_id).document(month)
+
+
+def iter_esg_reports(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
+    for doc in esg_reports_col(client_id).stream():
+        yield doc.id, doc.to_dict() or {}
+
+
 def connector_logs_col():
     return db().collection("connector_logs")
 

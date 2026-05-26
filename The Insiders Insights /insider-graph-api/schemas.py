@@ -95,3 +95,59 @@ class Claim(BaseModel):
     # → inget claim), så ett persisterat narrative-claim bär alltid dessa. ISO-tid + modell.
     validated_at: str | None = None
     validated_by: str | None = None
+
+
+# --- ESG & CSRD Perception Audit: trestegs ingestion-schema ------------------
+# "Borde svaret varit annorlunda?" → kunden matar in verifierade ESG-data i tre
+# mognadsfaser (progressiv onboarding). Strikt validering; FAS 1 obligatorisk,
+# FAS 2 och 3 frivilliga. Datan blir källförsedda korrigerande claims (skiva 2).
+
+
+class ESGCoreMetrics(BaseModel):
+    """FAS 1: CORE ESG — de akuta riskräddarna."""
+
+    scope_1_co2e: float = Field(..., ge=0, description="Scope 1, ton CO2e")
+    scope_2_co2e: float = Field(..., ge=0, description="Scope 2, ton CO2e")
+    scope_3_co2e: float = Field(..., ge=0, description="Scope 3, ton CO2e")
+    net_zero_target_year: int = Field(..., ge=2020, le=2100)
+    management_female_pct: int = Field(..., ge=0, le=100)
+    board_female_pct: int = Field(..., ge=0, le=100)
+    iso_27001_certified: bool
+    iso_14001_certified: bool
+
+
+class ESGCsrdBasicMetrics(BaseModel):
+    """FAS 2: CSRD BASIC — Social & Governance."""
+
+    unadjusted_gender_pay_gap_pct: float = Field(..., ge=-100, le=100)
+    employee_turnover_rate: float = Field(..., ge=0, le=100)
+    anti_corruption_policy_active: bool
+    ecovadis_medal: Literal["None", "Bronze", "Silver", "Gold", "Platinum"] = "None"
+
+
+class ESGEnterpriseAdvancedMetrics(BaseModel):
+    """FAS 3: ENTERPRISE ADVANCED — guldstandarden för AI-inköpare."""
+
+    renewable_energy_share_pct: float = Field(..., ge=0, le=100)
+    waste_recycling_rate_pct: float = Field(..., ge=0, le=100)
+    supplier_code_of_conduct_signed_pct: float = Field(..., ge=0, le=100)
+    eu_taxonomy_alignment_turnover_pct: float = Field(..., ge=0, le=100)
+
+
+class ESGMetricsSubmission(BaseModel):
+    """Inskickat ESG-formulär. FAS 1 obligatorisk; FAS 2/3 frivilliga (progressiv
+    onboarding). `finding_id` länkar tillbaka till den ESG-finding kunden reagerade på."""
+
+    finding_id: str | None = Field(
+        default=None, description="ESG-findingen som triggade 'Borde svaret varit annorlunda?'."
+    )
+    triggered_by_question: str | None = Field(
+        default=None, description="Den blinda AI-fråga kunden reagerade på."
+    )
+    source_label: str | None = Field(
+        default=None, description="Proveniens-etikett (default: uppgift från bolaget)."
+    )
+    source_url: str | None = None
+    core: ESGCoreMetrics
+    csrd_basic: ESGCsrdBasicMetrics | None = None
+    enterprise_advanced: ESGEnterpriseAdvancedMetrics | None = None

@@ -71,6 +71,11 @@ def reset(
     risk_run_summary: dict | None = None,
     monthly_reports: dict[str, dict] | None = None,
     polling_results: dict[str, dict] | None = None,
+    esg_questions: dict[str, dict] | None = None,
+    esg_findings: dict[str, dict] | None = None,
+    esg_run_summary: dict | None = None,
+    esg_submissions: dict[str, dict] | None = None,
+    esg_reports: dict[str, dict] | None = None,
 ) -> None:
     STATE.clear()
     STATE.update(
@@ -84,6 +89,11 @@ def reset(
         risk_run_summary=risk_run_summary,  # None → "finns inte"
         monthly_reports=monthly_reports or {},
         polling_results=polling_results or {},
+        esg_questions=esg_questions or {},
+        esg_findings=esg_findings or {},
+        esg_run_summary=esg_run_summary,  # None → "finns inte"
+        esg_submissions=esg_submissions or {},
+        esg_reports=esg_reports or {},
         writes={},
     )
 
@@ -203,6 +213,80 @@ def monthly_report_doc(client_id: str, month: str) -> _DocRef:
 
 def iter_monthly_reports(client_id: str):
     return list(STATE.get("monthly_reports", {}).items())
+
+
+def esg_questions_col(client_id: str) -> _Col:
+    return _Col(STATE.get("esg_questions"))
+
+
+def esg_question_doc(client_id: str, question_id: str) -> _DocRef:
+    return _DocRef(
+        question_id,
+        STATE.get("esg_questions", {}).get(question_id),
+        on_set=lambda i, p: STATE.setdefault("esg_questions", {}).__setitem__(i, p),
+        on_update=lambda i, p: STATE["esg_questions"].setdefault(i, {}).update(p),
+    )
+
+
+def iter_esg_questions(client_id: str):
+    return list(STATE.get("esg_questions", {}).items())
+
+
+def esg_findings_col(client_id: str) -> _Col:
+    return _Col(STATE.get("esg_findings"))
+
+
+def esg_finding_doc(client_id: str, finding_id: str) -> _DocRef:
+    return _DocRef(
+        finding_id,
+        STATE.get("esg_findings", {}).get(finding_id),
+        on_set=lambda i, p: STATE.setdefault("esg_findings", {}).__setitem__(i, p),
+        on_update=lambda i, p: STATE["esg_findings"].setdefault(i, {}).update(p),
+    )
+
+
+def iter_esg_findings(client_id: str):
+    return list(STATE.get("esg_findings", {}).items())
+
+
+def esg_run_summary_doc(client_id: str) -> _DocRef:
+    return _DocRef(
+        "latest",
+        STATE.get("esg_run_summary"),
+        on_set=lambda _i, p: STATE.__setitem__("esg_run_summary", p),
+    )
+
+
+def esg_submissions_col(client_id: str) -> _Col:
+    return _Col(STATE.get("esg_submissions"))
+
+
+def esg_submission_doc(client_id: str, submission_id: str) -> _DocRef:
+    return _DocRef(
+        submission_id,
+        STATE.get("esg_submissions", {}).get(submission_id),
+        on_set=lambda i, p: STATE.setdefault("esg_submissions", {}).__setitem__(i, p),
+    )
+
+
+def iter_esg_submissions(client_id: str):
+    return list(STATE.get("esg_submissions", {}).items())
+
+
+def esg_reports_col(client_id: str) -> _Col:
+    return _Col(STATE.get("esg_reports"))
+
+
+def esg_report_doc(client_id: str, month: str) -> _DocRef:
+    return _DocRef(
+        month,
+        STATE.get("esg_reports", {}).get(month),
+        on_set=lambda i, p: STATE.setdefault("esg_reports", {}).__setitem__(i, p),
+    )
+
+
+def iter_esg_reports(client_id: str):
+    return list(STATE.get("esg_reports", {}).items())
 
 
 def writes() -> dict[str, dict]:

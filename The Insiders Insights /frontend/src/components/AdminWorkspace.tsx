@@ -68,7 +68,7 @@ const FILE_CATEGORIES = [
 // all issues, files and agent sessions to a separate workspace.
 // ============================================================
 export default function AdminWorkspace({ product = 'the-insiders' }: { product?: string }) {
-  const [activeTab, setActiveTab] = useState<'kanban' | 'files' | 'agent'>('kanban');
+  const [activeTab, setActiveTab] = useState<'kanban' | 'files' | 'agent'>('agent');
 
   return (
     <div style={{

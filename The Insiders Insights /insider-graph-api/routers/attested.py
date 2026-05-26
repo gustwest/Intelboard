@@ -13,15 +13,26 @@ from typing import Any
 
 from fastapi import APIRouter, Form, HTTPException, UploadFile
 
-from services.attested_ingest import PARSERS, ingest_attested_csv
+from services.attested_ingest import SOURCE_TYPES, attested_status, ingest_attested_csv
 
 router = APIRouter(prefix="/api/attested", tags=["attested"])
 
 
 @router.get("/source-types")
 def list_source_types() -> dict[str, Any]:
-    """Vilka officiella källtyper systemet kan ta emot just nu."""
-    return {"source_types": sorted(PARSERS)}
+    """Vilka officiella källtyper systemet kan ta emot, med läge + beskrivning för UI."""
+    return {
+        "source_types": [
+            {"key": st.key, "label": st.label, "description": st.description, "mode": st.mode}
+            for st in SOURCE_TYPES.values()
+        ]
+    }
+
+
+@router.get("/{client_id}/status")
+def status(client_id: str) -> dict[str, Any]:
+    """Per källtyp: antal attesterade claims + senaste datum, för uppladdnings-UI:t."""
+    return {"client_id": client_id, "source_types": attested_status(client_id)}
 
 
 @router.post("/{client_id}/{source_type}")

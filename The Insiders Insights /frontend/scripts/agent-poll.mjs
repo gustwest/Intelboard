@@ -17,7 +17,7 @@
  *   AGENT_API_BASE    — Frontend URL (default: Cloud Run)
  *   AGENT_API_KEY     — Shared secret for authentication (required)
  *   AGENT_CLI         — CLI command (default: ~/.local/bin/claude)
- *   AGENT_MODEL       — Default model (default: claude-sonnet-4-6)
+ *   AGENT_MODEL       — Default model (default: claude-opus-4-7)
  *   POLL_INTERVAL_MS  — Poll interval in ms (default: 5000)
  */
 
@@ -27,7 +27,7 @@ import { spawn } from 'child_process';
 const API_BASE = process.env.AGENT_API_BASE || 'https://insiders-frontend-815335042776.europe-north1.run.app';
 const API_KEY = process.env.AGENT_API_KEY || '';
 const CLAUDE_CLI = process.env.AGENT_CLI || `${process.env.HOME}/.local/bin/claude`;
-const DEFAULT_MODEL = process.env.AGENT_MODEL || 'claude-sonnet-4-6';
+const DEFAULT_MODEL = process.env.AGENT_MODEL || 'claude-opus-4-7';
 const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL_MS || '5000', 10);
 const LOG_BATCH_INTERVAL = 1000; // Send logs every 1 second
 const PROJECT_DIR = process.cwd();

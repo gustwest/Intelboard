@@ -5,12 +5,21 @@ från den officiella källan och laddar upp den mot kunden i vårt system. Kunde
 aldrig datan på vägen → vi kan ärligt attestera att den är oförvanskad per ett datum.
 
 Vi tolkar ett **kanoniskt intag-format** (CSV med kolumnerna `dimension,segment,value`),
-inte LinkedIns råa export rakt av. Skälet: de råa export-layouterna varierar och ändras;
+inte källans råa export rakt av. Skälet: de råa export-layouterna varierar och ändras;
 eftersom vi förbereder filerna normaliserar vi dem till detta format. Native-parsers per
-LinkedIn-export-typ kan registreras i PARSERS när vi har riktiga exempelfiler.
+export-typ registreras i SOURCE_TYPES när vi har riktiga exempelfiler.
+
+Två uppdateringslägen, en egenskap hos källtypen (inte ett val per uppladdning):
+
+  * **replace** (ögonblicksbild): varje export är "nuläget" → gamla claims från samma
+    källtyp raderas innan de nya skrivs. T.ex. följardemografi: förra månadens andelar
+    är fel nu.
+  * **append** (logg): varje rad är ett eget daterat innehåll → ackumuleras. Idempotenta
+    id:n hindrar dubbletter. T.ex. inlägg/jobbannonser (framtida källtyper).
 
 Claims byggs **deterministiskt** (ingen LLM) — datan är strukturerad och vi går i god
-för den. Varje claim får en `attested`-källa med datum + valfri publik url.
+för den. Varje claim taggas med `origin="attested:<source_type>"` så replace kan hitta
+och radera rätt claims vid omkörning.
 """
 from __future__ import annotations
 
@@ -19,6 +28,7 @@ import hashlib
 import io
 import logging
 from dataclasses import dataclass
+from typing import Any, Callable
 
 import firestore_client as fs
 from schemas import Claim, ClaimSource
@@ -46,35 +56,13 @@ class Row:
     value: int
 
 
-def ingest_attested_csv(
-    client_id: str,
-    source_type: str,
-    csv_text: str,
-    attested_at: str,
-    url: str | None = None,
-) -> dict:
-    """Tolka, validera och persistera attesterade claims ur en officiell CSV.
-
-    Höjer ValueError vid kund som saknas, okänd source_type eller ogiltig CSV.
-    """
-    client = fs.client_doc(client_id).get()
-    if not client.exists:
-        raise ValueError(f"client not found: {client_id}")
-    company = (client.to_dict() or {}).get("company_name") or client_id
-
-    parser = PARSERS.get(source_type)
-    if parser is None:
-        raise ValueError(f"unknown source_type: {source_type}")
-
-    rows = parser(csv_text)
-    if not rows:
-        raise ValueError("no valid rows in file")
-
-    claims = _build_claims(company, rows, source_type, attested_at, url)
-    for claim_id, claim in claims:
-        fs.claim_doc(client_id, claim_id).set(claim.model_dump())
-
-    return {"client_id": client_id, "source_type": source_type, "written": len(claims), "attested_at": attested_at}
+@dataclass(frozen=True)
+class SourceType:
+    key: str
+    label: str                      # människovänlig etikett för UI
+    description: str
+    mode: str                       # "replace" | "append"
+    parser: Callable[[str], list["Row"]]
 
 
 def parse_canonical(csv_text: str) -> list[Row]:
@@ -99,11 +87,100 @@ def parse_canonical(csv_text: str) -> list[Row]:
     return rows
 
 
-# source_type → parser. Native LinkedIn-export-parsers registreras här när vi har
+# source_type → konfig. Native LinkedIn-export-parsers registreras här när vi har
 # riktiga exempelfiler att skriva dem mot.
-PARSERS = {
-    "linkedin_follower_demographics": parse_canonical,
+SOURCE_TYPES: dict[str, SourceType] = {
+    "linkedin_follower_demographics": SourceType(
+        key="linkedin_follower_demographics",
+        label="LinkedIn – följardemografi",
+        description="Följarbasens sammansättning (senioritet, funktion, bransch, geografi, "
+                    "företagsstorlek). Ögonblicksbild — ersätter tidigare uppladdning.",
+        mode="replace",
+        parser=parse_canonical,
+    ),
 }
+
+# Bakåtkompatibel vy: source_type → parser.
+PARSERS = {k: st.parser for k, st in SOURCE_TYPES.items()}
+
+
+def ingest_attested_csv(
+    client_id: str,
+    source_type: str,
+    csv_text: str,
+    attested_at: str,
+    url: str | None = None,
+) -> dict:
+    """Tolka, validera och persistera attesterade claims ur en officiell CSV.
+
+    Höjer ValueError vid kund som saknas, okänd source_type eller ogiltig CSV.
+    """
+    client = fs.client_doc(client_id).get()
+    if not client.exists:
+        raise ValueError(f"client not found: {client_id}")
+    company = (client.to_dict() or {}).get("company_name") or client_id
+
+    st = SOURCE_TYPES.get(source_type)
+    if st is None:
+        raise ValueError(f"unknown source_type: {source_type}")
+
+    rows = st.parser(csv_text)
+    if not rows:
+        raise ValueError("no valid rows in file")
+
+    origin = f"attested:{source_type}"
+    removed = _delete_existing(client_id, origin) if st.mode == "replace" else 0
+
+    claims = _build_claims(company, rows, source_type, attested_at, url)
+    for claim_id, claim in claims:
+        fs.claim_doc(client_id, claim_id).set({**claim.model_dump(), "origin": origin})
+
+    return {
+        "client_id": client_id,
+        "source_type": source_type,
+        "mode": st.mode,
+        "written": len(claims),
+        "removed": removed,
+        "attested_at": attested_at,
+    }
+
+
+def attested_status(client_id: str) -> list[dict[str, Any]]:
+    """Per källtyp: antal attesterade claims + senaste attested_at (för UI-status)."""
+    counts: dict[str, int] = {}
+    latest: dict[str, str] = {}
+    for _claim_id, raw in fs.iter_claims(client_id):
+        origin = raw.get("origin") or ""
+        if not origin.startswith("attested:"):
+            continue
+        key = origin.split(":", 1)[1]
+        counts[key] = counts.get(key, 0) + 1
+        src = (raw.get("source") or [{}])[0]
+        at = src.get("attested_at")
+        if at and at > latest.get(key, ""):
+            latest[key] = at
+
+    return [
+        {
+            "key": st.key,
+            "label": st.label,
+            "description": st.description,
+            "mode": st.mode,
+            "claims": counts.get(st.key, 0),
+            "last_attested_at": latest.get(st.key),
+        }
+        for st in SOURCE_TYPES.values()
+    ]
+
+
+def _delete_existing(client_id: str, origin: str) -> int:
+    """Radera tidigare attesterade claims med samma origin (replace-läge)."""
+    removed = 0
+    for claim_id, raw in list(fs.iter_claims(client_id)):
+        if (raw.get("origin") or "") == origin:
+            fs.claim_doc(client_id, claim_id).delete()
+            removed += 1
+    return removed
 
 
 def _build_claims(
