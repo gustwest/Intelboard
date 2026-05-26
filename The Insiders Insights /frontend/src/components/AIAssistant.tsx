@@ -133,9 +133,11 @@ export default function AIAssistant() {
       const storedSession = sessionStorage.getItem('insiders_ai_session');
       if (storedSession) {
         setSessionId(storedSession);
-        
-        // Fetch history
-        fetch(`${API_URL}/api/ai/chat/${storedSession}`)
+
+        // Fetch history, scoped to the active product so the transcript doesn't
+        // mix Insiders- and Geogiraph-turer when switching products.
+        const product = pathname.startsWith('/insider-graph') ? 'graph_home' : 'home';
+        fetch(`${API_URL}/api/ai/chat/${storedSession}?page_context=${product}`)
           .then(res => res.json())
           .then(data => {
             if (Array.isArray(data) && data.length > 0) {

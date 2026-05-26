@@ -94,7 +94,12 @@ async def ai_upload_temp(customer_id: Optional[str] = None, file: UploadFile = F
 # ------------------------------------------------------------------
 # Platform knowledge — baked into system prompt
 # ------------------------------------------------------------------
-PLATFORM_KNOWLEDGE = """
+# The knowledge is split per product. Only the ACTIVE product (derived from
+# page_context) is injected as primary knowledge; the other product is demoted
+# to a short reference so Gemini can answer cross-product questions without
+# blending concepts (LinkedIn-mätvärden vs SoV, PostgreSQL vs Firestore, osv.).
+
+INSIDERS_KNOWLEDGE = """
 ## Om The Insiders Insights
 
 The Insiders Insights är en SaaS-plattform byggd för LinkedIn-marknadsföringsbyråer.
@@ -169,24 +174,25 @@ navigerar till källdetaljsidan vid klick. Pilen (▼) expanderar listan med ens
 - **Spend / Total Spent**: Annonskostnad
 - **CPC (Cost Per Click)**: Kostnad per klick
 - **CPM (Cost Per Mille)**: Kostnad per 1000 visningar
+"""
 
----
 
-## Produkt 2: geogiraph
+GEOGRAPH_KNOWLEDGE = """
+## Om Geogiraph
 
-geogiraph är en **separat tjänst** som lever bredvid The Insiders Insights i samma
+Geogiraph är en **separat tjänst** som lever bredvid The Insiders Insights i samma
 plattform. Användare växlar mellan produkterna via en ProductSwitcher högst upp i sidebar
-("THE INSIDERS." ↔ "GEOGIRAPH"). När pathname börjar med `/insider-graph/` är användaren
+("THE INSIDERS." ↔ "GEOGRAPH"). När pathname börjar med `/insider-graph/` är användaren
 i Graph-läget och sidebarens nav-länkar ändras.
 
-**Kunder är samma bolag** i båda produkterna — `client_id` i geogiraph är samma slug
+**Kunder är samma bolag** i båda produkterna — `client_id` i Geogiraph är samma slug
 som `customer.slug` i Insiders Insights. Inloggning är delad via NextAuth.
 
-### Vad geogiraph gör (Generative Engine Optimization)
+### Vad Geogiraph gör (Generative Engine Optimization)
 
-geogiraph gör en kunds organisation **maskinläsbar för AI-sökmotorer** (ChatGPT,
+Geogiraph gör en kunds organisation **maskinläsbar för AI-sökmotorer** (ChatGPT,
 Perplexity, Gemini, Google AI Overviews). I stället för att optimera annonsering mot
-LinkedIn (vilket är Insiders Insights fokus) optimerar geogiraph kundens *närvaro*
+LinkedIn (vilket är Insiders Insights fokus) optimerar Geogiraph kundens *närvaro*
 i de AI-svar som ges till frågor som "Vilka är de ledande bolagen inom X i Sverige?"
 
 Pipeline i fem steg:
@@ -216,7 +222,7 @@ Pipeline i fem steg:
 - **AI-synlighet** (`/insider-graph/polling`): Veckodata för Share of Voice, Sentiment och
   Parity Index per kategori (Affär, Finans, Innovation, HR).
 
-### Nyckelkoncept i geogiraph
+### Nyckelkoncept i Geogiraph
 
 **Nodtyp** — varje medarbetare klassas som en av tre:
 - **Aktiv nod**: publicerar regelbundet. Scrapeas dagligen, fullt coachningsspår, högst pris-tier.
@@ -244,7 +250,7 @@ Substack, GitHub, Crunchbase, Vinnova, PRV, Scholar.
 
 ### Teknisk arkitektur (skiljer sig från Insiders Insights)
 
-| | Insiders Insights | geogiraph |
+| | Insiders Insights | Geogiraph |
 |---|---|---|
 | Databas | PostgreSQL (Cloud SQL) | Firestore (eur3, native) |
 | Backend | `backend/` FastAPI | `insider-graph-api/` FastAPI |
@@ -259,7 +265,7 @@ Cron-jobb (Cloud Scheduler, tidszon Europe/Stockholm):
 - `compile-all-daily` 05:00 dagligen + Eventarc-trigger på Firestore-writes
 - `polling-weekly-tue` 06:00 tisdagar
 
-**Auth**: geogiraph-API:t kräver `X-API-Key` (Secret Manager: `insider-graph-admin-key`).
+**Auth**: Geogiraph-API:t kräver `X-API-Key` (Secret Manager: `insider-graph-admin-key`).
 Frontend skickar key via `NEXT_PUBLIC_GRAPH_API_KEY`. Webhooks och Eventarc-targets är
 undantagna och autentiseras separat.
 
@@ -267,6 +273,37 @@ undantagna och autentiseras separat.
 Eventarc-trigger på GCP. `cloudbuild.yaml` bygger image + uppdaterar service och alla jobs
 till samma SHA vid varje deploy.
 """
+
+
+# Short summaries of the *other* product — injected only as a cross-reference so
+# the AI can answer "vad är skillnaden?" utan att blanda ihop begreppen.
+INSIDERS_SUMMARY = """
+**The Insiders Insights** (den ANDRA produkten): SaaS för LinkedIn-marknadsföringsbyråer.
+Samlar in, analyserar och rapporterar kunders LinkedIn-kampanjer/organiska aktivitet.
+Begrepp: Kund, Källa, Dataset, Modul (KPI), Mål. Data i PostgreSQL. Mätvärden: Impressions,
+Clicks, CTR, Engagement Rate, CPC, CPM m.fl. Sidor: /kunder, /sources, /moduler, /rapporter.
+"""
+
+GEOGRAPH_SUMMARY = """
+**Geogiraph** (den ANDRA produkten): separat tjänst för Generative Engine Optimization (GEO).
+Gör en kunds organisation maskinläsbar för AI-sökmotorer (ChatGPT, Perplexity, Gemini) via en
+JSON-LD-graf (Schema.org) som distribueras över CDN och injiceras med GTM. Data i Firestore.
+Begrepp: Nodtyp (aktiv/episodisk/passiv), Connector, Share of Voice, Sentiment, Parity Index.
+Sidor: /insider-graph/*.
+"""
+
+
+def _select_product_knowledge(page_context: Optional[str]) -> Tuple[str, str, str]:
+    """Pick which product is active based on page_context.
+
+    Returns (active_product_name, primary_knowledge, other_product_summary).
+    Only the active product's full knowledge is injected; the other product is
+    demoted to a one-paragraph summary so the AI never conflates the two.
+    """
+    in_graph = bool(page_context and page_context.startswith("graph_"))
+    if in_graph:
+        return "Geogiraph", GEOGRAPH_KNOWLEDGE, INSIDERS_SUMMARY
+    return "The Insiders Insights", INSIDERS_KNOWLEDGE, GEOGRAPH_SUMMARY
 
 
 # ------------------------------------------------------------------
@@ -380,7 +417,7 @@ def _build_context(db: Session, customer_id: Optional[str], page_context: Option
 
     elif page_context and page_context.startswith("graph_"):
         context_labels.append(page_context)
-        sections.append("\n## Användaren är i geogiraph-produkten")
+        sections.append("\n## Användaren är i Geogiraph-produkten")
         graph_page_hints = {
             "graph_home": "På översiktssidan — pipeline-status och förklaring av tjänsten.",
             "graph_customers": (
@@ -409,15 +446,24 @@ def _build_context(db: Session, customer_id: Optional[str], page_context: Option
 # ------------------------------------------------------------------
 # Build conversation history for Gemini
 # ------------------------------------------------------------------
-def _get_history(db: Session, session_id: str, limit: int = 20) -> List[Dict]:
-    """Load recent messages from this session for multi-turn context."""
-    msgs = (
-        db.query(models.AIChatMessage)
-        .filter_by(session_id=session_id)
-        .order_by(models.AIChatMessage.created_at.desc())
-        .limit(limit)
-        .all()
-    )
+def _get_history(db: Session, session_id: str, page_context: Optional[str], limit: int = 20) -> List[Dict]:
+    """Load recent messages from this session for multi-turn context.
+
+    History is scoped to the ACTIVE product: a session that spans both products
+    (sessionStorage survives the ProductSwitcher) must not feed Insiders-turer in
+    i ett Geogiraph-anrop, eller tvärtom — det skulle dra tillbaka sammanblandningen
+    trots den produkt-scopade systemprompten.
+    """
+    q = db.query(models.AIChatMessage).filter_by(session_id=session_id)
+    in_graph = bool(page_context and page_context.startswith("graph_"))
+    if in_graph:
+        q = q.filter(models.AIChatMessage.page_context.like("graph_%"))
+    else:
+        q = q.filter(
+            (models.AIChatMessage.page_context == None)  # noqa: E711
+            | (models.AIChatMessage.page_context.notlike("graph_%"))
+        )
+    msgs = q.order_by(models.AIChatMessage.created_at.desc()).limit(limit).all()
     # Reverse to chronological order
     msgs.reverse()
     return [{"role": m.role, "content": m.content} for m in msgs]
@@ -441,7 +487,25 @@ def ai_chat(req: ChatRequest, db: Session = Depends(get_db)):
     if req.temp_file_id and req.file_analysis:
         actual_message_for_ai += f"\n\n[SYSTEM_FILE_ANALYSIS: temp_id={req.temp_file_id}]\nAnalys:\n{req.file_analysis}\nFråga användaren om de vill spara detta dataset."
 
-    system_prompt = f"""{PLATFORM_KNOWLEDGE}
+    active_product, primary_knowledge, other_summary = _select_product_knowledge(req.page_context)
+
+    system_prompt = f"""## AKTIV PRODUKT: {active_product}
+
+Användaren befinner sig just nu i produkten **{active_product}**. Plattformen rymmer två
+separata produkter — **The Insiders Insights** (LinkedIn-analys) och **Geogiraph** (AI-synlighet/GEO).
+Det är två HELT olika produkter med olika begrepp, databaser och mätvärden. Blanda ALDRIG ihop dem.
+
+Nedan följer den fullständiga kunskapen om den AKTIVA produkten. Förankra alla svar i den.
+
+{primary_knowledge}
+
+---
+
+## Den andra produkten (endast som referens)
+
+{other_summary}
+
+---
 
 {dynamic_context}
 
@@ -449,7 +513,8 @@ def ai_chat(req: ChatRequest, db: Session = Depends(get_db)):
 
 ## Instruktioner
 
-Du är "Insiders AI", en hjälpsam assistent för The Insiders Insights-plattformen.
+Du är "Insiders AI", en hjälpsam assistent för plattformen. Just nu hjälper du användaren
+inom produkten **{active_product}**.
 
 Regler:
 1. Svara alltid på SVENSKA
@@ -458,8 +523,14 @@ Regler:
 4. Om du refererar till data, ange källa (dataset-namn, modulnamn etc.)
 5. Om användaren frågar om att skapa något (modul, mål etc.) — förklara vad du föreslår och be om bekräftelse
 6. Om du inte vet svaret — var ärlig och föreslå var användaren kan hitta informationen
-7. Om användaren nämner specifika KPI:er, koppla dem till rätt LinkedIn-mätvärden
-8. Du kan svara på frågor om alla aspekter av plattformen, inklusive tekniska detaljer
+7. Du kan svara på frågor om alla aspekter av plattformen, inklusive tekniska detaljer
+8. **Håll produkterna åtskilda**: förankra svaret i den aktiva produkten ({active_product}).
+   Använd ALDRIG begrepp, mätvärden eller arkitektur från den andra produkten som om de hörde
+   till den aktiva. Insiders Insights = LinkedIn-mätvärden (Impressions, CTR, CPC...), PostgreSQL,
+   Kund/Källa/Dataset/Modul/Mål. Geogiraph = AI-synlighet (Share of Voice, Sentiment, Parity Index),
+   Firestore, Nodtyp/Connector/JSON-LD. Om dessa krockar i ett svar har du blandat ihop dem.
+9. Om frågan tydligt gäller den ANDRA produkten: svara gärna, men säg uttryckligen vilken produkt
+   du beskriver. Om det är oklart vilken produkt användaren menar — fråga innan du svarar.
 
 ## Hantering av Uppladdade Filer
 När en användare laddar upp en fil i chatten kommer systemet att infoga intern information i meddelandet, t.ex. "[SYSTEM_FILE_ANALYSIS: temp_id=... ...]".
@@ -480,8 +551,8 @@ Om användaren vill skapa ett nytt mål för kunden, använd:
 (byt ut med relevant JSON). Om kunden är vald läggs de in på kunden automatiskt. Formel (formula) är frivilligt, men expression är själva matten (t.ex. "(Reactions + Comments) / Impressions") och metrics är de exakta kolumnnamnen som behövs. Skriv ingen annan text i svaret om du använder en tagg.
 """
 
-    # Get conversation history
-    history = _get_history(db, session_id)
+    # Get conversation history (scoped to the active product)
+    history = _get_history(db, session_id, req.page_context)
 
     # Save user message
     user_msg = models.AIChatMessage(
@@ -666,14 +737,23 @@ Om användaren vill skapa ett nytt mål för kunden, använd:
 # Session history endpoint
 # ------------------------------------------------------------------
 @router.get("/api/ai/chat/{session_id}")
-def get_chat_history(session_id: str, db: Session = Depends(get_db)):
-    """Get all messages for a chat session."""
-    msgs = (
-        db.query(models.AIChatMessage)
-        .filter_by(session_id=session_id)
-        .order_by(models.AIChatMessage.created_at.asc())
-        .all()
-    )
+def get_chat_history(session_id: str, page_context: Optional[str] = None, db: Session = Depends(get_db)):
+    """Get messages for a chat session, scoped to the active product.
+
+    When ``page_context`` anges visas bara den produktens transkript, så att
+    chatfönstret inte blandar Insiders- och Geogiraph-turer vid produktbyte.
+    Utelämnas parametern returneras allt (bakåtkompatibelt).
+    """
+    q = db.query(models.AIChatMessage).filter_by(session_id=session_id)
+    if page_context is not None:
+        if page_context.startswith("graph_"):
+            q = q.filter(models.AIChatMessage.page_context.like("graph_%"))
+        else:
+            q = q.filter(
+                (models.AIChatMessage.page_context == None)  # noqa: E711
+                | (models.AIChatMessage.page_context.notlike("graph_%"))
+            )
+    msgs = q.order_by(models.AIChatMessage.created_at.asc()).all()
     return [
         {
             "id": m.id,
