@@ -74,7 +74,6 @@ export default function GraphConnectorsPage() {
   const [state, setState] = useState<ClientConnectors | null>(null);
   const [active, setActive] = useState<string[]>([]);
   const [feeds, setFeeds] = useState<RssFeed[]>([]);
-  const [jobFeeds, setJobFeeds] = useState<JobFeed[]>([]);
   const [scrapeEmployees, setScrapeEmployees] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -96,7 +95,6 @@ export default function GraphConnectorsPage() {
         setState(d);
         setActive(d.active_connectors);
         setFeeds(d.rss_feeds || []);
-        setJobFeeds(d.job_feeds || []);
         setScrapeEmployees(!!d.scrape_employee_profiles);
         setDirty(false);
       })
@@ -123,21 +121,6 @@ export default function GraphConnectorsPage() {
     setDirty(true);
   }
 
-  function updateJobFeed(i: number, patch: Partial<JobFeed>) {
-    setJobFeeds((prev) => prev.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
-    setDirty(true);
-  }
-
-  function addJobFeed() {
-    setJobFeeds((prev) => [...prev, { url: '', label: '' }]);
-    setDirty(true);
-  }
-
-  function removeJobFeed(i: number) {
-    setJobFeeds((prev) => prev.filter((_, idx) => idx !== i));
-    setDirty(true);
-  }
-
   async function save() {
     if (!selected) return;
     setSaving(true);
@@ -149,7 +132,6 @@ export default function GraphConnectorsPage() {
         body: JSON.stringify({
           active_connectors: active,
           rss_feeds: feeds.filter((f) => f.url),
-          job_feeds: jobFeeds.filter((f) => f.url),
           scrape_employee_profiles: scrapeEmployees,
         }),
       });
@@ -406,43 +388,18 @@ export default function GraphConnectorsPage() {
         </div>
       )}
 
-      {active.includes('jobfeed') && (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px', marginTop: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-            <h2 style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56', margin: 0 }}>Platsannons-feeds (ATS) för {state?.client_id}</h2>
-            <button onClick={addJobFeed} style={btn(C, 'subtle')}>
-              <Plus size={12} /> Lägg till
-            </button>
-          </div>
-          <div style={{ fontSize: 12, color: C.muted, marginBottom: 12, lineHeight: 1.55 }}>
-            XML/RSS-feed från rekryteringssystemet (Teamtailor, Jobylon …). Stängda annonser upptäcks
-            automatiskt och deras kompetenser klingar av över tid.
-          </div>
-          {jobFeeds.length === 0 ? (
-            <div style={{ fontSize: 12, color: C.muted, padding: '12px 0' }}>Inga feeds. Klistra in kundens ATS-XML-länk.</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {jobFeeds.map((f, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 200px 40px', gap: 8 }}>
-                  <input
-                    value={f.url}
-                    onChange={(e) => updateJobFeed(i, { url: e.target.value })}
-                    placeholder="https://kund.teamtailor.com/jobs.xml"
-                    style={inp(C)}
-                  />
-                  <input
-                    value={f.label || ''}
-                    onChange={(e) => updateJobFeed(i, { label: e.target.value })}
-                    placeholder="Etikett"
-                    style={inp(C)}
-                  />
-                  <button onClick={() => removeJobFeed(i)} style={{ ...btn(C, 'subtle'), padding: '8px' }}>
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              ))}
+      {active.includes('jobfeed') && selected && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px', marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <div style={{ minWidth: 0 }}>
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56', margin: 0 }}>Platsannons-feeds (ATS)</h2>
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 4, lineHeight: 1.55 }}>
+              Feeds klistras in per kund på kundkortet — låsta till rätt kund och inte åtkomliga via
+              en delad rullgardin.
             </div>
-          )}
+          </div>
+          <Link href={`/insider-graph/kunder/${selected}`} style={{ ...btn(C, 'primary'), textDecoration: 'none', whiteSpace: 'nowrap' }}>
+            Konfigurera på kundkortet <ArrowRight size={12} />
+          </Link>
         </div>
       )}
 

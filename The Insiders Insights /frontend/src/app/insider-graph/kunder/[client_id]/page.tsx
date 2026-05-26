@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Users, ArrowLeft, Trash2, X, AlertCircle, ExternalLink } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../../_components/GraphPageShell';
 import AttestedUpload from '../../_components/AttestedUpload';
+import JobFeedsEditor from '../../_components/JobFeedsEditor';
 import ESGAddon from '../../_components/ESGAddon';
 import { graphFetch } from '../../_lib/api';
 
@@ -150,6 +151,9 @@ export default function ClientDetailPage() {
 
           {/* Officiell attesterad data (uppladdning) */}
           <AttestedUpload clientId={clientId} />
+
+          {/* Platsannons-feeds (ATS-XML) — per kund */}
+          <JobFeedsEditor clientId={clientId} />
 
           {/* Medarbetare */}
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>
