@@ -6,9 +6,27 @@ class Settings(BaseSettings):
     cdn_bucket: str = ""
     cdn_base_url: str = "https://cdn.insidergraph.io"
 
+    # Probe-motorer (de publika AI-assistenterna vi MÄTER, inte våra egna). Kvar som
+    # första-parts tills EU-kompatibel probe-routning beslutats (se llm.py / projektminne).
     openai_api_key: str = ""
     gemini_api_key: str = ""
-    anthropic_api_key: str = ""
+    anthropic_api_key: str = ""  # legacy/probe; våra resonemangsmodeller går via Vertex EU.
+
+    # EU-only (hårt krav): våra egna resonemangsmodeller (generator/validator) körs via
+    # Vertex AI i EU-region — ingen första-parts US-väg. Service-account-auth (ADC).
+    gcp_project: str = ""
+    vertex_location: str = "europe-west1"  # EU-region som har både Gemini och Claude på Vertex
+    # När True (default) routas ALLT EU: probe-GPT kräver Azure OpenAI EU, annars stängs
+    # den av (fail-closed). False = escape hatch för icke-EU-miljöer (första-parts US-GPT).
+    eu_only: bool = True
+
+    # Probe-motorer i EU: Gemini via Vertex (samma modell, EU-region → mätneutralt),
+    # GPT-4o via Azure OpenAI EU (identisk modell, EU-region). Se services/llm.py.
+    probe_gemini_model: str = "gemini-1.5-pro"
+    azure_openai_endpoint: str = ""
+    azure_openai_api_key: str = ""
+    azure_openai_deployment: str = ""  # deployment-namn för gpt-4o i Azure
+    azure_openai_api_version: str = "2024-10-21"
 
     # Modellval för claims-pipelinen (hybrid). Konfig-överstyrbart eftersom exakta
     # API-modellsträngar rör sig — ops kan rätta utan kodändring.

@@ -23,11 +23,10 @@ from typing import Any
 
 from google.cloud import firestore
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_openai import ChatOpenAI
 
 import firestore_client as fs
 from config import settings
+from services import llm as llm_factory
 
 log = logging.getLogger(__name__)
 
@@ -140,22 +139,8 @@ def _build_questions(client: dict[str, Any]) -> list[tuple[str, str]]:
 
 
 def _build_models() -> dict[str, Any]:
-    models: dict[str, Any] = {}
-    if settings.openai_api_key:
-        models["gpt-4o"] = ChatOpenAI(
-            api_key=settings.openai_api_key,
-            model="gpt-4o",
-            temperature=0,
-            timeout=60,
-        )
-    if settings.gemini_api_key:
-        models["gemini-1.5-pro"] = ChatGoogleGenerativeAI(
-            google_api_key=settings.gemini_api_key,
-            model="gemini-1.5-pro",
-            temperature=0,
-            timeout=60,
-        )
-    return models
+    # Delad EU-routad probe-factory (Gemini→Vertex EU, GPT-4o→Azure OpenAI EU).
+    return llm_factory.make_probe_engines()
 
 
 def _collect_answers(

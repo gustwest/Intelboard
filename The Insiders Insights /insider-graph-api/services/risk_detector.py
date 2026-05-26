@@ -621,24 +621,11 @@ def _mark_clean(client_id: str, persona: str, question: str, engine: str) -> Non
     ref.update(update)
 
 
-# --- Motoranrop (samma mönster som services/polling.py) -----------------------
+# --- Motoranrop (delad EU-routad probe-factory, se services/llm.py) -----------
 
 
 def _build_engines() -> dict[str, Any]:
-    from config import settings
-
-    engines: dict[str, Any] = {}
-    if settings.openai_api_key:
-        from langchain_openai import ChatOpenAI
-
-        engines["gpt-4o"] = ChatOpenAI(api_key=settings.openai_api_key, model="gpt-4o", temperature=0, timeout=60)
-    if settings.gemini_api_key:
-        from langchain_google_genai import ChatGoogleGenerativeAI
-
-        engines["gemini-1.5-pro"] = ChatGoogleGenerativeAI(
-            google_api_key=settings.gemini_api_key, model="gemini-1.5-pro", temperature=0, timeout=60
-        )
-    return engines
+    return llm_factory.make_probe_engines()
 
 
 def _ask(question: str, llm: Any) -> str:
