@@ -139,7 +139,8 @@ def _build_questions(client: dict[str, Any]) -> list[tuple[str, str]]:
 
 
 def _build_models() -> dict[str, Any]:
-    # Delad EU-routad probe-factory (Gemini→Vertex EU, GPT-4o→Azure OpenAI EU).
+    # Delad probe-factory: första-parts gpt-4o + gemini (de publika motorer vi mäter).
+    # EU-skyddet ligger på resonemangsmodellerna (Vertex EU), inte här. Se make_probe_engines.
     return llm_factory.make_probe_engines()
 
 
