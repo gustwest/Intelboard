@@ -23,7 +23,9 @@ class Settings(BaseSettings):
     # Modellval för claims-pipelinen (hybrid). Konfig-överstyrbart eftersom exakta
     # API-modellsträngar rör sig — ops kan rätta utan kodändring.
     # Generera/relevans: stort kontextfönster sväljer hela korpusen i ett anrop.
-    generator_model: str = "gemini-3.1-pro"
+    # gemini-2.5-pro: senaste Gemini-pro som faktiskt serveras i europe-west1 (EU-only).
+    # Gemini 3.x finns ej i europe-west1 ännu (verifierat 2026-05-26 mot publisher-API).
+    generator_model: str = "gemini-2.5-pro"
     # Validering: vassaste resonemanget på det precisionskritiska steget.
     validator_model: str = "claude-opus-4-7"
 
