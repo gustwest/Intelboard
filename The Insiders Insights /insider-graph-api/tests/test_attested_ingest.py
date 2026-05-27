@@ -110,5 +110,41 @@ class AttestedIngestTest(unittest.TestCase):
         self.assertEqual(row["mode"], "replace")
 
 
+class NativeSheetsTest(unittest.TestCase):
+    """Native multi-flik-export (LinkedIns .xls-layout), testad på build-nivå."""
+
+    CTX = ai.BuildCtx(company="Acme AB", attested_at="2026-05-27", url=None)
+
+    def test_visitor_demographics_from_sheets(self):
+        sheets = {
+            "Visitor metrics": [["Date", "Overview page views (total)"], ["05/26/2025", "3"]],  # tidsserie → ignoreras
+            "Seniority": [["Seniority", "Total views"], ["Senior", "262"], ["Director", "94"]],
+            "Location": [["Location", "Total views"], ["Stockholm", "415"]],
+        }
+        writes = ai.SOURCE_TYPES["linkedin_visitor_demographics"].build(sheets, self.CTX)
+        statements = [p["statement"] for tgt, _id, p in writes if tgt == "claim"]
+        self.assertEqual(len(writes), 3)  # 2 seniority + 1 location; tidsserien räknas inte
+        self.assertTrue(any("besökarna på Acme ABs LinkedIn-sida är på nivån Senior" in s for s in statements))
+        self.assertTrue(any("262" in s for s in statements))
+
+    def test_content_posts_become_socialmediaposting_without_author(self):
+        sheets = {
+            "All posts": [
+                ["Engagement metrics for individual posts..."],  # beskrivningsrad
+                ["Post title", "Post link", "Post type", "Posted by", "Created date"],
+                ["Vi hjälper bolag med data.", "https://linkedin.com/post/1", "Organic", "Erik Bergqvist", "05/07/2026"],
+            ],
+        }
+        writes = ai.SOURCE_TYPES["linkedin_content"].build(sheets, self.CTX)
+        self.assertEqual(len(writes), 1)
+        tgt, _id, p = writes[0]
+        self.assertEqual(tgt, "raw_item")
+        self.assertEqual(p["schema_type"], "SocialMediaPosting")
+        self.assertEqual(p["content"], "Vi hjälper bolag med data.")
+        self.assertEqual(p["url"], "https://linkedin.com/post/1")
+        self.assertEqual(p["published_at"].year, 2026)
+        self.assertNotIn("Erik", str(p))  # författare tas aldrig med
+
+
 if __name__ == "__main__":
     unittest.main()

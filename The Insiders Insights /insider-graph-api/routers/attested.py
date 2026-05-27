@@ -13,7 +13,7 @@ from typing import Any
 
 from fastapi import APIRouter, Form, HTTPException, UploadFile
 
-from services.attested_ingest import SOURCE_TYPES, attested_status, ingest_attested_csv
+from services.attested_ingest import SOURCE_TYPES, attested_status, ingest_attested
 
 router = APIRouter(prefix="/api/attested", tags=["attested"])
 
@@ -45,13 +45,9 @@ async def upload_attested(
 ) -> dict[str, Any]:
     raw = await file.read()
     try:
-        csv_text = raw.decode("utf-8-sig")  # tål BOM från exporter
-    except UnicodeDecodeError:
-        raise HTTPException(400, "file is not valid UTF-8 text")
-
-    try:
-        return ingest_attested_csv(client_id, source_type, csv_text, attested_at=attested_at, url=url)
+        # LinkedIns native-export (.xls/.xlsx) eller kanonisk CSV — ingesten väljer rätt.
+        return ingest_attested(client_id, source_type, file.filename, raw, attested_at=attested_at, url=url)
     except ValueError as exc:
-        # kund saknas / okänd source_type / ogiltig CSV
+        # kund saknas / okänd source_type / ogiltig fil
         status = 404 if "client not found" in str(exc) else 400
         raise HTTPException(status, str(exc)) from exc

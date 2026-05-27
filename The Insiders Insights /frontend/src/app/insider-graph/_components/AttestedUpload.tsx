@@ -50,8 +50,12 @@ export default function AttestedUpload({ clientId }: { clientId: string }) {
   }, [clientId]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    graphFetch<{ source_types: SourceType[] }>(`/api/attested/${clientId}/status`)
+      .then((d) => { if (!cancelled) setSources(d.source_types); })
+      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); });
+    return () => { cancelled = true; };
+  }, [clientId]);
 
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>
@@ -179,12 +183,12 @@ function SourceUploader({ clientId, source, onDone }: { clientId: string; source
       >
         <UploadCloud size={22} color={C.muted} />
         <div style={{ fontSize: 12, fontWeight: 600, color: '#3a4b56', marginTop: 4 }}>
-          {busy ? 'Laddar upp…' : 'Dra CSV hit eller klicka för att välja'}
+          {busy ? 'Laddar upp…' : 'Dra fil hit (LinkedIn-export .xls/.xlsx eller CSV) eller klicka'}
         </div>
         <input
           ref={fileInput}
           type="file"
-          accept=".csv,.tsv,.txt"
+          accept=".csv,.tsv,.txt,.xls,.xlsx"
           style={{ display: 'none' }}
           onChange={(e) => {
             const f = e.target.files?.[0];
@@ -205,7 +209,7 @@ function SourceUploader({ clientId, source, onDone }: { clientId: string; source
       )}
       {result && (
         <div style={{ fontSize: 12, color: '#16a34a', marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <CheckCircle2 size={14} /> {result.written} påståenden skrivna
+          <CheckCircle2 size={14} /> {result.written} datapunkter skrivna
           {result.removed > 0 && ` · ${result.removed} ersatta`}.
         </div>
       )}
