@@ -41,22 +41,23 @@ export function useJobRuns(clientId: string | null) {
   const [runs, setRuns] = useState<JobRun[] | null>(null);
   const [active, setActive] = useState<Record<string, TriggerStatus>>({});
 
+  // clientId satt → körningar för den kunden; null → globalt (alla kunder).
+  const query = clientId ? `client_id=${encodeURIComponent(clientId)}&limit=50` : 'limit=50';
+
   const refresh = useCallback(() => {
-    if (!clientId) { setRuns([]); return; }
-    graphFetch<{ runs: JobRun[] }>(`/api/jobs/runs?client_id=${encodeURIComponent(clientId)}&limit=50`)
+    graphFetch<{ runs: JobRun[] }>(`/api/jobs/runs?${query}`)
       .then((d) => setRuns(d.runs))
       .catch(() => setRuns([]));
-  }, [clientId]);
+  }, [query]);
 
-  // Initial/clientId-byte: hämta inline (bara async setState → inga cascading renders).
+  // Initial/byte: hämta inline (bara async setState → inga cascading renders).
   useEffect(() => {
-    if (!clientId) return;
     let cancelled = false;
-    graphFetch<{ runs: JobRun[] }>(`/api/jobs/runs?client_id=${encodeURIComponent(clientId)}&limit=50`)
+    graphFetch<{ runs: JobRun[] }>(`/api/jobs/runs?${query}`)
       .then((d) => { if (!cancelled) setRuns(d.runs); })
       .catch(() => { if (!cancelled) setRuns([]); });
     return () => { cancelled = true; };
-  }, [clientId]);
+  }, [query]);
 
   // runs är nyast-först → first match = senaste.
   const latest = useCallback(

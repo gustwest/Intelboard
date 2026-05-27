@@ -36,11 +36,13 @@ export default function PipelineStatus({
   steps: stepsProp,
   compact = false,
   caption,
+  refreshKey = 0,
 }: {
   clientId?: string;
   steps?: PipelineStep[];
   compact?: boolean;
   caption?: string;
+  refreshKey?: number;
 }) {
   const [data, setData] = useState<PipelineData | null>(null);
   const [error, setError] = useState(false);
@@ -52,7 +54,7 @@ export default function PipelineStatus({
       .then((d) => { if (!cancelled) setData(d); })
       .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
-  }, [clientId, stepsProp]);
+  }, [clientId, stepsProp, refreshKey]);
 
   const steps = stepsProp ?? data?.steps;
   const nextAction = data?.next_action ?? null;

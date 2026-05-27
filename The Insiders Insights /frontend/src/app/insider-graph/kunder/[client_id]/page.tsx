@@ -3,14 +3,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Users, ArrowLeft, Trash2, X, AlertCircle, ExternalLink } from 'lucide-react';
+import { Users, ArrowLeft, Trash2, X, AlertCircle, ExternalLink, Play, Loader2, Check, Clock } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../../_components/GraphPageShell';
 import AttestedUpload from '../../_components/AttestedUpload';
 import JobFeedsEditor from '../../_components/JobFeedsEditor';
 import LinkedInCapacityUpload from '../../_components/LinkedInCapacityUpload';
 import ESGAddon from '../../_components/ESGAddon';
 import PipelineStatus from '../../_components/PipelineStatus';
+import ConnectorsEditor from '../../_components/ConnectorsEditor';
 import { graphFetch } from '../../_lib/api';
+import { useJobRuns, fmtRelative } from '../../_lib/jobRuns';
 
 type Employee = {
   employee_id: string;
@@ -51,6 +53,25 @@ export default function ClientDetailPage() {
     | { kind: 'employee'; id: string; name: string }
     | null
   >(null);
+  const [pipelineKey, setPipelineKey] = useState(0);
+  const { latest, active: jobActive, trigger: runJob } = useJobRuns(clientId);
+
+  // Per-kund jobbknapp med progress; uppdaterar pipeline-stegen när jobbet är klart.
+  function renderJobBtn(label: string, key: string, path: string, jobType: string) {
+    const st = jobActive[key] || 'idle';
+    const Icon = st === 'running' ? Loader2 : st === 'success' ? Check : Play;
+    const color = st === 'success' ? '#16a34a' : undefined;
+    return (
+      <button
+        onClick={async () => { await runJob(key, path, jobType); setPipelineKey((k) => k + 1); }}
+        disabled={st === 'running'}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: 'transparent', color: '#3a4b56', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: st === 'running' ? 'wait' : 'pointer' }}
+      >
+        <Icon size={12} color={color} style={st === 'running' ? { animation: 'spin 0.8s linear infinite' } : undefined} />
+        {st === 'running' ? 'Kör…' : label}
+      </button>
+    );
+  }
 
   const load = useCallback(async () => {
     setError(null);
@@ -131,12 +152,32 @@ export default function ClientDetailPage() {
         </div>
       ) : (
         <>
-          {/* Pipeline-status — var står kunden, vad är nästa steg */}
+          {/* Pipeline-status — var står kunden, vad är nästa steg + per-kund-jobb */}
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px', marginBottom: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 16 }}>
-              Pipeline
+            <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Pipeline
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {renderJobBtn('Kompilera', 'compile', `/api/jobs/compile/${clientId}`, 'compile_schema')}
+                {renderJobBtn('Extract claims', 'extract', `/api/jobs/extract-claims/${clientId}`, 'extract_claims')}
+              </div>
             </div>
-            <PipelineStatus clientId={clientId} />
+            <PipelineStatus clientId={clientId} refreshKey={pipelineKey} />
+            {/* Senast körd per jobb (för den här kunden) */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 16, fontSize: 11, color: C.muted }}>
+              {([['scrape_active', 'Scrape'], ['compile_schema', 'Kompilering'], ['extract_claims', 'Claims']] as [string, string][]).map(([type, label]) => {
+                const run = latest(type);
+                return (
+                  <span key={type} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    <Clock size={11} color={C.dim} />
+                    <strong style={{ color: '#3a4b56', fontWeight: 600 }}>{label}:</strong>
+                    {run ? <><span>{fmtRelative(run.started_at)}</span>{run.status === 'success' && <Check size={11} color="#16a34a" />}</> : <span style={{ color: C.dim }}>aldrig körd</span>}
+                  </span>
+                );
+              })}
+            </div>
           </div>
 
           {/* Företagsöversikt */}
@@ -155,6 +196,9 @@ export default function ClientDetailPage() {
               )}
             </div>
           </div>
+
+          {/* Connectors — vilka datakällor den här kunden hämtar från */}
+          <ConnectorsEditor clientId={clientId} />
 
           {/* AI-synlighet — ESG & CSRD Perception Audit (valbart tillägg, per kund) */}
           <ESGAddon clientId={clientId} />
