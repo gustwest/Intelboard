@@ -259,3 +259,22 @@ def iter_clients() -> Iterator[tuple[str, dict[str, Any]]]:
 def iter_employees(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
     for doc in employees_col(client_id).stream():
         yield doc.id, doc.to_dict() or {}
+
+
+# --- Körningsspår (job_runs) --------------------------------------------------
+# En global tidsserie-collection: ett dokument per jobbkörning (per arbetsenhet,
+# dvs per kund där jobbet är kund-scopat, annars globalt). Driver körningshistorik
+# i UI:t och "senast körd"-stämplar. Skrivs av jobs/_run_tracker.record_run.
+
+
+def job_runs_col():
+    return db().collection("job_runs")
+
+
+def job_run_doc(run_id: str):
+    return job_runs_col().document(run_id)
+
+
+def iter_job_runs() -> Iterator[tuple[str, dict[str, Any]]]:
+    for doc in job_runs_col().stream():
+        yield doc.id, doc.to_dict() or {}

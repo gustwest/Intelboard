@@ -18,6 +18,7 @@ import logging
 from datetime import datetime, timezone
 
 import firestore_client as fs
+from jobs._run_tracker import record_run
 from services import confidence_scorer
 
 log = logging.getLogger("jobs.sunset_skills")
@@ -34,21 +35,23 @@ def run() -> None:
 def run_for_client(client_id: str, now: datetime | None = None) -> int:
     """Radera utgångna stängda annons-noder. Returnerar antal raderade."""
     now = now or datetime.now(timezone.utc)
-    col = fs.raw_items_company_col(client_id)
-    deleted = 0
-    for snap in col.stream():
-        raw = snap.to_dict() or {}
-        if raw.get("schema_type") != "JobPosting":
-            continue
-        closed_at = raw.get("closed_at")
-        if not closed_at:
-            continue  # aktiv annons — rörs inte
-        if confidence_scorer.is_sunset(closed_at, now):
-            col.document(snap.id).delete()
-            deleted += 1
-    if deleted:
-        log.info("sunset_skills %s: hard-deleted %d expired job nodes", client_id, deleted)
-    return deleted
+    with record_run("sunset_skills", client_id) as r:
+        col = fs.raw_items_company_col(client_id)
+        deleted = 0
+        for snap in col.stream():
+            raw = snap.to_dict() or {}
+            if raw.get("schema_type") != "JobPosting":
+                continue
+            closed_at = raw.get("closed_at")
+            if not closed_at:
+                continue  # aktiv annons — rörs inte
+            if confidence_scorer.is_sunset(closed_at, now):
+                col.document(snap.id).delete()
+                deleted += 1
+        if deleted:
+            log.info("sunset_skills %s: hard-deleted %d expired job nodes", client_id, deleted)
+        r.summary = {"deleted": deleted}
+        return deleted
 
 
 if __name__ == "__main__":

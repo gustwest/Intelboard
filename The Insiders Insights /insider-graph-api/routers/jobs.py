@@ -14,15 +14,53 @@ import re
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from google.cloud import firestore
 
 import firestore_client as fs
-from jobs import compile_schema, polling_weekly, quarterly_todo, scrape_active, scrape_episodic, sunset_skills, xml_sync
+from jobs import compile_schema, extract_claims, polling_weekly, quarterly_todo, scrape_active, scrape_episodic, sunset_skills, xml_sync
+from jobs._run_tracker import record_run, tracked
 
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 EVENTARC_DOC_RE = re.compile(r"clients/([^/]+)/")
+
+
+@router.get("/runs")
+def list_job_runs(
+    client_id: str | None = None, job_type: str | None = None, limit: int = 50
+) -> dict[str, Any]:
+    """Körningshistorik, senaste först. Filtrera valfritt på kund och/eller jobbtyp.
+
+    Hämtar ett tak av de senaste körningarna och filtrerar i Python → inga
+    composite-index krävs.
+    """
+    limit = max(1, min(limit, 200))
+    query = fs.job_runs_col().order_by("started_at", direction=firestore.Query.DESCENDING).limit(500)
+    runs: list[dict[str, Any]] = []
+    for snap in query.stream():
+        d = snap.to_dict() or {}
+        if client_id is not None and d.get("client_id") != client_id:
+            continue
+        if job_type is not None and d.get("job_type") != job_type:
+            continue
+        runs.append(
+            {
+                "id": snap.id,
+                "job_type": d.get("job_type"),
+                "client_id": d.get("client_id"),
+                "status": d.get("status"),
+                "started_at": _iso(d.get("started_at")),
+                "ended_at": _iso(d.get("ended_at")),
+                "duration_seconds": d.get("duration_seconds"),
+                "summary": d.get("summary") or {},
+                "error_message": d.get("error_message"),
+            }
+        )
+        if len(runs) >= limit:
+            break
+    return {"runs": runs}
 
 
 @router.post("/scrape-active")
@@ -70,9 +108,8 @@ def trigger_extract_claims(client_id: str, background: BackgroundTasks) -> dict[
     efteråt för att projicera de nya claimsen in i JSON-LD/profilsidan."""
     if not fs.client_doc(client_id).get().exists:
         raise HTTPException(404, "client not found")
-    from services.claim_extraction import extract_claims_for_client
-
-    background.add_task(extract_claims_for_client, client_id)
+    # Via jobb-wrappern (inte servicen direkt) så körningen hamnar i job_runs.
+    background.add_task(extract_claims.run, client_id)
     return {"status": "queued", "job": "extract_claims", "client_id": client_id}
 
 
@@ -91,7 +128,7 @@ def trigger_risk_generate(client_id: str, background: BackgroundTasks) -> dict[s
         raise HTTPException(404, "client not found")
     from services.risk_detector import generate_and_store_questions
 
-    background.add_task(generate_and_store_questions, client_id)
+    background.add_task(tracked, "risk_generate", client_id, generate_and_store_questions, client_id)
     return {"status": "queued", "job": "risk_generate", "client_id": client_id}
 
 
@@ -106,7 +143,7 @@ def trigger_risk_detect(client_id: str, background: BackgroundTasks) -> dict[str
         raise HTTPException(404, "client not found")
     from services.risk_detector import run_for_client
 
-    background.add_task(run_for_client, client_id)
+    background.add_task(tracked, "risk_detect", client_id, run_for_client, client_id)
     return {"status": "queued", "job": "risk_detect", "client_id": client_id}
 
 
@@ -139,8 +176,9 @@ def _run_esg_monthly() -> None:
         if not data.get("esg_audit_enabled"):
             continue
         try:
-            run_esg_scan(cid)
-            esg_report.run(cid)
+            with record_run("esg_scan", cid):
+                run_esg_scan(cid)
+                esg_report.run(cid)
             ran += 1
         except Exception as exc:  # en kund får inte fälla hela fan-outen
             log.warning("esg_monthly: kund %s misslyckades: %s", cid, exc)
@@ -179,3 +217,11 @@ def _eventarc_doc_name(body: Any) -> str:
         return ""
     value = body.get("value") or {}
     return value.get("name", "") if isinstance(value, dict) else ""
+
+
+def _iso(value: Any) -> str | None:
+    if not value:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)

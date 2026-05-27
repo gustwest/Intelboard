@@ -12,44 +12,50 @@ import logging
 import connectors
 import firestore_client as fs
 from connectors.base import ConnectorConfig
+from jobs._run_tracker import record_run
 
 log = logging.getLogger("jobs.scrape_episodic")
 
 
 def run() -> None:
     for client_id, client in fs.iter_clients():
-        active_connectors = client.get("active_connectors", [])
-        for employee_id, emp in fs.iter_employees(client_id):
-            if emp.get("node_type") != "episodisk":
+        with record_run("scrape_episodic", client_id):
+            run_for_client(client_id, client)
+
+
+def run_for_client(client_id: str, client: dict) -> None:
+    active_connectors = client.get("active_connectors", [])
+    for employee_id, emp in fs.iter_employees(client_id):
+        if emp.get("node_type") != "episodisk":
+            continue
+        if emp.get("opted_out"):
+            continue  # opt-out → hämta ingen ny data för personen
+        for connector_id in active_connectors:
+            if connector_id != "linkedin":
+                continue  # episodisk skörd = per-person; bara LinkedIn för MVP
+            try:
+                connector_cls = connectors.get(connector_id)
+            except KeyError:
                 continue
-            if emp.get("opted_out"):
-                continue  # opt-out → hämta ingen ny data för personen
-            for connector_id in active_connectors:
-                if connector_id != "linkedin":
-                    continue  # episodisk skörd = per-person; bara LinkedIn för MVP
-                try:
-                    connector_cls = connectors.get(connector_id)
-                except KeyError:
-                    continue
-                connector = connector_cls()
-                config = ConnectorConfig(
-                    client_id=client_id,
-                    employee_id=employee_id,
-                    params={"linkedin_url": emp.get("linkedin_url")},
+            connector = connector_cls()
+            config = ConnectorConfig(
+                client_id=client_id,
+                employee_id=employee_id,
+                params={"linkedin_url": emp.get("linkedin_url")},
+            )
+            for item in connector.fetch(config):
+                fs.raw_items_col(client_id, employee_id).add(
+                    {
+                        "source": item.source,
+                        "schema_type": item.schema_type,
+                        "content": item.content,
+                        "url": item.url,
+                        "published_at": item.published_at,
+                        "included_in_output": True,
+                        "episodic": True,
+                        **item.extra,
+                    }
                 )
-                for item in connector.fetch(config):
-                    fs.raw_items_col(client_id, employee_id).add(
-                        {
-                            "source": item.source,
-                            "schema_type": item.schema_type,
-                            "content": item.content,
-                            "url": item.url,
-                            "published_at": item.published_at,
-                            "included_in_output": True,
-                            "episodic": True,
-                            **item.extra,
-                        }
-                    )
 
 
 if __name__ == "__main__":

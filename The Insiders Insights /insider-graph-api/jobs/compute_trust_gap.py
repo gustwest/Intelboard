@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import firestore_client as fs
+from jobs._run_tracker import record_run
 from schema_org import humanization_config as hc
 from schema_org.claims import iter_culture_claims
 
@@ -150,17 +151,20 @@ def compute(client_id: str) -> dict[str, Any]:
 
 def run(client_id: str) -> dict[str, Any]:
     """Beräkna och skriv trust_gap (överskriv). Hoppar över om inputs oförändrade."""
-    doc = compute(client_id)
-    existing = fs.trust_gap_doc(client_id).get()
-    if getattr(existing, "exists", False) and (existing.to_dict() or {}).get("inputs_hash") == doc["inputs_hash"]:
-        log.info("trust_gap oförändrad för %s — hoppar över", client_id)
-        return {"client_id": client_id, "skipped": True}
-    fs.trust_gap_doc(client_id).set(doc)
-    log.info("trust_gap skriven för %s: overall=%.3f", client_id, doc["overall_score"])
-    return {
-        "client_id": client_id, "written": True,
-        "overall_score": doc["overall_score"], "coverage": doc["coverage"],
-    }
+    with record_run("compute_trust_gap", client_id) as r:
+        doc = compute(client_id)
+        existing = fs.trust_gap_doc(client_id).get()
+        if getattr(existing, "exists", False) and (existing.to_dict() or {}).get("inputs_hash") == doc["inputs_hash"]:
+            log.info("trust_gap oförändrad för %s — hoppar över", client_id)
+            r.summary = {"skipped": True}
+            return {"client_id": client_id, "skipped": True}
+        fs.trust_gap_doc(client_id).set(doc)
+        log.info("trust_gap skriven för %s: overall=%.3f", client_id, doc["overall_score"])
+        r.summary = {"overall_score": doc["overall_score"]}
+        return {
+            "client_id": client_id, "written": True,
+            "overall_score": doc["overall_score"], "coverage": doc["coverage"],
+        }
 
 
 def run_all() -> None:
