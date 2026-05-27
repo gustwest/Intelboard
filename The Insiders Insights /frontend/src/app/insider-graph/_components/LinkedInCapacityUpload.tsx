@@ -9,11 +9,12 @@
  * /api/connectors/{clientId}.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Network, UploadCloud, CheckCircle2, AlertCircle, FileCheck2, X } from 'lucide-react';
+import { Network, UploadCloud, CheckCircle2, AlertCircle, FileCheck2, X, BellRing } from 'lucide-react';
 import { graphColors as C } from './GraphPageShell';
 import { graphFetch } from '../_lib/api';
 
 type Snapshot = { id: string; status: string; is_active: boolean; skills: string[]; quarter: string | null; uploaded_at: string | null };
+type Todo = { id: string; type: string; status: string; message: string; created_at: string | null };
 
 const STATUS: Record<string, { bg: string; fg: string; label: string }> = {
   PENDING_INTERNAL_VERIFICATION: { bg: 'rgba(245,158,11,0.15)', fg: '#b45309', label: 'Väntar på verifiering' },
@@ -24,6 +25,7 @@ const STATUS: Record<string, { bg: string; fg: string; label: string }> = {
 export default function LinkedInCapacityUpload({ clientId }: { clientId: string }) {
   const [active, setActive] = useState<string[]>([]);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
+  const [todos, setTodos] = useState<Todo[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [skills, setSkills] = useState('');
   const [quarter, setQuarter] = useState('');
@@ -35,12 +37,14 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
 
   const load = useCallback(async () => {
     try {
-      const [snaps, conn] = await Promise.all([
+      const [snaps, conn, td] = await Promise.all([
         graphFetch<{ snapshots: Snapshot[] }>(`/api/linkedin/${clientId}/snapshots`),
         graphFetch<{ active_connectors: string[] }>(`/api/connectors/${clientId}`),
+        graphFetch<{ todos: Todo[] }>(`/api/linkedin/${clientId}/todos`),
       ]);
       setSnapshots(snaps.snapshots);
       setActive(conn.active_connectors || []);
+      setTodos(td.todos || []);
     } catch (e) {
       setBanner({ tone: 'error', text: e instanceof Error ? e.message : String(e) });
     }
@@ -63,7 +67,8 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
       if (quarter.trim()) fd.append('quarter', quarter.trim());
       if (followers.trim()) fd.append('followers', followers.trim());
       if (file) fd.append('file', file);
-      await graphFetch(`/api/linkedin/${clientId}/snapshots`, { method: 'POST', body: fd });
+      const res = await graphFetch<{ extracted_from_file?: number }>(`/api/linkedin/${clientId}/snapshots`, { method: 'POST', body: fd });
+      const extracted = res?.extracted_from_file || 0;
       // Uppladdning = enrollment → slå på connectorn för kunden.
       if (!active.includes('linkedin_capacity')) {
         const next = [...active, 'linkedin_capacity'];
@@ -74,7 +79,7 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
         });
         setActive(next);
       }
-      setBanner({ tone: 'ok', text: 'Uppladdat — väntar på intern verifiering.' });
+      setBanner({ tone: 'ok', text: extracted > 0 ? `Uppladdat — läste ${extracted} kompetenser ur filen. Väntar på verifiering.` : 'Uppladdat — väntar på intern verifiering.' });
       setFile(null);
       setSkills('');
       setQuarter('');
@@ -99,9 +104,16 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
         </span>
       </div>
       <div style={{ fontSize: 11, color: C.muted, marginBottom: 12, lineHeight: 1.5 }}>
-        Vi samlar in datan själva. Dra in skärmklipp/export över bolagets samlade kompetensstatistik
-        (utan persondata). Kompetenserna kan anges nedan eller fyllas vid verifieringen.
+        Vi samlar in datan själva. Dra in export/skärmklipp över bolagets samlade kompetensstatistik
+        (utan persondata). <strong>CSV/XLSX läses automatiskt</strong> — kompetenserna kan annars anges
+        nedan eller fyllas vid verifieringen. Bild/PDF lagras som underlag.
       </div>
+
+      {todos.map((t) => (
+        <div key={t.id} style={{ background: 'rgba(159,81,182,0.08)', border: '1px solid rgba(159,81,182,0.3)', borderRadius: 8, padding: '8px 12px', marginBottom: 10, display: 'flex', gap: 8, alignItems: 'center', color: '#7a3d8c', fontSize: 12 }}>
+          <BellRing size={14} /> {t.message}
+        </div>
+      ))}
 
       {banner && (
         <div style={{ background: banner.tone === 'ok' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${banner.tone === 'ok' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, borderRadius: 8, padding: '8px 12px', color: banner.tone === 'ok' ? '#16a34a' : '#b91c1c', fontSize: 12, marginBottom: 10, display: 'flex', gap: 6, alignItems: 'center' }}>

@@ -11,7 +11,6 @@ const PAGES: { label: string; href: string }[] = [
   { label: 'Översikt', href: '/insider-graph' },
   { label: 'Kunder', href: '/insider-graph/kunder' },
   { label: 'Connectors', href: '/insider-graph/connectors' },
-  { label: 'LinkedIn', href: '/insider-graph/linkedin' },
   { label: 'Granska', href: '/insider-graph/review' },
   { label: 'Leverans', href: '/insider-graph/leverans' },
   { label: 'AI-synlighet', href: '/insider-graph/polling' },

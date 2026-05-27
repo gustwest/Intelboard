@@ -19,7 +19,7 @@ from google.cloud import firestore
 
 import firestore_client as fs
 from schemas import LinkedInStatus
-from services import blob_storage
+from services import blob_storage, capacity_parse
 
 router = APIRouter(prefix="/api/linkedin", tags=["linkedin"])
 
@@ -45,25 +45,40 @@ async def upload_snapshot(
     if not fs.client_doc(client_id).get().exists:
         raise HTTPException(404, f"client not found: {client_id}")
 
-    parsed = _parse_skills(skills)
-    # Skärmklipp eller kompetenser räcker — kompetenserna kan annars fyllas vid den
-    # interna verifieringen (granskaren ser underlaget och skriver in dem då).
-    if not parsed and file is None:
-        raise HTTPException(422, "ladda upp ett underlag (skärmklipp/export) eller ange minst en kompetens")
-
+    manual = _parse_skills(skills)
     snapshot_id = "snap-" + uuid.uuid4().hex[:12]
-    # Underlaget (export/skärmklipp) lagras privat så granskaren kan öppna det; faller
-    # tillbaka på enbart filnamnet om ingen upload-bucket är konfigurerad.
+
+    # Läs filen en gång: använd den både för parsning (CSV/XLSX → kompetenser/följare)
+    # och för att lagra underlaget. Bild/PDF parsas inte — lagras bara som underlag.
     file_path = None
+    extracted: dict[str, Any] = {}
     if file:
         content = await file.read()
+        extracted = capacity_parse.extract(file.filename, file.content_type, content)
         file_path = blob_storage.store(client_id, snapshot_id, file.filename or "", content, file.content_type)
+
+    # Slå ihop: manuellt angivna först, sedan extraherade som inte redan finns.
+    skills_final = list(manual)
+    seen = {s.lower() for s in skills_final}
+    for s in extracted.get("skills", []):
+        if s.lower() not in seen:
+            seen.add(s.lower())
+            skills_final.append(s)
+    followers_final = followers if followers is not None else extracted.get("followers")
+    extracted_count = len(extracted.get("skills", []))
+
+    # Skärmklipp eller kompetenser räcker — kompetenserna kan annars fyllas vid den
+    # interna verifieringen (granskaren ser underlaget och skriver in dem då).
+    if not skills_final and file is None:
+        raise HTTPException(422, "ladda upp ett underlag (skärmklipp/export) eller ange minst en kompetens")
+
     fs.linkedin_snapshot_doc(client_id, snapshot_id).set(
         {
             "status": LinkedInStatus.PENDING,
             "is_active": False,
-            "skills": parsed,
-            "followers": followers,  # intern visning; mappas aldrig till grafen
+            "skills": skills_final,
+            "skills_extracted_count": extracted_count,  # hur många som lästes ur filen
+            "followers": followers_final,  # intern visning; mappas aldrig till grafen
             "quarter": quarter,
             "filename": file.filename if file else None,
             "file_path": file_path,
@@ -76,7 +91,13 @@ async def upload_snapshot(
         if todo.get("type") == "linkedin_quarterly" and todo.get("status") == "open":
             fs.todo_doc(client_id, tid).update({"status": "done", "done_at": firestore.SERVER_TIMESTAMP})
 
-    return {"status": "ok", "snapshot_id": snapshot_id, "snapshot_status": LinkedInStatus.PENDING, "skills": parsed}
+    return {
+        "status": "ok",
+        "snapshot_id": snapshot_id,
+        "snapshot_status": LinkedInStatus.PENDING,
+        "skills": skills_final,
+        "extracted_from_file": extracted_count,
+    }
 
 
 @router.get("/{client_id}/snapshots")

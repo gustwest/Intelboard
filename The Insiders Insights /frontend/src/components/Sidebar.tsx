@@ -17,7 +17,6 @@ import {
   Radar,
   Inbox,
   Rocket,
-  Network,
 } from 'lucide-react';
 import ProductSwitcher, { activeProductId } from './ProductSwitcher';
 import { graphFetch } from '@/app/insider-graph/_lib/api';
@@ -48,7 +47,6 @@ const GRAPH_GROUPS: NavGroup[] = [
     links: [
       { href: '/insider-graph/kunder', label: 'Kunder', icon: Users },
       { href: '/insider-graph/connectors', label: 'Connectors', icon: Plug },
-      { href: '/insider-graph/linkedin', label: 'LinkedIn', icon: Network },
     ],
   },
   {
