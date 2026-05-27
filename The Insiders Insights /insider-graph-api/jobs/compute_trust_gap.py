@@ -22,7 +22,7 @@ from schema_org.claims import iter_culture_claims
 log = logging.getLogger(__name__)
 
 # polling_results-dok som värme-probarna (#6) skriver. Frånvaro → ingen perception.
-WARMTH_PROBE_DOC = "warmth-latest"
+WARMTH_PROBE_DOC = hc.WARMTH_PROBE_DOC
 
 
 def _now_iso() -> str:

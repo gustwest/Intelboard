@@ -73,6 +73,9 @@ TARGET_NORM: float = 2.0
 # Perception får ej beräknas till valens/gap under detta salience-golv (spec §8 steg 5).
 SALIENCE_FLOOR: float = 0.25
 
+# polling_results-dok där värme-probarna skriver perception (compute_trust_gap läser det).
+WARMTH_PROBE_DOC: str = "warmth-latest"
+
 # Flagg-grindar (spec §8 steg 6) — asymmetriska efter riktning.
 FLAG_CONFIDENCE_MIN: float = 0.5   # ingen flagga reses under denna konfidens
 GAP_MAGNITUDE_MIN: float = 0.2     # minsta |gap| för att en flagga ska vara meningsfull

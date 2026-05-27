@@ -226,7 +226,7 @@ def risk_run_summary_doc(client_id: str) -> _DocRef:
 
 
 def polling_results_col(client_id: str) -> _Col:
-    return _Col(STATE.get("polling_results"))
+    return _Col(STATE.get("polling_results"), writable=True)
 
 
 def monthly_reports_col(client_id: str) -> _Col:
