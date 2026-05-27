@@ -31,7 +31,7 @@ class AttestedIngestTest(unittest.TestCase):
         self.assertEqual(src["kind"], "attested")
         self.assertEqual(src["label"], "LinkedIn-data, verifierad av Geogiraph")
         self.assertEqual(src["attested_at"], "2026-05-01")
-        self.assertTrue(sample["included_in_output"])
+        self.assertFalse(sample["included_in_output"])  # staged tills "Inkludera i leverans" bekräftas
         self.assertFalse(sample["needs_review"])
 
     def test_statement_uses_company_and_value(self):
@@ -105,9 +105,27 @@ class AttestedIngestTest(unittest.TestCase):
             },
         )
         row = [s for s in ai.attested_status("acme") if s["key"] == "linkedin_follower_demographics"][0]
-        self.assertEqual(row["claims"], 2)
+        self.assertEqual(row["staged"], 2)  # fixturen saknar included_in_output → staged
+        self.assertEqual(row["included"], 0)
         self.assertEqual(row["last_attested_at"], "2026-05-01")
         self.assertEqual(row["mode"], "replace")
+
+    def test_include_flips_staged_to_included(self):
+        fakefs.reset(
+            client={"company_name": "Acme AB"},
+            claims={
+                "att-1": {"origin": "attested:linkedin_follower_demographics", "included_in_output": False,
+                          "statement": "1500 av Acme ABs följare …", "source": [{"attested_at": "2026-05-01"}]},
+            },
+        )
+        before = [s for s in ai.attested_status("acme") if s["key"] == "linkedin_follower_demographics"][0]
+        self.assertEqual(before["staged"], 1)
+        self.assertEqual(before["included"], 0)
+        n = ai.include_source("acme", "linkedin_follower_demographics")
+        self.assertEqual(n, 1)
+        after = [s for s in ai.attested_status("acme") if s["key"] == "linkedin_follower_demographics"][0]
+        self.assertEqual(after["included"], 1)
+        self.assertEqual(after["staged"], 0)
 
 
 class NativeSheetsTest(unittest.TestCase):

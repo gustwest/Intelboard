@@ -21,8 +21,10 @@ type SourceType = {
   label: string;
   description: string;
   mode: 'replace' | 'append';
-  claims: number;
+  included: number;
+  staged: number;
   last_attested_at: string | null;
+  samples: string[];
 };
 
 type UploadResult = { written: number; removed: number; mode: string; attested_at: string };
@@ -91,9 +93,24 @@ function SourceUploader({ clientId, source, onDone }: { clientId: string; source
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<UploadResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [including, setIncluding] = useState(false);
+  const [showSamples, setShowSamples] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const replace = source.mode === 'replace';
+
+  async function includeInDelivery() {
+    setIncluding(true);
+    setErr(null);
+    try {
+      await graphFetch(`/api/attested/${clientId}/${source.key}/include`, { method: 'POST' });
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIncluding(false);
+    }
+  }
 
   async function upload(file: File) {
     setBusy(true);
@@ -130,10 +147,37 @@ function SourceUploader({ clientId, source, onDone }: { clientId: string; source
       <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>{source.description}</div>
 
       <div style={{ fontSize: 11, color: C.muted, marginBottom: 12 }}>
-        {source.claims > 0 ? (
-          <>Senast uppdaterad <strong style={{ color: '#3a4b56' }}>{fmtDate(source.last_attested_at)}</strong> · {source.claims} påståenden</>
+        {source.staged > 0 ? (
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <span style={{ color: '#b45309', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <CheckCircle2 size={13} /> Uppladdat{source.last_attested_at ? ` ${fmtDate(source.last_attested_at)}` : ''} — {source.staged} datapunkter · väntar på bekräftelse
+            </span>
+            <button
+              onClick={includeInDelivery}
+              disabled={including}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: 'rgba(159,81,182,0.18)', color: '#9f51b6', border: '1px solid rgba(159,81,182,0.3)', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: including ? 'wait' : 'pointer' }}
+            >
+              <CheckCircle2 size={12} /> {including ? 'Inkluderar…' : 'Inkludera i leverans'}
+            </button>
+          </div>
+        ) : source.included > 0 ? (
+          <span style={{ color: '#16a34a', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <CheckCircle2 size={13} /> Ingår i leverans{source.last_attested_at ? ` (sedan ${fmtDate(source.last_attested_at)})` : ''} — {source.included} datapunkter
+          </span>
         ) : (
           <span style={{ fontStyle: 'italic' }}>Inget uppladdat än.</span>
+        )}
+        {source.samples.length > 0 && (
+          <button onClick={() => setShowSamples((v) => !v)} style={{ marginLeft: 10, background: 'transparent', border: 'none', color: C.accent, fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
+            {showSamples ? 'Dölj exempel' : 'Visa exempel'}
+          </button>
+        )}
+        {showSamples && (
+          <ul style={{ margin: '6px 0 0', paddingLeft: 16, color: C.muted, lineHeight: 1.5 }}>
+            {source.samples.map((s, i) => (
+              <li key={i} style={{ marginBottom: 2 }}>{s.length > 110 ? s.slice(0, 110) + '…' : s}</li>
+            ))}
+          </ul>
         )}
       </div>
 

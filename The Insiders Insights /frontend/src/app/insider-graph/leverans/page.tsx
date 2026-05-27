@@ -82,6 +82,7 @@ export default function LeveransPage() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [attested, setAttested] = useState<{ key: string; label: string; included: number; staged: number }[] | null>(null);
   const { latest, active: jobActive, trigger: runJob } = useJobRuns(selected);
 
   // Badge-kontroller
@@ -111,6 +112,16 @@ export default function LeveransPage() {
     graphFetch<Delivery>(`/api/delivery/${selected}`)
       .then(setDelivery)
       .catch((e) => setError(e.message));
+  }, [selected, refreshTick]);
+
+  // Officiell (attesterad) data — vad som ingår i leveransen.
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
+    graphFetch<{ source_types: { key: string; label: string; included: number; staged: number }[] }>(`/api/attested/${selected}/status`)
+      .then((d) => { if (!cancelled) setAttested(d.source_types); })
+      .catch(() => { if (!cancelled) setAttested([]); });
+    return () => { cancelled = true; };
   }, [selected, refreshTick]);
 
   useEffect(() => {
@@ -235,6 +246,31 @@ export default function LeveransPage() {
           );
         })()}
       </div>
+
+      {/* Officiell data som ingår */}
+      {attested && attested.some((a) => a.included > 0 || a.staged > 0) && (
+        <Card title="Officiell data i leveransen" hint="Attesterad LinkedIn-data som ingår i grafen. Staged data bekräftas på kundkortet under Officiell data.">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {attested.filter((a) => a.included > 0 || a.staged > 0).map((a) => (
+              <div key={a.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, fontSize: 13 }}>
+                <span style={{ color: '#3a4b56' }}>{a.label}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  {a.included > 0 && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#16a34a', fontWeight: 600, fontSize: 12 }}>
+                      <Check size={13} /> {a.included} ingår
+                    </span>
+                  )}
+                  {a.staged > 0 && (
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#b45309', background: 'rgba(245,158,11,0.15)', borderRadius: 4, padding: '2px 8px' }}>
+                      {a.staged} väntar på bekräftelse
+                    </span>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* 1. Profilsida */}
       <Card title="Profilsida" hint="Den kanoniska sanningskällan AI-motorerna läser. Länken badgen pekar på.">

@@ -184,7 +184,8 @@ def _demo_claim(ctx: BuildCtx, key: str, dimension: str, segment: str, value: in
         statement=statement[:200],
         source=[ctx.source],
         confidence=1.0,
-        included_in_output=True,
+        # Staged: ingår INTE i grafen förrän operatören bekräftar "Inkludera i leverans".
+        included_in_output=False,
         needs_review=False,
     )
     return ("claim", claim_id, claim.model_dump())
@@ -229,7 +230,8 @@ def _content_build(sheets: dict[str, list[list[str]]], ctx: BuildCtx) -> list[Wr
             "content": title[:5000],
             "url": link or None,
             "published_at": published,
-            "included_in_output": True,
+            # Staged tills "Inkludera i leverans" bekräftas.
+            "included_in_output": False,
             "attested_source": "linkedin_content",
             # OBS: "Posted by" (författare) tas medvetet ALDRIG med (persondata).
             "extra": {"post_type": post_type},
@@ -339,24 +341,34 @@ def ingest_attested_csv(client_id: str, source_type: str, csv_text: str, atteste
 
 
 def attested_status(client_id: str) -> list[dict[str, Any]]:
-    """Per källtyp: antal + senaste attested_at (claims via origin, inlägg via raw_items)."""
-    counts: dict[str, int] = {}
-    latest: dict[str, str] = {}
+    """Per källtyp: antal i leverans (included) vs väntande (staged), senaste datum och
+    ett par exempel — så kortet kan visa både kvittens och bekräfta-läge."""
+    agg: dict[str, dict[str, Any]] = {
+        st.key: {"included": 0, "staged": 0, "last": None, "samples": []} for st in SOURCE_TYPES.values()
+    }
 
     for _claim_id, raw in fs.iter_claims(client_id):
         origin = raw.get("origin") or ""
         if not origin.startswith("attested:"):
             continue
-        key = origin.split(":", 1)[1]
-        counts[key] = counts.get(key, 0) + 1
+        a = agg.get(origin.split(":", 1)[1])
+        if a is None:
+            continue
+        a["included" if raw.get("included_in_output") else "staged"] += 1
         at = (raw.get("source") or [{}])[0].get("attested_at")
-        if at and at > latest.get(key, ""):
-            latest[key] = at
+        if at and (a["last"] is None or at > a["last"]):
+            a["last"] = at
+        if len(a["samples"]) < 3 and raw.get("statement"):
+            a["samples"].append(raw["statement"])
 
     for snap in fs.raw_items_company_col(client_id).stream():
-        key = (snap.to_dict() or {}).get("attested_source")
-        if key:
-            counts[key] = counts.get(key, 0) + 1
+        d = snap.to_dict() or {}
+        a = agg.get(d.get("attested_source") or "")
+        if a is None:
+            continue
+        a["included" if d.get("included_in_output") else "staged"] += 1
+        if len(a["samples"]) < 3 and d.get("content"):
+            a["samples"].append((d.get("content") or "")[:120])
 
     return [
         {
@@ -364,11 +376,35 @@ def attested_status(client_id: str) -> list[dict[str, Any]]:
             "label": st.label,
             "description": st.description,
             "mode": st.mode,
-            "claims": counts.get(st.key, 0),
-            "last_attested_at": latest.get(st.key),
+            "included": agg[st.key]["included"],
+            "staged": agg[st.key]["staged"],
+            "last_attested_at": agg[st.key]["last"],
+            "samples": agg[st.key]["samples"],
         }
         for st in SOURCE_TYPES.values()
     ]
+
+
+def include_source(client_id: str, source_type: str) -> int:
+    """Flippa staged → included_in_output för en källtyp (bekräfta "Inkludera i leverans").
+    Returnerar antal poster som inkluderades. Anroparen kör en omkompilering."""
+    if source_type not in SOURCE_TYPES:
+        raise ValueError(f"unknown source_type: {source_type}")
+    if not fs.client_doc(client_id).get().exists:
+        raise ValueError(f"client not found: {client_id}")
+
+    origin = f"attested:{source_type}"
+    n = 0
+    for claim_id, raw in list(fs.iter_claims(client_id)):
+        if (raw.get("origin") or "") == origin and not raw.get("included_in_output"):
+            fs.claim_doc(client_id, claim_id).update({"included_in_output": True})
+            n += 1
+    for snap in list(fs.raw_items_company_col(client_id).stream()):
+        d = snap.to_dict() or {}
+        if d.get("attested_source") == source_type and not d.get("included_in_output"):
+            fs.raw_items_company_col(client_id).document(snap.id).update({"included_in_output": True})
+            n += 1
+    return n
 
 
 def _delete_existing(client_id: str, source_type: str) -> int:
