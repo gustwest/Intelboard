@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Iterator
 
 from google.cloud import firestore
@@ -59,6 +59,9 @@ def record_run(job_type: str, client_id: str | None = None) -> Iterator[RunHandl
                 "client_id": client_id,
                 "status": "running",
                 "started_at": firestore.SERVER_TIMESTAMP,
+                # TTL: Firestore raderar posten ~90 dagar efter körningen (kräver att
+                # en TTL-policy är aktiverad på fältet expire_at för job_runs).
+                "expire_at": datetime.now(timezone.utc) + timedelta(days=90),
             }
         )
     except Exception:  # noqa: BLE001

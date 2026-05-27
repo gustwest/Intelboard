@@ -75,6 +75,7 @@ export function useJobRuns(clientId: string | null) {
         return;
       }
       const deadline = Date.now() + 45000;
+      let sawFresh = false;
       while (Date.now() < deadline) {
         await sleep(2000);
         try {
@@ -83,12 +84,20 @@ export function useJobRuns(clientId: string | null) {
           const d = await graphFetch<{ runs: JobRun[] }>(`/api/jobs/runs?${params.toString()}`);
           // En körning som startade efter att vi triggade (4s marginal för klock-skav).
           const fresh = d.runs.find((r) => r.started_at && new Date(r.started_at).getTime() >= t0 - 4000);
-          if (fresh && fresh.status !== 'running') {
-            setActive((p) => ({ ...p, [key]: fresh.status }));
-            refresh();
-            // Lämna kvar resultatet en stund, återgå sedan till idle.
-            setTimeout(() => setActive((p) => ({ ...p, [key]: 'idle' })), 6000);
-            return;
+          if (fresh) {
+            sawFresh = true;
+            if (fresh.status !== 'running') {
+              setActive((p) => ({ ...p, [key]: fresh.status }));
+              refresh();
+              // Lämna kvar resultatet en stund, återgå sedan till idle.
+              setTimeout(() => setActive((p) => ({ ...p, [key]: 'idle' })), 6000);
+              return;
+            }
+          } else if (!sawFresh && Date.now() - t0 > 8000) {
+            // Ingen körning dök upp inom 8s → jobbet var troligen ej tillämpligt för
+            // kunden (t.ex. xml-sync utan jobfeed) eller en batch utan per-kund-spår.
+            // Sluta snurra istället för att vänta ut hela timeouten.
+            break;
           }
         } catch {
           /* fortsätt polla */

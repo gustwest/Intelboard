@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Radar, RefreshCw } from 'lucide-react';
+import { Radar, RefreshCw, Play, Loader2, Check, X, Clock } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import { graphFetch } from '../_lib/api';
+import { useJobRuns, fmtRelative } from '../_lib/jobRuns';
 
 // --- Riskloopens render-modell (speglar services/monthly_report.py) ---
 
@@ -110,6 +111,8 @@ export default function GraphRiskLoopPage() {
   const [month, setMonth] = useState<string | null>(null);
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const { latest, active: jobActive, trigger: runJob } = useJobRuns(selected);
 
   useEffect(() => {
     graphFetch<{ clients: Client[] }>('/api/clients')
@@ -119,6 +122,32 @@ export default function GraphRiskLoopPage() {
       })
       .catch((e) => setError(e.message));
   }, []);
+
+  // Jobbknapp med progress (delas av polling/risk-detect/månadsrapport).
+  function renderJobBtn(label: string, key: string, path: string, jobType: string, opts?: { needsClient?: boolean; onDone?: () => void }) {
+    const st = jobActive[key] || 'idle';
+    const Icon = st === 'running' ? Loader2 : st === 'success' ? Check : st === 'failed' ? X : Play;
+    const color = st === 'failed' ? '#dc2626' : st === 'success' ? '#16a34a' : undefined;
+    return (
+      <button
+        onClick={async () => {
+          await runJob(key, path, jobType);
+          opts?.onDone?.();
+        }}
+        disabled={(opts?.needsClient && !selected) || st === 'running'}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px',
+          background: st === 'success' ? 'rgba(159,81,182,0.18)' : 'transparent',
+          color: st === 'success' ? '#9f51b6' : '#3a4b56',
+          border: `1px solid ${st === 'success' ? 'rgba(159,81,182,0.3)' : C.border}`,
+          borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: st === 'running' ? 'wait' : 'pointer',
+        }}
+      >
+        <Icon size={12} color={color} style={st === 'running' ? { animation: 'spin 0.8s linear infinite' } : undefined} />
+        {st === 'running' ? 'Kör…' : label}
+      </button>
+    );
+  }
 
   // Lista tillgängliga månadsrapporter för vald kund, välj senaste.
   useEffect(() => {
@@ -141,7 +170,7 @@ export default function GraphRiskLoopPage() {
     return () => {
       cancelled = true;
     };
-  }, [selected]);
+  }, [selected, refreshTick]);
 
   // Hämta vald månads rapport.
   useEffect(() => {
@@ -201,6 +230,34 @@ export default function GraphRiskLoopPage() {
             Internt utkast
           </span>
         )}
+      </div>
+
+      {/* Jobbkontroller + senast körd */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+        {renderJobBtn('Kör polling', 'polling', '/api/jobs/polling', 'polling')}
+        {renderJobBtn('Kör risk-detect', 'risk', `/api/jobs/risk-detect/${selected}`, 'risk_detect', { needsClient: true })}
+        {renderJobBtn('Bygg månadsrapport', 'report', `/api/jobs/monthly-report/${selected}`, 'monthly_report', { needsClient: true, onDone: () => setRefreshTick((t) => t + 1) })}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 12, color: C.muted, marginLeft: 8 }}>
+          {([['polling', 'Polling'], ['risk_detect', 'Risk-detect'], ['monthly_report', 'Rapport']] as [string, string][]).map(([type, label]) => {
+            const run = latest(type);
+            return (
+              <span key={type} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <Clock size={12} color={C.dim} />
+                <strong style={{ color: '#3a4b56', fontWeight: 600 }}>{label}:</strong>
+                {run ? (
+                  <>
+                    <span>{fmtRelative(run.started_at)}</span>
+                    {run.status === 'success' && <Check size={12} color="#16a34a" />}
+                    {run.status === 'failed' && <X size={12} color="#dc2626" />}
+                  </>
+                ) : (
+                  <span style={{ color: C.dim }}>aldrig körd</span>
+                )}
+              </span>
+            );
+          })}
+        </div>
       </div>
 
       {error && <div style={errorStyle}>{error}</div>}

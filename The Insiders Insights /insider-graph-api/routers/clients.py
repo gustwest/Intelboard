@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 import firestore_client as fs
+import ttl_cache
 from routers.inbox import _count_client  # samma "väntar på människa"-räkning som inkorgen
 
 router = APIRouter(prefix="/api/clients", tags=["clients"])
@@ -92,18 +93,27 @@ def get_pipeline(client_id: str) -> dict[str, Any]:
 
     Driver pipeline-stegen i UI:t (kunddetalj + kundlista). Tillstånd per steg:
     done (klart), attention (kräver en människa) eller todo (ej påbörjat).
+    Resultatet cachas kort (tungt anrop som väver ihop flera collections).
     """
-    snap = fs.client_doc(client_id).get()
-    if not snap.exists:
+    if not fs.client_doc(client_id).get().exists:
         raise HTTPException(404, f"client not found: {client_id}")
-    data = snap.to_dict() or {}
+    return ttl_cache.cached(f"pipeline:{client_id}", 20, lambda: _build_pipeline(client_id))
 
+
+def _build_pipeline(client_id: str) -> dict[str, Any]:
+    data = fs.client_doc(client_id).get().to_dict() or {}
     connectors = data.get("active_connectors", [])
     counts = _count_client(client_id, data)
     pending = sum(counts.values())
     last_compiled = data.get("last_compiled")
     cdn_url = data.get("cdn_url")
     polling_week = _latest_polling_week(client_id)
+    raw_count = _raw_count(client_id)
+    run_at = _latest_run_times(client_id)
+
+    # Data-steget: senaste av de datahämtande jobben.
+    data_at = _max_iso(run_at.get(j) for j in ("scrape_active", "scrape_website", "scrape_episodic", "xml_sync"))
+    has_data = raw_count is None and _has_any_raw(client_id) or bool(raw_count)
 
     steps = [
         {"key": "onboarded", "label": "Onboardad", "state": "done", "at": _iso(data.get("created_at")), "detail": None},
@@ -117,9 +127,9 @@ def get_pipeline(client_id: str) -> dict[str, Any]:
         {
             "key": "data",
             "label": "Data inkommen",
-            "state": "done" if _has_any_raw(client_id) else "todo",
-            "detail": None,
-            "at": None,
+            "state": "done" if has_data else "todo",
+            "detail": f"{raw_count} källposter" if raw_count else None,
+            "at": data_at,
         },
         {
             "key": "review",
@@ -133,7 +143,7 @@ def get_pipeline(client_id: str) -> dict[str, Any]:
             "label": "Kompilerad",
             "state": "done" if last_compiled else "todo",
             "detail": None,
-            "at": _iso(last_compiled),
+            "at": _iso(last_compiled) or run_at.get("compile_schema"),
         },
         {
             "key": "delivered",
@@ -147,7 +157,7 @@ def get_pipeline(client_id: str) -> dict[str, Any]:
             "label": "AI-synlighet",
             "state": "done" if polling_week else "todo",
             "detail": polling_week or "Ej mätt",
-            "at": None,
+            "at": run_at.get("polling"),
         },
     ]
     next_action = next((s["label"] for s in steps if s["state"] in ("attention", "todo")), None)
@@ -162,6 +172,39 @@ def _has_any_raw(client_id: str) -> bool:
         for _ in fs.raw_items_col(client_id, emp_id).limit(1).stream():
             return True
     return False
+
+
+def _raw_count(client_id: str) -> int | None:
+    """Antal insamlade källposter (bolag + medarbetare) via count-aggregering.
+    None om aggregeringen inte stöds → anroparen faller tillbaka till presence."""
+    try:
+        total = fs.raw_items_company_col(client_id).count().get()[0][0].value
+        for emp_id, _ in fs.iter_employees(client_id):
+            total += fs.raw_items_col(client_id, emp_id).count().get()[0][0].value
+        return int(total)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _latest_run_times(client_id: str) -> dict[str, str | None]:
+    """job_type → senaste körningens start (iso) för kunden, ur job_runs."""
+    latest: dict[str, Any] = {}
+    try:
+        for snap in fs.job_runs_col().where("client_id", "==", client_id).stream():
+            d = snap.to_dict() or {}
+            jt, st = d.get("job_type"), d.get("started_at")
+            if not jt or st is None:
+                continue
+            if jt not in latest or st > latest[jt]:
+                latest[jt] = st
+    except Exception:  # noqa: BLE001
+        return {}
+    return {k: _iso(v) for k, v in latest.items()}
+
+
+def _max_iso(values) -> str | None:
+    present = [v for v in values if v]
+    return max(present) if present else None
 
 
 def _latest_polling_week(client_id: str) -> str | None:

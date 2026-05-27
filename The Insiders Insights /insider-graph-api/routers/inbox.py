@@ -20,6 +20,7 @@ from typing import Any
 from fastapi import APIRouter
 
 import firestore_client as fs
+import ttl_cache
 from schemas import LinkedInStatus
 
 router = APIRouter(prefix="/api/inbox", tags=["inbox"])
@@ -73,7 +74,12 @@ def _count_client(client_id: str, data: dict[str, Any]) -> dict[str, int]:
 
 @router.get("")
 def get_inbox() -> dict[str, Any]:
-    """Summera mänskliga åtgärder per kund + totalt per kategori."""
+    """Summera mänskliga åtgärder per kund + totalt per kategori. Cachas kort
+    (headern hämtar den vid varje sidladdning)."""
+    return ttl_cache.cached("inbox", 20, _build_inbox)
+
+
+def _build_inbox() -> dict[str, Any]:
     clients: list[dict[str, Any]] = []
     totals = {k: 0 for k in CATEGORY_KEYS}
 
