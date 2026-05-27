@@ -161,3 +161,29 @@ def run(client_id: str) -> dict[str, Any]:
         "client_id": client_id, "written": True,
         "overall_score": doc["overall_score"], "coverage": doc["coverage"],
     }
+
+
+def run_all() -> None:
+    """Fan-out över alla kunder (schemalagt golv; change-agenten i compile_schema täcker
+    annars per kund)."""
+    count = 0
+    for client_id, _ in fs.iter_clients():
+        try:
+            run(client_id)
+            count += 1
+        except Exception as exc:  # noqa: BLE001
+            log.exception("compute_trust_gap misslyckades för %s: %s", client_id, exc)
+    log.info("compute_trust_gap kördes för %d kunder", count)
+
+
+if __name__ == "__main__":
+    import argparse
+
+    logging.basicConfig(level=logging.INFO)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--client-id", default=None, help="enskild kund (default: alla)")
+    args = parser.parse_args()
+    if args.client_id:
+        run(args.client_id)
+    else:
+        run_all()

@@ -8,7 +8,8 @@
 #   - Service-account för insider-graph-api
 #   - IAM-bindningar (Firestore, GCS, Secret Manager)
 #   - Cloud Run Jobs (scrape-active, scrape-episodic, scrape-website, extract-all-claims,
-#     compile-all-schemas, polling-weekly, xml-sync, sunset-skills, quarterly-linkedin-todo)
+#     compile-all-schemas, polling-weekly, xml-sync, sunset-skills, quarterly-linkedin-todo,
+#     compute-trust-gap, trust-gap-report, warmth-probes)
 #   - Cloud Scheduler-triggers för jobben
 #   - Eventarc-trigger för compile_schema vid Firestore-skrivningar
 #
@@ -225,6 +226,10 @@ create_or_update_job polling-weekly          jobs.polling_weekly
 create_or_update_job xml-sync                jobs.xml_sync
 create_or_update_job sunset-skills           jobs.sunset_skills
 create_or_update_job quarterly-linkedin-todo jobs.quarterly_todo
+# Humaniseringslager & Förtroendegap (docs/humanization-trust-gap-spec.md):
+create_or_update_job compute-trust-gap        jobs.compute_trust_gap
+create_or_update_job trust-gap-report         jobs.trust_gap_report
+create_or_update_job warmth-probes            jobs.warmth_probes
 
 # ---- 7. Cloud Scheduler-triggers ------------------------------------------
 schedule_job() {
@@ -264,6 +269,13 @@ schedule_job polling-weekly-tue      "0 6 * * 2"  polling-weekly
 schedule_job xml-sync-daily          "30 3 * * *" xml-sync
 schedule_job sunset-skills-weekly    "0 2 * * 1"  sunset-skills
 schedule_job quarterly-todo-daily    "0 7 * * *"  quarterly-linkedin-todo
+# Humaniseringslagret: värme-probes tisdagar 06:30 (efter polling — kostar motoranrop;
+# perceptions-TAL visas ej skarpt för kund förrän kalibrering är låst). compute-trust-gap
+# dagligt golv 05:15 (change-agenten i compile_schema täcker annars per kund). trust-gap-
+# report månadsvis snapshot 1:a kl 08:00.
+schedule_job warmth-probes-weekly     "30 6 * * 2"  warmth-probes
+schedule_job compute-trust-gap-daily  "15 5 * * *"  compute-trust-gap
+schedule_job trust-gap-report-monthly "0 8 1 * *"   trust-gap-report
 
 # ---- 8. Eventarc-trigger: compile vid Firestore-skrivningar ---------------
 # (frivilligt — skapas bara om det inte redan finns, kräver att firestore-db
