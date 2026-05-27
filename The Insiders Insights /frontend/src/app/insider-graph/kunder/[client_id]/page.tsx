@@ -57,18 +57,30 @@ export default function ClientDetailPage() {
   const { latest, active: jobActive, trigger: runJob } = useJobRuns(clientId);
 
   // Per-kund jobbknapp med progress; uppdaterar pipeline-stegen när jobbet är klart.
-  function renderJobBtn(label: string, key: string, path: string, jobType: string) {
+  // primary = fylld accent (full uppdatering), annars ghost (sekundär återpublicering).
+  function renderJobBtn(
+    label: string,
+    key: string,
+    path: string,
+    jobType: string,
+    opts: { primary?: boolean; title?: string; runningLabel?: string } = {},
+  ) {
     const st = jobActive[key] || 'idle';
     const Icon = st === 'running' ? Loader2 : st === 'success' ? Check : Play;
-    const color = st === 'success' ? '#16a34a' : undefined;
+    const primary = opts.primary ?? false;
+    const iconColor = primary ? '#fff' : st === 'success' ? '#16a34a' : undefined;
+    const variant = primary
+      ? { background: C.accent, color: '#fff', border: `1px solid ${C.accent}` }
+      : { background: 'transparent', color: C.text, border: `1px solid ${C.border}` };
     return (
       <button
         onClick={async () => { await runJob(key, path, jobType); setPipelineKey((k) => k + 1); }}
         disabled={st === 'running'}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: 'transparent', color: '#3a4b56', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: st === 'running' ? 'wait' : 'pointer' }}
+        title={opts.title}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: st === 'running' ? 'wait' : 'pointer', ...variant }}
       >
-        <Icon size={12} color={color} style={st === 'running' ? { animation: 'spin 0.8s linear infinite' } : undefined} />
-        {st === 'running' ? 'Kör…' : label}
+        <Icon size={12} color={iconColor} style={st === 'running' ? { animation: 'spin 0.8s linear infinite' } : undefined} />
+        {st === 'running' ? (opts.runningLabel ?? 'Kör…') : label}
       </button>
     );
   }
@@ -160,8 +172,14 @@ export default function ClientDetailPage() {
                 Pipeline
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {renderJobBtn('Kompilera', 'compile', `/api/jobs/compile/${clientId}`, 'compile_schema')}
-                {renderJobBtn('Extract claims', 'extract', `/api/jobs/extract-claims/${clientId}`, 'extract_claims')}
+                {renderJobBtn('Uppdatera profil', 'extract', `/api/jobs/extract-claims/${clientId}`, 'extract_claims', {
+                  primary: true,
+                  runningLabel: 'Uppdaterar…',
+                  title: 'Läser om allt material, extraherar verifierade claims och publicerar profilen (~1 min)',
+                })}
+                {renderJobBtn('Återpublicera', 'compile', `/api/jobs/compile/${clientId}`, 'compile_schema', {
+                  title: 'Bygger om profilen från befintliga claims — snabbt, ingen ny analys',
+                })}
               </div>
             </div>
             <PipelineStatus clientId={clientId} refreshKey={pipelineKey} />

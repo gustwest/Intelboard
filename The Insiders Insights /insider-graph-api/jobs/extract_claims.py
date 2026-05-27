@@ -1,8 +1,11 @@
 """Cloud Run Job: extract-claims.
 
 Kör narrativ claims-extraktion (fritext → narrative-claims) för en kund och
-persisterar resultatet i claims-collectionen. Triggas manuellt eller schemalagt;
-kompilera schema (compile-schema) efteråt för att få ut claims i JSON-LD.
+persisterar resultatet i claims-collectionen. Triggas manuellt eller schemalagt.
+
+Kedjar compile-schema automatiskt efteråt så de nya claimsen projiceras direkt
+in i JSON-LD/profilsidan — beroendet går extract → compile, och compile är
+idempotent (change-agent hoppar över uppladdning om grafen är oförändrad).
 """
 import argparse
 import logging
@@ -19,6 +22,16 @@ def run(client_id: str) -> None:
         log.info("claim extraction for %s: %s", client_id, result)
         print(result)
         r.summary = {"result": str(result)[:300]}
+
+    # Projicera de nya claimsen in i leveransen (JSON-LD/profilsida/llms.txt).
+    # Best-effort — får aldrig fälla extraktionen, som redan är registrerad ovan.
+    # compile_schema öppnar sin egen record_run så körningen syns separat i job_runs.
+    try:
+        from jobs import compile_schema
+
+        compile_schema.run(client_id)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("chained compile_schema failed for %s (non-fatal): %s", client_id, exc)
 
 
 if __name__ == "__main__":
