@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Rocket, Copy, Check, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react';
+import { Rocket, Copy, Check, ExternalLink, ChevronDown, ChevronRight, Play, Loader2, X, Clock } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import { graphFetch } from '../_lib/api';
+import { useJobRuns, fmtRelative } from '../_lib/jobRuns';
 
 type Client = {
   client_id: string;
@@ -80,6 +81,8 @@ export default function LeveransPage() {
   const [badge, setBadge] = useState<Badge | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const { latest, active: jobActive, trigger: runJob } = useJobRuns(selected);
 
   // Badge-kontroller
   const [theme, setTheme] = useState<Theme>('light');
@@ -108,7 +111,7 @@ export default function LeveransPage() {
     graphFetch<Delivery>(`/api/delivery/${selected}`)
       .then(setDelivery)
       .catch((e) => setError(e.message));
-  }, [selected]);
+  }, [selected, refreshTick]);
 
   useEffect(() => {
     if (!selected) return;
@@ -141,7 +144,7 @@ export default function LeveransPage() {
     return () => {
       cancelled = true;
     };
-  }, [selected, clients]);
+  }, [selected, clients, refreshTick]);
 
   const copy = useCallback((text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -178,6 +181,59 @@ export default function LeveransPage() {
             </option>
           ))}
         </select>
+      </div>
+
+      {/* Leveransstatus */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 22px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+        <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', fontSize: 12 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: C.muted }}>
+            <Clock size={13} color={C.dim} />
+            <strong style={{ color: '#3a4b56', fontWeight: 600 }}>Kompilerad:</strong>
+            {(() => {
+              const r = latest('compile_schema');
+              if (!r) return <span style={{ color: C.dim }}>aldrig</span>;
+              return (
+                <>
+                  <span>{fmtRelative(r.started_at)}</span>
+                  {r.status === 'success' && <Check size={12} color="#16a34a" />}
+                  {r.status === 'failed' && <X size={12} color="#dc2626" />}
+                </>
+              );
+            })()}
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: C.muted }}>
+            <strong style={{ color: '#3a4b56', fontWeight: 600 }}>CDN:</strong>
+            {!selectedClient?.cdn_url ? (
+              <span style={{ color: C.dim }}>ej publicerad</span>
+            ) : fullJson && !outputError ? (
+              <><Check size={12} color="#16a34a" /> <span style={{ color: '#16a34a' }}>nås</span></>
+            ) : outputError ? (
+              <><X size={12} color="#dc2626" /> <span style={{ color: '#dc2626' }}>nås ej</span></>
+            ) : (
+              <span style={{ color: C.dim }}>kontrollerar…</span>
+            )}
+          </span>
+        </div>
+        {(() => {
+          const st = jobActive['compile'] || 'idle';
+          const Icon = st === 'running' ? Loader2 : st === 'success' ? Check : st === 'failed' ? X : Play;
+          const color = st === 'failed' ? '#dc2626' : st === 'success' ? '#16a34a' : '#9f51b6';
+          return (
+            <button
+              onClick={async () => {
+                if (!selected) return;
+                await runJob('compile', `/api/jobs/compile/${selected}`, 'compile_schema');
+                setRefreshTick((t) => t + 1);
+              }}
+              disabled={!selected || st === 'running'}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'rgba(159,81,182,0.18)', color: '#9f51b6', border: '1px solid rgba(159,81,182,0.3)', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: !selected || st === 'running' ? 'not-allowed' : 'pointer' }}
+            >
+              <Icon size={13} color={color} style={st === 'running' ? { animation: 'spin 0.8s linear infinite' } : undefined} />
+              {st === 'running' ? 'Kompilerar…' : 'Kompilera om'}
+            </button>
+          );
+        })()}
       </div>
 
       {/* 1. Profilsida */}

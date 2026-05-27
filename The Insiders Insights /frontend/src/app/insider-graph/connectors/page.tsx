@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Plug, Play, Plus, Trash2, Save, AlertCircle, CheckCircle2, Users, ArrowRight } from 'lucide-react';
+import { Plug, Play, Plus, Trash2, Save, AlertCircle, CheckCircle2, Users, ArrowRight, Loader2, Check, X, Clock } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import { graphFetch } from '../_lib/api';
+import { useJobRuns, fmtRelative } from '../_lib/jobRuns';
 
 type ConnectorMeta = {
   id: string;
@@ -78,6 +79,7 @@ export default function GraphConnectorsPage() {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [banner, setBanner] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
+  const { latest, active: jobActive, trigger: runJob } = useJobRuns(selected);
 
   useEffect(() => {
     graphFetch<{ clients: Client[] }>('/api/clients')
@@ -137,22 +139,35 @@ export default function GraphConnectorsPage() {
       });
       setDirty(false);
       setBanner({ tone: 'ok', text: 'Sparat' });
-    } catch (e: any) {
-      setBanner({ tone: 'error', text: e.message });
+    } catch (e) {
+      setBanner({ tone: 'error', text: e instanceof Error ? e.message : String(e) });
     } finally {
       setSaving(false);
     }
   }
 
-  async function trigger(job: string, path: string) {
-    setBanner(null);
-    try {
-      await graphFetch(path, { method: 'POST' });
-      setBanner({ tone: 'ok', text: `Triggade ${job}` });
-    } catch (e: any) {
-      setBanner({ tone: 'error', text: e.message });
-    }
+  // Jobbknapp med riktig progress (spinner → klar/fel) via körningsspåret.
+  function renderJobBtn(label: string, key: string, path: string, jobType: string, needsClient = false) {
+    const st = jobActive[key] || 'idle';
+    const Icon = st === 'running' ? Loader2 : st === 'success' ? Check : st === 'failed' ? X : Play;
+    const color = st === 'failed' ? '#dc2626' : st === 'success' ? '#16a34a' : undefined;
+    return (
+      <button
+        onClick={() => runJob(key, path, jobType)}
+        disabled={(needsClient && !selected) || st === 'running'}
+        style={btn(C, st === 'success' ? 'primary' : 'subtle')}
+      >
+        <Icon size={12} color={color} style={st === 'running' ? { animation: 'spin 0.8s linear infinite' } : undefined} />
+        {st === 'running' ? 'Kör…' : label}
+      </button>
+    );
   }
+
+  const JOB_STRIP: { label: string; type: string }[] = [
+    { label: 'Scrape', type: 'scrape_active' },
+    { label: 'XML-sync', type: 'xml_sync' },
+    { label: 'Kompilering', type: 'compile_schema' },
+  ];
 
   const liveIds = new Set((state?.available || []).map((c) => c.id));
   const allConnectors: ConnectorMeta[] = [
@@ -189,25 +204,10 @@ export default function GraphConnectorsPage() {
           ))}
         </select>
         <div style={{ flex: 1 }} />
-        <button
-          onClick={() => trigger('scrape-active', '/api/jobs/scrape-active')}
-          style={btn(C, 'subtle')}
-        >
-          <Play size={12} /> Kör scrape-active
-        </button>
-        <button
-          onClick={() => trigger('xml-sync', '/api/jobs/xml-sync')}
-          style={btn(C, 'subtle')}
-        >
-          <Play size={12} /> Kör xml-sync
-        </button>
-        <button
-          onClick={() => trigger('compile', `/api/jobs/compile/${selected}`)}
-          disabled={!selected}
-          style={btn(C, 'subtle')}
-        >
-          <Play size={12} /> Kompilera
-        </button>
+        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+        {renderJobBtn('Kör scrape', 'scrape', '/api/jobs/scrape-active', 'scrape_active')}
+        {renderJobBtn('Kör xml-sync', 'xml', '/api/jobs/xml-sync', 'xml_sync')}
+        {renderJobBtn('Kompilera', 'compile', `/api/jobs/compile/${selected}`, 'compile_schema', true)}
         <button
           onClick={save}
           disabled={!dirty || saving}
@@ -216,6 +216,31 @@ export default function GraphConnectorsPage() {
           <Save size={12} /> {saving ? 'Sparar…' : 'Spara'}
         </button>
       </div>
+
+      {/* Senast körd per jobb (för vald kund) */}
+      {selected && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16, fontSize: 12, color: C.muted }}>
+          {JOB_STRIP.map(({ label, type }) => {
+            const run = latest(type);
+            return (
+              <span key={type} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <Clock size={12} color={C.dim} />
+                <strong style={{ color: '#3a4b56', fontWeight: 600 }}>{label}:</strong>
+                {run ? (
+                  <>
+                    <span>{fmtRelative(run.started_at)}</span>
+                    {run.status === 'success' && <Check size={12} color="#16a34a" />}
+                    {run.status === 'failed' && <X size={12} color="#dc2626" />}
+                    {run.status === 'running' && <Loader2 size={12} color="#f59e0b" style={{ animation: 'spin 0.8s linear infinite' }} />}
+                  </>
+                ) : (
+                  <span style={{ color: C.dim }}>aldrig körd</span>
+                )}
+              </span>
+            );
+          })}
+        </div>
+      )}
 
       {banner && (
         <div
@@ -422,7 +447,7 @@ export default function GraphConnectorsPage() {
   );
 }
 
-function btn(C: any, variant: 'primary' | 'subtle') {
+function btn(C: Record<string, string>, variant: 'primary' | 'subtle') {
   return {
     display: 'flex',
     alignItems: 'center',
@@ -438,7 +463,7 @@ function btn(C: any, variant: 'primary' | 'subtle') {
   };
 }
 
-function inp(C: any) {
+function inp(C: Record<string, string>) {
   return {
     padding: '8px 12px',
     background: '#eef0f1',
