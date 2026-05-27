@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from auth import ApiKeyMiddleware
 from config import settings
-from routers import attested, badge, clients, connectors_router, delivery, esg, health, jobs as jobs_router, linkedin, onboard, polling, reports, review, webhooks
+from routers import attested, badge, clients, connectors_router, delivery, esg, health, jobs as jobs_router, linkedin, onboard, polling, reports, review, verification, webhooks
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("insider-graph-api")
@@ -42,4 +42,5 @@ app.include_router(onboard.router)
 app.include_router(polling.router)
 app.include_router(reports.router)
 app.include_router(review.router)
+app.include_router(verification.router)
 app.include_router(webhooks.router)

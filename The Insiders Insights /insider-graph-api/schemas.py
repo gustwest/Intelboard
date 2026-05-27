@@ -84,6 +84,13 @@ class ClaimSource(BaseModel):
     # Verbatim källspann som den deterministiska grinden (services/claim_grounding) verifierat
     # finns i källtexten och stödjer påståendet. Bevaras som proveniens/revisionsspår.
     quote: str | None = None
+    # Manuell Geogiraph-verifiering (docs/humanization-trust-gap-spec.md §7). assurance_level
+    # styr VIKTEN i compute_trust_gap (§8); kind (ovan) styr hur vi CITERAR. Skilda axlar.
+    # verification_id pekar på Verification-recordet källan kom ur (clients/{id}/verifications).
+    assurance_level: Literal[
+        "self_declared", "third_party_reviewed", "independently_assured"
+    ] | None = None
+    verification_id: str | None = None
 
 
 class Claim(BaseModel):
@@ -109,6 +116,72 @@ class Claim(BaseModel):
     # → inget claim), så ett persisterat narrative-claim bär alltid dessa. ISO-tid + modell.
     validated_at: str | None = None
     validated_by: str | None = None
+    # --- Humaniseringslager (se docs/humanization-trust-gap-spec.md §5.1) -------
+    # facet skiljer operationella claims från kultur-/värmeclaims. Default
+    # "operational" → allt gammalt beteende oförändrat (inga befintliga claims berörs).
+    facet: Literal["operational", "culture"] = "operational"
+    # warmth_mode (endast facet="culture"): "declared" = en utsaga/policy finns;
+    # "demonstrated" = en handling/utfall med tredjepartsunderlag (väger tyngre i §8).
+    warmth_mode: Literal["declared", "demonstrated"] | None = None
+    # dimension: en av de sex värmedimensionerna i humanization_config.DIMENSIONS
+    # (endast facet="culture"). None för slogan o.dyl. som inte hör till en dimension.
+    dimension: str | None = None
+
+
+# --- Manuell Geogiraph-verifiering ("Manually verified by Geogiraph") --------
+# Gemensam verifieringsrutin (docs/humanization-trust-gap-spec.md §7,
+# services/verification.py). Delas av ESG, humanisering och framtida moduler.
+
+ASSURANCE_LEVELS = ("self_declared", "third_party_reviewed", "independently_assured")
+
+
+class VerificationSubject(BaseModel):
+    """Vad verifieringen handlar om — siffran/utsagan ett bevis ska styrka."""
+
+    domain: str                              # "culture" | "esg" | ...
+    dimension: str | None = None             # värmedimension (§5.2) om domain="culture"
+    metric: str | None = None                # t.ex. "eNPS", "board_female_pct"
+    value: Any | None = None
+    # schema.org-predikat det stödda claimet fyller (t.ex. "aggregateRating").
+    # Saknas → narrative-claim byggs av `statement` istället.
+    predicate: str | None = None
+    statement: str | None = None             # läsbar mening för profil/llms.txt
+
+
+class VerificationSubmission(BaseModel):
+    """Ops-inlämning på kundkortet (§7.5). Ingen kundyta i MVP — intag via mejl/fil."""
+
+    evidence_type: str                       # väljer profil (verification_profiles.py)
+    subject: VerificationSubject
+    # Uppladdad fil — revisionsspår. Krävs för allt utom self_declared.
+    artifact_ref: str | None = None
+    instrument_or_issuer: str | None = None
+    document_date: str | None = None         # ISO; underlagets datum (färskhet)
+    methodology: dict[str, Any] = Field(default_factory=dict)  # period, sample_n, response_rate…
+    # Mänskliga omdömen ops bockar (oberoende/spårbarhet). Metodik + färskhet auto-bedöms.
+    ops_checks: dict[str, bool] = Field(default_factory=dict)
+    chosen_assurance_level: str | None = None  # ops väljer; begränsas av checks (§7.5)
+    verified_by: str = "ops"
+    rejected_reason: str | None = None       # satt → verdict="rejected", ingen ClaimSource
+
+
+class Verification(BaseModel):
+    """Persisterat verifieringsrecord (§5.4). clients/{id}/verifications/{id}."""
+
+    evidence_type: str
+    subject: VerificationSubject
+    artifact_ref: str | None = None
+    instrument_or_issuer: str | None = None
+    document_date: str | None = None
+    methodology: dict[str, Any] = Field(default_factory=dict)
+    # De fyra generiska kontrollerna (§7.2), upplösta till booleans.
+    checks: dict[str, bool] = Field(default_factory=dict)
+    assurance_level: str | None = None       # slutlig, ev. nedgraderad av checks
+    verdict: Literal["verified", "self_declared", "rejected"]
+    verification_text: str
+    verified_by: str = "ops"
+    verified_at: str | None = None
+    expires_at: str | None = None
 
 
 # --- ESG & CSRD Perception Audit: trestegs ingestion-schema ------------------

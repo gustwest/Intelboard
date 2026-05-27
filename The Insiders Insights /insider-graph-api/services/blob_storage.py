@@ -18,11 +18,21 @@ from config import settings
 log = logging.getLogger(__name__)
 
 
-def store(client_id: str, snapshot_id: str, filename: str, content: bytes, content_type: str | None) -> str | None:
-    """Ladda upp underlaget privat. Returnerar objektsökvägen, eller None om ej lagrat."""
+def store(
+    client_id: str,
+    snapshot_id: str,
+    filename: str,
+    content: bytes,
+    content_type: str | None,
+    prefix: str = "linkedin",
+) -> str | None:
+    """Ladda upp underlaget privat. Returnerar objektsökvägen, eller None om ej lagrat.
+
+    `prefix` styr mappen i bucketen (default "linkedin" för bakåtkompatibilitet;
+    verifieringsunderlag använder "verifications")."""
     if not settings.upload_bucket or not content:
         return None
-    object_path = f"linkedin/{client_id}/{snapshot_id}/{filename or 'underlag'}"
+    object_path = f"{prefix}/{client_id}/{snapshot_id}/{filename or 'underlag'}"
     try:
         blob = _bucket().blob(object_path)
         blob.upload_from_string(content, content_type=content_type or "application/octet-stream")

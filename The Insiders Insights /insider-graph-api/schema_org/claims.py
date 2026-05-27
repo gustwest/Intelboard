@@ -30,6 +30,89 @@ _COMPANY_FIELD_MAP: dict[str, tuple[str, str]] = {
 }
 
 
+# --- Humaniseringslager: culture-claims (docs/humanization-trust-gap-spec.md §5.3) ---
+# Företagsnivå-extra-fält → (predikat, warmth_mode, dimension, mall). Connector-
+# levererade culture-fält; saknas fältet ignoreras det. Auto-deriverade claims bär
+# INGEN assurance-nivå — bara den manuella verifieringen (services/verification.py)
+# sätter den, så de rör inte demonstrated-poängen förrän de verifierats (§8).
+_CULTURE_FIELD_MAP: dict[str, tuple[str, str, str | None, str]] = {
+    "ethics_policy_url": ("ethicsPolicy", "declared", "ethics", "Etikpolicy: {value}"),
+    "diversity_policy_url": ("diversityPolicy", "declared", "inclusion", "Mångfaldspolicy: {value}"),
+    "slogan": ("slogan", "declared", None, "Ledord: {value}"),
+    "csr_topics": ("knowsAbout", "declared", "community", "Engagerade i {value}"),
+    "collective_agreement": ("memberOf", "demonstrated", "transparency", "Kollektivavtal: {value}"),
+    "workplace_label": ("hasCredential", "demonstrated", "wellbeing", "Utmärkelse: {value}"),
+}
+
+
+def derive_culture_claims(client_id: str) -> Iterator[Claim]:
+    """Yielda culture-taggade property-claims ur företags-raw_items (connector-fält +
+    jobbförmåner). Item-källa (självverifierande); ingen assurance-nivå."""
+    for snap in fs.raw_items_company_col(client_id).stream():
+        raw = snap.to_dict() or {}
+        if not raw.get("included_in_output", True):
+            continue
+        source = ClaimSource(kind="item", item_id=snap.id, employee_id=None)
+        extra = raw.get("extra") or {}
+
+        for field, value in extra.items():
+            mapping = _CULTURE_FIELD_MAP.get(field)
+            if not mapping or value in (None, "", []):
+                continue
+            predicate, warmth_mode, dimension, template = mapping
+            yield Claim(
+                claim_kind="property", subject_ref="org", predicate=predicate, value=value,
+                statement=template.format(value=_display(value)), source=[source], confidence=1.0,
+                facet="culture", warmth_mode=warmth_mode, dimension=dimension,
+            )
+
+        # Jobbförmåner i en levande annons = demonstrerad (item-källa). Förmånerna ligger
+        # i benefits_enriched (LLM-berikad, jfr skills_enriched) eller extra["benefits"].
+        if raw.get("schema_type") == "JobPosting":
+            benefits = raw.get("benefits_enriched") or extra.get("benefits") or []
+            if isinstance(benefits, str):
+                benefits = [benefits]
+            for benefit in benefits:
+                if not benefit:
+                    continue
+                yield Claim(
+                    claim_kind="property", subject_ref="org", predicate="jobBenefits",
+                    value=benefit, statement=f"Erbjuder: {benefit}", source=[source], confidence=1.0,
+                    facet="culture", warmth_mode="demonstrated", dimension="wellbeing",
+                )
+
+
+def culture_claims_from_esg(client_id: str) -> Iterator[Claim]:
+    """Återanvänd ESG-inlämningens data som culture-claims — samla EJ in på nytt (§5.3).
+
+    Mångfald (kvinnor i ledning/styrelse) → inclusion; ojusterat lönegap → transparency.
+    Källa manual (bolagets självrapport) → self_declared-styrka tills verifierad. Deterministiska
+    'culesg-'-id:n → omkörning skriver över. MVP: senaste inlämningen väljs efter phase_reached.
+    """
+    subs = list(fs.iter_esg_submissions(client_id))
+    if not subs:
+        return
+    _sid, sub = max(subs, key=lambda kv: (kv[1].get("phase_reached") or 0))
+    src = ClaimSource(kind="manual", label="uppgift från bolaget")
+    core = sub.get("core") or {}
+    basic = sub.get("csrd_basic") or {}
+
+    figures: list[tuple[str, str]] = []  # (dimension, statement)
+    if core.get("management_female_pct") is not None:
+        figures.append(("inclusion", f"Andelen kvinnor i ledningsgruppen är {core['management_female_pct']}%."))
+    if core.get("board_female_pct") is not None:
+        figures.append(("inclusion", f"Andelen kvinnor i styrelsen är {core['board_female_pct']}%."))
+    if basic.get("unadjusted_gender_pay_gap_pct") is not None:
+        figures.append(("transparency", f"Ojusterat lönegap (Gender Pay Gap): {basic['unadjusted_gender_pay_gap_pct']}%."))
+
+    for dimension, statement in figures:
+        yield Claim(
+            claim_kind="narrative", subject_ref="org", statement=statement[:200], source=[src],
+            confidence=1.0, included_in_output=True, needs_review=False, review_status="approved",
+            facet="culture", warmth_mode="demonstrated", dimension=dimension,
+        )
+
+
 def derive_property_claims(client_id: str) -> Iterator[Claim]:
     """Yielda property-claims för företagsnivå ur godkända företags-raw_items."""
     for snap in fs.raw_items_company_col(client_id).stream():

@@ -24,7 +24,12 @@ from dataclasses import dataclass, field
 from typing import Any, Iterator
 
 import firestore_client as fs
-from schema_org.claims import derive_property_claims, derive_skill_claims
+from schema_org.claims import (
+    culture_claims_from_esg,
+    derive_culture_claims,
+    derive_property_claims,
+    derive_skill_claims,
+)
 from schema_org.urls import canonical_url
 from schemas import Claim, ClaimSource
 
@@ -251,7 +256,14 @@ def compile_client(client_id: str) -> dict[str, Any]:
         "name": model.company_name,
     }
     for fact in model.facts:
-        _apply_property(organization, fact.predicate, fact.value)
+        if fact.predicate == "aggregateRating":
+            # Medarbetaromdöme (eNPS o.dyl.) → riktig AggregateRating-nod, inte ett platt tal.
+            organization["aggregateRating"] = {"@type": "AggregateRating", "ratingValue": fact.value}
+        elif fact.predicate == "memberOf" and isinstance(fact.value, str):
+            # Kollektivavtal/motpart → Organization-referens (schema.org memberOf-typ).
+            _apply_property(organization, "memberOf", {"@type": "Organization", "name": fact.value})
+        else:
+            _apply_property(organization, fact.predicate, fact.value)
     if model.description:
         organization["description"] = model.description
     if model.same_as:
@@ -334,8 +346,9 @@ _FAQ_TEMPLATES: dict[str, tuple[str, str]] = {
     "address": ("Var har {name} sitt säte?", "{name} har sitt säte i {value}."),
     "knowsAbout": ("Vad är {name} verksamt inom?", "{name} är verksamt inom {value}."),
     "numberOfEmployees": ("Hur många anställda har {name}?", "{name} har {value} anställda."),
+    "jobBenefits": ("Vilka förmåner erbjuder {name}?", "{name} erbjuder {value}."),
 }
-_FAQ_ORDER = ["foundingDate", "address", "knowsAbout", "numberOfEmployees"]
+_FAQ_ORDER = ["foundingDate", "address", "knowsAbout", "numberOfEmployees", "jobBenefits"]
 
 
 def build_faq(model: RenderModel) -> list[FaqEntry]:
@@ -378,6 +391,11 @@ def _iter_output_claims(client_id: str) -> Iterator[Claim]:
         yield Claim(**raw)
     yield from derive_property_claims(client_id)
     yield from derive_skill_claims(client_id)
+    # Humaniseringslager (§5.3): culture-taggade claims rider på samma maskineri —
+    # property-claims (ethicsPolicy/diversityPolicy/slogan/knowsAbout/memberOf/jobBenefits/
+    # hasCredential) blir org-egenskaper, ESG-återanvändning blir prosa.
+    yield from derive_culture_claims(client_id)
+    yield from culture_claims_from_esg(client_id)
 
 
 def _apply_property(node: dict[str, Any], predicate: str, value: Any) -> None:

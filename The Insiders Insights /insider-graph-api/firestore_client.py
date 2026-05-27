@@ -213,6 +213,20 @@ def iter_todos(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
         yield doc.id, doc.to_dict() or {}
 
 
+def verifications_col(client_id: str):
+    """Manuella Geogiraph-verifieringar (docs/humanization-trust-gap-spec.md §5.4)."""
+    return client_doc(client_id).collection("verifications")
+
+
+def verification_doc(client_id: str, verification_id: str):
+    return verifications_col(client_id).document(verification_id)
+
+
+def iter_verifications(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
+    for doc in verifications_col(client_id).stream():
+        yield doc.id, doc.to_dict() or {}
+
+
 def connector_logs_col():
     return db().collection("connector_logs")
 

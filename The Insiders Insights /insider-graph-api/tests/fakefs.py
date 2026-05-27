@@ -85,6 +85,7 @@ def reset(
     linkedin_snapshots: dict[str, dict] | None = None,
     todos: dict[str, dict] | None = None,
     clients: dict[str, dict] | None = None,
+    verifications: dict[str, dict] | None = None,
 ) -> None:
     STATE.clear()
     STATE.update(
@@ -106,6 +107,7 @@ def reset(
         esg_reports=esg_reports or {},
         linkedin_snapshots=linkedin_snapshots or {},
         todos=todos or {},
+        verifications=verifications or {},
         writes={},
     )
 
@@ -345,6 +347,23 @@ def todo_doc(client_id: str, todo_id: str) -> _DocRef:
 
 def iter_todos(client_id: str):
     return list(STATE.get("todos", {}).items())
+
+
+def verifications_col(client_id: str) -> _Col:
+    return _Col(STATE.get("verifications"), writable=True)
+
+
+def verification_doc(client_id: str, verification_id: str) -> _DocRef:
+    return _DocRef(
+        verification_id,
+        STATE.get("verifications", {}).get(verification_id),
+        on_set=lambda i, p: STATE.setdefault("verifications", {}).__setitem__(i, p),
+        on_update=lambda i, p: STATE["verifications"].setdefault(i, {}).update(p),
+    )
+
+
+def iter_verifications(client_id: str):
+    return list(STATE.get("verifications", {}).items())
 
 
 def writes() -> dict[str, dict]:
