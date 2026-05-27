@@ -1,184 +1,243 @@
 'use client';
 
-import { LayoutDashboard, TrendingUp, Globe2, Activity, Clock } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  LayoutDashboard, Users, Plug, Rocket, Activity, Globe2,
+  Quote, Inbox, Network, Radar, Leaf, Check, X, Loader2,
+} from 'lucide-react';
 import GraphPageShell, { graphColors as C } from './_components/GraphPageShell';
+import { graphFetch } from './_lib/api';
 
-const stats = [
-  { label: 'Aktiva kunder', value: '0', sub: 'Inga kunder onboardade ännu' },
-  { label: 'Datakällor anslutna', value: '0 / 19', sub: 'Connectors konfigurerade' },
-  { label: 'JSON-LD-noder', value: '—', sub: 'Senast kompilerad: ej körd' },
-  { label: 'AI-synlighet (SoV)', value: '—', sub: 'Mätning startar v.2 efter onboarding' },
-];
-
-const pipeline = [
-  { key: 'Insamling', state: 'Inte konfigurerad', tone: 'idle' },
-  { key: 'Lagring (Firestore)', state: 'Klar', tone: 'ok' },
-  { key: 'Schema-kompilator', state: 'Klar (stub)', tone: 'ok' },
-  { key: 'CDN-deploy', state: 'Saknar bucket-env', tone: 'warn' },
-  { key: 'GTM-brygga', state: 'Inte distribuerad', tone: 'idle' },
-  { key: 'Polling (AI-synlighet)', state: 'Inte aktiverad', tone: 'idle' },
-];
-
-const toneColor: Record<string, string> = {
-  ok: '#22c55e',
-  warn: '#f59e0b',
-  idle: '#9aa8b1',
+type Client = { client_id: string; active_connectors: string[]; cdn_url: string | null };
+type Counts = Record<string, number>;
+type InboxData = { total: number; categories: Counts; clients: { client_id: string; company_name: string | null; total: number }[] };
+type JobRun = {
+  id: string;
+  job_type: string;
+  client_id: string | null;
+  status: 'running' | 'success' | 'failed';
+  started_at: string | null;
+  duration_seconds: number | null;
+  summary: Record<string, unknown>;
+  error_message: string | null;
 };
 
+// Inbox-köer → vart åtgärden görs (samma logik som klockan i headern).
+const QUEUES: { label: string; keys: string[]; href: string; icon: typeof Quote; color: string }[] = [
+  { label: 'Claims att granska', keys: ['claims'], href: '/insider-graph/review', icon: Quote, color: '#9f51b6' },
+  { label: 'Inkommande att granska', keys: ['items'], href: '/insider-graph/review', icon: Inbox, color: '#3b82f6' },
+  { label: 'LinkedIn att verifiera', keys: ['linkedin'], href: '/insider-graph/review', icon: Network, color: '#0ea5e9' },
+  { label: 'Risk att åtgärda', keys: ['risk_findings', 'risk_questions'], href: '/insider-graph/polling', icon: Radar, color: '#f59e0b' },
+  { label: 'ESG att granska', keys: ['esg_questions', 'esg_findings'], href: '/insider-graph/kunder', icon: Leaf, color: '#22c55e' },
+];
+
+// Jobbtyp → läsbar etikett för körningsloggen.
+const RUN_LABEL: Record<string, string> = {
+  scrape_active: 'Scrape (aktiv)',
+  scrape_episodic: 'Scrape (episodisk)',
+  scrape_website: 'Webbplats-crawl',
+  xml_sync: 'Jobbannons-sync',
+  polling: 'AI-synlighet (polling)',
+  compile_schema: 'Schema-kompilering',
+  extract_claims: 'Claims-extraktion',
+  monthly_report: 'Månadsrapport',
+  risk_detect: 'Risk-detektering',
+  risk_generate: 'Risk-frågor',
+  esg_scan: 'ESG-skanning',
+  sunset_skills: 'Sunset (kompetenser)',
+  quarterly_todo: 'Kvartals-To-Do',
+  warmth_probes: 'Värme-probe',
+  compute_trust_gap: 'Förtroendegap',
+  trust_gap_report: 'Förtroendegap-rapport',
+};
+
+function fmtRelative(iso: string | null): string {
+  if (!iso) return '';
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return '';
+  const s = Math.round((Date.now() - t) / 1000);
+  if (s < 60) return 'nyss';
+  if (s < 3600) return `${Math.floor(s / 60)} min sedan`;
+  if (s < 86400) return `${Math.floor(s / 3600)} tim sedan`;
+  return `${Math.floor(s / 86400)} d sedan`;
+}
+
+function summaryText(run: JobRun): string | null {
+  const s = run.summary || {};
+  const parts: string[] = [];
+  for (const [k, v] of Object.entries(s)) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === 'changed' && v === true) parts.push('ändrad');
+    else if (k === 'uploaded' && v === true) parts.push('uppladdad');
+    else if (typeof v === 'number') parts.push(`${v} ${k}`);
+    else if (typeof v === 'boolean') parts.push(k);
+    else parts.push(`${k}: ${v}`);
+  }
+  return parts.length ? parts.join(' · ') : null;
+}
+
 export default function InsiderGraphHomePage() {
+  const router = useRouter();
+  const [clients, setClients] = useState<Client[] | null>(null);
+  const [inbox, setInbox] = useState<InboxData | null>(null);
+  const [runs, setRuns] = useState<JobRun[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    graphFetch<{ clients: Client[] }>('/api/clients').then((d) => { if (!cancelled) setClients(d.clients); }).catch(() => { if (!cancelled) setClients([]); });
+    graphFetch<InboxData>('/api/inbox').then((d) => { if (!cancelled) setInbox(d); }).catch(() => {});
+    graphFetch<{ runs: JobRun[] }>('/api/jobs/runs?limit=12').then((d) => { if (!cancelled) setRuns(d.runs); }).catch(() => { if (!cancelled) setRuns([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const activeClients = clients?.length ?? null;
+  const connectorInstances = clients ? clients.reduce((n, c) => n + (c.active_connectors?.length || 0), 0) : null;
+  const delivered = clients ? clients.filter((c) => c.cdn_url).length : null;
+  const todo = inbox?.total ?? null;
+
+  const queues = QUEUES.map((q) => ({
+    ...q,
+    count: inbox ? q.keys.reduce((s, k) => s + (inbox.categories[k] || 0), 0) : 0,
+  })).filter((q) => q.count > 0);
+
   return (
     <GraphPageShell
       title="geogiraph — översikt"
       icon={<LayoutDashboard size={22} />}
-      subtitle="GEO-motor som gör kundens organisation maskinläsbar för AI-sökmotorer."
-      badge="MVP"
+      subtitle="Kommandocentral: vad väntar på dig, vad har körts och var står kunderna."
     >
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: 12,
-          marginBottom: 24,
-        }}
-      >
-        {stats.map((s) => (
-          <div
-            key={s.label}
-            style={{
-              background: C.card,
-              border: `1px solid ${C.border}`,
-              borderRadius: 12,
-              padding: '18px 20px',
-            }}
-          >
-            <div style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>
-              {s.label}
-            </div>
-            <div style={{ fontSize: 28, fontWeight: 600, color: '#3a4b56', marginTop: 8, letterSpacing: '-0.02em' }}>
-              {s.value}
-            </div>
-            <div style={{ fontSize: 12, color: C.dim, marginTop: 4 }}>{s.sub}</div>
-          </div>
-        ))}
+      {/* Nyckeltal (live) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 24 }}>
+        <Stat icon={<Users size={15} />} label="Aktiva kunder" value={activeClients} />
+        <Stat icon={<Plug size={15} />} label="Connectors aktiva" value={connectorInstances} sub="instanser över alla kunder" />
+        <Stat icon={<Inbox size={15} />} label="Att göra" value={todo} sub="väntar på granskning" tone={todo ? 'attention' : 'ok'} />
+        <Stat icon={<Rocket size={15} />} label="Levererade" value={delivered} sub="kunder med JSON-LD live" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 16 }}>
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <Activity size={16} color={C.accent} />
-            <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: '#3a4b56' }}>Pipeline-status</h2>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {pipeline.map((p) => (
-              <div
-                key={p.key}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '10px 14px',
-                  background: 'rgba(0,0,0,0.02)',
-                  borderRadius: 8,
-                  border: `1px solid ${C.border}`,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      background: toneColor[p.tone],
-                      boxShadow: p.tone === 'ok' ? '0 0 8px rgba(34,197,94,0.5)' : undefined,
-                    }}
-                  />
-                  <span style={{ fontSize: 13, color: '#3a4b56', fontWeight: 500 }}>{p.key}</span>
-                </div>
-                <span style={{ fontSize: 12, color: C.muted }}>{p.state}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        {/* Att göra-inkorg */}
+        <Panel icon={<Inbox size={16} color={C.accent} />} title="Att göra">
+          {inbox === null ? (
+            <Empty text="Laddar…" />
+          ) : queues.length === 0 ? (
+            <Empty text="Inget väntar på dig 🎉" />
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {queues.map((q) => {
+                const Icon = q.icon;
+                return (
+                  <button key={q.label} onClick={() => router.push(q.href)} style={rowBtn}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.03)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                    <Icon size={15} color={q.color} />
+                    <span style={{ flex: 1, color: C.text }}>{q.label}</span>
+                    <span style={pill}>{q.count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </Panel>
 
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <Globe2 size={16} color={C.accent} />
-            <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: '#3a4b56' }}>Så här fungerar geogiraph</h2>
-          </div>
-          <ol style={{ paddingLeft: 18, margin: 0, color: C.muted, fontSize: 13, lineHeight: 1.75 }}>
-            <li>Kund onboardas med CSV (medarbetare + LinkedIn-URL).</li>
-            <li>Connectors hämtar profiler, inlägg, jobb, events.</li>
-            <li>Schema-motorn kompilerar JSON-LD per kund.</li>
-            <li>Filen serveras via Cloud CDN och injiceras via GTM-snippet.</li>
-            <li>Polling-jobb mäter AI-synlighet veckovis.</li>
-          </ol>
-          <div
-            style={{
-              marginTop: 16,
-              padding: 12,
-              background: 'rgba(159,81,182,0.06)',
-              border: '1px solid rgba(159,81,182,0.2)',
-              borderRadius: 8,
-              fontSize: 12,
-              color: C.muted,
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 8,
-            }}
-          >
-            <Clock size={14} color={C.accent} style={{ marginTop: 2, flexShrink: 0 }} />
-            <span>
-              MVP-läget kör en isolerad pipeline mot Firestore. Inga skarpa kunder är aktiverade än —
-              vyerna nedan visar strukturen du kommer att administrera.
-            </span>
-          </div>
-        </div>
+        {/* Senaste körningar */}
+        <Panel icon={<Activity size={16} color={C.accent} />} title="Senaste körningar">
+          {runs === null ? (
+            <Empty text="Laddar…" />
+          ) : runs.length === 0 ? (
+            <Empty text="Inga körningar än" />
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {runs.map((run) => {
+                const sum = summaryText(run);
+                return (
+                  <div key={run.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', borderBottom: `1px solid ${C.border}` }}>
+                    <RunStatus status={run.status} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, color: C.text, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {RUN_LABEL[run.job_type] || run.job_type}
+                        {run.client_id && <span style={{ color: C.muted, fontWeight: 400 }}> · {run.client_id}</span>}
+                      </div>
+                      <div style={{ fontSize: 11, color: run.status === 'failed' ? '#dc2626' : C.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {run.status === 'failed' ? (run.error_message || 'Misslyckades') : sum || (run.status === 'running' ? 'Pågår…' : 'Klar')}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 10, color: C.dim, textAlign: 'right', flexShrink: 0 }}>
+                      <div>{fmtRelative(run.started_at)}</div>
+                      {run.duration_seconds != null && run.status !== 'running' && <div>{run.duration_seconds}s</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Panel>
       </div>
 
-      <div
-        style={{
-          marginTop: 24,
-          background: C.card,
-          border: `1px solid ${C.border}`,
-          borderRadius: 12,
-          padding: '20px 24px',
-        }}
-      >
+      {/* Så här fungerar (kontext) */}
+      <div style={{ marginTop: 16, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <TrendingUp size={16} color={C.accent} />
-          <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: '#3a4b56' }}>Mätningsdimensioner</h2>
+          <Globe2 size={16} color={C.accent} />
+          <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: C.text }}>Så här fungerar geogiraph</h2>
         </div>
-        <p style={{ fontSize: 13, color: C.muted, margin: '4px 0 12px' }}>
-          Hur geogiraph bevisar effekt — alla mätvärden räknas internt och rapporteras till kund.
-        </p>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: 12,
-          }}
-        >
-          {[
-            { name: 'Share of Voice', desc: 'Andel AI-frågor där kunden nämns' },
-            { name: 'Sentiment', desc: 'Tonalitet i AI-svar (-1 till 1)' },
-            { name: 'Parity Index', desc: 'Köns- och rollbalans i rekommendationer' },
-            { name: 'Baseline-delta', desc: 'Tillväxt oberoende av följarmängd' },
-          ].map((m) => (
-            <div
-              key={m.name}
-              style={{
-                background: 'rgba(0,0,0,0.02)',
-                border: `1px solid ${C.border}`,
-                borderRadius: 10,
-                padding: '14px 16px',
-              }}
-            >
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56' }}>{m.name}</div>
-              <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{m.desc}</div>
-            </div>
-          ))}
-        </div>
+        <ol style={{ paddingLeft: 18, margin: 0, color: C.muted, fontSize: 13, lineHeight: 1.7 }}>
+          <li>Kund onboardas (medarbetare + LinkedIn-URL), connectors väljs.</li>
+          <li>Connectors hämtar profiler, inlägg, jobb, events → claims granskas.</li>
+          <li>Schema-motorn kompilerar JSON-LD per kund och levererar via CDN.</li>
+          <li>Polling mäter AI-synlighet och risk löpande.</li>
+        </ol>
       </div>
     </GraphPageShell>
   );
 }
+
+function Stat({ icon, label, value, sub, tone }: { icon: React.ReactNode; label: string; value: number | null; sub?: string; tone?: 'ok' | 'attention' }) {
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 20px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>
+        <span style={{ color: C.accent }}>{icon}</span>
+        {label}
+      </div>
+      <div style={{ fontSize: 28, fontWeight: 600, color: tone === 'attention' ? '#d97706' : C.text, marginTop: 8, letterSpacing: '-0.02em' }}>
+        {value === null ? '—' : value}
+      </div>
+      {sub && <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function Panel({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 22px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        {icon}
+        <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: C.text }}>{title}</h2>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function RunStatus({ status }: { status: JobRun['status'] }) {
+  if (status === 'success') return <span style={dot('#22c55e')}><Check size={11} color="#fff" strokeWidth={3} /></span>;
+  if (status === 'failed') return <span style={dot('#ef4444')}><X size={11} color="#fff" strokeWidth={3} /></span>;
+  return <span style={dot('#f59e0b')}><Loader2 size={11} color="#fff" /></span>;
+}
+
+function Empty({ text }: { text: string }) {
+  return <div style={{ fontSize: 12, color: C.muted, padding: '16px 4px', textAlign: 'center' }}>{text}</div>;
+}
+
+function dot(color: string): React.CSSProperties {
+  return { width: 18, height: 18, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
+}
+
+const rowBtn: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 8px',
+  border: 'none', background: 'transparent', borderRadius: 8, cursor: 'pointer', textAlign: 'left', fontSize: 13, transition: 'background 0.12s',
+};
+
+const pill: React.CSSProperties = {
+  minWidth: 22, padding: '1px 8px', background: 'rgba(159,81,182,0.14)', color: '#9f51b6',
+  borderRadius: 10, fontSize: 12, fontWeight: 700, textAlign: 'center',
+};

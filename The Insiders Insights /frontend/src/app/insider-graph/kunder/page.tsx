@@ -259,16 +259,18 @@ function ClientCard({ client, pending }: { client: Client; pending: number }) {
             </div>
           </div>
           {client.cdn_url && (
-            <a
-              href={client.cdn_url}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              type="button"
               title="Öppna JSON-LD i ny flik"
-              onClick={(e) => e.stopPropagation()}
-              style={{ color: '#9f51b6', textDecoration: 'none', display: 'flex' }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                window.open(client.cdn_url!, '_blank', 'noopener,noreferrer');
+              }}
+              style={{ color: '#9f51b6', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', display: 'flex' }}
             >
               <ExternalLink size={14} />
-            </a>
+            </button>
           )}
         </div>
 
