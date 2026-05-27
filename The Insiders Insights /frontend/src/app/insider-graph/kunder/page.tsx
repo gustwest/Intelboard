@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Users, Plus, X, AlertCircle, CheckCircle2, ExternalLink, RefreshCw, Search, Check } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import PipelineStatus, { type PipelineStep } from '../_components/PipelineStatus';
@@ -236,6 +237,7 @@ function compactCaption(client: Client, pending: number): string {
 }
 
 function ClientCard({ client, pending }: { client: Client; pending: number }) {
+  const router = useRouter();
   return (
     <Link
       href={`/insider-graph/kunder/${client.client_id}`}
@@ -258,20 +260,49 @@ function ClientCard({ client, pending }: { client: Client; pending: number }) {
               {client.client_id}
             </div>
           </div>
-          {client.cdn_url && (
-            <button
-              type="button"
-              title="Öppna JSON-LD i ny flik"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                window.open(client.cdn_url!, '_blank', 'noopener,noreferrer');
-              }}
-              style={{ color: '#9f51b6', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', display: 'flex' }}
-            >
-              <ExternalLink size={14} />
-            </button>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            {pending > 0 && (
+              <button
+                type="button"
+                title="Granska väntande poster för den här kunden"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  router.push(`/insider-graph/review?client=${client.client_id}`);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '2px 8px',
+                  borderRadius: 10,
+                  background: 'rgba(245,158,11,0.15)',
+                  color: '#b45309',
+                  border: '1px solid rgba(245,158,11,0.3)',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {pending} att granska
+              </button>
+            )}
+            {client.cdn_url && (
+              <button
+                type="button"
+                title="Öppna JSON-LD i ny flik"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  window.open(client.cdn_url!, '_blank', 'noopener,noreferrer');
+                }}
+                style={{ color: '#9f51b6', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', display: 'flex' }}
+              >
+                <ExternalLink size={14} />
+              </button>
+            )}
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>

@@ -22,6 +22,9 @@ type ReviewItem = {
   organizer: string | null;
   published_at: string | null;
   created_at: string | null;
+  // Sätts bara i "Alla kunder"-läget (cross-client-kö) så vi vet vart beslutet går.
+  client_id?: string;
+  company_name?: string | null;
 };
 
 type ClaimSource = { kind: string; item_id?: string | null; label?: string | null };
@@ -36,6 +39,8 @@ type ClaimItem = {
   created_at: string | null;
   validated_at: string | null;
   validated_by: string | null;
+  client_id?: string;
+  company_name?: string | null;
 };
 
 type Snapshot = {
@@ -46,9 +51,15 @@ type Snapshot = {
   filename: string | null;
   has_file: boolean;
   uploaded_at: string | null;
+  client_id?: string;
+  company_name?: string | null;
 };
 
 type Tab = 'items' | 'claims' | 'linkedin';
+
+const ALL = 'all';
+
+type InboxClientLite = { client_id: string; company_name: string | null; counts: Record<string, number> };
 
 const TYPE_ICON: Record<string, typeof FileText> = {
   Event: Calendar,
@@ -57,9 +68,44 @@ const TYPE_ICON: Record<string, typeof FileText> = {
   PodcastEpisode: Mail,
 };
 
+// "Alla kunder"-kö: läs inkorgen (redan filtrerad till kunder med väntande poster),
+// hämta de relevanta kundernas listor parallellt och tagga varje post med dess kund.
+async function fetchAllForTab(which: Tab): Promise<Array<Record<string, unknown> & { client_id: string; company_name: string | null }>> {
+  const inbox = await graphFetch<{ clients: InboxClientLite[] }>('/api/inbox');
+  const relevant = inbox.clients.filter((c) => (c.counts?.[which] || 0) > 0);
+  const key = which === 'linkedin' ? 'snapshots' : 'items';
+  const lists = await Promise.all(
+    relevant.map(async (c) => {
+      const path =
+        which === 'items'
+          ? `/api/review/${c.client_id}`
+          : which === 'linkedin'
+            ? `/api/review/${c.client_id}/linkedin`
+            : `/api/review/${c.client_id}/claims`;
+      const data = await graphFetch<Record<string, Record<string, unknown>[]>>(path);
+      const arr = data[key] || [];
+      return arr.map((x) => ({ ...x, client_id: c.client_id, company_name: c.company_name }));
+    }),
+  );
+  return lists.flat();
+}
+
+// Gruppera poster per kund för cross-client-vyn (bevarar inkommande ordning).
+function groupByClient<T extends { id: string; client_id?: string; company_name?: string | null }>(
+  arr: T[],
+): Array<{ clientId: string; name: string | null; items: T[] }> {
+  const map = new Map<string, { clientId: string; name: string | null; items: T[] }>();
+  for (const x of arr) {
+    const cid = x.client_id || 'okänd';
+    if (!map.has(cid)) map.set(cid, { clientId: cid, name: x.company_name ?? cid, items: [] });
+    map.get(cid)!.items.push(x);
+  }
+  return [...map.values()];
+}
+
 export default function GraphReviewPage() {
   const [clients, setClients] = useState<Client[]>([]);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string>(ALL);
   const [tab, setTab] = useState<Tab>('claims');
   const [items, setItems] = useState<ReviewItem[] | null>(null);
   const [claims, setClaims] = useState<ClaimItem[] | null>(null);
@@ -78,11 +124,18 @@ export default function GraphReviewPage() {
 
   useEffect(() => {
     graphFetch<{ clients: Client[] }>('/api/clients')
-      .then((d) => {
-        setClients(d.clients);
-        if (d.clients[0]) setSelected(d.clients[0].client_id);
-      })
+      .then((d) => setClients(d.clients))
       .catch((e) => setError(e.message));
+  }, []);
+
+  // Deep-link: ?client=<id>&tab=<claims|items|linkedin> (t.ex. från kundkortet).
+  // Läser window.location för att slippa useSearchParams Suspense-kravet.
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const c = sp.get('client');
+    const t = sp.get('tab');
+    if (c) setSelected(c);
+    if (t === 'claims' || t === 'items' || t === 'linkedin') setTab(t);
   }, []);
 
   // Bas-räknare per kund från inkorgen (en hämtning).
@@ -97,35 +150,38 @@ export default function GraphReviewPage() {
   }, []);
 
   // En avklarad post (godkänd/avvisad) drar ner räknaren för fliken, per kund.
-  function bumpResolved(key: 'claims' | 'items' | 'linkedin') {
-    if (!selected) return;
+  function bumpResolved(key: 'claims' | 'items' | 'linkedin', clientId: string) {
     setResolved((p) => {
-      const cur = p[selected] || { claims: 0, items: 0, linkedin: 0 };
-      return { ...p, [selected]: { ...cur, [key]: cur[key] + 1 } };
+      const cur = p[clientId] || { claims: 0, items: 0, linkedin: 0 };
+      return { ...p, [clientId]: { ...cur, [key]: cur[key] + 1 } };
     });
   }
 
   const tabCount = (k: 'claims' | 'items' | 'linkedin'): number => {
-    const base = (selected && inboxByClient[selected]?.[k]) || 0;
-    const done = (selected && resolved[selected]?.[k]) || 0;
-    return Math.max(0, base - done);
+    const countFor = (cid: string) =>
+      Math.max(0, (inboxByClient[cid]?.[k] || 0) - (resolved[cid]?.[k] || 0));
+    if (selected === ALL) {
+      return Object.keys(inboxByClient).reduce((sum, cid) => sum + countFor(cid), 0);
+    }
+    return countFor(selected);
   };
 
   const load = useCallback(async (clientId: string, which: Tab) => {
     setError(null);
+    const all = clientId === ALL;
     try {
       if (which === 'items') {
         setItems(null);
-        const data = await graphFetch<{ items: ReviewItem[] }>(`/api/review/${clientId}`);
-        setItems(data.items);
+        if (all) setItems((await fetchAllForTab('items')) as unknown as ReviewItem[]);
+        else setItems((await graphFetch<{ items: ReviewItem[] }>(`/api/review/${clientId}`)).items);
       } else if (which === 'linkedin') {
         setSnapshots(null);
-        const data = await graphFetch<{ snapshots: Snapshot[] }>(`/api/review/${clientId}/linkedin`);
-        setSnapshots(data.snapshots);
+        if (all) setSnapshots((await fetchAllForTab('linkedin')) as unknown as Snapshot[]);
+        else setSnapshots((await graphFetch<{ snapshots: Snapshot[] }>(`/api/review/${clientId}/linkedin`)).snapshots);
       } else {
         setClaims(null);
-        const data = await graphFetch<{ items: ClaimItem[] }>(`/api/review/${clientId}/claims`);
-        setClaims(data.items);
+        if (all) setClaims((await fetchAllForTab('claims')) as unknown as ClaimItem[]);
+        else setClaims((await graphFetch<{ items: ClaimItem[] }>(`/api/review/${clientId}/claims`)).items);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -140,16 +196,17 @@ export default function GraphReviewPage() {
   }, [selected, tab, load]);
 
   async function decideItem(item: ReviewItem, decision: 'approve' | 'reject') {
-    if (!selected) return;
+    const cid = item.client_id ?? (selected === ALL ? null : selected);
+    if (!cid) return;
     setBusyId(item.id);
     try {
-      await graphFetch(`/api/review/${selected}/${item.employee_id}/${item.id}`, {
+      await graphFetch(`/api/review/${cid}/${item.employee_id}/${item.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ decision }),
       });
-      setItems((prev) => (prev ? prev.filter((i) => i.id !== item.id) : prev));
-      bumpResolved('items');
+      setItems((prev) => (prev ? prev.filter((i) => !(i.id === item.id && i.client_id === item.client_id)) : prev));
+      bumpResolved('items', cid);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -158,7 +215,8 @@ export default function GraphReviewPage() {
   }
 
   async function decideClaim(claim: ClaimItem, decision: 'approve' | 'reject') {
-    if (!selected) return;
+    const cid = claim.client_id ?? (selected === ALL ? null : selected);
+    if (!cid) return;
     setBusyId(claim.id);
     const edited = edits[claim.id];
     const body: Record<string, unknown> = { decision };
@@ -166,7 +224,7 @@ export default function GraphReviewPage() {
       body.statement = edited;
     }
     try {
-      await graphFetch(`/api/review/${selected}/claims/${claim.id}`, {
+      await graphFetch(`/api/review/${cid}/claims/${claim.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -175,9 +233,9 @@ export default function GraphReviewPage() {
         // Stanna kvar med en valideringsnotis i stället för att försvinna.
         setApproved((prev) => ({ ...prev, [claim.id]: new Date().toISOString() }));
       } else {
-        setClaims((prev) => (prev ? prev.filter((c) => c.id !== claim.id) : prev));
+        setClaims((prev) => (prev ? prev.filter((c) => !(c.id === claim.id && c.client_id === claim.client_id)) : prev));
       }
-      bumpResolved('claims'); // både godkänt och avvisat löser needs_review
+      bumpResolved('claims', cid); // både godkänt och avvisat löser needs_review
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -186,7 +244,8 @@ export default function GraphReviewPage() {
   }
 
   async function decideSnapshot(snap: Snapshot, decision: 'approve' | 'reject') {
-    if (!selected) return;
+    const cid = snap.client_id ?? (selected === ALL ? null : selected);
+    if (!cid) return;
     setBusyId(snap.id);
     const body: Record<string, unknown> = { decision };
     if (decision === 'approve') {
@@ -198,13 +257,13 @@ export default function GraphReviewPage() {
       body.skills = skills;
     }
     try {
-      await graphFetch(`/api/review/${selected}/linkedin/${snap.id}`, {
+      await graphFetch(`/api/review/${cid}/linkedin/${snap.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      setSnapshots((prev) => (prev ? prev.filter((s) => s.id !== snap.id) : prev));
-      bumpResolved('linkedin');
+      setSnapshots((prev) => (prev ? prev.filter((s) => !(s.id === snap.id && s.client_id === snap.client_id)) : prev));
+      bumpResolved('linkedin', cid);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -213,9 +272,10 @@ export default function GraphReviewPage() {
   }
 
   async function viewFile(snap: Snapshot) {
-    if (!selected) return;
+    const cid = snap.client_id ?? (selected === ALL ? null : selected);
+    if (!cid) return;
     try {
-      const blob = await graphFetchBlob(`/api/linkedin/${selected}/snapshots/${snap.id}/file`);
+      const blob = await graphFetchBlob(`/api/linkedin/${cid}/snapshots/${snap.id}/file`);
       window.open(URL.createObjectURL(blob), '_blank');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -230,8 +290,8 @@ export default function GraphReviewPage() {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <label style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>Kund:</label>
-        <select value={selected || ''} onChange={(e) => setSelected(e.target.value)} style={selectStyle}>
-          {clients.length === 0 && <option>Inga kunder</option>}
+        <select value={selected} onChange={(e) => setSelected(e.target.value)} style={selectStyle}>
+          <option value={ALL}>Alla kunder</option>
           {clients.map((c) => (
             <option key={c.client_id} value={c.client_id}>
               {c.company_name || c.client_id}
@@ -286,9 +346,10 @@ export default function GraphReviewPage() {
     if (snapshots === null) return <Loading />;
     if (snapshots.length === 0)
       return <Empty hint="Inga LinkedIn-snapshots väntar på verifiering. Kunden laddar upp sin kvartalsdata under fliken LinkedIn." />;
+    const groups = selected === ALL ? groupByClient(snapshots) : [{ clientId: 'one', name: null, items: snapshots }];
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {snapshots.map((snap) => {
+      <GroupedList groups={groups}>
+        {(snap) => {
           const skillText = skillEdits[snap.id] ?? snap.skills.join(', ');
           return (
             <div key={snap.id} style={{ ...cardStyle, opacity: busyId === snap.id ? 0.5 : 1 }}>
@@ -343,17 +404,18 @@ export default function GraphReviewPage() {
               />
             </div>
           );
-        })}
-      </div>
+        }}
+      </GroupedList>
     );
   }
 
   function renderItems() {
     if (items === null) return <Loading />;
     if (items.length === 0) return <Empty hint="Alla inkommande mail har confidence ≥ 0,7 eller är redan beslutade." />;
+    const groups = selected === ALL ? groupByClient(items) : [{ clientId: 'one', name: null, items }];
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {items.map((item) => {
+      <GroupedList groups={groups}>
+        {(item) => {
           const Icon = TYPE_ICON[item.schema_type] || FileText;
           return (
             <div key={item.id} style={{ ...cardStyle, opacity: busyId === item.id ? 0.5 : 1 }}>
@@ -380,17 +442,18 @@ export default function GraphReviewPage() {
               {item.content && <div style={contentStyle}>{item.content}</div>}
             </div>
           );
-        })}
-      </div>
+        }}
+      </GroupedList>
     );
   }
 
   function renderClaims() {
     if (claims === null) return <Loading />;
     if (claims.length === 0) return <Empty hint="Inga claims väntar på granskning — alla har confidence ≥ 0,7 eller är redan beslutade." />;
+    const groups = selected === ALL ? groupByClient(claims) : [{ clientId: 'one', name: null, items: claims }];
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {claims.map((claim) => {
+      <GroupedList groups={groups}>
+        {(claim) => {
           const sourceLabel = claim.source.map((s) => (s.kind === 'manual' ? s.label || 'manuell' : 'källa')).join(', ') || 'ingen källa';
           const text = edits[claim.id] ?? claim.statement ?? '';
           const isProperty = claim.claim_kind === 'property';
@@ -444,13 +507,46 @@ export default function GraphReviewPage() {
               )}
             </div>
           );
-        })}
-      </div>
+        }}
+      </GroupedList>
     );
   }
 }
 
 /* --- delade småkomponenter --- */
+
+// Renderar poster grupperat per kund. I "Alla kunder"-läget får varje grupp en
+// rubrik; för en enskild kund (name === null) blir det en rak lista som förut.
+function GroupedList<T extends { id: string }>({
+  groups,
+  children,
+}: {
+  groups: Array<{ clientId: string; name: string | null; items: T[] }>;
+  children: (item: T) => React.ReactNode;
+}) {
+  const grouped = groups.some((g) => g.name !== null);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: grouped ? 22 : 12 }}>
+      {groups.map((g) => (
+        <div key={g.clientId} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {g.name !== null && <ClientGroupHeader name={g.name} count={g.items.length} />}
+          {g.items.map((item) => children(item))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ClientGroupHeader({ name, count }: { name: string; count: number }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 2px 4px' }}>
+      <span style={{ fontSize: 13, fontWeight: 700, color: '#3a4b56' }}>{name}</span>
+      <span style={{ fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 10, background: 'rgba(159,81,182,0.15)', color: '#9f51b6' }}>
+        {count}
+      </span>
+    </div>
+  );
+}
 
 function Loading() {
   return <div style={{ ...cardStyle, padding: 48, textAlign: 'center', color: C.muted, fontSize: 13 }}>Laddar…</div>;
