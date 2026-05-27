@@ -57,6 +57,10 @@ ASSURANCE_BASE_WEIGHT: dict[str, float] = {
     "independently_assured": 1.0,
 }
 
+# Vikt för demonstrated-bevis UTAN manuell verifiering men med självverifierande
+# item-källa (jobbannons/publikt register). Lägre än verifierat, högre än bolagets ord.
+ITEM_UNVERIFIED_WEIGHT: float = 0.5
+
 # score_d = min(SCORE_W_DECLARED·declared_d, DECLARED_CAP) + SCORE_W_DEMONSTRATED·demonstrated_d
 # Perception ingår ALDRIG i poängen (spec §2.4, §8 steg 4).
 DECLARED_CAP: float = 0.3          # TAK — påstående ensamt kan ej överstiga detta

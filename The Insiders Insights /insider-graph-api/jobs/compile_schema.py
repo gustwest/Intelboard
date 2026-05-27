@@ -69,6 +69,15 @@ def run(client_id: str) -> None:
         }
     )
 
+    # Change-agent: håll Förtroendegap-tillståndet färskt i samma loop (spec §8, kadens).
+    # Best-effort — får aldrig fälla schema-kompileringen.
+    try:
+        from jobs import compute_trust_gap
+
+        compute_trust_gap.run(client_id)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("compute_trust_gap failed for %s (non-fatal): %s", client_id, exc)
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

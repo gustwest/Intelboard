@@ -86,6 +86,7 @@ def reset(
     todos: dict[str, dict] | None = None,
     clients: dict[str, dict] | None = None,
     verifications: dict[str, dict] | None = None,
+    trust_gap: dict | None = None,
 ) -> None:
     STATE.clear()
     STATE.update(
@@ -108,6 +109,7 @@ def reset(
         linkedin_snapshots=linkedin_snapshots or {},
         todos=todos or {},
         verifications=verifications or {},
+        trust_gap=trust_gap,  # None → "finns inte" (exists=False)
         writes={},
     )
 
@@ -347,6 +349,15 @@ def todo_doc(client_id: str, todo_id: str) -> _DocRef:
 
 def iter_todos(client_id: str):
     return list(STATE.get("todos", {}).items())
+
+
+def trust_gap_doc(client_id: str) -> _DocRef:
+    return _DocRef(
+        "latest",
+        STATE.get("trust_gap"),
+        on_set=lambda _i, p: STATE.__setitem__("trust_gap", p),
+        on_update=lambda _i, p: (STATE.get("trust_gap") or {}).update(p),
+    )
 
 
 def verifications_col(client_id: str) -> _Col:

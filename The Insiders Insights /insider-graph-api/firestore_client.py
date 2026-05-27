@@ -213,6 +213,26 @@ def iter_todos(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
         yield doc.id, doc.to_dict() or {}
 
 
+def trust_gap_doc(client_id: str):
+    """Levande Förtroendegap-tillstånd (docs/humanization-trust-gap-spec.md §5.5).
+    Ett dok per kund, överskrivs av compute_trust_gap."""
+    return client_doc(client_id).collection("trust_gap").document("latest")
+
+
+def trust_gap_snapshots_col(client_id: str):
+    return client_doc(client_id).collection("trust_gap_snapshots")
+
+
+def trust_gap_snapshot_doc(client_id: str, date: str):
+    """Daterad, immutabel snapshot (§5.6) — ger trendlinjen."""
+    return trust_gap_snapshots_col(client_id).document(date)
+
+
+def iter_trust_gap_snapshots(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
+    for doc in trust_gap_snapshots_col(client_id).stream():
+        yield doc.id, doc.to_dict() or {}
+
+
 def verifications_col(client_id: str):
     """Manuella Geogiraph-verifieringar (docs/humanization-trust-gap-spec.md §5.4)."""
     return client_doc(client_id).collection("verifications")

@@ -113,6 +113,22 @@ def culture_claims_from_esg(client_id: str) -> Iterator[Claim]:
         )
 
 
+def iter_culture_claims(client_id: str) -> Iterator[Claim]:
+    """Alla culture-taggade claims: persisterade (godkända, ej rejected) + deterministiskt
+    deriverade (connector-fält/jobbförmåner + ESG-återanvändning). Konsumeras av
+    jobs/compute_trust_gap.py (§8)."""
+    for _claim_id, raw in fs.iter_claims(client_id):
+        if not raw.get("included_in_output", True):
+            continue
+        if raw.get("review_status") == "rejected":
+            continue
+        if raw.get("facet") != "culture":
+            continue
+        yield Claim(**raw)
+    yield from derive_culture_claims(client_id)
+    yield from culture_claims_from_esg(client_id)
+
+
 def derive_property_claims(client_id: str) -> Iterator[Claim]:
     """Yielda property-claims för företagsnivå ur godkända företags-raw_items."""
     for snap in fs.raw_items_company_col(client_id).stream():
