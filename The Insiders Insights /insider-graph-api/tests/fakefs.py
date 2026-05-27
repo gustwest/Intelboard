@@ -87,6 +87,7 @@ def reset(
     clients: dict[str, dict] | None = None,
     verifications: dict[str, dict] | None = None,
     trust_gap: dict | None = None,
+    trust_gap_snapshots: dict[str, dict] | None = None,
 ) -> None:
     STATE.clear()
     STATE.update(
@@ -110,6 +111,7 @@ def reset(
         todos=todos or {},
         verifications=verifications or {},
         trust_gap=trust_gap,  # None → "finns inte" (exists=False)
+        trust_gap_snapshots=trust_gap_snapshots or {},
         writes={},
     )
 
@@ -358,6 +360,22 @@ def trust_gap_doc(client_id: str) -> _DocRef:
         on_set=lambda _i, p: STATE.__setitem__("trust_gap", p),
         on_update=lambda _i, p: (STATE.get("trust_gap") or {}).update(p),
     )
+
+
+def trust_gap_snapshots_col(client_id: str) -> _Col:
+    return _Col(STATE.get("trust_gap_snapshots"), writable=True)
+
+
+def trust_gap_snapshot_doc(client_id: str, date: str) -> _DocRef:
+    return _DocRef(
+        date,
+        STATE.get("trust_gap_snapshots", {}).get(date),
+        on_set=lambda i, p: STATE.setdefault("trust_gap_snapshots", {}).__setitem__(i, p),
+    )
+
+
+def iter_trust_gap_snapshots(client_id: str):
+    return list(STATE.get("trust_gap_snapshots", {}).items())
 
 
 def verifications_col(client_id: str) -> _Col:
