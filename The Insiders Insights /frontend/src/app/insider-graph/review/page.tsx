@@ -71,6 +71,10 @@ export default function GraphReviewPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   // Godkända claims stannar kvar i vyn med en valideringsnotis (id → godkänt-tid).
   const [approved, setApproved] = useState<Record<string, string>>({});
+  // Flik-räknare: bas från inkorgen + lokalt avklarade per kund (beräknas i render,
+  // så vi slipper härleda state i en effekt).
+  const [inboxByClient, setInboxByClient] = useState<Record<string, { claims: number; items: number; linkedin: number }>>({});
+  const [resolved, setResolved] = useState<Record<string, { claims: number; items: number; linkedin: number }>>({});
 
   useEffect(() => {
     graphFetch<{ clients: Client[] }>('/api/clients')
@@ -80,6 +84,32 @@ export default function GraphReviewPage() {
       })
       .catch((e) => setError(e.message));
   }, []);
+
+  // Bas-räknare per kund från inkorgen (en hämtning).
+  useEffect(() => {
+    graphFetch<{ clients: { client_id: string; counts: { claims: number; items: number; linkedin: number } }[] }>('/api/inbox')
+      .then((d) => {
+        const map: Record<string, { claims: number; items: number; linkedin: number }> = {};
+        for (const c of d.clients) map[c.client_id] = { claims: c.counts.claims, items: c.counts.items, linkedin: c.counts.linkedin };
+        setInboxByClient(map);
+      })
+      .catch(() => {});
+  }, []);
+
+  // En avklarad post (godkänd/avvisad) drar ner räknaren för fliken, per kund.
+  function bumpResolved(key: 'claims' | 'items' | 'linkedin') {
+    if (!selected) return;
+    setResolved((p) => {
+      const cur = p[selected] || { claims: 0, items: 0, linkedin: 0 };
+      return { ...p, [selected]: { ...cur, [key]: cur[key] + 1 } };
+    });
+  }
+
+  const tabCount = (k: 'claims' | 'items' | 'linkedin'): number => {
+    const base = (selected && inboxByClient[selected]?.[k]) || 0;
+    const done = (selected && resolved[selected]?.[k]) || 0;
+    return Math.max(0, base - done);
+  };
 
   const load = useCallback(async (clientId: string, which: Tab) => {
     setError(null);
@@ -119,6 +149,7 @@ export default function GraphReviewPage() {
         body: JSON.stringify({ decision }),
       });
       setItems((prev) => (prev ? prev.filter((i) => i.id !== item.id) : prev));
+      bumpResolved('items');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -146,6 +177,7 @@ export default function GraphReviewPage() {
       } else {
         setClaims((prev) => (prev ? prev.filter((c) => c.id !== claim.id) : prev));
       }
+      bumpResolved('claims'); // både godkänt och avvisat löser needs_review
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -172,6 +204,7 @@ export default function GraphReviewPage() {
         body: JSON.stringify(body),
       });
       setSnapshots((prev) => (prev ? prev.filter((s) => s.id !== snap.id) : prev));
+      bumpResolved('linkedin');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -207,23 +240,34 @@ export default function GraphReviewPage() {
         </select>
 
         <div style={{ display: 'inline-flex', border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', marginLeft: 'auto' }}>
-          {([['claims', 'Claims'], ['items', 'Mail-items'], ['linkedin', 'LinkedIn']] as [Tab, string][]).map(([v, label]) => (
-            <button
-              key={v}
-              onClick={() => setTab(v)}
-              style={{
-                padding: '7px 14px',
-                fontSize: 12,
-                fontWeight: 600,
-                border: 'none',
-                cursor: 'pointer',
-                background: tab === v ? 'rgba(159,81,182,0.18)' : '#eef0f1',
-                color: tab === v ? '#9f51b6' : '#3a4b56',
-              }}
-            >
-              {label}
-            </button>
-          ))}
+          {([['claims', 'Claims'], ['items', 'Mail-items'], ['linkedin', 'LinkedIn']] as [Tab, string][]).map(([v, label]) => {
+            const n = tabCount(v);
+            return (
+              <button
+                key={v}
+                onClick={() => setTab(v)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '7px 14px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: tab === v ? 'rgba(159,81,182,0.18)' : '#eef0f1',
+                  color: tab === v ? '#9f51b6' : '#3a4b56',
+                }}
+              >
+                {label}
+                {n > 0 && (
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 8, background: tab === v ? 'rgba(159,81,182,0.25)' : 'rgba(0,0,0,0.08)', color: tab === v ? '#9f51b6' : C.muted }}>
+                    {n}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 

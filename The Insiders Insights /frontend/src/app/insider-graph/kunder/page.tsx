@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Users, Plus, X, AlertCircle, CheckCircle2, ExternalLink, RefreshCw, Search } from 'lucide-react';
+import { Users, Plus, X, AlertCircle, CheckCircle2, ExternalLink, RefreshCw, Search, Check } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import PipelineStatus, { type PipelineStep } from '../_components/PipelineStatus';
 import { graphFetch } from '../_lib/api';
@@ -467,6 +467,36 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
             <X size={20} />
           </button>
         </div>
+
+        {/* Stegindikator — speglar vad som är ifyllt (formuläret är en enda sida) */}
+        {(() => {
+          const steps = [
+            { label: 'Företag', done: !!clientId.trim() && !!companyName.trim() },
+            { label: 'Connectors', done: active.size > 0 },
+            { label: 'Medarbetare', done: employees.some((e) => e.name.trim() && e.linkedin_url.trim()) },
+          ];
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 22 }}>
+              {steps.map((s, i) => (
+                <div key={s.label} style={{ display: 'flex', alignItems: 'center', flex: i < steps.length - 1 ? 1 : '0 0 auto' }}>
+                  <span
+                    style={{
+                      width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 11, fontWeight: 700, flexShrink: 0,
+                      background: s.done ? '#22c55e' : '#eef0f1',
+                      color: s.done ? '#fff' : C.muted,
+                      border: s.done ? 'none' : `1px solid ${C.border}`,
+                    }}
+                  >
+                    {s.done ? <Check size={12} strokeWidth={3} /> : i + 1}
+                  </span>
+                  <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600, color: s.done ? '#3a4b56' : C.muted, whiteSpace: 'nowrap' }}>{s.label}</span>
+                  {i < steps.length - 1 && <span style={{ flex: 1, height: 2, background: s.done ? '#22c55e' : C.border, margin: '0 12px' }} />}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* Företag */}
         <SectionLabel>Företag</SectionLabel>
