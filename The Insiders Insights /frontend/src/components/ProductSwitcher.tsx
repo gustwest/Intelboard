@@ -1,8 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { ChevronDown, Check } from 'lucide-react';
 
 type Product = {
   id: 'insiders' | 'graph';
@@ -10,6 +8,7 @@ type Product = {
   tagline: string;
   defaultPath: string;
   accent: string;
+  badge: string;
 };
 
 const PRODUCTS: Product[] = [
@@ -19,6 +18,7 @@ const PRODUCTS: Product[] = [
     tagline: 'Predictive Network Engine',
     defaultPath: '/kunder',
     accent: 'var(--brand-accent)',
+    badge: 'TI',
   },
   {
     id: 'graph',
@@ -26,6 +26,7 @@ const PRODUCTS: Product[] = [
     tagline: 'Generative Engine Optimization',
     defaultPath: '/insider-graph',
     accent: '#9f51b6',
+    badge: 'GG',
   },
 ];
 
@@ -36,158 +37,107 @@ export function activeProductId(pathname: string): 'insiders' | 'graph' {
 export default function ProductSwitcher() {
   const router = useRouter();
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
   const activeId = activeProductId(pathname);
   const active = PRODUCTS.find((p) => p.id === activeId)!;
 
   return (
-    <div ref={ref} style={{ position: 'relative', marginBottom: '24px' }}>
-      <button
-        onClick={() => setOpen(!open)}
+    <div style={{ marginBottom: '24px' }}>
+      {/* Segmenterad växlare — båda produkterna syns, ett klick byter */}
+      <div
+        role="tablist"
+        aria-label="Produkt"
         style={{
-          width: '100%',
           display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          padding: '10px 12px',
+          gap: '4px',
+          padding: '4px',
           background: 'rgba(255,255,255,0.03)',
           border: '1px solid var(--brand-border)',
           borderRadius: '10px',
-          cursor: 'pointer',
-          textAlign: 'left',
-          transition: 'background 0.15s',
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-        onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
       >
-        <span
-          style={{
-            width: '28px',
-            height: '28px',
-            borderRadius: '7px',
-            background: active.accent,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '0.75rem',
-            fontWeight: 700,
-            color: '#000',
-            flexShrink: 0,
-          }}
-        >
-          {active.id === 'graph' ? 'GG' : 'TI'}
-        </span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#fff', lineHeight: 1.2 }}>
-            {active.name}
-          </div>
-          <div
-            style={{
-              fontSize: '0.6875rem',
-              color: 'var(--brand-muted)',
-              marginTop: '2px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {active.tagline}
-          </div>
-        </div>
-        <ChevronDown size={14} color="var(--brand-muted)" />
-      </button>
-
-      {open && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + 6px)',
-            left: 0,
-            right: 0,
-            background: 'var(--brand-panel)',
-            border: '1px solid var(--brand-border)',
-            borderRadius: '10px',
-            padding: '6px',
-            zIndex: 50,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-          }}
-        >
-          {PRODUCTS.map((p) => {
-            const isActive = p.id === activeId;
-            return (
-              <button
-                key={p.id}
-                onClick={() => {
-                  setOpen(false);
-                  if (!isActive) router.push(p.defaultPath);
-                }}
+        {PRODUCTS.map((p) => {
+          const isActive = p.id === activeId;
+          return (
+            <button
+              key={p.id}
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => {
+                if (!isActive) router.push(p.defaultPath);
+              }}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '7px',
+                padding: '8px 6px',
+                borderRadius: '7px',
+                border: 'none',
+                cursor: isActive ? 'default' : 'pointer',
+                background: isActive
+                  ? p.id === 'graph'
+                    ? 'rgba(159, 81, 182, 0.18)'
+                    : 'rgba(0, 212, 255, 0.15)'
+                  : 'transparent',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              <span
                 style={{
-                  width: '100%',
+                  width: '20px',
+                  height: '20px',
+                  borderRadius: '5px',
+                  background: p.accent,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '10px',
-                  padding: '10px 12px',
-                  background: isActive ? 'rgba(255,255,255,0.04)' : 'transparent',
-                  border: 'none',
-                  borderRadius: '7px',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  transition: 'background 0.15s',
+                  justifyContent: 'center',
+                  fontSize: '0.5625rem',
+                  fontWeight: 700,
+                  color: '#000',
+                  flexShrink: 0,
+                  opacity: isActive ? 1 : 0.55,
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.background = isActive ? 'rgba(255,255,255,0.04)' : 'transparent')
-                }
               >
-                <span
-                  style={{
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '6px',
-                    background: p.accent,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '0.625rem',
-                    fontWeight: 700,
-                    color: '#000',
-                    flexShrink: 0,
-                  }}
-                >
-                  {p.id === 'graph' ? 'GG' : 'TI'}
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#fff', lineHeight: 1.2 }}>
-                    {p.name}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: '0.6875rem',
-                      color: 'var(--brand-muted)',
-                      marginTop: '2px',
-                    }}
-                  >
-                    {p.tagline}
-                  </div>
-                </div>
-                {isActive && <Check size={14} color="var(--brand-accent)" />}
-              </button>
-            );
-          })}
-        </div>
-      )}
+                {p.badge}
+              </span>
+              <span
+                style={{
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  color: isActive ? '#fff' : 'var(--brand-muted)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {p.name}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {/* Tagline för aktiv produkt */}
+      <div
+        style={{
+          fontSize: '0.6875rem',
+          color: 'var(--brand-muted)',
+          marginTop: '8px',
+          paddingLeft: '4px',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {active.tagline}
+      </div>
     </div>
   );
 }
