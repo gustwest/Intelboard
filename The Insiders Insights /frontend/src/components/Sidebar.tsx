@@ -100,27 +100,6 @@ export default function Sidebar() {
           );
         })}
       </nav>
-
-      {/* Footer System Status */}
-      <div style={{
-        marginTop: 'auto',
-        padding: '16px',
-        background: 'var(--brand-panel)',
-        borderRadius: '12px',
-        border: '1px solid var(--brand-border)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px'
-      }}>
-        <div style={{ position: 'relative', width: '10px', height: '10px' }}>
-          <span style={{ position: 'absolute', width: '10px', height: '10px', borderRadius: '50%', background: 'var(--brand-success)', opacity: 0.5, animation: 'ping 2s cubic-bezier(0, 0, 0.2, 1) infinite' }} />
-          <span style={{ position: 'absolute', width: '10px', height: '10px', borderRadius: '50%', background: 'var(--brand-success)' }} />
-        </div>
-        <div>
-          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#fff' }}>Engine Online</div>
-          <div style={{ fontSize: '0.6875rem', color: 'var(--brand-muted)' }}>Alla system normala</div>
-        </div>
-      </div>
     </aside>
   );
 }

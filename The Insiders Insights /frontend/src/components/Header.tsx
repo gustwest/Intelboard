@@ -3,15 +3,16 @@
 import { useState, useRef, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
-import { Search, Bell } from 'lucide-react';
+import { activeProductId } from './ProductSwitcher';
+import GraphSearch from './GraphSearch';
+import GraphInboxBell from './GraphInboxBell';
 
 export default function Header() {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const isGraph = activeProductId(pathname) === 'graph';
   const [showUserMenu, setShowUserMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  if (pathname === '/login') return null;
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -23,8 +24,10 @@ export default function Header() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  if (pathname === '/login') return null;
+
   const user = session?.user;
-  const role = (session as any)?.user?.role;
+  const role = (session?.user as { role?: string } | undefined)?.role;
   const initial = user?.name?.[0] || user?.email?.[0] || '?';
   const avatarUrl = user?.image;
 
@@ -50,26 +53,9 @@ export default function Header() {
       top: 0,
       zIndex: 100,
     }}>
-      {/* Left side: Search or Title Context */}
+      {/* Left side: Geogiraph-sök (attrapp dold i The Insiders tills den byggs ut) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '8px', 
-          background: 'rgba(255,255,255,0.03)',
-          border: '1px solid var(--brand-border)',
-          borderRadius: '8px',
-          padding: '8px 12px',
-          width: '300px'
-        }}>
-          <Search size={16} color="var(--brand-muted)" />
-          <input 
-            type="text" 
-            placeholder="Sök kunder, moduler..." 
-            style={{ 
-              background: 'transparent', border: 'none', color: '#fff', 
-              fontSize: '0.875rem', outline: 'none', width: '100%' 
-            }} 
-          />
-        </div>
+        {isGraph && <GraphSearch />}
       </div>
 
       {/* Right side: Actions & User */}
@@ -78,10 +64,8 @@ export default function Header() {
           {today}
         </div>
 
-        <button style={{ background: 'transparent', border: 'none', cursor: 'pointer', position: 'relative' }}>
-          <Bell size={20} color="var(--brand-muted)" />
-          <span style={{ position: 'absolute', top: '-2px', right: '-2px', width: '8px', height: '8px', background: 'var(--brand-accent)', borderRadius: '50%' }} />
-        </button>
+        {/* Att göra-inkorg — bara Geogiraph; attrapp-klockan borttagen i The Insiders */}
+        {isGraph && <GraphInboxBell />}
 
         <div style={{ width: '1px', height: '24px', background: 'var(--brand-border)' }} />
 
