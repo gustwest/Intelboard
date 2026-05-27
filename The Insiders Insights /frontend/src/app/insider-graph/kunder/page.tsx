@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Users, Plus, X, AlertCircle, CheckCircle2, ExternalLink, RefreshCw, Search } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
+import PipelineStatus, { type PipelineStep } from '../_components/PipelineStatus';
 import { graphFetch } from '../_lib/api';
 
 type ConnectorField = {
@@ -52,10 +53,14 @@ function emptyEmployee(): EmployeeRow {
   return { name: '', linkedin_url: '', title: '', node_type: 'aktiv', gender: '' };
 }
 
+type InboxClient = { client_id: string; total: number };
+
 export default function GraphKunderPage() {
   const [showModal, setShowModal] = useState(false);
   const [clients, setClients] = useState<Client[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Väntande granskningar per kund (för pipeline-stegen) — en enda inbox-hämtning.
+  const [pendingByClient, setPendingByClient] = useState<Record<string, number>>({});
 
   const loadClients = useCallback(() => {
     return graphFetch<{ clients: Client[] }>('/api/clients')
@@ -79,6 +84,14 @@ export default function GraphKunderPage() {
         setLoadError(e instanceof Error ? e.message : String(e));
         setClients([]);
       });
+    // Inbox-summering för pipeline-stegen (tyst om den inte finns/fel).
+    graphFetch<{ clients: InboxClient[] }>('/api/inbox')
+      .then((d) => {
+        const map: Record<string, number> = {};
+        for (const c of d.clients) map[c.client_id] = c.total;
+        setPendingByClient(map);
+      })
+      .catch(() => {});
   }, []);
 
   return (
@@ -186,7 +199,7 @@ export default function GraphKunderPage() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
           {clients.map((c) => (
-            <ClientCard key={c.client_id} client={c} />
+            <ClientCard key={c.client_id} client={c} pending={pendingByClient[c.client_id] ?? 0} />
           ))}
         </div>
       )}
@@ -203,7 +216,26 @@ export default function GraphKunderPage() {
   );
 }
 
-function ClientCard({ client }: { client: Client }) {
+function compactSteps(client: Client, pending: number): PipelineStep[] {
+  const hasConnectors = client.active_connectors.length > 0;
+  return [
+    { key: 'onboarded', label: 'Onboardad', state: 'done' },
+    { key: 'connectors', label: 'Connectors', state: hasConnectors ? 'done' : 'todo', detail: `${client.active_connectors.length} aktiva` },
+    { key: 'review', label: 'Granskad', state: pending > 0 ? 'attention' : 'done', detail: pending > 0 ? `${pending} att granska` : undefined },
+    { key: 'compiled', label: 'Kompilerad', state: client.last_compiled ? 'done' : 'todo' },
+    { key: 'delivered', label: 'Levererad', state: client.cdn_url ? 'done' : 'todo' },
+  ];
+}
+
+function compactCaption(client: Client, pending: number): string {
+  if (pending > 0) return `${pending} att granska`;
+  if (client.active_connectors.length === 0) return 'Välj connectors';
+  if (!client.last_compiled) return 'Ej kompilerad';
+  if (!client.cdn_url) return 'Ej levererad';
+  return 'Levererad';
+}
+
+function ClientCard({ client, pending }: { client: Client; pending: number }) {
   return (
     <Link
       href={`/insider-graph/kunder/${client.client_id}`}
@@ -254,6 +286,11 @@ function ClientCard({ client }: { client: Client }) {
             label="Senast kompilerad"
             value={client.last_compiled ? new Date(client.last_compiled).toLocaleString('sv-SE') : 'Inte ännu'}
           />
+        </div>
+
+        {/* Kompakt pipeline-status */}
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+          <PipelineStatus compact steps={compactSteps(client, pending)} caption={compactCaption(client, pending)} />
         </div>
       </div>
     </Link>

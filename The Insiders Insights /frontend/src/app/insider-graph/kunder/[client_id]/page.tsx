@@ -9,6 +9,7 @@ import AttestedUpload from '../../_components/AttestedUpload';
 import JobFeedsEditor from '../../_components/JobFeedsEditor';
 import LinkedInCapacityUpload from '../../_components/LinkedInCapacityUpload';
 import ESGAddon from '../../_components/ESGAddon';
+import PipelineStatus from '../../_components/PipelineStatus';
 import { graphFetch } from '../../_lib/api';
 
 type Employee = {
@@ -130,6 +131,14 @@ export default function ClientDetailPage() {
         </div>
       ) : (
         <>
+          {/* Pipeline-status — var står kunden, vad är nästa steg */}
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px', marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 16 }}>
+              Pipeline
+            </div>
+            <PipelineStatus clientId={clientId} />
+          </div>
+
           {/* Företagsöversikt */}
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: C.muted }}>

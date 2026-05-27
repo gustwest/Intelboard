@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 import firestore_client as fs
+from routers.inbox import _count_client  # samma "väntar på människa"-räkning som inkorgen
 
 router = APIRouter(prefix="/api/clients", tags=["clients"])
 
@@ -83,6 +84,90 @@ def get_client(client_id: str) -> dict[str, Any]:
         "last_compiled": _iso(data.get("last_compiled")),
         "employees": employees,
     }
+
+
+@router.get("/{client_id}/pipeline")
+def get_pipeline(client_id: str) -> dict[str, Any]:
+    """Kundens läge i pipelinen, steg för steg, ur befintlig data.
+
+    Driver pipeline-stegen i UI:t (kunddetalj + kundlista). Tillstånd per steg:
+    done (klart), attention (kräver en människa) eller todo (ej påbörjat).
+    """
+    snap = fs.client_doc(client_id).get()
+    if not snap.exists:
+        raise HTTPException(404, f"client not found: {client_id}")
+    data = snap.to_dict() or {}
+
+    connectors = data.get("active_connectors", [])
+    counts = _count_client(client_id, data)
+    pending = sum(counts.values())
+    last_compiled = data.get("last_compiled")
+    cdn_url = data.get("cdn_url")
+    polling_week = _latest_polling_week(client_id)
+
+    steps = [
+        {"key": "onboarded", "label": "Onboardad", "state": "done", "at": _iso(data.get("created_at")), "detail": None},
+        {
+            "key": "connectors",
+            "label": "Connectors",
+            "state": "done" if connectors else "todo",
+            "detail": f"{len(connectors)} aktiva" if connectors else "Inga valda",
+            "at": None,
+        },
+        {
+            "key": "data",
+            "label": "Data inkommen",
+            "state": "done" if _has_any_raw(client_id) else "todo",
+            "detail": None,
+            "at": None,
+        },
+        {
+            "key": "review",
+            "label": "Granskad",
+            "state": "attention" if pending else "done",
+            "detail": f"{pending} att granska" if pending else "Inget väntar",
+            "at": None,
+        },
+        {
+            "key": "compiled",
+            "label": "Kompilerad",
+            "state": "done" if last_compiled else "todo",
+            "detail": None,
+            "at": _iso(last_compiled),
+        },
+        {
+            "key": "delivered",
+            "label": "Levererad",
+            "state": "done" if cdn_url else "todo",
+            "detail": "CDN live" if cdn_url else None,
+            "at": None,
+        },
+        {
+            "key": "polling",
+            "label": "AI-synlighet",
+            "state": "done" if polling_week else "todo",
+            "detail": polling_week or "Ej mätt",
+            "at": None,
+        },
+    ]
+    next_action = next((s["label"] for s in steps if s["state"] in ("attention", "todo")), None)
+    return {"client_id": client_id, "steps": steps, "next_action": next_action, "pending": pending}
+
+
+def _has_any_raw(client_id: str) -> bool:
+    """Har någon data hämtats in (bolagsnivå eller per medarbetare)?"""
+    for _ in fs.raw_items_company_col(client_id).limit(1).stream():
+        return True
+    for emp_id, _ in fs.iter_employees(client_id):
+        for _ in fs.raw_items_col(client_id, emp_id).limit(1).stream():
+            return True
+    return False
+
+
+def _latest_polling_week(client_id: str) -> str | None:
+    """Senaste vecko-id i polling_results (hoppar över warmth-probe-dokumentet)."""
+    weeks = [doc.id for doc in fs.polling_results_col(client_id).stream() if "warmth" not in doc.id]
+    return max(weeks) if weeks else None
 
 
 @router.patch("/{client_id}/employees/{employee_id}")
