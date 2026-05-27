@@ -54,14 +54,37 @@ function emptyEmployee(): EmployeeRow {
   return { name: '', linkedin_url: '', title: '', node_type: 'aktiv', gender: '' };
 }
 
-type InboxClient = { client_id: string; total: number };
+// Inkorgens kategorier per kund. Vi delar upp dem på kortet så varje räknare
+// pekar på rätt yta: review → Granska, esg → ESG-arbetsytan, risk → AI-synlighet.
+type InboxCounts = {
+  claims: number;
+  items: number;
+  linkedin: number;
+  risk_findings: number;
+  risk_questions: number;
+  esg_questions: number;
+  esg_findings: number;
+};
+type InboxClient = { client_id: string; counts: InboxCounts };
+type PendingSplit = { review: number; esg: number; risk: number };
+
+const ZERO_SPLIT: PendingSplit = { review: 0, esg: 0, risk: 0 };
+
+function splitCounts(c?: InboxCounts): PendingSplit {
+  if (!c) return ZERO_SPLIT;
+  return {
+    review: (c.claims || 0) + (c.items || 0) + (c.linkedin || 0),
+    esg: (c.esg_questions || 0) + (c.esg_findings || 0),
+    risk: (c.risk_findings || 0) + (c.risk_questions || 0),
+  };
+}
 
 export default function GraphKunderPage() {
   const [showModal, setShowModal] = useState(false);
   const [clients, setClients] = useState<Client[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  // Väntande granskningar per kund (för pipeline-stegen) — en enda inbox-hämtning.
-  const [pendingByClient, setPendingByClient] = useState<Record<string, number>>({});
+  // Väntande poster per kund, uppdelade per kategori — en enda inbox-hämtning.
+  const [pendingByClient, setPendingByClient] = useState<Record<string, InboxCounts>>({});
 
   const loadClients = useCallback(() => {
     return graphFetch<{ clients: Client[] }>('/api/clients')
@@ -85,11 +108,11 @@ export default function GraphKunderPage() {
         setLoadError(e instanceof Error ? e.message : String(e));
         setClients([]);
       });
-    // Inbox-summering för pipeline-stegen (tyst om den inte finns/fel).
+    // Inbox-summering per kategori för korten (tyst om den inte finns/fel).
     graphFetch<{ clients: InboxClient[] }>('/api/inbox')
       .then((d) => {
-        const map: Record<string, number> = {};
-        for (const c of d.clients) map[c.client_id] = c.total;
+        const map: Record<string, InboxCounts> = {};
+        for (const c of d.clients) map[c.client_id] = c.counts;
         setPendingByClient(map);
       })
       .catch(() => {});
@@ -200,7 +223,7 @@ export default function GraphKunderPage() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
           {clients.map((c) => (
-            <ClientCard key={c.client_id} client={c} pending={pendingByClient[c.client_id] ?? 0} />
+            <ClientCard key={c.client_id} client={c} counts={pendingByClient[c.client_id]} />
           ))}
         </div>
       )}
@@ -236,8 +259,14 @@ function compactCaption(client: Client, pending: number): string {
   return 'Levererad';
 }
 
-function ClientCard({ client, pending }: { client: Client; pending: number }) {
+function ClientCard({ client, counts }: { client: Client; counts?: InboxCounts }) {
   const router = useRouter();
+  const split = splitCounts(counts);
+  const go = (e: React.MouseEvent, href: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    router.push(href);
+  };
   return (
     <Link
       href={`/insider-graph/kunder/${client.client_id}`}
@@ -260,33 +289,36 @@ function ClientCard({ client, pending }: { client: Client; pending: number }) {
               {client.client_id}
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            {pending > 0 && (
-              <button
-                type="button"
-                title="Granska väntande poster för den här kunden"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  router.push(`/insider-graph/review?client=${client.client_id}`);
-                }}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  padding: '2px 8px',
-                  borderRadius: 10,
-                  background: 'rgba(245,158,11,0.15)',
-                  color: '#b45309',
-                  border: '1px solid rgba(245,158,11,0.3)',
-                  fontSize: 10,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {pending} att granska
-              </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {split.review > 0 && (
+              <PendingChip
+                label={`${split.review} att granska`}
+                title="Granska claims/inkommande/LinkedIn för den här kunden"
+                color="#b45309"
+                bg="rgba(245,158,11,0.15)"
+                border="rgba(245,158,11,0.3)"
+                onClick={(e) => go(e, `/insider-graph/review?client=${client.client_id}`)}
+              />
+            )}
+            {split.esg > 0 && (
+              <PendingChip
+                label={`${split.esg} ESG`}
+                title="Granska ESG-frågor/findings i ESG-arbetsytan"
+                color="#16a34a"
+                bg="rgba(34,197,94,0.15)"
+                border="rgba(34,197,94,0.3)"
+                onClick={(e) => go(e, `/insider-graph/esg/${client.client_id}`)}
+              />
+            )}
+            {split.risk > 0 && (
+              <PendingChip
+                label={`${split.risk} risk`}
+                title="Åtgärda risk-findings/frågor under AI-synlighet"
+                color="#9f51b6"
+                bg="rgba(159,81,182,0.15)"
+                border="rgba(159,81,182,0.3)"
+                onClick={(e) => go(e, '/insider-graph/polling')}
+              />
             )}
             {client.cdn_url && (
               <button
@@ -323,10 +355,51 @@ function ClientCard({ client, pending }: { client: Client; pending: number }) {
 
         {/* Kompakt pipeline-status */}
         <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
-          <PipelineStatus compact steps={compactSteps(client, pending)} caption={compactCaption(client, pending)} />
+          <PipelineStatus compact steps={compactSteps(client, split.review)} caption={compactCaption(client, split.review)} />
         </div>
       </div>
     </Link>
+  );
+}
+
+// Klickbar räknare på kortet, en per granskningstyp, som deep-länkar till rätt yta.
+function PendingChip({
+  label,
+  title,
+  color,
+  bg,
+  border,
+  onClick,
+}: {
+  label: string;
+  title: string;
+  color: string;
+  bg: string;
+  border: string;
+  onClick: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: '2px 8px',
+        borderRadius: 10,
+        background: bg,
+        color,
+        border: `1px solid ${border}`,
+        fontSize: 10,
+        fontWeight: 700,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {label}
+    </button>
   );
 }
 
