@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 import connectors
 import firestore_client as fs
 from connectors.base import ConnectorConfig
+from jobs._run_tracker import record_run
 
 log = logging.getLogger("jobs.scrape_website")
 
@@ -40,16 +41,18 @@ def crawl_client(client_id: str, client: dict, *, force: bool = False) -> int:
         log.info("skipping %s — crawled within %s", client_id, MIN_INTERVAL)
         return 0
 
-    connector = connectors.get("website")()
-    config = ConnectorConfig(client_id=client_id, params={"website": website})
-    count = 0
-    col = fs.raw_items_company_col(client_id)
-    for item in connector.fetch(config):
-        col.document(item.item_id).set(_payload(item))  # idempotent
-        count += 1
-    fs.client_doc(client_id).update({"website_last_crawled_at": datetime.now(timezone.utc)})
-    log.info("website: wrote %s chunks for %s", count, client_id)
-    return count
+    with record_run("scrape_website", client_id) as r:
+        connector = connectors.get("website")()
+        config = ConnectorConfig(client_id=client_id, params={"website": website})
+        count = 0
+        col = fs.raw_items_company_col(client_id)
+        for item in connector.fetch(config):
+            col.document(item.item_id).set(_payload(item))  # idempotent
+            count += 1
+        fs.client_doc(client_id).update({"website_last_crawled_at": datetime.now(timezone.utc)})
+        log.info("website: wrote %s chunks for %s", count, client_id)
+        r.summary = {"chunks": count}
+        return count
 
 
 def _crawled_recently(client: dict) -> bool:

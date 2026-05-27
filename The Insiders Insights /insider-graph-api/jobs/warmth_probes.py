@@ -9,6 +9,7 @@ OBS: perceptions-talen ska INTE visas skarpt för kund förrän kalibreringen (#
 import logging
 
 import firestore_client as fs
+from jobs._run_tracker import record_run
 from services.warmth_probes import run_for_client
 
 log = logging.getLogger("jobs.warmth_probes")
@@ -18,8 +19,10 @@ def run() -> None:
     count = 0
     for client_id, _ in fs.iter_clients():
         try:
-            if run_for_client(client_id):
-                count += 1
+            with record_run("warmth_probes", client_id) as r:
+                if run_for_client(client_id):
+                    r.summary = {"probed": True}
+                    count += 1
         except Exception as exc:  # noqa: BLE001
             log.exception("warmth-probes failed for %s: %s", client_id, exc)
     log.info("warmth-probed %d clients", count)

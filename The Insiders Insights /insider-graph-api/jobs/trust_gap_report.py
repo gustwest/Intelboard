@@ -8,14 +8,17 @@ import argparse
 import logging
 
 import firestore_client as fs
+from jobs._run_tracker import record_run
 from services.trust_gap_report import run as build_snapshot
 
 log = logging.getLogger("jobs.trust_gap_report")
 
 
 def run(client_id: str, date: str | None = None) -> None:
-    result = build_snapshot(client_id, date)
-    log.info("trust-gap-report för %s: %s", client_id, "ok" if result else "skipped (ingen trust_gap)")
+    with record_run("trust_gap_report", client_id) as r:
+        result = build_snapshot(client_id, date)
+        log.info("trust-gap-report för %s: %s", client_id, "ok" if result else "skipped (ingen trust_gap)")
+        r.summary = {"built": bool(result)}
 
 
 def run_all(date: str | None = None) -> None:

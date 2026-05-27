@@ -14,6 +14,7 @@ import connectors
 import firestore_client as fs
 from config import settings
 from connectors.base import ConnectorConfig
+from jobs._run_tracker import record_run
 
 log = logging.getLogger("jobs.scrape_active")
 
@@ -29,22 +30,23 @@ def run_for_client(client_id: str, client: dict) -> None:
     Anropas både av cron-loopen (run) och av onboarding-ingestionen
     (services/ingest) så att en ny kund fylls på direkt.
     """
-    active_connectors = client.get("active_connectors", [])
-    _run_company_level(client_id, client, active_connectors)
+    with record_run("scrape_active", client_id):
+        active_connectors = client.get("active_connectors", [])
+        _run_company_level(client_id, client, active_connectors)
 
-    # MVP: bara bolagsnivå. Per-medarbetare-profiler är avstängda by default.
-    # Slås på antingen globalt (settings.scrape_employee_linkedin) eller per
-    # kund (client.settings.scrape_employee_profiles). När det är på hämtas
-    # bara medarbetare med node_type="aktiv" — så ledningen markeras "aktiv"
-    # och övriga "passiv".
-    if not _employee_linkedin_enabled(client):
-        return
-    for employee_id, emp in fs.iter_employees(client_id):
-        if emp.get("node_type") != "aktiv":
-            continue
-        if emp.get("opted_out"):
-            continue  # opt-out → hämta ingen ny data för personen
-        _run_employee_level(client_id, employee_id, emp, active_connectors)
+        # MVP: bara bolagsnivå. Per-medarbetare-profiler är avstängda by default.
+        # Slås på antingen globalt (settings.scrape_employee_linkedin) eller per
+        # kund (client.settings.scrape_employee_profiles). När det är på hämtas
+        # bara medarbetare med node_type="aktiv" — så ledningen markeras "aktiv"
+        # och övriga "passiv".
+        if not _employee_linkedin_enabled(client):
+            return
+        for employee_id, emp in fs.iter_employees(client_id):
+            if emp.get("node_type") != "aktiv":
+                continue
+            if emp.get("opted_out"):
+                continue  # opt-out → hämta ingen ny data för personen
+            _run_employee_level(client_id, employee_id, emp, active_connectors)
 
 
 def _employee_linkedin_enabled(client: dict) -> bool:

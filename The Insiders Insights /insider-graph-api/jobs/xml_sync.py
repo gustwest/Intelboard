@@ -25,6 +25,7 @@ from google.cloud import firestore
 import connectors
 import firestore_client as fs
 from connectors.base import ConnectorConfig
+from jobs._run_tracker import record_run
 
 log = logging.getLogger("jobs.xml_sync")
 
@@ -46,29 +47,31 @@ def run_for_client(client_id: str, client: dict) -> None:
     if not job_feeds:
         return
 
-    connector = connectors.get(CONNECTOR_ID)()
-    config = ConnectorConfig(client_id=client_id, params={"job_feeds": job_feeds})
-    items = connector.fetch(config)
+    with record_run("xml_sync", client_id) as r:
+        connector = connectors.get(CONNECTOR_ID)()
+        config = ConnectorConfig(client_id=client_id, params={"job_feeds": job_feeds})
+        items = connector.fetch(config)
 
-    company_col = fs.raw_items_company_col(client_id)
-    current: dict[str, dict] = {}
-    for item in items:
-        job_id = (item.extra or {}).get("job_id")
-        if not job_id or not item.item_id:
-            continue
-        # merge=True bevarar LLM-berikningen (global_title/skills_enriched/strategic/
-        # enriched_at) som job_enrichment skrivit på topp-nivå. closed_at=None nollställer
-        # status: en annons som dykt upp igen i feeden räknas som aktiv igen.
-        company_col.document(item.item_id).set(_payload(item), merge=True)
-        current[job_id] = {"item_id": item.item_id, "name": (item.extra or {}).get("name")}
+        company_col = fs.raw_items_company_col(client_id)
+        current: dict[str, dict] = {}
+        for item in items:
+            job_id = (item.extra or {}).get("job_id")
+            if not job_id or not item.item_id:
+                continue
+            # merge=True bevarar LLM-berikningen (global_title/skills_enriched/strategic/
+            # enriched_at) som job_enrichment skrivit på topp-nivå. closed_at=None nollställer
+            # status: en annons som dykt upp igen i feeden räknas som aktiv igen.
+            company_col.document(item.item_id).set(_payload(item), merge=True)
+            current[job_id] = {"item_id": item.item_id, "name": (item.extra or {}).get("name")}
 
-    _reconcile_closed(client_id, company_col, current)
-    log.info("xml_sync %s: %d active jobs", client_id, len(current))
+        _reconcile_closed(client_id, company_col, current)
+        log.info("xml_sync %s: %d active jobs", client_id, len(current))
+        r.summary = {"active_jobs": len(current)}
 
-    # Berika nya annonser (ontologisk titel + filtrering, spec §2). Self-noop utan LLM.
-    from services import job_enrichment
+        # Berika nya annonser (ontologisk titel + filtrering, spec §2). Self-noop utan LLM.
+        from services import job_enrichment
 
-    job_enrichment.enrich_jobs_for_client(client_id)
+        job_enrichment.enrich_jobs_for_client(client_id)
 
 
 def _reconcile_closed(client_id: str, company_col, current: dict[str, dict]) -> None:

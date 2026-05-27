@@ -7,15 +7,18 @@ kompilera schema (compile-schema) efteråt för att få ut claims i JSON-LD.
 import argparse
 import logging
 
+from jobs._run_tracker import record_run
 from services.claim_extraction import extract_claims_for_client
 
 log = logging.getLogger("jobs.extract_claims")
 
 
 def run(client_id: str) -> None:
-    result = extract_claims_for_client(client_id)
-    log.info("claim extraction for %s: %s", client_id, result)
-    print(result)
+    with record_run("extract_claims", client_id) as r:
+        result = extract_claims_for_client(client_id)
+        log.info("claim extraction for %s: %s", client_id, result)
+        print(result)
+        r.summary = {"result": str(result)[:300]}
 
 
 if __name__ == "__main__":

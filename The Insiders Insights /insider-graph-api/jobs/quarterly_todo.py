@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from google.cloud import firestore
 
 import firestore_client as fs
+from jobs._run_tracker import record_run
 
 log = logging.getLogger("jobs.quarterly_todo")
 
@@ -44,23 +45,28 @@ def run_for_client(client_id: str, client: dict | None = None, now: datetime | N
 
     if CONNECTOR_ID not in (client or {}).get("active_connectors", []):
         return False  # connectorn ej påslagen för kunden
-    if _has_open_quarterly_todo(client_id):
-        return False  # redan påmind, väntar på uppladdning
-    if not _is_due(client_id, now):
-        return False
 
-    todo_id = "todo-" + uuid.uuid4().hex[:12]
-    fs.todo_doc(client_id, todo_id).set(
-        {
-            "type": TODO_TYPE,
-            "status": "open",
-            "message": TODO_MESSAGE,
-            "created_at": firestore.SERVER_TIMESTAMP,
-        }
-    )
-    _notify(client_id, client or {})
-    log.info("quarterly_todo %s: created To-Do %s", client_id, todo_id)
-    return True
+    with record_run("quarterly_todo", client_id) as r:
+        if _has_open_quarterly_todo(client_id):
+            r.summary = {"created": False}
+            return False  # redan påmind, väntar på uppladdning
+        if not _is_due(client_id, now):
+            r.summary = {"created": False}
+            return False
+
+        todo_id = "todo-" + uuid.uuid4().hex[:12]
+        fs.todo_doc(client_id, todo_id).set(
+            {
+                "type": TODO_TYPE,
+                "status": "open",
+                "message": TODO_MESSAGE,
+                "created_at": firestore.SERVER_TIMESTAMP,
+            }
+        )
+        _notify(client_id, client or {})
+        log.info("quarterly_todo %s: created To-Do %s", client_id, todo_id)
+        r.summary = {"created": True}
+        return True
 
 
 def _has_open_quarterly_todo(client_id: str) -> bool:
