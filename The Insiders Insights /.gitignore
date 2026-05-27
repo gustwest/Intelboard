@@ -26,3 +26,6 @@ backend/data/uploads/
 # IDE
 .vscode/
 .idea/
+
+# Lokala LinkedIn-exportfiler (råa kunddata — committas aldrig)
+samples/
