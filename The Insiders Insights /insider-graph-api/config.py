@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # första-parts US-väg. Service-account-auth (ADC).
     gcp_project: str = ""
     vertex_location: str = "europe-west1"  # EU-region för Vertex AI (Gemini)
+    # Cloud Scheduler ligger i europe-west1 (ej tillgängligt i europe-north1). Speglar
+    # SCHEDULER_LOCATION i scripts/bootstrap.sh. Styr schema-status/paus-API:t.
+    scheduler_location: str = "europe-west1"
 
     # Modellvalet för resonemangsmodellerna (generator/validator) bor i services/llm.py
     # (GEO_GENERATOR_MODEL / GEO_VALIDATOR_MODEL, env-överstyrbara). BÅDA rollerna körs på

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Radar, RefreshCw, Play, Loader2, Check, X, Clock } from 'lucide-react';
+import { Radar, RefreshCw, Play, Loader2, Check, X, Clock, Pause, CalendarClock } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import { graphFetch } from '../_lib/api';
 import { useJobRuns, fmtRelative } from '../_lib/jobRuns';
@@ -123,6 +123,22 @@ const CATEGORY_SV: Record<string, string> = {
   hr: 'HR',
 };
 
+// --- Schemalagda körningar (speglar routers/schedules.py) ---
+
+type ScheduleRow = {
+  name: string;
+  label: string;
+  cadence: string;
+  state?: string;
+  paused?: boolean;
+  schedule?: string;
+  time_zone?: string;
+  last_run?: string | null;
+  next_run?: string | null;
+  exists?: boolean;
+};
+type SchedulesResp = { available: boolean; location?: string; schedules: ScheduleRow[] };
+
 // --- Humaniseringsbild (speglar services/trust_gap_report.py — översättningslagret §10.1) ---
 
 type HumanizationDim = {
@@ -157,6 +173,7 @@ export default function GraphRiskLoopPage() {
   const [month, setMonth] = useState<string | null>(null);
   const [report, setReport] = useState<Report | null>(null);
   const [polling, setPolling] = useState<PollingWeek[] | null>(null);
+  const [schedules, setSchedules] = useState<SchedulesResp | null>(null);
   const [humanization, setHumanization] = useState<Humanization | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
@@ -170,6 +187,26 @@ export default function GraphRiskLoopPage() {
       })
       .catch((e) => setError(e.message));
   }, []);
+
+  // Schemastatus (globalt, ej kundberoende) — verkligt Cloud Scheduler-läge + paus.
+  useEffect(() => {
+    let cancelled = false;
+    graphFetch<SchedulesResp>('/api/schedules')
+      .then((d) => !cancelled && setSchedules(d))
+      .catch(() => !cancelled && setSchedules({ available: false, schedules: [] }));
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshTick]);
+
+  async function toggleSchedule(name: string, paused: boolean) {
+    try {
+      await graphFetch(`/api/schedules/${name}/${paused ? 'resume' : 'pause'}`, { method: 'POST' });
+      setRefreshTick((t) => t + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
 
   // Jobbknapp med progress (delas av polling/risk-detect/månadsrapport).
   function renderJobBtn(label: string, key: string, path: string, jobType: string, opts?: { needsClient?: boolean; onDone?: () => void }) {
@@ -333,6 +370,11 @@ export default function GraphRiskLoopPage() {
       </div>
 
       {error && <div style={errorStyle}>{error}</div>}
+
+      {/* Schemalagda körningar — verkligt Cloud Scheduler-läge + paus/återuppta */}
+      {schedules?.available && schedules.schedules.length > 0 && (
+        <SchedulesPanel rows={schedules.schedules} onToggle={toggleSchedule} />
+      )}
 
       {/* Veckovis synlighet — det löpande, automatiska måttet (visas oavsett månadsrapport) */}
       {polling && polling.length > 0 && <WeeklyVisibility weeks={polling} />}
@@ -541,6 +583,56 @@ function TrendView({ trend, currentScore }: { trend: Trend; currentScore: number
       ) : (
         <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>Trend visas när minst två månadsrapporter finns.</p>
       )}
+    </div>
+  );
+}
+
+function SchedulesPanel({ rows, onToggle }: { rows: ScheduleRow[]; onToggle: (name: string, paused: boolean) => void }) {
+  const fmt = (iso?: string | null) => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? '—' : d.toLocaleString('sv-SE', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+  return (
+    <div style={{ ...cardStyle, marginBottom: 16 }}>
+      <SectionHead
+        title="Schemalagda körningar"
+        hint="Mätloopens automatik. Pausa stoppar Cloud Scheduler-triggern tills den återupptas — körningar uteblir helt under tiden."
+      />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {rows.map((r) => {
+          const missing = r.exists === false;
+          const paused = !!r.paused;
+          const pill = missing
+            ? { text: 'Saknas', color: C.dim, bg: 'rgba(106,126,138,0.12)' }
+            : paused
+            ? { text: 'Pausad', color: '#b45309', bg: 'rgba(245,158,11,0.14)' }
+            : { text: 'Aktiv', color: '#16a34a', bg: 'rgba(34,197,94,0.12)' };
+          return (
+            <div key={r.name} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 1.3fr 1.3fr auto', gap: 12, alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <CalendarClock size={14} color={C.accent} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56' }}>{r.label}</span>
+              </div>
+              <span style={{ fontSize: 12, color: C.muted }}>{r.cadence}</span>
+              <span style={{ fontSize: 11, color: C.dim }}>Senast: {fmt(r.last_run)}</span>
+              <span style={{ fontSize: 11, color: C.dim }}>{paused ? 'Nästa: pausad' : `Nästa: ${fmt(r.next_run)}`}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'flex-end' }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: pill.color, background: pill.bg, borderRadius: 6, padding: '3px 8px' }}>{pill.text}</span>
+                {!missing && (
+                  <button
+                    onClick={() => onToggle(r.name, paused)}
+                    title={paused ? 'Återuppta' : 'Pausa'}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: 'transparent', color: paused ? '#16a34a' : '#b45309', border: `1px solid ${paused ? 'rgba(34,197,94,0.4)' : 'rgba(245,158,11,0.4)'}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    {paused ? <Play size={12} /> : <Pause size={12} />} {paused ? 'Återuppta' : 'Pausa'}
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
