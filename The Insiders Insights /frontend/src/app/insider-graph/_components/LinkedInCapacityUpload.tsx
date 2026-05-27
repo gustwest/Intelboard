@@ -105,8 +105,9 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
       </div>
       <div style={{ fontSize: 11, color: C.muted, marginBottom: 12, lineHeight: 1.5 }}>
         Vi samlar in datan själva. Dra in export/skärmklipp över bolagets samlade kompetensstatistik
-        (utan persondata). <strong>CSV/XLSX läses automatiskt</strong> — kompetenserna kan annars anges
-        nedan eller fyllas vid verifieringen. Bild/PDF lagras som underlag.
+        (utan persondata). <strong>CSV/XLSX läses automatiskt och PDF/bild tolkas med AI</strong> —
+        de extraherade kompetenserna förfylls och verifieras alltid manuellt i Granska. Kan annars
+        anges nedan.
       </div>
 
       {todos.map((t) => (

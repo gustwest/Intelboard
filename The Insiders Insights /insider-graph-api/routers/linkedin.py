@@ -19,7 +19,7 @@ from google.cloud import firestore
 
 import firestore_client as fs
 from schemas import LinkedInStatus
-from services import blob_storage, capacity_parse
+from services import blob_storage, capacity_parse, capacity_llm
 
 router = APIRouter(prefix="/api/linkedin", tags=["linkedin"])
 
@@ -54,7 +54,10 @@ async def upload_snapshot(
     extracted: dict[str, Any] = {}
     if file:
         content = await file.read()
+        # Deterministiskt först (CSV/XLSX). För PDF/bild: LLM-extraktion via Vertex EU.
         extracted = capacity_parse.extract(file.filename, file.content_type, content)
+        if not extracted.get("skills"):
+            extracted = capacity_llm.extract(file.filename, file.content_type, content) or extracted
         file_path = blob_storage.store(client_id, snapshot_id, file.filename or "", content, file.content_type)
 
     # Slå ihop: manuellt angivna först, sedan extraherade som inte redan finns.
