@@ -96,6 +96,52 @@ type Report = {
 
 type Client = { client_id: string; company_name: string | null };
 
+// --- Veckovis polling (speglar routers/polling.py + services/polling.py) ---
+
+type CategoryResult = {
+  share_of_voice: number;
+  sentiment_score: number;
+  answer_count: number;
+  mention_count: number;
+};
+
+type PollingWeek = {
+  week_id: string;
+  share_of_voice: number | null;
+  sentiment_score: number | null;
+  parity_index: number | null;
+  category_results: Record<string, CategoryResult> | null;
+  total_answers: number | null;
+  answers_with_mention: number | null;
+  models_used: string[] | null;
+};
+
+const CATEGORY_SV: Record<string, string> = {
+  affar: 'Affär',
+  finans: 'Finans',
+  innovation: 'Innovation',
+  hr: 'HR',
+};
+
+// --- Humaniseringsbild (speglar services/trust_gap_report.py — översättningslagret §10.1) ---
+
+type HumanizationDim = {
+  dimension: string;
+  label: string;
+  evidence_plain: string;
+  perception_plain: string;
+  perception_by_engine: string[];
+  action: string;
+  confidence_note: string | null;
+};
+type Humanization = {
+  available: boolean;
+  coverage_plain?: string;
+  dimensions?: HumanizationDim[];
+  ranked_actions?: { label: string; why: string; action: string }[];
+  opportunities_and_risks?: string[];
+};
+
 const PERSONAS: Persona[] = ['buyer', 'candidate', 'investor'];
 
 const SEVERITY: Record<string, { label: string; color: string; bg: string }> = {
@@ -110,6 +156,8 @@ export default function GraphRiskLoopPage() {
   const [months, setMonths] = useState<string[] | null>(null);
   const [month, setMonth] = useState<string | null>(null);
   const [report, setReport] = useState<Report | null>(null);
+  const [polling, setPolling] = useState<PollingWeek[] | null>(null);
+  const [humanization, setHumanization] = useState<Humanization | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const { latest, active: jobActive, trigger: runJob } = useJobRuns(selected);
@@ -167,6 +215,30 @@ export default function GraphRiskLoopPage() {
         setMonths([]);
         setReport(null);
       });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected, refreshTick]);
+
+  // Veckovis pollingdata — oberoende av månadsrapporten (det löpande, automatiska måttet).
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
+    graphFetch<{ weeks: PollingWeek[] }>(`/api/polling/${selected}`)
+      .then((d) => !cancelled && setPolling(d.weeks))
+      .catch(() => !cancelled && setPolling([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [selected, refreshTick]);
+
+  // Humaniseringsbild — hur AI uppfattar kundens mänsklighet (trust_gap-perception).
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
+    graphFetch<Humanization>(`/api/reports/${selected}/humanization`)
+      .then((d) => !cancelled && setHumanization(d))
+      .catch(() => !cancelled && setHumanization(null));
     return () => {
       cancelled = true;
     };
@@ -235,7 +307,7 @@ export default function GraphRiskLoopPage() {
       {/* Jobbkontroller + senast körd */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-        {renderJobBtn('Kör polling', 'polling', '/api/jobs/polling', 'polling')}
+        {renderJobBtn('Kör polling', 'polling', '/api/jobs/polling', 'polling', { onDone: () => setRefreshTick((t) => t + 1) })}
         {renderJobBtn('Kör risk-detect', 'risk', `/api/jobs/risk-detect/${selected}`, 'risk_detect', { needsClient: true })}
         {renderJobBtn('Bygg månadsrapport', 'report', `/api/jobs/monthly-report/${selected}`, 'monthly_report', { needsClient: true, onDone: () => setRefreshTick((t) => t + 1) })}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 12, color: C.muted, marginLeft: 8 }}>
@@ -262,9 +334,13 @@ export default function GraphRiskLoopPage() {
 
       {error && <div style={errorStyle}>{error}</div>}
 
-      {months?.length === 0 && (
-        <EmptyState />
-      )}
+      {/* Veckovis synlighet — det löpande, automatiska måttet (visas oavsett månadsrapport) */}
+      {polling && polling.length > 0 && <WeeklyVisibility weeks={polling} />}
+
+      {/* Humaniseringsbild — hur AI uppfattar kundens mänsklighet (kultur-/värmedimensioner) */}
+      {humanization?.available && <HumanizationView model={humanization} />}
+
+      {months?.length === 0 && (!polling || polling.length === 0) && <EmptyState />}
 
       {report && conf && (
         <>
@@ -469,6 +545,122 @@ function TrendView({ trend, currentScore }: { trend: Trend; currentScore: number
   );
 }
 
+function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
+  const latest = weeks[0];
+  // Trenden ritas äldst → nyast (API:t ger nyast först).
+  const sovSeries = [...weeks].reverse().filter((w) => w.share_of_voice != null) as (PollingWeek & { share_of_voice: number })[];
+  const sent = sentimentLabel(latest.sentiment_score);
+  const cats = latest.category_results
+    ? Object.entries(latest.category_results).sort((a, b) => b[1].share_of_voice - a[1].share_of_voice)
+    : [];
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: 16 }}>
+      <SectionHead
+        title="Veckovis synlighet"
+        hint="Det löpande måttet — hur ofta AI-motorerna nämner kunden på branschfrågor (Share of Voice), med vilket sentiment och med vilken könsbalans. Uppdateras automatiskt varje vecka."
+      />
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: sovSeries.length > 1 ? 18 : 0 }}>
+        <Stat label="Share of Voice" value={pct(latest.share_of_voice)} accent />
+        <Stat label="Sentiment" value={sent.text} color={sent.color} />
+        <Stat label="Könsbalans (Parity)" value={pct(latest.parity_index)} />
+      </div>
+
+      <div style={{ fontSize: 11, color: C.dim, margin: sovSeries.length > 1 ? '0 0 14px' : '10px 0 0' }}>
+        {latest.week_id}
+        {latest.total_answers != null && ` · ${latest.answers_with_mention ?? 0}/${latest.total_answers} svar nämnde kunden`}
+        {latest.models_used?.length ? ` · ${latest.models_used.join(', ')}` : ''}
+      </div>
+
+      {sovSeries.length > 1 && (
+        <div style={{ marginBottom: cats.length ? 18 : 0 }}>
+          <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 8 }}>Share of Voice över tid</div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 90, borderBottom: `1px solid ${C.border}`, paddingBottom: 4 }}>
+            {sovSeries.map((w) => (
+              <div key={w.week_id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1, maxWidth: 48 }}>
+                <span style={{ fontSize: 10, color: C.muted }}>{Math.round(w.share_of_voice * 100)}</span>
+                <div style={{ width: '100%', maxWidth: 28, height: `${Math.max(3, w.share_of_voice * 72)}px`, background: C.accent, borderRadius: '4px 4px 0 0', opacity: 0.85 }} />
+                <span style={{ fontSize: 9, color: C.dim, fontFamily: 'ui-monospace, monospace' }}>{w.week_id.slice(5)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {cats.length > 0 && (
+        <div>
+          <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 8 }}>Per kategori — senaste veckan</div>
+          <div style={{ ...catGrid, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 8, marginBottom: 6 }}>
+            <span>Kategori</span>
+            <span>Share of Voice</span>
+            <span>Sentiment</span>
+            <span>Svar</span>
+          </div>
+          {cats.map(([cat, r]) => {
+            const cs = sentimentLabel(r.sentiment_score);
+            return (
+              <div key={cat} style={{ ...catGrid, padding: '8px 0', borderBottom: `1px solid ${C.border}`, fontSize: 12, alignItems: 'center' }}>
+                <span style={{ color: '#3a4b56' }}>{CATEGORY_SV[cat] || cat}</span>
+                <span style={{ color: '#3a4b56' }}>{Math.round(r.share_of_voice * 100)}%</span>
+                <span style={{ color: cs.color }}>{cs.text}</span>
+                <span style={{ color: C.dim }}>{Math.round(r.mention_count)}/{Math.round(r.answer_count)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HumanizationView({ model }: { model: Humanization }) {
+  const dims = model.dimensions || [];
+  const flags = model.opportunities_and_risks || [];
+  return (
+    <div style={{ ...cardStyle, marginBottom: 16 }}>
+      <SectionHead
+        title="Hur AI uppfattar er mänsklighet"
+        hint="AI-motorernas bild av er på kultur- och värdedimensionerna — synlighet och omdöme hålls isär. Detta är PERCEPTION (vad motorerna säger), inte poängen: bevis räknas separat, perception vägs aldrig in."
+      />
+      <p style={{ fontSize: 13, color: '#3a4b56', margin: '0 0 14px', lineHeight: 1.6 }}>{model.coverage_plain}</p>
+
+      {flags.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 6 }}>Möjligheter &amp; risker</div>
+          <ul style={{ margin: 0, paddingLeft: 18, color: '#3a4b56', fontSize: 13, lineHeight: 1.6 }}>
+            {flags.map((f, i) => <li key={i}>{f}</li>)}
+          </ul>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {dims.map((d) => (
+          <div key={d.dimension} style={{ padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56' }}>{d.label}</div>
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>{d.perception_plain}</div>
+            {d.perception_by_engine.length > 0 && (
+              <ul style={{ margin: '4px 0 0', paddingLeft: 16, color: C.dim, fontSize: 11, lineHeight: 1.5 }}>
+                {d.perception_by_engine.map((line, i) => <li key={i}>{line}</li>)}
+              </ul>
+            )}
+            {d.confidence_note && <div style={{ fontSize: 11, color: C.dim, marginTop: 3, fontStyle: 'italic' }}>{d.confidence_note}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, accent, color }: { label: string; value: string; accent?: boolean; color?: string }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: 28, fontWeight: 600, marginTop: 8, letterSpacing: '-0.02em', color: color || (accent ? C.accent : '#3a4b56') }}>{value}</div>
+    </div>
+  );
+}
+
 function EmptyState() {
   return (
     <div style={{ ...cardStyle, padding: '48px 24px', textAlign: 'center' }}>
@@ -489,6 +681,18 @@ function harmLabel(harm: string | null): string {
   return sv ? `${harm} ${sv}` : harm;
 }
 
+function pct(v: number | null | undefined): string {
+  return v == null ? '—' : `${Math.round(v * 100)}%`;
+}
+
+// Sentiment −1..1 → svensk etikett + färg.
+function sentimentLabel(s: number | null | undefined): { text: string; color: string } {
+  if (s == null) return { text: '—', color: C.dim };
+  if (s > 0.15) return { text: `Positivt (${s.toFixed(2)})`, color: '#16a34a' };
+  if (s < -0.15) return { text: `Negativt (${s.toFixed(2)})`, color: '#b91c1c' };
+  return { text: `Neutralt (${s.toFixed(2)})`, color: C.muted };
+}
+
 /* --- delade stilar --- */
 
 const cardStyle: React.CSSProperties = {
@@ -501,6 +705,12 @@ const cardStyle: React.CSSProperties = {
 const rowGrid: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns: '0.8fr 2fr 2.5fr 1.4fr 0.9fr',
+  gap: 12,
+};
+
+const catGrid: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '1.5fr 1.2fr 1.4fr 0.8fr',
   gap: 12,
 };
 

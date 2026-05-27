@@ -63,6 +63,81 @@ def list_job_runs(
     return {"runs": runs}
 
 
+# Nyckeljobben som avgör om en kunds data faktiskt bearbetas (kund-tidslinjens ryggrad).
+HEALTH_JOBS = ("scrape_active", "extract_claims", "compile_schema", "compute_trust_gap")
+# Pipelinen kör veckovis (website) → dagligen; äldre än så = något har stannat.
+STALE_DAYS = 8
+
+
+@router.get("/health")
+def client_health() -> dict[str, Any]:
+    """Tvärgående kundhälsa: för varje kund den senaste lyckade körningen per nyckeljobb,
+    plus en färskhetsflagga. Svaret på 'har den här kundens data bearbetats?' — sämst först.
+
+    Skannar ett tak av de senaste körningarna och aggregerar i Python (inga composite-index).
+    Aggregeringen ligger i build_health() (ren → enhetstestbar utan Firestore).
+    """
+    from datetime import datetime, timezone
+
+    query = fs.job_runs_col().order_by("started_at", direction=firestore.Query.DESCENDING).limit(3000)
+    runs = [
+        {"client_id": (d := snap.to_dict() or {}).get("client_id"),
+         "job_type": d.get("job_type"), "status": d.get("status"),
+         "started_at": _iso(d.get("started_at"))}
+        for snap in query.stream()
+    ]
+    return build_health(runs, list(fs.iter_clients()), datetime.now(timezone.utc))
+
+
+def build_health(runs: list[dict[str, Any]], clients: list[Any], now: Any) -> dict[str, Any]:
+    """Ren aggregering: senaste lyckade körning per (kund, nyckeljobb) + färskhetsflagga.
+    `runs` förväntas i fallande tidsordning (senaste först). `clients` = (id, dict)-par."""
+    from datetime import timezone
+
+    last_ok: dict[str, dict[str, str]] = {}
+    for r in runs:
+        cid, jt = r.get("client_id"), r.get("job_type")
+        if not cid or jt not in HEALTH_JOBS or r.get("status") != "success":
+            continue
+        per = last_ok.setdefault(cid, {})
+        if jt not in per and r.get("started_at"):  # första (= senaste) träffen vinner
+            per[jt] = r["started_at"]
+
+    def _age_days(iso: str | None) -> float | None:
+        if not iso:
+            return None
+        try:
+            from datetime import datetime
+            dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return (now - dt).total_seconds() / 86400
+
+    rows: list[dict[str, Any]] = []
+    for client_id, client in clients:
+        jobs_seen = last_ok.get(client_id, {})
+        per_job = {jt: {"at": jobs_seen.get(jt), "age_days": _age_days(jobs_seen.get(jt))} for jt in HEALTH_JOBS}
+        ages = [v["age_days"] for v in per_job.values() if v["age_days"] is not None]
+        missing = [jt for jt in HEALTH_JOBS if not per_job[jt]["at"]]
+        worst_age = max(ages) if ages else None
+        stale = bool(missing) or (worst_age is not None and worst_age > STALE_DAYS)
+        rows.append({
+            "client_id": client_id,
+            "company_name": (client or {}).get("company_name") or client_id,
+            "jobs": per_job,
+            "missing": missing,
+            "worst_age_days": round(worst_age, 1) if worst_age is not None else None,
+            "stale": stale,
+            "never_processed": len(missing) == len(HEALTH_JOBS),
+        })
+
+    # Sämst hälsa först: aldrig bearbetade, sedan stale, sedan äldst.
+    rows.sort(key=lambda r: (not r["never_processed"], not r["stale"], -(r["worst_age_days"] or 0)))
+    return {"key_jobs": list(HEALTH_JOBS), "stale_days": STALE_DAYS, "clients": rows}
+
+
 @router.post("/scrape-active")
 def trigger_scrape_active(background: BackgroundTasks) -> dict[str, Any]:
     background.add_task(scrape_active.run)

@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 
 import firestore_client as fs
+from services import trust_gap_report
 from services.monthly_report import render_report_html
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
@@ -25,6 +26,21 @@ def list_reports(client_id: str) -> dict[str, Any]:
         (mid for mid, _ in fs.iter_monthly_reports(client_id)), reverse=True
     )
     return {"client_id": client_id, "months": months}
+
+
+@router.get("/{client_id}/humanization")
+def get_humanization(client_id: str) -> dict[str, Any]:
+    """Den begripliga Humaniseringstäckning-modellen (översättningslagret §10.1) för
+    AI-synlighet-fliken. available=False om trust_gap ännu inte beräknats för kunden.
+
+    Deklareras FÖRE /{client_id}/{month} så att 'humanization' inte tolkas som en månad.
+    """
+    if not fs.client_doc(client_id).get().exists:
+        raise HTTPException(404, f"client not found: {client_id}")
+    model = trust_gap_report.build_report_model(client_id)
+    if model is None:
+        return {"available": False, "client_id": client_id}
+    return {"available": True, **model}
 
 
 @router.get("/{client_id}/{month}")

@@ -71,7 +71,8 @@ const FILE_CATEGORIES = [
 // ============================================================
 export default function AdminWorkspace({ product = 'the-insiders' }: { product?: string }) {
   const [activeTab, setActiveTab] = useState<'kanban' | 'files' | 'agent' | 'arkitektur'>('agent');
-  const showArchitecture = product === 'the-insiders';
+  // Arkitekturportalen är tvåspårig (The Insiders + Geogiraph) → visas i båda arbetsytorna.
+  const showArchitecture = true;
 
   return (
     <div style={{

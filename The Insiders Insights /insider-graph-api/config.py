@@ -23,16 +23,11 @@ class Settings(BaseSettings):
     # behandlar full kunddata internt och körs via Vertex AI i EU-region — ingen
     # första-parts US-väg. Service-account-auth (ADC).
     gcp_project: str = ""
-    vertex_location: str = "europe-west1"  # EU-region som har både Gemini och Claude på Vertex
+    vertex_location: str = "europe-west1"  # EU-region för Vertex AI (Gemini)
 
-    # Modellval för claims-pipelinen (hybrid). Konfig-överstyrbart eftersom exakta
-    # API-modellsträngar rör sig — ops kan rätta utan kodändring.
-    # Generera/relevans: stort kontextfönster sväljer hela korpusen i ett anrop.
-    # gemini-2.5-pro: senaste Gemini-pro som faktiskt serveras i europe-west1 (EU-only).
-    # Gemini 3.x finns ej i europe-west1 ännu (verifierat 2026-05-26 mot publisher-API).
-    generator_model: str = "gemini-2.5-pro"
-    # Validering: vassaste resonemanget på det precisionskritiska steget.
-    validator_model: str = "claude-opus-4-7"
+    # Modellvalet för resonemangsmodellerna (generator/validator) bor i services/llm.py
+    # (GEO_GENERATOR_MODEL / GEO_VALIDATOR_MODEL, env-överstyrbara). BÅDA rollerna körs på
+    # Gemini via Vertex EU — Claude är inte EU-resident i regionen, så ingen Claude-väg.
 
     brightdata_api_key: str = ""
     brightdata_linkedin_profile_dataset_id: str = ""

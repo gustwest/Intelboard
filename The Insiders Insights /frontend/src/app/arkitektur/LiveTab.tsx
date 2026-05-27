@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import css from './architecture.module.css';
-import { GLOSSARY, type SchemaModel } from './data';
+import { GLOSSARY, FIRESTORE_COLLECTIONS, type SchemaModel } from './data';
 
 type StatusEntry = { name: string; url: string; ok: boolean; ms: number | null; detail: string };
 type StatusResponse = { checkedAt: string; services: StatusEntry[] };
@@ -115,9 +115,9 @@ export default function LiveTab({
         )}
       </div>
 
-      {/* ---- Schema-browser ---- */}
+      {/* ---- Schema-browser (Insiders / Postgres) ---- */}
       <h2 className={css.sectionTitle} style={{ marginTop: 28 }}>
-        Datamodell (schema-browser)
+        Datamodell · The Insiders (PostgreSQL)
       </h2>
       <div className={css.banner}>
         Modellen läses ur <code>backend/models.py</code> (SQLAlchemy).{' '}
@@ -176,6 +176,34 @@ export default function LiveTab({
         );
       })}
       {filteredModels.length === 0 && <div className={css.placeholder}>Inga modeller matchar.</div>}
+
+      {/* ---- Firestore-collections (Geogiraph) ---- */}
+      <h2 className={css.sectionTitle} style={{ marginTop: 28 }}>
+        Datamodell · Geogiraph (Firestore)
+      </h2>
+      <div className={css.banner}>
+        Geogiraphs lager är schemalöst (Firestore). Här listas de centrala collections som referens —
+        inte parsade, utan en kurerad spegling av <code>insider-graph-api</code>.
+      </div>
+      {FIRESTORE_COLLECTIONS.map((c) => (
+        <div key={c.path} className={css.schemaModel}>
+          <div className={css.schemaHead} style={{ cursor: 'default' }}>
+            <span className={css.schemaModelName}>{c.path}</span>
+          </div>
+          <div className={css.schemaFields}>
+            <p className={css.detailText} style={{ margin: '0 0 8px' }}>
+              {c.description}
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {c.fields.map((f) => (
+                <span key={f} className={css.tag} style={{ fontFamily: 'ui-monospace, monospace' }}>
+                  {f}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      ))}
 
       {/* ---- Ordlista ---- */}
       <h2 className={css.sectionTitle} style={{ marginTop: 28 }}>

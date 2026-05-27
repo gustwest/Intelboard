@@ -1,20 +1,13 @@
 'use client';
 
 /**
- * Arkitektur & Designsystem — klientskal.
- * Håller flik-state och renderar hero + tab-bar + rätt flik.
- * Stack-, Designsystem- och Domänmoduler-flikarna bor som lokala funktioner här;
- * Diagram/ADR/Live ligger i egna filer. ALL data importeras från ./data (ingen dubblering).
+ * Arkitektur & Designsystem — klientskal för den TVÅSPÅRIGA portalen.
+ * Håller flik-state och renderar hero + tab-bar + rätt flik. Stack-,
+ * Designsystem- och Domänmoduler-flikarna bor som lokala funktioner här;
+ * Diagram/ADR/Live ligger i egna filer. ALL data importeras från ./data.
  */
 import { useState } from 'react';
-import {
-  Network,
-  Layers,
-  Palette,
-  Boxes,
-  BookOpen,
-  Radio,
-} from 'lucide-react';
+import { Network, Layers, Palette, Boxes, BookOpen, Radio } from 'lucide-react';
 import css from './architecture.module.css';
 import {
   TECH_STACK,
@@ -24,7 +17,13 @@ import {
   DESIGN_RULES,
   CODE_EXAMPLES,
   MODULES,
+  MODULE_POSITIONS_INSIDERS,
+  MODULE_POSITIONS_GEOGRAPH,
+  GRAPH_VIEWBOX_INSIDERS,
+  GRAPH_VIEWBOX_GEOGRAPH,
+  TRACK_LABELS,
   type TechItem,
+  type Track,
   type SchemaModel,
 } from './data';
 import DiagramTab from './DiagramTab';
@@ -43,6 +42,12 @@ const TABS: { id: TabId; label: string; icon: typeof Network }[] = [
   { id: 'live', label: 'Live', icon: Radio },
 ];
 
+const TRACK_CLASS: Record<Track, string> = {
+  insiders: css.trackInsiders,
+  geogiraph: css.trackGeogiraph,
+  delad: css.trackDelad,
+};
+
 export default function ArchitectureClient({
   schemaModels,
   schemaSource,
@@ -55,11 +60,12 @@ export default function ArchitectureClient({
   return (
     <div className={css.page}>
       <header className={css.hero}>
-        <p className={css.heroEyebrow}>Internt · Admin</p>
+        <p className={css.heroEyebrow}>Internt · Admin · Två spår</p>
         <h1 className={css.heroTitle}>Arkitektur &amp; Designsystem</h1>
         <p className={css.heroSub}>
-          Levande karta över The Insiders Insights — tjänster, datamodell, designtokens och beslut.
-          Klicka runt: varje flik är fristående.
+          Levande karta över hela systemet: <strong style={{ color: 'var(--brand-accent)' }}>The Insiders</strong>{' '}
+          (KPI/LinkedIn-analys) och <strong style={{ color: 'var(--brand-purple)' }}>Geogiraph</strong>{' '}
+          (AI-synlighet/GEO) — hur spåren är byggda var för sig och hur de samspelar.
         </p>
       </header>
 
@@ -90,16 +96,38 @@ export default function ArchitectureClient({
 }
 
 /* ================================================================== */
-/* Teknikstack-fliken                                                  */
+/* Teknikstack-fliken — lager + spårfilter                             */
 /* ================================================================== */
+const TRACK_FILTERS: { id: Track | 'alla'; label: string }[] = [
+  { id: 'alla', label: 'Alla spår' },
+  { id: 'delad', label: TRACK_LABELS.delad },
+  { id: 'insiders', label: TRACK_LABELS.insiders },
+  { id: 'geogiraph', label: TRACK_LABELS.geogiraph },
+];
+
 function StackTab() {
   const [selected, setSelected] = useState<TechItem | null>(null);
+  const [trackFilter, setTrackFilter] = useState<Track | 'alla'>('alla');
+
+  const visible = TECH_STACK.filter((t) => trackFilter === 'alla' || t.track === trackFilter);
 
   return (
     <div className={css.split}>
       <div>
+        <div className={css.viewToggle}>
+          {TRACK_FILTERS.map((f) => (
+            <button
+              key={f.id}
+              className={`${css.btn} ${trackFilter === f.id ? css.btnActive : ''}`}
+              onClick={() => setTrackFilter(f.id)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
         {LAYERS.map((layer) => {
-          const items = TECH_STACK.filter((t) => t.layer === layer.id);
+          const items = visible.filter((t) => t.layer === layer.id);
           if (items.length === 0) return null;
           return (
             <div key={layer.id} className={css[layer.cls]}>
@@ -120,6 +148,9 @@ function StackTab() {
                     <span className={css.cardEmoji}>{item.emoji}</span>
                     <div className={css.cardName}>{item.name}</div>
                     <div className={css.cardSnippet}>{item.snippet}</div>
+                    <span className={`${css.pill} ${TRACK_CLASS[item.track]}`} style={{ marginTop: 8 }}>
+                      {TRACK_LABELS[item.track]}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -134,7 +165,8 @@ function StackTab() {
             <div className={css.detailTitle}>
               {selected.emoji} {selected.name}
             </div>
-            <span className={css.pill}>{selected.layer}</span>
+            <span className={css.pill}>{selected.layer}</span>{' '}
+            <span className={`${css.pill} ${TRACK_CLASS[selected.track]}`}>{TRACK_LABELS[selected.track]}</span>
             <div className={css.detailLabel}>Vad &amp; varför</div>
             <p className={css.detailText}>{selected.description}</p>
             <div className={css.prosCons}>
@@ -240,25 +272,40 @@ function DesignTab() {
 }
 
 /* ================================================================== */
-/* Domänmoduler-fliken                                                 */
+/* Domänmoduler-fliken — spårväljare                                   */
 /* ================================================================== */
 function ModulesTab() {
+  const [track, setTrack] = useState<Exclude<Track, 'delad'>>('insiders');
   const [view, setView] = useState<'graph' | 'matrix'>('graph');
 
-  // Inkommande kopplingar (används av) räknas ut från alla moduluses.
+  const trackModules = MODULES.filter((m) => m.track === track);
+  const positions = track === 'insiders' ? MODULE_POSITIONS_INSIDERS : MODULE_POSITIONS_GEOGRAPH;
+  const viewBox = track === 'insiders' ? GRAPH_VIEWBOX_INSIDERS : GRAPH_VIEWBOX_GEOGRAPH;
+
   const usedBy: Record<string, { id: string; via: string }[]> = {};
-  for (const m of MODULES) {
+  for (const m of trackModules) {
     for (const u of m.moduleUses) {
       (usedBy[u.id] ||= []).push({ id: m.id, via: u.via });
     }
   }
-
-  // Tjänster för beroendematrisen.
-  const allServices = Array.from(new Set(MODULES.flatMap((m) => m.deps))).sort();
+  const allServices = Array.from(new Set(trackModules.flatMap((m) => m.deps))).sort();
 
   return (
     <div>
       <div className={css.viewToggle}>
+        <button
+          className={`${css.btn} ${track === 'insiders' ? css.btnActive : ''}`}
+          onClick={() => setTrack('insiders')}
+        >
+          {TRACK_LABELS.insiders}
+        </button>
+        <button
+          className={`${css.btn} ${track === 'geogiraph' ? css.btnActive : ''}`}
+          onClick={() => setTrack('geogiraph')}
+        >
+          {TRACK_LABELS.geogiraph}
+        </button>
+        <span style={{ flex: 1 }} />
         <button
           className={`${css.btn} ${view === 'graph' ? css.btnActive : ''}`}
           onClick={() => setView('graph')}
@@ -274,7 +321,7 @@ function ModulesTab() {
       </div>
 
       {view === 'graph' ? (
-        <ModuleGraph />
+        <ModuleGraph key={track} modules={trackModules} positions={positions} viewBox={viewBox} />
       ) : (
         <div className={css.card} style={{ overflowX: 'auto' }}>
           <table className={css.matrix}>
@@ -287,7 +334,7 @@ function ModulesTab() {
               </tr>
             </thead>
             <tbody>
-              {MODULES.map((m) => (
+              {trackModules.map((m) => (
                 <tr key={m.id}>
                   <td style={{ textAlign: 'left', color: 'var(--brand-text)' }}>
                     {m.emoji} {m.name}
@@ -305,18 +352,17 @@ function ModulesTab() {
       )}
 
       <h2 className={css.sectionTitle} style={{ marginTop: 28 }}>
-        Moduler
+        Moduler · {TRACK_LABELS[track]}
       </h2>
       <div className={css.grid}>
-        {MODULES.map((m) => {
+        {trackModules.map((m) => {
           const incoming = usedBy[m.id] || [];
           const degree = m.moduleUses.length + incoming.length;
           return (
             <div key={m.id} className={css.card}>
               <span className={css.cardEmoji}>{m.emoji}</span>
               <div className={css.cardName}>
-                {m.name}{' '}
-                {degree >= 3 && <span className={css.tag}>hub</span>}
+                {m.name} {degree >= 3 && <span className={css.tag}>hub</span>}
                 {degree === 0 && <span className={css.tag}>isolerad</span>}
               </div>
               <p className={css.detailText} style={{ margin: '4px 0 8px' }}>

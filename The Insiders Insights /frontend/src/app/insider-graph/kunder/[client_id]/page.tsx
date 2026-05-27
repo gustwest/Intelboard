@@ -8,9 +8,11 @@ import GraphPageShell, { graphColors as C } from '../../_components/GraphPageShe
 import AttestedUpload from '../../_components/AttestedUpload';
 import JobFeedsEditor from '../../_components/JobFeedsEditor';
 import LinkedInCapacityUpload from '../../_components/LinkedInCapacityUpload';
+import VerificationCockpit from '../../_components/VerificationCockpit';
 import ESGAddon from '../../_components/ESGAddon';
 import PipelineStatus from '../../_components/PipelineStatus';
 import ConnectorsEditor from '../../_components/ConnectorsEditor';
+import MeasurementConfigEditor from '../../_components/MeasurementConfigEditor';
 import { graphFetch } from '../../_lib/api';
 import { useJobRuns, fmtRelative } from '../../_lib/jobRuns';
 
@@ -218,11 +220,17 @@ export default function ClientDetailPage() {
           {/* Connectors — vilka datakällor den här kunden hämtar från */}
           <ConnectorsEditor clientId={clientId} />
 
+          {/* Mätkonfiguration — bransch-platshållare, personas, egna pollingfrågor (AI-synlighet) */}
+          <MeasurementConfigEditor clientId={clientId} />
+
           {/* AI-synlighet — ESG & CSRD Perception Audit (valbart tillägg, per kund) */}
           <ESGAddon clientId={clientId} />
 
           {/* Officiell attesterad data (uppladdning) */}
           <AttestedUpload clientId={clientId} />
+
+          {/* Verifierings-cockpit — manuell "Manually verified by Geogiraph" (ops, §7) */}
+          <VerificationCockpit clientId={clientId} />
 
           {/* Platsannons-feeds (ATS-XML) — per kund */}
           <JobFeedsEditor clientId={clientId} />

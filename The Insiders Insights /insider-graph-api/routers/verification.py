@@ -105,6 +105,14 @@ async def add_upload(
         raise HTTPException(400, str(exc)) from exc
 
     vid = verif.persist_verification(client_id, v)
+    # Affärshändelse → kund-tidslinjen (verifierat/avvisat underlag).
+    from jobs._run_tracker import log_event
+
+    log_event(
+        "evidence_rejected" if v.verdict == "rejected" else "evidence_verified",
+        client_id,
+        {"evidence_type": v.evidence_type, "verdict": v.verdict, "assurance_level": v.assurance_level},
+    )
     result: dict[str, Any] = {
         "status": "ok", "role": role, "verification_id": vid,
         "verdict": v.verdict, "assurance_level": v.assurance_level,

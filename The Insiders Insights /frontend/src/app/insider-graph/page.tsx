@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users, Plug, Rocket, Activity, Globe2,
-  Quote, Inbox, Network, Radar, Leaf, Check, X, Loader2,
+  Quote, Inbox, Network, Radar, Leaf, Check, X, Loader2, HeartPulse, AlertTriangle,
 } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from './_components/GraphPageShell';
 import { graphFetch } from './_lib/api';
@@ -32,6 +32,13 @@ const QUEUES: { label: string; keys: string[]; href: string; icon: typeof Quote;
   { label: 'ESG att granska', keys: ['esg_questions', 'esg_findings'], href: '/insider-graph/kunder', icon: Leaf, color: '#22c55e' },
 ];
 
+// Affärshändelser (job_type "event:<kind>") → läsbar etikett för aktivitetsflödet.
+const EVENT_LABEL: Record<string, string> = {
+  report_generated: 'Rapport genererad',
+  evidence_verified: 'Underlag verifierat',
+  evidence_rejected: 'Underlag avvisat',
+};
+
 // Jobbtyp → läsbar etikett för körningsloggen.
 const RUN_LABEL: Record<string, string> = {
   scrape_active: 'Scrape (aktiv)',
@@ -50,6 +57,33 @@ const RUN_LABEL: Record<string, string> = {
   warmth_probes: 'Värme-probe',
   compute_trust_gap: 'Förtroendegap',
   trust_gap_report: 'Förtroendegap-rapport',
+};
+
+function runLabel(jobType: string): string {
+  if (jobType.startsWith('event:')) {
+    const k = jobType.slice(6);
+    return EVENT_LABEL[k] || k;
+  }
+  return RUN_LABEL[jobType] || jobType;
+}
+
+type HealthJob = { at: string | null; age_days: number | null };
+type HealthRow = {
+  client_id: string;
+  company_name: string;
+  jobs: Record<string, HealthJob>;
+  missing: string[];
+  worst_age_days: number | null;
+  stale: boolean;
+  never_processed: boolean;
+};
+type HealthData = { key_jobs: string[]; stale_days: number; clients: HealthRow[] };
+
+const HEALTH_JOB_SHORT: Record<string, string> = {
+  scrape_active: 'Scrape',
+  extract_claims: 'Claims',
+  compile_schema: 'Kompilering',
+  compute_trust_gap: 'Förtroendegap',
 };
 
 function fmtRelative(iso: string | null): string {
@@ -82,12 +116,14 @@ export default function InsiderGraphHomePage() {
   const [clients, setClients] = useState<Client[] | null>(null);
   const [inbox, setInbox] = useState<InboxData | null>(null);
   const [runs, setRuns] = useState<JobRun[] | null>(null);
+  const [health, setHealth] = useState<HealthData | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     graphFetch<{ clients: Client[] }>('/api/clients').then((d) => { if (!cancelled) setClients(d.clients); }).catch(() => { if (!cancelled) setClients([]); });
     graphFetch<InboxData>('/api/inbox').then((d) => { if (!cancelled) setInbox(d); }).catch(() => {});
     graphFetch<{ runs: JobRun[] }>('/api/jobs/runs?limit=12').then((d) => { if (!cancelled) setRuns(d.runs); }).catch(() => { if (!cancelled) setRuns([]); });
+    graphFetch<HealthData>('/api/jobs/health').then((d) => { if (!cancelled) setHealth(d); }).catch(() => { if (!cancelled) setHealth(null); });
     return () => { cancelled = true; };
   }, []);
 
@@ -155,7 +191,7 @@ export default function InsiderGraphHomePage() {
                     <RunStatus status={run.status} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, color: C.text, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {RUN_LABEL[run.job_type] || run.job_type}
+                        {runLabel(run.job_type)}
                         {run.client_id && <span style={{ color: C.muted, fontWeight: 400 }}> · {run.client_id}</span>}
                       </div>
                       <div style={{ fontSize: 11, color: run.status === 'failed' ? '#dc2626' : C.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -169,6 +205,42 @@ export default function InsiderGraphHomePage() {
                   </div>
                 );
               })}
+            </div>
+          )}
+        </Panel>
+      </div>
+
+      {/* Kundhälsa — har varje kunds data bearbetats nyligen? (tvärgående översikt) */}
+      <div style={{ marginTop: 16 }}>
+        <Panel icon={<HeartPulse size={16} color={C.accent} />} title="Kundhälsa — pipeline-färskhet">
+          {health === null ? (
+            <Empty text="Laddar…" />
+          ) : health.clients.length === 0 ? (
+            <Empty text="Inga kunder än" />
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <div style={{ fontSize: 11, color: C.muted, marginBottom: 6 }}>
+                Senaste lyckade körning per nyckeljobb. Gult/rött = äldre än {health.stale_days} dagar eller saknas — något kan ha stannat.
+              </div>
+              {health.clients.map((row) => (
+                <button
+                  key={row.client_id}
+                  onClick={() => router.push(`/insider-graph/kunder/${row.client_id}`)}
+                  style={{ ...rowBtn, alignItems: 'center' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.03)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <HealthBadge row={row} />
+                  <span style={{ flex: 1, color: C.text, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {row.company_name}
+                  </span>
+                  <span style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    {health.key_jobs.map((jt) => (
+                      <JobFreshness key={jt} label={HEALTH_JOB_SHORT[jt] || jt} job={row.jobs[jt]} staleDays={health.stale_days} />
+                    ))}
+                  </span>
+                </button>
+              ))}
             </div>
           )}
         </Panel>
@@ -226,6 +298,29 @@ function RunStatus({ status }: { status: JobRun['status'] }) {
 
 function Empty({ text }: { text: string }) {
   return <div style={{ fontSize: 12, color: C.muted, padding: '16px 4px', textAlign: 'center' }}>{text}</div>;
+}
+
+function HealthBadge({ row }: { row: HealthRow }) {
+  if (row.never_processed) {
+    return <span title="Aldrig bearbetad" style={dot('#ef4444')}><X size={11} color="#fff" strokeWidth={3} /></span>;
+  }
+  if (row.stale) {
+    return <span title="Något jobb är gammalt eller saknas" style={dot('#f59e0b')}><AlertTriangle size={10} color="#fff" /></span>;
+  }
+  return <span title="Färsk" style={dot('#22c55e')}><Check size={11} color="#fff" strokeWidth={3} /></span>;
+}
+
+function JobFreshness({ label, job, staleDays }: { label: string; job: HealthJob | undefined; staleDays: number }) {
+  const age = job?.age_days ?? null;
+  const missing = !job?.at;
+  const color = missing ? '#ef4444' : age != null && age > staleDays ? '#f59e0b' : '#22c55e';
+  const ageText = missing ? 'saknas' : age != null && age < 1 ? '<1d' : `${Math.round(age ?? 0)}d`;
+  return (
+    <span title={`${label}: ${ageText}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, color: C.muted }}>
+      <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }} />
+      {label}
+    </span>
+  );
 }
 
 function dot(color: string): React.CSSProperties {

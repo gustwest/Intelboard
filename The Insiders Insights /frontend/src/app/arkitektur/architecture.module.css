@@ -308,6 +308,52 @@
   gap: 10px;
 }
 
+/* Två spår-lanes i diagrammet */
+.lanes {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.lane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px dashed var(--brand-border);
+  border-radius: 14px;
+  padding: 14px 12px 18px;
+}
+.laneInsiders {
+  --c: var(--brand-accent);
+}
+.laneGeogiraph {
+  --c: var(--brand-purple);
+}
+.laneTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--c, var(--brand-accent));
+  margin-bottom: 12px;
+}
+
+/* Spår-taggar (pills) */
+.trackInsiders {
+  --c: var(--brand-accent);
+}
+.trackGeogiraph {
+  --c: var(--brand-purple);
+}
+.trackDelad {
+  --c: var(--brand-muted);
+}
+
 /* ---------- Designsystem tab ---------- */
 .swatchGrid {
   display: grid;

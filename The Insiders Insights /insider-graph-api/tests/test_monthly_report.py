@@ -221,6 +221,24 @@ class RenderHtmlTest(unittest.TestCase):
         self.assertIn("Motorerna blandar ihop er med Acme Corp.", html_out)
         self.assertIn("AI-genererat", html_out)
 
+    def test_humanization_section_present(self):
+        # trust_gap beräknad → Humaniseringstäckning ingår som SEKTION i samma rapport (§10)
+        _setup(trust_gap={
+            "overall_score": 0.3, "coverage": {"declared": 1, "demonstrated": 0, "of": 6},
+            "dimensions": {"ethics": {"declared": 1.0, "demonstrated": 0.0, "score": 0.3}},
+            "flags": [],
+        })
+        html_out = mr.render_report_html(mr.build_report_model("acme", "2026-05"))
+        self.assertIn("Humaniseringstäckning", html_out)
+        self.assertIn("säger ni om er själva", html_out)  # översatt klartext, inga råa tal
+
+    def test_humanization_section_graceful_without_trust_gap(self):
+        # ingen trust_gap → sektionen visar upplysning, ej krasch/tomhet
+        _setup()  # ingen trust_gap
+        html_out = mr.render_report_html(mr.build_report_model("acme", "2026-05"))
+        self.assertIn("Humaniseringstäckning", html_out)
+        self.assertIn("beräknas när trust_gap", html_out)
+
 
 class ReportEndpointsTest(unittest.TestCase):
     def test_list_404_missing_client(self):

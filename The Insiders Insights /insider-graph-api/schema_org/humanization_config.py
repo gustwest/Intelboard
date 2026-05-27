@@ -5,8 +5,12 @@ värmedimensionerna, predicate→dimension-kopplingen och scoring-konstanterna s
 taxonomin kan justeras utan att röra logiken i schema_org/claims.py (derivering) eller
 jobs/compute_trust_gap.py (aggregering).
 
-VIKTIGT: viktparametrarna nedan är PROVISORISKA platshållare. De ska kalibreras mot
-riktig kunddata innan trust_gap-poäng visas skarpt för kund (spec §12, task #9).
+KALIBRERING (spec §12): de numeriska NIVÅERNA nedan är defaultvärden med dokumenterat
+resonemang (se per-konstant-kommentarerna). De ska finjusteras mot fältdata innan
+perceptions-tal visas skarpt — men de STRUKTURELLA invarianterna som gör en poäng/flagga
+meningsfull (declared kapat, demonstrated kräver oberoende underlag, perception aldrig i
+poängen, salience-golv, asymmetrisk flagg-grind) är låsta av tests/test_compute_trust_gap.py
+och får inte drifta när nivåerna justeras.
 """
 from __future__ import annotations
 

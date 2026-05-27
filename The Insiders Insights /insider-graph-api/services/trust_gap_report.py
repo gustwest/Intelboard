@@ -21,6 +21,9 @@ log = logging.getLogger(__name__)
 
 _GAP = hc.GAP_MAGNITUDE_MIN  # tröskel för "varmare/svalare än underlaget"
 
+# Probe-motorernas visningsnamn (perception per motor, §10.3 punkt 3).
+ENGINE_SV = {"perplexity": "Perplexity", "gemini": "Gemini", "chatgpt": "ChatGPT", "gpt-4o": "ChatGPT"}
+
 
 def today() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -67,6 +70,28 @@ def _action_plain(label: str, e: dict[str, Any]) -> str:
     return f"Fortsätt belägga {label} med färska, oberoende underlag."
 
 
+def _perception_by_engine(e: dict[str, Any]) -> list[str]:
+    """Perception PER motor i klartext (§10.3 punkt 3) — behåll motorerna isär, kollapsa ej.
+    Tom lista om probe-data saknas. Synlighet (salience) och omdöme (valens) hålls åtskilda."""
+    by_engine = ((e.get("perceived") or {}).get("by_engine")) or {}
+    lines: list[str] = []
+    for engine, stats in by_engine.items():
+        name = ENGINE_SV.get(engine, engine)
+        salience = (stats or {}).get("salience")
+        valence = (stats or {}).get("valence")
+        if salience is None or salience < hc.SALIENCE_FLOOR:
+            lines.append(f"{name} vet ännu nästan inget om er här (en synlighetsfråga, inte ett dåligt omdöme).")
+        elif valence is None:
+            lines.append(f"{name} känner till er, men ger inget tydligt omdöme att tolka än.")
+        elif valence >= 0.6:
+            lines.append(f"{name} känner till er och beskriver er positivt här.")
+        elif valence <= 0.4:
+            lines.append(f"{name} känner till er men beskriver er svalt här.")
+        else:
+            lines.append(f"{name} känner till er och beskriver er neutralt här.")
+    return lines
+
+
 def _confidence_note(e: dict[str, Any]) -> str | None:
     p = e.get("perceived") or {}
     if p.get("status") == "not_visible":
@@ -75,6 +100,23 @@ def _confidence_note(e: dict[str, Any]) -> str | None:
     if conf is not None and conf < hc.FLAG_CONFIDENCE_MIN:
         return "För osäkert underlag för att dra slutsats — vi flaggar, inte bedömer."
     return None
+
+
+def _action_priority(e: dict[str, Any], flag_kind: str | None) -> tuple[int, str] | None:
+    """Prioritet (lägre = mer akut) + skäl, för den gap-rankade handlingslistan (§10 punkt 5).
+    None = inget att göra (redan belagt, ingen flagga) → räknas som styrka, ej åtgärd."""
+    declared, demo = e.get("declared", 0), e.get("demonstrated", 0)
+    if flag_kind == "over_claim":
+        return 1, "Trovärdighetsrisk: AI beskriver er varmare än ni kan belägga."
+    if flag_kind == "opportunity":
+        return 2, "Möjlighet: ni gör mer än vad som syns utåt."
+    if declared and not demo:
+        return 3, "Ni säger det, men kan inte belägga det ännu."
+    if not declared and not demo:
+        return 4, "Vitt fält — varken utsaga eller underlag."
+    if 0 < demo < 0.5:
+        return 5, "Delvis belagt — stärk underlaget för full tyngd."
+    return None  # demo >= 0.5 utan flagga → en styrka, inte en åtgärd
 
 
 def _flag_plain(flag: dict[str, Any]) -> str:
@@ -95,15 +137,21 @@ def build_report_model(client_id: str) -> dict[str, Any] | None:
     data = snap.to_dict() or {}
     client = fs.client_doc(client_id).get().to_dict() or {}
 
+    flags = data.get("flags") or []
+    flag_by_dim = {f.get("dimension"): f.get("kind") for f in flags if f.get("dimension")}
+
     dimensions = []
+    ranked_actions = []
     for d, label in hc.DIMENSIONS.items():
         e = (data.get("dimensions") or {}).get(d, {})
+        action = _action_plain(label, e)
         dimensions.append({
             "dimension": d,
             "label": label,
             "evidence_plain": _evidence_plain(e),
             "perception_plain": _perception_plain(e),
-            "action": _action_plain(label, e),
+            "perception_by_engine": _perception_by_engine(e),
+            "action": action,
             "confidence_note": _confidence_note(e),
             "raw": {  # appendix — för den som vill gräva, aldrig i huvudtexten
                 "declared": e.get("declared"), "demonstrated": e.get("demonstrated"),
@@ -111,6 +159,12 @@ def build_report_model(client_id: str) -> dict[str, Any] | None:
                 "perceived": e.get("perceived"),
             },
         })
+        prio = _action_priority(e, flag_by_dim.get(d))
+        if prio is not None:
+            ranked_actions.append({"label": label, "why": prio[1], "action": action, "_priority": prio[0]})
+
+    # Gap-rankad handlingslista (§10 punkt 5): mest akut först. Aldrig "lägg till markup".
+    ranked_actions.sort(key=lambda a: a["_priority"])
 
     cov = data.get("coverage") or {}
     coverage_plain = (
@@ -124,7 +178,8 @@ def build_report_model(client_id: str) -> dict[str, Any] | None:
         "is_draft": True,
         "coverage_plain": coverage_plain,
         "dimensions": dimensions,
-        "opportunities_and_risks": [_flag_plain(f) for f in (data.get("flags") or [])],
+        "ranked_actions": ranked_actions,
+        "opportunities_and_risks": [_flag_plain(f) for f in flags],
         "trend": _trend(client_id, data),
         "raw": {  # appendix
             "overall_score": data.get("overall_score"),
@@ -172,28 +227,74 @@ def run(client_id: str, date: str | None = None) -> dict[str, Any] | None:
 
 # --- HTML-vy (för påsyn) ------------------------------------------------------
 
-def render_report_html(model: dict[str, Any]) -> str:
-    name = html.escape(model.get("company_name") or "")
+def render_fragment(model: dict[str, Any]) -> str:
+    """Humaniseringstäckning som ett HTML-FRAGMENT (utan doc-ram) — bäddas in i
+    månadsrapporten (§10) och i den fristående vyn nedan. Allt är redan översatt till
+    klartext i modellen; här sker bara escaping + layout."""
+    if not model:
+        return "<p class='note'>Humaniseringstäckning beräknas när trust_gap har körts.</p>"
+    cov = html.escape(model.get("coverage_plain") or "")
+
+    actions = "".join(
+        f"<li><strong>{html.escape(a['label'])}:</strong> {html.escape(a['why'])} "
+        f"<span class='act'>{html.escape(a['action'])}</span></li>"
+        for a in model.get("ranked_actions") or []
+    )
+    actions_html = f"<ol>{actions}</ol>" if actions else "<p class='note'>Inga öppna åtgärder — täckningen är belagd.</p>"
+
+    flags = "".join(f"<li>{html.escape(x)}</li>" for x in model.get("opportunities_and_risks") or [])
+    flags_html = f"<ul>{flags}</ul>" if flags else "<p class='note'>Inga särskilda möjligheter eller risker att lyfta.</p>"
+
     rows = ""
-    for d in model["dimensions"]:
+    for d in model.get("dimensions") or []:
         note = f"<p class='note'>{html.escape(d['confidence_note'])}</p>" if d.get("confidence_note") else ""
+        engines = "".join(f"<li class='note'>{html.escape(line)}</li>" for line in d.get("perception_by_engine") or [])
+        engines_html = f"<ul>{engines}</ul>" if engines else ""
         rows += (
             f"<div class='dim'><h3>{html.escape(d['label'])}</h3>"
             f"<p>{html.escape(d['evidence_plain'])}</p>"
-            f"<p>{html.escape(d['perception_plain'])}</p>"
+            f"<p>{html.escape(d['perception_plain'])}</p>{engines_html}"
             f"<p class='act'><strong>Att göra:</strong> {html.escape(d['action'])}</p>{note}</div>"
         )
-    flags = "".join(f"<li>{html.escape(x)}</li>" for x in model.get("opportunities_and_risks") or [])
-    flags_html = f"<ul>{flags}</ul>" if flags else "<p class='note'>Inga särskilda möjligheter eller risker att lyfta.</p>"
+
+    trend = model.get("trend") or {}
+    if trend.get("previous_date"):
+        trend_html = (
+            f"<p class='note'>Sedan {html.escape(trend['previous_date'])}: belagda områden "
+            f"{_signed(trend.get('demonstrated_delta'))}, uttalade områden {_signed(trend.get('declared_delta'))}.</p>"
+        )
+    else:
+        trend_html = f"<p class='note'>{html.escape(trend.get('note') or '')}</p>"
+
+    return (
+        f"<p>{cov}</p>"
+        f"<h3>Att göra (mest angeläget först)</h3>{actions_html}"
+        f"<h3>Möjligheter &amp; risker</h3>{flags_html}"
+        f"<h3>Per område</h3>{rows}"
+        f"{trend_html}"
+    )
+
+
+def render_report_html(model: dict[str, Any]) -> str:
+    """Fristående vy (för påsyn). Månadsrapporten bäddar i stället in render_fragment()."""
+    name = html.escape(model.get("company_name") or "")
     return f"""<!doctype html><html lang="sv"><head><meta charset="utf-8">
 <title>Humaniseringstäckning (utkast) — {name}</title>
 <style>body{{font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:820px;margin:2rem auto;padding:0 1rem;color:#1a1a1a}}
-h1{{font-size:1.5rem}} h3{{margin:.2rem 0;font-size:1.05rem}} .dim{{border-bottom:1px solid #eee;padding:.8rem 0}}
-.act{{color:#1a5}} .note{{color:#777;font-size:.85rem}}
+h1{{font-size:1.5rem}} h3{{margin:.6rem 0 .2rem;font-size:1.05rem}} .dim{{border-bottom:1px solid #eee;padding:.8rem 0}}
+.act{{color:#1a5}} .note{{color:#777;font-size:.85rem}} ol,ul{{margin:.4rem 0;padding-left:1.2rem}}
 .banner{{background:#fff6e0;border:1px solid #f0d990;border-radius:6px;padding:.6rem .8rem;font-size:.9rem}}</style></head><body>
 <p class="banner"><strong>Internt utkast.</strong> Färdigställs som ledningsgruppsrapport utanför verktyget.</p>
 <h1>Humaniseringstäckning — {name}</h1>
-<p>{html.escape(model.get('coverage_plain') or '')}</p>
-<h2>Möjligheter & risker</h2>{flags_html}
-<h2>Per område</h2>{rows}
+{render_fragment(model)}
 </body></html>"""
+
+
+def _signed(v: Any) -> str:
+    if v is None:
+        return "oförändrat"
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        return str(v)
+    return f"+{n}" if n > 0 else (str(n) if n < 0 else "oförändrat")

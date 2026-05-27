@@ -12,6 +12,7 @@ import logging
 
 from jobs._run_tracker import record_run
 from services.claim_extraction import extract_claims_for_client
+from services.culture_extraction import extract_culture_for_client
 
 log = logging.getLogger("jobs.extract_claims")
 
@@ -22,6 +23,13 @@ def run(client_id: str) -> None:
         log.info("claim extraction for %s: %s", client_id, result)
         print(result)
         r.summary = {"result": str(result)[:300]}
+
+    # Culture-signaler ur samma webbkorpus → grundade culture-claims (humaniseringslagret).
+    # Egen körning i job_runs; hash-guarden hoppar över LLM:en när webben är oförändrad.
+    with record_run("extract_culture", client_id) as r:
+        culture = extract_culture_for_client(client_id)
+        log.info("culture extraction for %s: %s", client_id, culture)
+        r.summary = {"result": str(culture)[:300]}
 
     # Projicera de nya claimsen in i leveransen (JSON-LD/profilsida/llms.txt).
     # Best-effort — får aldrig fälla extraktionen, som redan är registrerad ovan.

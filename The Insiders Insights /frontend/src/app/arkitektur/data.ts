@@ -1,14 +1,27 @@
 /**
  * Arkitektur & Designsystem — ENDA datakällan för portalen.
  *
- * Lärdom från BeachVibes-handovern (§8, fallgrop #1): en tidigare delad
- * `data.ts` blev död kod när innehållet inlinades i klientkomponenten. Vi gör
- * tvärtom från start — ALL innehållsdata bor här och importeras av flikarna.
- * Lägg inte dubbletter i ArchitectureClient.tsx.
+ * Portalen dokumenterar BÅDA spåren i monorepot och hur de samspelar:
+ *   • The Insiders Insights — KPI-/LinkedIn-analysplattform (FastAPI + Postgres)
+ *   • Geogiraph (insider-graph) — AI-synlighet / GEO-kunskapsgraf (FastAPI + Firestore)
+ * Delad frontend (Next.js) med ProductSwitcher; AI-chatten i insiders-api växlar
+ * kontext och hämtar i graf-läge LIVE Geogiraph-data via GRAPH_API_URL.
  *
- * Färger: hex förekommer ENDAST i COLOR_TOKENS nedan (det är själva swatch-datan).
- * Allt annat färgsätts via CSS-klasser som pekar på --brand-*-tokens.
+ * Lärdom (handover §8, fallgrop #1): ingen dubblerad datafil. ALL innehållsdata
+ * bor här och importeras av flikarna. Hex förekommer ENDAST i COLOR_TOKENS.
  */
+
+/* ------------------------------------------------------------------ */
+/* Spår                                                                */
+/* ------------------------------------------------------------------ */
+
+export type Track = 'insiders' | 'geogiraph' | 'delad';
+
+export const TRACK_LABELS: Record<Track, string> = {
+  insiders: 'The Insiders',
+  geogiraph: 'Geogiraph',
+  delad: 'Delad',
+};
 
 /* ------------------------------------------------------------------ */
 /* Typer                                                               */
@@ -19,7 +32,8 @@ export type TechItem = {
   emoji: string;
   name: string;
   layer: string; // måste matcha ett id i LAYERS
-  layerClass: string; // CSS-klass för lagrets färg
+  layerClass: string;
+  track: Track;
   snippet: string;
   description: string;
   pros: string[];
@@ -35,23 +49,32 @@ export type DiagramNodeData = {
   sub: string;
   color: string; // CSS-klass: nodeBlue | nodeCyan | nodeGreen | nodePurple | nodeOrange | nodeDanger
   detail: {
-    description: string; // Vad det är
-    whyChosen: string; // Varför vi valde det
-    alternatives: string; // Alternativ vi valde bort
-    techDetails: string; // Tekniska detaljer
+    description: string;
+    whyChosen: string;
+    alternatives: string;
+    techDetails: string;
   };
+};
+
+export type Interaction = {
+  id: string;
+  from: string;
+  to: string;
+  label: string;
+  detail: string;
 };
 
 export type ModuleNode = {
   id: string;
   emoji: string;
   name: string;
+  track: Exclude<Track, 'delad'>;
   description: string;
   frontend: string;
   backend: string;
   apiRoutes: string[];
-  deps: string[]; // tjänster för beroendematrisen
-  moduleUses: { id: string; via: string }[]; // riktade kopplingar → annan modul
+  deps: string[];
+  moduleUses: { id: string; via: string }[];
 };
 
 export type Adr = {
@@ -84,126 +107,102 @@ export type SchemaModel = {
   fields: SchemaField[];
 };
 
+export type FirestoreCollection = {
+  path: string;
+  description: string;
+  fields: string[];
+};
+
 /* ------------------------------------------------------------------ */
-/* Teknikstack                                                         */
+/* Teknikstack — båda spåren, taggade med track                        */
 /* ------------------------------------------------------------------ */
 
 export const LAYERS: Layer[] = [
   { id: 'Frontend', label: 'Frontend', cls: 'layerFrontend' },
   { id: 'Backend', label: 'Backend', cls: 'layerBackend' },
   { id: 'Data', label: 'Data', cls: 'layerData' },
-  { id: 'Tjänster', label: 'Tjänster', cls: 'layerServices' },
+  { id: 'AI & Tjänster', label: 'AI & Tjänster', cls: 'layerServices' },
   { id: 'Infrastruktur', label: 'Infrastruktur', cls: 'layerInfra' },
 ];
 
 export const TECH_STACK: TechItem[] = [
+  /* ---- Frontend (delad) ---- */
   {
     id: 'nextjs',
     emoji: '▲',
     name: 'Next.js 16 (App Router)',
     layer: 'Frontend',
     layerClass: 'layerFrontend',
-    snippet: 'Server- + Client Components',
+    track: 'delad',
+    snippet: 'Delad konsol för båda spåren',
     description:
-      'Hela admin-konsolen (insiders-frontend) är en Next.js 16-app med App Router. Server Components gör auth-guard och fs-läsning; resten är "use client".',
+      'En enda Next.js 16-app (insiders-frontend) driver båda produkterna. Insiders-vyerna (/kunder, /moduler …) och Geogiraph-vyerna (/insider-graph/*) lever sida vid sida; ProductSwitcher växlar.',
     pros: [
-      'Server Components håller hemligheter och guards på servern',
-      'Filbaserad routing matchar vår sidstruktur (/kunder, /moduler, /rapporter …)',
-      'Samma ramverk för både The Insiders och Insider Graph-vyerna',
+      'En kodbas, ett bygge, en inloggning för båda spåren',
+      'Server Components för guards + fs-läsning',
+      'Route-baserad produktdetektion (/insider-graph → graf-läge)',
     ],
-    cons: [
-      'App Router har brutit mot äldre API:er — kräver att man läser docs',
-      'RSC/Client-gränsen är lätt att råka bryta',
-    ],
+    cons: ['App Router har brutit mot äldre API:er', 'Två teman i samma app kräver disciplin'],
     alternatives: [
-      { name: 'Vite + React SPA', why: 'Tappar SSR-guard och filbaserad routing' },
-      { name: 'Remix', why: 'Mindre ekosystem för vårt GCP-bygge' },
+      { name: 'Två separata frontends', why: 'Dubbel auth + dubbelt bygge för litet team' },
     ],
   },
   {
-    id: 'react',
-    emoji: '⚛️',
-    name: 'React 19',
+    id: 'productswitcher',
+    emoji: '🔀',
+    name: 'ProductSwitcher + delad auth',
     layer: 'Frontend',
     layerClass: 'layerFrontend',
-    snippet: 'UI-bibliotek',
-    description: 'React 19 driver alla vyer, med hooks för flik-state och datahämtning.',
-    pros: ['Stort ekosystem', 'Server Components-stöd'],
-    cons: ['Snabb versionstakt'],
-    alternatives: [{ name: 'Vue / Svelte', why: 'Mindre överlapp med övriga AntiGravity-projekt' }],
+    track: 'delad',
+    snippet: 'NextAuth (Google) för båda spåren',
+    description:
+      'ProductSwitcher.tsx växlar mellan The Insiders och Geogiraph via pathname. NextAuth v5 (Google OAuth, whitelist i team.ts) är single sign-on för båda. Sidebar visar INSIDERS_LINKS eller GRAPH_LINKS.',
+    pros: ['En inloggning täcker båda', 'Tydlig visuell separation (cyan vs lila)'],
+    cons: ['Whitelist underhålls manuellt', 'v5 är beta'],
+    alternatives: [{ name: 'Separata inloggningar', why: 'Onödig friktion — samma team' }],
   },
   {
     id: 'tailwind',
     emoji: '🎨',
-    name: 'Tailwind CSS v4 + tokens',
+    name: 'Tailwind v4 + tokens',
     layer: 'Frontend',
     layerClass: 'layerFrontend',
-    snippet: 'Utility-CSS + --brand-*-tokens',
+    track: 'delad',
+    snippet: 'Två teman via --brand-*',
     description:
-      'Tailwind v4 via @tailwindcss/postcss. Färger styrs av --brand-*-CSS-variabler i globals.css (cyan-temat), inte hårdkodade hex.',
+      'Tailwind v4. Insiders kör mörkt tema (cyan accent); Geogiraph-vyerna scopar ett ljust tema (off-white, lila accent #9f51b6) i sin layout.tsx. Färger via tokens, ej hårdkodade hex.',
     pros: ['Tokens = ett ställe att byta tema', 'Inga globala klasskollisioner'],
     cons: ['Lång klasslista i markup'],
-    alternatives: [{ name: 'CSS Modules överallt', why: 'Mer boilerplate för enkel layout' }],
+    alternatives: [{ name: 'CSS Modules överallt', why: 'Mer boilerplate' }],
   },
+  /* ---- Backend ---- */
   {
-    id: 'nextauth',
-    emoji: '🔑',
-    name: 'NextAuth v5 (Google OAuth)',
-    layer: 'Frontend',
-    layerClass: 'layerFrontend',
-    snippet: 'JWT-session + e-postwhitelist',
-    description:
-      'Inloggning via Google OAuth. middleware.ts skyddar alla rutter utom /login; team.ts är whitelist med roller (SUPERADMIN/ADMIN).',
-    pros: ['Edge-kompatibel middleware-guard', 'Ingen egen lösenordshantering'],
-    cons: ['v5 är fortfarande beta', 'Whitelist underhålls manuellt i team.ts'],
-    alternatives: [
-      { name: 'Egen JWT-auth', why: 'Mer kod, mer att göra fel på' },
-      { name: 'Firebase Auth', why: 'Binder hårdare mot en extern leverantör' },
-    ],
-  },
-  {
-    id: 'recharts',
-    emoji: '📈',
-    name: 'Recharts + html2canvas',
-    layer: 'Frontend',
-    layerClass: 'layerFrontend',
-    snippet: 'Diagram + PNG-export',
-    description: 'Recharts ritar dashboard-diagram; html2canvas exporterar rapportvyer som bild för LinkedIn-rapporter.',
-    pros: ['Deklarativa React-diagram', 'Export utan server-rendering'],
-    cons: ['html2canvas matchar inte alltid komplex CSS pixel-perfekt'],
-    alternatives: [{ name: 'Chart.js', why: 'Imperativt API passar React sämre' }],
-  },
-  {
-    id: 'fastapi',
+    id: 'fastapi-insiders',
     emoji: '⚡',
-    name: 'FastAPI + Uvicorn',
+    name: 'FastAPI — insiders-api',
     layer: 'Backend',
     layerClass: 'layerBackend',
-    snippet: 'insiders-api',
+    track: 'insiders',
+    snippet: 'KPI-API + delad AI-chatt',
     description:
-      'Backend (insiders-api) är en tunn FastAPI-app i main.py som registrerar routers/ (customers, sources, datasets, modules, reports, agent, chat, ai_chat …).',
-    pros: ['Typade Pydantic-scheman (schemas.py)', 'Async + snabb', 'Auto-OpenAPI'],
-    cons: ['Manuell DB-migrering (auto-migrate i db.py)'],
-    alternatives: [
-      { name: 'Django REST', why: 'Tyngre än vad ett KPI-API behöver' },
-      { name: 'Node/Express', why: 'Pandas/NumPy-ekosystemet bor i Python' },
-    ],
+      'Insiders backend: tunn FastAPI-app (main.py) som registrerar routers (customers, sources, datasets, modules, reports, agent, chat, ai_chat …). Här bor även den delade AI-chatten som växlar kontext per produkt.',
+    pros: ['Pydantic-scheman', 'Pandas/NumPy för formel-engine', 'Auto-OpenAPI'],
+    cons: ['Manuell auto-migrate i db.py'],
+    alternatives: [{ name: 'Node/Express', why: 'Pandas-ekosystemet bor i Python' }],
   },
   {
-    id: 'sqlalchemy',
-    emoji: '🗃️',
-    name: 'SQLAlchemy 2.0 (ORM)',
+    id: 'fastapi-graph',
+    emoji: '🕸️',
+    name: 'FastAPI — insider-graph-api',
     layer: 'Backend',
     layerClass: 'layerBackend',
-    snippet: 'models.py — datamodellen',
+    track: 'geogiraph',
+    snippet: 'GEO-kunskapsgraf + pipeline',
     description:
-      'Datamodellen definieras som SQLAlchemy-klasser i backend/models.py. Moduler binder mot stabila SourceField.id, inte kolumnnamn (se ADR).',
-    pros: ['Samma modeller mot Postgres och SQLite', 'Relationer + cascade i kod'],
-    cons: ['create_all lägger inte till kolumner — vi har egen auto-migrate'],
-    alternatives: [
-      { name: 'Prisma', why: 'JS-orienterat; vår backend är Python' },
-      { name: 'Rå SQL', why: 'Tappar relationer och typer' },
-    ],
+      'Geogiraph backend: egen FastAPI-tjänst (routers: clients, connectors, delivery, polling, review, esg, jobs, onboard, linkedin, badge, reports, webhooks). X-API-Key-auth. Driver hela scrape→extrahera→kompilera→leverera→mät-kedjan.',
+    pros: ['Helt frikopplad från KPI-plattformen', 'Egen deploy + egna jobb'],
+    cons: ['Ingen direkt join mot Postgres — integration via API'],
+    alternatives: [{ name: 'Utöka insiders-api', why: 'Två helt olika produktmodeller' }],
   },
   {
     id: 'pandas',
@@ -211,101 +210,184 @@ export const TECH_STACK: TechItem[] = [
     name: 'Pandas + NumPy',
     layer: 'Backend',
     layerClass: 'layerBackend',
+    track: 'insiders',
     snippet: 'Ingest + formel-engine',
     description:
-      'Pandas/NumPy normaliserar uppladdade rapportfiler och driver formel-engine (formula.py) som räknar KPI-uttryck. openpyxl/xlrd läser Excel.',
+      'Normaliserar uppladdade LinkedIn-rapporter och driver KPI-formel-engine (formula.py). openpyxl/xlrd läser Excel.',
     pros: ['Robust CSV/Excel-parsning', 'Vektoriserade beräkningar'],
-    cons: ['Minnesglupskt för mycket stora filer'],
-    alternatives: [{ name: 'Polars', why: 'Mindre moget ekosystem för Excel-läsning' }],
+    cons: ['Minnesglupskt för stora filer'],
+    alternatives: [{ name: 'Polars', why: 'Mindre moget för Excel' }],
   },
+  {
+    id: 'langchain',
+    emoji: '🔗',
+    name: 'LangChain + Vertex-bindning',
+    layer: 'Backend',
+    layerClass: 'layerBackend',
+    track: 'geogiraph',
+    snippet: 'langchain-google-vertexai',
+    description:
+      'Geogiraphs LLM-fabrik (services/llm.py) bygger generator (gemini-2.5-pro) och validator (claude-opus-4-7) via langchain-google-vertexai — allt mot Vertex AI EU. trafilatura extraherar text vid webbcrawl.',
+    pros: ['Enhetligt LLM-gränssnitt', 'Vertex = EU-residens utan API-nycklar'],
+    cons: ['Abstraktionslager att hålla koll på'],
+    alternatives: [{ name: 'Direkta SDK-anrop', why: 'Mer limkod per modell' }],
+  },
+  /* ---- Data ---- */
   {
     id: 'postgres',
     emoji: '🐘',
     name: 'Cloud SQL PostgreSQL',
     layer: 'Data',
     layerClass: 'layerData',
-    snippet: 'Produktionsdatabas',
+    track: 'insiders',
+    snippet: 'Insiders KPI-data',
     description:
-      'Produktion kör PostgreSQL på Cloud SQL (psycopg2). DATABASE_URL sätts i Cloud Run; saknas den faller db.py tillbaka på lokal SQLite.',
-    pros: ['Relationell integritet för kund/källa/dataset', 'Hanterad backup'],
+      'Insiders kör PostgreSQL på Cloud SQL (psycopg2, SQLAlchemy). DATABASE_URL i Cloud Run; saknas den faller db.py tillbaka på lokal SQLite. Modeller i backend/models.py.',
+    pros: ['Relationell integritet kund/källa/dataset/modul', 'Hanterad backup'],
     cons: ['Kräver Cloud SQL-instans + connector'],
-    alternatives: [{ name: 'Endast SQLite', why: 'Skalar inte till delad produktion' }],
-  },
-  {
-    id: 'sqlite',
-    emoji: '💾',
-    name: 'SQLite (lokal dev)',
-    layer: 'Data',
-    layerClass: 'layerData',
-    snippet: 'data/insiders.db',
-    description: 'Lokal utveckling använder SQLite-fil utan extern tjänst. Samma SQLAlchemy-modeller, egen auto-migrate.',
-    pros: ['Noll uppsättning lokalt', 'Identisk modellkod'],
-    cons: ['SQLite saknar ADD COLUMN IF NOT EXISTS — egen migrationssvepning'],
-    alternatives: [{ name: 'Docker-Postgres lokalt', why: 'Mer friktion för snabb iteration' }],
+    alternatives: [{ name: 'Endast SQLite', why: 'Skalar inte i produktion' }],
   },
   {
     id: 'firestore',
     emoji: '🔥',
-    name: 'Firestore (Insider Graph)',
+    name: 'Firestore (native EU)',
     layer: 'Data',
     layerClass: 'layerData',
-    snippet: 'GEO/AI-synlighet',
+    track: 'geogiraph',
+    snippet: 'GEO-kunskapsgraf',
     description:
-      'Systertjänsten insider-graph-api lagrar AI-synlighets-/GEO-data i Firestore — separat datalager från KPI-plattformens Postgres.',
-    pros: ['Schemalöst passar polling-/connector-data', 'Skalar horisontellt'],
+      'Geogiraph lagrar kunder, anställda (noder), raw_items, claims, polling_results, risk_findings, esg_findings m.m. i Firestore. Schemalöst passar den heterogena connector-/claim-datan.',
+    pros: ['Schemalöst passar claim-/polling-data', 'Skalar horisontellt', 'EU-region'],
     cons: ['Eget frågespråk, ingen join med Postgres'],
-    alternatives: [{ name: 'Samma Postgres', why: 'Tvingar ihop två olika produktmodeller' }],
+    alternatives: [{ name: 'Samma Postgres', why: 'Tvingar ihop två produktmodeller' }],
   },
   {
-    id: 'gemini',
-    emoji: '✨',
-    name: 'Vertex AI — Gemini 3 Flash',
-    layer: 'Tjänster',
-    layerClass: 'layerServices',
-    snippet: 'Dataset-sammanfattningar',
+    id: 'gcs-cdn',
+    emoji: '📦',
+    name: 'Cloud Storage + CDN',
+    layer: 'Data',
+    layerClass: 'layerData',
+    track: 'geogiraph',
+    snippet: 'Publicerad JSON-LD',
     description:
-      'ai.py anropar Gemini 3 Flash via Vertex AI (Cloud Runs default service account) för att skriva korta svenska sammanfattningar av nyuppladdade dataset.',
-    pros: ['Ingen API-nyckel att rotera på Cloud Run', 'Snabb + billig för korta texter'],
-    cons: ['gemini-3-flash-preview kräver global endpoint (se EU-ADR)'],
-    alternatives: [{ name: 'OpenAI', why: 'Vi vill hålla data inom GCP/EU' }],
+      'Kompilerade kunskapsgrafer (JSON-LD), profilsidor och badges pushas till GCS/CDN. Kunden injicerar identitets-snippet via GTM en gång. Insiders använder även GCS för admin-filer.',
+    pros: ['Billig publik leverans', 'CDN-cache'],
+    cons: ['Cache-invalidering att tänka på'],
+    alternatives: [{ name: 'Serva från tjänsten', why: 'Onödig last + sämre cache' }],
+  },
+  /* ---- AI & Tjänster ---- */
+  {
+    id: 'vertex-eu',
+    emoji: '🇪🇺',
+    name: 'Vertex AI EU (resonemang)',
+    layer: 'AI & Tjänster',
+    layerClass: 'layerServices',
+    track: 'geogiraph',
+    snippet: 'gemini-2.5-pro + claude-opus',
+    description:
+      'Resonemangsmodellerna som bearbetar kunddata körs ENBART via Vertex AI i europe-west1: generator gemini-2.5-pro, validator/reasoner claude-opus-4-7 (via Vertex, ej Anthropics förstapart). Hård EU-residens.',
+    pros: ['Data stannar i EU', 'Service account-auth, inga nycklar att rotera'],
+    cons: ['Claude ej EU-resident via förstapart → Gemini för ESG-resonemang'],
+    alternatives: [{ name: 'Förstaparts-US-API', why: 'Bryter EU-only-kravet' }],
   },
   {
-    id: 'claude',
-    emoji: '🤖',
-    name: 'Claude-agent (Anthropic)',
-    layer: 'Tjänster',
+    id: 'probes',
+    emoji: '🛰️',
+    name: 'Probe-motorer (mätning)',
+    layer: 'AI & Tjänster',
     layerClass: 'layerServices',
+    track: 'geogiraph',
+    snippet: 'gpt-4o + gemini (förstapart)',
+    description:
+      'AI-synlighet och risk mäts mot de motorer riktiga användare möter: gpt-4o + Gemini som FÖRSTAPART. Avsiktligt utanför EU-grinden eftersom payloaden är publik (bolagsnamn + generisk fråga), inte kunddata.',
+    pros: ['Mäter verkliga, användarvända motorer', 'Publik payload → ingen residenskonflikt'],
+    cons: ['Två separata leverantörsnycklar'],
+    alternatives: [{ name: 'Bara EU-motorer', why: 'Mäter inte vad användarna faktiskt får' }],
+  },
+  {
+    id: 'gemini-summaries',
+    emoji: '✨',
+    name: 'Gemini (dataset-sammanfattning)',
+    layer: 'AI & Tjänster',
+    layerClass: 'layerServices',
+    track: 'insiders',
+    snippet: 'ai.py via Vertex',
+    description:
+      'Insiders ai.py skriver korta svenska sammanfattningar av nyuppladdade dataset via Gemini Flash på Vertex (Cloud Runs default service account).',
+    pros: ['Ingen nyckel att rotera', 'Snabb + billig'],
+    cons: ['EU-only-kravet kräver fortsatt EU-region-routing (se ADR)'],
+    alternatives: [{ name: 'Tredjeparts-LLM', why: 'Vi vill hålla data inom GCP/EU' }],
+  },
+  {
+    id: 'brightdata',
+    emoji: '🌐',
+    name: 'Bright Data',
+    layer: 'AI & Tjänster',
+    layerClass: 'layerServices',
+    track: 'geogiraph',
+    snippet: 'LinkedIn-profiler/bolag',
+    description:
+      'LinkedIn-connectorn hämtar profil- och bolagsdata via Bright Datas Datasets API. RSS/jobbflöden + GLEIF (LEI) kompletterar.',
+    pros: ['Strukturerad LinkedIn-data utan egen skrapning'],
+    cons: ['Extern kostnad + dataset-id:n att hantera'],
+    alternatives: [{ name: 'Egen skrapning', why: 'Skört + mot ToS' }],
+  },
+  {
+    id: 'sendgrid',
+    emoji: '✉️',
+    name: 'SendGrid (in/ut-mail)',
+    layer: 'AI & Tjänster',
+    layerClass: 'layerServices',
+    track: 'geogiraph',
+    snippet: 'Episodiska noder + notiser',
+    description:
+      'Inkommande mail (webhook) parsas till Event/NewsArticle för episodiska noder; utgående notiser (t.ex. kvartalspåminnelse om LinkedIn-kapacitet) skickas via SendGrid.',
+    pros: ['Mail-in som datakälla', 'Enkla notiser'],
+    cons: ['Ännu en extern tjänst'],
+    alternatives: [{ name: 'Ingen mail-in', why: 'Missar episodiska händelser' }],
+  },
+  {
+    id: 'claude-agent',
+    emoji: '🤖',
+    name: 'Claude-agent (admin)',
+    layer: 'AI & Tjänster',
+    layerClass: 'layerServices',
+    track: 'delad',
     snippet: 'agent_tasks-kö',
     description:
-      'En extern Claude-agent (claude-sonnet-4-6) pollar agent_tasks-kön via /api/admin/agent och utför utvecklings-/analysuppgifter i admin-arbetsytan.',
+      'En extern Claude-agent pollar agent_tasks i insiders-api och utför utvecklings-/analysuppgifter i admin-arbetsytan. Produktscopad (the-insiders | insider-graph).',
     pros: ['Avlastar manuellt arbete', 'Pollande kö frikopplar agenten'],
-    cons: ['Extern beroende; körs utanför Cloud Run'],
-    alternatives: [{ name: 'Inbäddad agent', why: 'Cloud Run-tjänsten ska vara tunn' }],
+    cons: ['Extern; körs utanför Cloud Run'],
+    alternatives: [{ name: 'Inbäddad agent', why: 'Tjänsten ska vara tunn' }],
   },
-  {
-    id: 'gcs',
-    emoji: '📦',
-    name: 'Google Cloud Storage',
-    layer: 'Tjänster',
-    layerClass: 'layerServices',
-    snippet: 'Fil-/bilduppladdning',
-    description: 'GCS lagrar admin-uppladdade filer (AdminFile) och bilagor utanför databasen.',
-    pros: ['Billig blob-lagring', 'Signerade URL:er'],
-    cons: ['Ännu en resurs att rättighetsstyra'],
-    alternatives: [{ name: 'Spara i DB', why: 'Blåser upp databasen med binärdata' }],
-  },
+  /* ---- Infrastruktur ---- */
   {
     id: 'cloudrun',
     emoji: '☁️',
     name: 'Google Cloud Run',
     layer: 'Infrastruktur',
     layerClass: 'layerInfra',
-    snippet: 'europe-north1',
+    track: 'delad',
+    snippet: 'Tre tjänster, europe-north1',
     description:
-      'Frontend, insiders-api och insider-graph-api körs som separata Cloud Run-tjänster i europe-north1 (projekt round-plating-480321-j7), alla allow-unauthenticated bakom egen auth.',
+      'insiders-frontend, insiders-api och insider-graph-api körs som separata Cloud Run-tjänster i europe-north1 (projekt round-plating-480321-j7).',
     pros: ['Skalar till noll', 'En tjänst per ansvar'],
     cons: ['Kallstarter', 'Containrar strippar källfiler (se Live-schemafallback)'],
     alternatives: [{ name: 'GKE', why: 'Överkill för vår trafik' }],
+  },
+  {
+    id: 'jobs',
+    emoji: '⏱️',
+    name: 'Cloud Run Jobs + Scheduler',
+    layer: 'Infrastruktur',
+    layerClass: 'layerInfra',
+    track: 'geogiraph',
+    snippet: 'Geogiraphs pipeline-kron',
+    description:
+      'Geogiraphs pipeline körs som schemalagda Cloud Run Jobs (scrape-active/episodic/website, extract-all-claims, compile-all-schemas, polling-weekly, xml-sync, sunset-skills, quarterly-todo) via Cloud Scheduler + Eventarc. Alla byggs ur samma image.',
+    pros: ['Frikopplad batch utan att blockera API:t', 'En image → alla jobb'],
+    cons: ['Nya jobb kräver BÅDE gcloud-create OCH cloudbuild-loopen'],
+    alternatives: [{ name: 'Cron i tjänsten', why: 'Blandar request- och batch-last' }],
   },
   {
     id: 'cloudbuild',
@@ -313,82 +395,72 @@ export const TECH_STACK: TechItem[] = [
     name: 'Cloud Build + Kaniko',
     layer: 'Infrastruktur',
     layerClass: 'layerInfra',
-    snippet: 'Auto-deploy på push till main',
+    track: 'delad',
+    snippet: 'Auto-deploy per tjänst',
     description:
-      'Per-tjänst Cloud Build-triggers (i europe-west1) bygger med Kaniko-cache och deployar till Cloud Run vid push till main. Staging = där vi verifierar.',
-    pros: ['Push → live utan manuella steg', 'Kaniko-lagercache snabbar bygget'],
-    cons: ['Samtidiga byggen kan racea — vänta in kön innan ny push'],
+      'Per-tjänst Cloud Build-triggers (i europe-west1) bygger med Kaniko-cache och deployar till Cloud Run vid push till main. graph-api-bygget uppdaterar dessutom alla jobb-images. Staging = där vi verifierar.',
+    pros: ['Push → live utan manuella steg', 'Kaniko-cache snabbar bygget'],
+    cons: ['Samtidiga byggen kan racea — vänta in kön'],
     alternatives: [{ name: 'GitHub Actions', why: 'Cloud Build sitter närmare GCP-rättigheter' }],
   },
 ];
 
 /* ------------------------------------------------------------------ */
-/* Diagram                                                             */
+/* Diagram — delat lager + två spår + integrationskant                 */
 /* ------------------------------------------------------------------ */
 
-export const CLIENTS: DiagramNodeData[] = [
+// Delade noder (toppen) — gemensamma för båda spåren.
+export const DIAGRAM_SHARED: DiagramNodeData[] = [
   {
     id: 'browser',
     label: 'Webbläsare (team)',
-    sub: 'The Insiders-byrån',
+    sub: 'Byrå + ops',
     color: 'nodeCyan',
     detail: {
-      description: 'Byråns team använder admin-konsolen i webbläsaren för kunder, källor, moduler och rapporter.',
-      whyChosen: 'Internt verktyg — ingen publik kundåtkomst behövs.',
-      alternatives: 'Kundinloggning valdes bort i MVP; rapporter levereras manuellt.',
-      techDetails: 'Skyddas av NextAuth-middleware; bara whitelistade e-poster i team.ts släpps in.',
+      description: 'Teamet arbetar i den delade admin-konsolen och växlar mellan The Insiders och Geogiraph.',
+      whyChosen: 'Internt verktyg för båda produkterna — ingen publik kundåtkomst.',
+      alternatives: 'Separata konsoler valdes bort för samma lilla team.',
+      techDetails: 'Skyddas av NextAuth-middleware; whitelist i team.ts.',
     },
   },
   {
-    id: 'agent-client',
-    label: 'AI-agent (CLI)',
-    sub: 'Claude pollar kön',
-    color: 'nodePurple',
+    id: 'frontend',
+    label: 'Next.js Frontend',
+    sub: 'insiders-frontend (delad)',
+    color: 'nodeCyan',
     detail: {
-      description: 'En extern Claude-agent agerar klient och pollar agent_tasks för uppgifter.',
-      whyChosen: 'Avlastar repetitivt arbete utan att bädda in agenten i tjänsten.',
-      alternatives: 'Inbäddad agent valdes bort — Cloud Run-tjänsten ska vara tunn.',
-      techDetails: 'Anropar /api/admin/agent (status/poll/cancel) med produktscope.',
+      description: 'En app som renderar både Insiders-vyer och Geogiraph-vyer. ProductSwitcher + Sidebar växlar spår via pathname.',
+      whyChosen: 'En kodbas, ett bygge, en inloggning för båda spåren.',
+      alternatives: 'Två frontends valdes bort — dubbel auth/bygge.',
+      techDetails: 'Next.js 16. /insider-graph/* = graf-läge (ljust tema, lila). Pratar med insiders-api (NEXT_PUBLIC_API_URL) och graph-api (graphFetch).',
+    },
+  },
+  {
+    id: 'ai-chat',
+    label: 'AI-chatt (kontextväxlande)',
+    sub: 'bor i insiders-api',
+    color: 'nodeOrange',
+    detail: {
+      description: 'Den delade assistenten. I graf-läge laddas Geogiraph-kunskap och LIVE Geogiraph-kunder/connectors; i Insiders-läge laddas Insiders-kunskap.',
+      whyChosen: 'En assistent för båda spåren utan att blanda ihop kontexterna.',
+      alternatives: 'Separata assistenter valdes bort.',
+      techDetails: 'ai_chat.py: page_context "graph_*" → hämtar /api/clients + /api/connectors från graph-api. Faller aldrig tillbaka på Insiders-kunder.',
     },
   },
 ];
 
-// Ritas i fast ordning 0..5 med pilar mellan (se DiagramTab).
-export const DIAGRAM_NODES: DiagramNodeData[] = [
+// Insiders-spårets noder (vänster lane).
+export const DIAGRAM_INSIDERS: DiagramNodeData[] = [
   {
-    id: 'frontend',
-    label: 'Next.js Frontend',
-    sub: 'insiders-frontend',
-    color: 'nodeCyan',
-    detail: {
-      description: 'Admin-konsolen: vyer för kunder, källor, dataset, moduler, rapporter, loggar och denna arkitekturportal.',
-      whyChosen: 'App Router ger oss server-side guards och filbaserad routing i ett.',
-      alternatives: 'Ren SPA valdes bort — vi ville ha SSR-guard och RSC.',
-      techDetails: 'Next.js 16, React 19, Tailwind v4. Pratar med insiders-api via NEXT_PUBLIC_API_URL.',
-    },
-  },
-  {
-    id: 'auth',
-    label: 'NextAuth-middleware',
-    sub: 'Google OAuth-guard',
-    color: 'nodeOrange',
-    detail: {
-      description: 'Edge-middleware som kräver inloggad session för alla rutter utom /login.',
-      whyChosen: 'Skyddar hela konsolen på ett ställe utan att duplicera guards.',
-      alternatives: 'Per-sida-guards valdes bort som primär barriär (men sidor som denna lägger på roll-koll också).',
-      techDetails: 'JWT-strategi; team.ts mappar e-post → roll (SUPERADMIN/ADMIN).',
-    },
-  },
-  {
-    id: 'api',
-    label: 'FastAPI Backend',
-    sub: 'insiders-api',
+    id: 'insiders-api',
+    label: 'FastAPI · insiders-api',
+    sub: 'KPI-/rapport-API',
     color: 'nodeBlue',
     detail: {
-      description: 'Tunn FastAPI-app som registrerar alla routers och hanterar request-loggning + health.',
-      whyChosen: 'Python-ekosystemet (Pandas) bor här; Pydantic ger typade scheman.',
-      alternatives: 'Node-backend valdes bort — beräkningarna vill ha Pandas/NumPy.',
-      techDetails: 'main.py → routers/. CORS öppet, allt bakom samma tjänst i europe-north1.',
+      description: 'Hanterar kunder, källor, dataset, KPI-moduler och rapporter — plus den delade AI-chatten och admin-arbetsytan.',
+      whyChosen: 'Python/Pandas för formel-engine; Pydantic-scheman.',
+      alternatives: 'Node-backend valdes bort.',
+      techDetails: 'main.py → routers/. CORS öppet. europe-north1.',
     },
   },
   {
@@ -397,10 +469,10 @@ export const DIAGRAM_NODES: DiagramNodeData[] = [
     sub: 'formula.py',
     color: 'nodeBlue',
     detail: {
-      description: 'Räknar KPI-modulernas uttryck (t.ex. impressions / reach * 100) över normaliserade dataset-rader.',
-      whyChosen: 'Moduler ska kunna definieras som formler mot stabila fält, inte hårdkodas.',
-      alternatives: 'Hårdkodade KPI:er valdes bort — vi vill kunna skapa moduler i UI.',
-      techDetails: 'Läser ModuleFieldRef → SourceField, slår upp DatasetRow.values_json, aggregerar med Pandas.',
+      description: 'Räknar KPI-modulernas uttryck över normaliserade dataset-rader.',
+      whyChosen: 'Moduler ska definieras som formler mot stabila fält, inte hårdkodas.',
+      alternatives: 'Hårdkodade KPI:er valdes bort.',
+      techDetails: 'ModuleFieldRef → SourceField → DatasetRow.values_json, aggregeras med Pandas.',
     },
   },
   {
@@ -409,102 +481,145 @@ export const DIAGRAM_NODES: DiagramNodeData[] = [
     sub: 'models.py',
     color: 'nodeGreen',
     detail: {
-      description: 'Datamodell-lagret. Definierar kund, källa (versionerad), dataset, modul, rapport m.fl.',
-      whyChosen: 'Relationer + cascade i kod, samma modeller mot Postgres och SQLite.',
-      alternatives: 'Rå SQL valdes bort — tappar relationer och typer.',
-      techDetails: 'declarative_base; init_db() kör create_all + egen auto-migrate.',
+      description: 'Relationell datamodell: kund, källa (versionerad), dataset, modul, rapport.',
+      whyChosen: 'Relationer + cascade i kod; samma modeller mot Postgres och SQLite.',
+      alternatives: 'Rå SQL valdes bort.',
+      techDetails: 'init_db() kör create_all + egen auto-migrate.',
     },
   },
   {
-    id: 'db',
+    id: 'postgres-db',
     label: 'Cloud SQL Postgres',
     sub: 'SQLite lokalt',
     color: 'nodeGreen',
     detail: {
-      description: 'Persistenslagret för KPI-plattformen.',
-      whyChosen: 'Relationell integritet mellan kund, källa, dataset och modul.',
-      alternatives: 'Firestore valdes bort för denna data (används i stället av Insider Graph).',
-      techDetails: 'psycopg2 + pool_pre_ping. DATABASE_URL i Cloud Run, annars SQLite-fallback.',
+      description: 'Persistens för KPI-plattformen.',
+      whyChosen: 'Relationell integritet mellan kund/källa/dataset/modul.',
+      alternatives: 'Firestore används av Geogiraph i stället.',
+      techDetails: 'psycopg2 + pool_pre_ping. DATABASE_URL i Cloud Run.',
     },
   },
 ];
 
-export const SIDE_NODES: DiagramNodeData[] = [
+// Geogiraph-spårets noder (höger lane).
+export const DIAGRAM_GEOGRAPH: DiagramNodeData[] = [
+  {
+    id: 'graph-api',
+    label: 'FastAPI · insider-graph-api',
+    sub: 'GEO-kunskapsgraf',
+    color: 'nodePurple',
+    detail: {
+      description: 'Onboarding, connectors, granskning, leverans, polling, ESG. Drivkraften i hela scrape→kompilera→mät-kedjan.',
+      whyChosen: 'Egen produktmodell, helt frikopplad från KPI-plattformen.',
+      alternatives: 'Att utöka insiders-api valdes bort.',
+      techDetails: 'X-API-Key-auth. Egen Cloud Run-tjänst + schemalagda jobb.',
+    },
+  },
+  {
+    id: 'pipeline-jobs',
+    label: 'Pipeline-jobb',
+    sub: 'Cloud Run Jobs + Scheduler',
+    color: 'nodeOrange',
+    detail: {
+      description: 'Schemalagd batch: skrapar källor, extraherar claims, kompilerar grafer, mäter AI-synlighet.',
+      whyChosen: 'Tung batch ska inte blockera API:t.',
+      alternatives: 'Cron i tjänsten valdes bort.',
+      techDetails: 'scrape-* / extract-all-claims / compile-all-schemas / polling-weekly / xml-sync … via Eventarc + Scheduler.',
+    },
+  },
+  {
+    id: 'firestore-db',
+    label: 'Firestore (EU)',
+    sub: 'noder, claims, findings',
+    color: 'nodeGreen',
+    detail: {
+      description: 'Kunder/anställda (noder), raw_items, claims, polling_results, risk-/esg-findings.',
+      whyChosen: 'Schemalöst passar heterogen connector-/claim-data.',
+      alternatives: 'Postgres valdes bort för denna data.',
+      techDetails: 'firestore_client.py. Native EU-region.',
+    },
+  },
   {
     id: 'vertex',
-    label: 'Vertex AI · Gemini 3 Flash',
-    sub: 'Dataset-sammanfattning',
-    color: 'nodeOrange',
+    label: 'Vertex AI EU',
+    sub: 'gemini-2.5-pro / claude-opus',
+    color: 'nodePink',
     detail: {
-      description: 'Skriver korta svenska sammanfattningar av nyuppladdade dataset.',
-      whyChosen: 'Default service account på Cloud Run → ingen nyckel att rotera.',
-      alternatives: 'Tredjeparts-LLM i USA valdes bort av datahänsyn.',
-      techDetails: 'ai.py via google-genai, vertexai=True. EU-only-kravet kräver omrouting (se ADR).',
+      description: 'Resonemangsmodeller som bearbetar kunddata: generator + validator. Körs ENBART i EU.',
+      whyChosen: 'Hård EU-residens; service account-auth.',
+      alternatives: 'Förstaparts-US-API valdes bort (bryter EU-only).',
+      techDetails: 'services/llm.py via langchain-google-vertexai, europe-west1.',
     },
   },
   {
-    id: 'claude-svc',
-    label: 'Claude-agent',
-    sub: 'claude-sonnet-4-6',
-    color: 'nodePurple',
-    detail: {
-      description: 'Extern agent som utför uppgifter ur agent_tasks-kön.',
-      whyChosen: 'Pollande kö frikopplar agenten från tjänstens livscykel.',
-      alternatives: 'Inbäddad körning valdes bort.',
-      techDetails: 'Pratar med /api/admin/agent; status/poll/cancel.',
-    },
-  },
-  {
-    id: 'gcs-svc',
-    label: 'Cloud Storage',
-    sub: 'Fil-/bildblob',
+    id: 'cdn',
+    label: 'CDN / GCS',
+    sub: 'publicerad JSON-LD',
     color: 'nodeBlue',
     detail: {
-      description: 'Lagrar admin-uppladdade filer utanför databasen.',
-      whyChosen: 'Billig blob-lagring i stället för binärdata i DB.',
-      alternatives: 'Spara i DB valdes bort.',
-      techDetails: 'google-cloud-storage SDK.',
+      description: 'Kompilerade kunskapsgrafer, profilsidor och badges som kunden injicerar via GTM.',
+      whyChosen: 'Billig, cachebar publik leverans.',
+      alternatives: 'Serva från tjänsten valdes bort.',
+      techDetails: 'schema_org/compiler.py → JSON-LD → GCS-bucket → CDN.',
     },
   },
   {
-    id: 'graph-svc',
-    label: 'Insider Graph API',
-    sub: 'GEO/AI-synlighet',
-    color: 'nodePurple',
-    detail: {
-      description: 'Systertjänst för AI-synlighet/GEO med eget Firestore-datalager och egna connectors.',
-      whyChosen: 'Separat produktmodell — hålls isär från KPI-plattformen.',
-      alternatives: 'Att utöka insiders-api valdes bort.',
-      techDetails: 'Egen Cloud Run-tjänst; frontend pratar via graphFetch (x-api-key).',
-    },
-  },
-  {
-    id: 'oauth',
-    label: 'Google OAuth',
-    sub: 'Inloggning',
+    id: 'probe-engines',
+    label: 'Probe-motorer',
+    sub: 'gpt-4o + gemini (förstapart)',
     color: 'nodeOrange',
     detail: {
-      description: 'Identitetsleverantör för teamets inloggning.',
-      whyChosen: 'Teamet har redan Google-konton; ingen egen lösenordshantering.',
-      alternatives: 'Egen auth valdes bort.',
-      techDetails: 'NextAuth Google-provider; whitelist i team.ts.',
+      description: 'De AI-motorer riktiga användare möter. Mäter Share of Voice, sentiment och paritet.',
+      whyChosen: 'Måste mäta verkliga, användarvända motorer.',
+      alternatives: 'Bara EU-motorer valdes bort — mäter inte verkligheten.',
+      techDetails: 'Publik payload (bolagsnamn + generisk fråga) → avsiktligt utanför EU-grinden.',
     },
+  },
+];
+
+// Integrationspunkter mellan spåren (renderas som klickbara kort).
+export const DIAGRAM_INTERACTIONS: Interaction[] = [
+  {
+    id: 'chat-live',
+    from: 'ai-chat',
+    to: 'graph-api',
+    label: 'AI-chatt → graph-api (live)',
+    detail:
+      'I graf-läge hämtar ai_chat.py LIVE-data via GRAPH_API_URL: GET /api/clients + GET /api/connectors. Assistenten ser bara Geogiraph-kunder/connectors och kan aldrig läcka Insiders-kunder.',
+  },
+  {
+    id: 'shared-frontend',
+    from: 'frontend',
+    to: 'graph-api',
+    label: 'Frontend → graph-api (graphFetch)',
+    detail:
+      'Geogiraph-vyerna (/insider-graph/*) pratar direkt med graph-api via graphFetch (x-api-key, NEXT_PUBLIC_GRAPH_API_URL). Insiders-vyerna pratar med insiders-api.',
+  },
+  {
+    id: 'product-scope',
+    from: 'insiders-api',
+    to: 'graph-api',
+    label: 'Produktscope (delad admin)',
+    detail:
+      'Den delade admin-arbetsytan (Ärenden/Filer/Agent) lever i insiders-api med en product-kolumn ("the-insiders" | "insider-graph") som isolerar data per spår. Riktningen är enkelriktad: insiders-api läser från graph-api, aldrig tvärtom.',
   },
 ];
 
 /* ------------------------------------------------------------------ */
-/* Domänmoduler                                                        */
+/* Domänmoduler — per spår                                             */
 /* ------------------------------------------------------------------ */
 
 export const MODULES: ModuleNode[] = [
+  /* ---- Insiders ---- */
   {
     id: 'kunder',
     emoji: '🏢',
     name: 'Kunder',
+    track: 'insiders',
     description: 'Kundregister med ICP, taggar, anteckningar och mätbara mål.',
     frontend: 'src/app/kunder',
     backend: 'routers/customers.py, routers/notes.py',
-    apiRoutes: ['GET /api/customers', 'POST /api/customers', 'GET /api/customers/{id}', 'POST /api/customers/{id}/notes'],
+    apiRoutes: ['GET /api/customers', 'POST /api/customers', 'POST /api/customers/{id}/notes'],
     deps: ['Postgres'],
     moduleUses: [{ id: 'moduler', via: 'CustomerGoal kan länka en KPI-modul' }],
   },
@@ -512,10 +627,11 @@ export const MODULES: ModuleNode[] = [
     id: 'kallor',
     emoji: '📥',
     name: 'Källor',
+    track: 'insiders',
     description: 'Versionerade rapporttyper. SourceField är stabilt; kolumnnamn mappas per version.',
     frontend: 'src/app/sources',
     backend: 'routers/sources.py',
-    apiRoutes: ['GET /api/sources', 'POST /api/sources', 'POST /api/sources/{id}/versions', 'GET /api/sources/{id}/fields'],
+    apiRoutes: ['GET /api/sources', 'POST /api/sources/{id}/versions', 'GET /api/sources/{id}/fields'],
     deps: ['Postgres'],
     moduleUses: [],
   },
@@ -523,21 +639,23 @@ export const MODULES: ModuleNode[] = [
     id: 'datasets',
     emoji: '📊',
     name: 'Dataset',
-    description: 'Uppladdade filer normaliserade till rader. AI-sammanfattning + periodspårning mot dubbelräkning.',
+    track: 'insiders',
+    description: 'Uppladdade filer normaliserade till rader. AI-sammanfattning + periodspårning.',
     frontend: 'src/app/kunder/[id]',
     backend: 'routers/datasets.py, ai.py',
-    apiRoutes: ['POST /api/datasets', 'GET /api/datasets/{id}', 'DELETE /api/datasets/{id}'],
-    deps: ['Postgres', 'Vertex AI', 'Pandas'],
+    apiRoutes: ['POST /api/datasets', 'GET /api/datasets/{id}'],
+    deps: ['Postgres', 'Gemini', 'Pandas'],
     moduleUses: [{ id: 'kallor', via: 'normaliserar rader mot SourceField/version' }],
   },
   {
     id: 'moduler',
     emoji: '🧩',
     name: 'Moduler / KPI',
-    description: 'KPI-moduler som formler mot SourceField. Tröskelvärden, visualisering, insiktsmallar.',
+    track: 'insiders',
+    description: 'KPI-moduler som formler mot SourceField. Tröskelvärden + insiktsmallar.',
     frontend: 'src/app/moduler, src/app/engine',
     backend: 'routers/modules.py, formula.py',
-    apiRoutes: ['GET /api/modules', 'POST /api/modules', 'POST /api/modules/{id}/evaluate'],
+    apiRoutes: ['GET /api/modules', 'POST /api/modules/{id}/evaluate'],
     deps: ['Postgres', 'Pandas'],
     moduleUses: [
       { id: 'kallor', via: 'ModuleFieldRef → SourceField' },
@@ -548,10 +666,11 @@ export const MODULES: ModuleNode[] = [
     id: 'rapporter',
     emoji: '📈',
     name: 'Rapporter',
-    description: 'Sparade vyer som kombinerar moduler och kunder. Dashboard + LinkedIn-rapportexport.',
+    track: 'insiders',
+    description: 'Sparade vyer som kombinerar moduler och kunder. Dashboard + LinkedIn-export.',
     frontend: 'src/app/rapporter',
     backend: 'routers/reports.py, routers/dashboard.py',
-    apiRoutes: ['GET /api/reports', 'POST /api/reports', 'GET /api/dashboard'],
+    apiRoutes: ['GET /api/reports', 'GET /api/dashboard'],
     deps: ['Postgres'],
     moduleUses: [
       { id: 'moduler', via: 'aggregerar KPI:er' },
@@ -562,63 +681,197 @@ export const MODULES: ModuleNode[] = [
     id: 'aichat',
     emoji: '💡',
     name: 'AI-assistent',
-    description: 'Inbyggd assistent som svarar på frågor om kunder och rapporter med sidkontext.',
+    track: 'insiders',
+    description: 'Delad assistent som växlar kontext per produkt och hämtar live Geogiraph-data i graf-läge.',
     frontend: 'src/components/AIAssistant.tsx',
     backend: 'routers/ai_chat.py',
     apiRoutes: ['POST /api/ai-chat', 'GET /api/ai-chat/{session_id}'],
-    deps: ['Postgres', 'Vertex AI'],
+    deps: ['Postgres', 'Gemini', 'graph-api'],
     moduleUses: [
-      { id: 'kunder', via: 'kundkontext i prompten' },
-      { id: 'rapporter', via: 'läser dashboard-/rapportdata' },
+      { id: 'kunder', via: 'kundkontext (Insiders-läge)' },
+      { id: 'rapporter', via: 'läser dashboard-data' },
     ],
-  },
-  {
-    id: 'teamchat',
-    emoji: '💬',
-    name: 'Team-chat',
-    description: 'Intern chatt mellan teammedlemmar med konversationer, bilagor och reaktioner.',
-    frontend: 'src/components/ChatWidget.tsx',
-    backend: 'routers/chat.py',
-    apiRoutes: ['GET /api/conversations', 'POST /api/conversations/{id}/messages'],
-    deps: ['Postgres'],
-    moduleUses: [],
-  },
-  {
-    id: 'kanban',
-    emoji: '🗂️',
-    name: 'Kanban / Issues',
-    description: 'Per-produkt arbetsyta med issues, kommentarer och bilder (feedback-bubblan).',
-    frontend: 'src/components/AdminWorkspace.tsx',
-    backend: 'routers/issues.py',
-    apiRoutes: ['GET /api/issues', 'POST /api/issues', 'PATCH /api/issues/{id}'],
-    deps: ['Postgres'],
-    moduleUses: [],
   },
   {
     id: 'agent',
     emoji: '🤖',
-    name: 'AI-agent',
-    description: 'Sessioner och uppgiftskö för den externa Claude-agenten, scopad per produkt.',
+    name: 'AI-agent (admin)',
+    track: 'insiders',
+    description: 'Sessioner + uppgiftskö för den externa Claude-agenten, scopad per produkt.',
     frontend: 'src/app/api/admin/agent, src/lib/agent-store.ts',
     backend: 'routers/agent.py',
-    apiRoutes: ['GET /api/admin/agent/status', 'POST /api/admin/agent', 'POST /api/admin/agent/poll'],
+    apiRoutes: ['GET /api/admin/agent/status', 'POST /api/admin/agent'],
     deps: ['Postgres', 'Claude-agent'],
-    moduleUses: [{ id: 'kanban', via: 'kan agera på issues' }],
+    moduleUses: [],
+  },
+  /* ---- Geogiraph ---- */
+  {
+    id: 'onboarding',
+    emoji: '🚀',
+    name: 'Onboarding',
+    track: 'geogiraph',
+    description: 'Skapar kund + anställda (noder) i Firestore och startar första insamlingen.',
+    frontend: 'src/app/insider-graph/kunder',
+    backend: 'routers/onboard.py, services/discovery.py, services/ingest.py',
+    apiRoutes: ['POST /api/onboard', 'GET /api/clients'],
+    deps: ['Firestore'],
+    moduleUses: [{ id: 'connectors', via: 'aktiverar connectors för kunden' }],
+  },
+  {
+    id: 'connectors',
+    emoji: '🔌',
+    name: 'Connectors',
+    track: 'geogiraph',
+    description: 'Pluggbara källor: LinkedIn (Bright Data), RSS, webbsajt, jobbflöde (ATS), GLEIF, LinkedIn-kapacitet.',
+    frontend: 'src/app/insider-graph/connectors',
+    backend: 'routers/connectors_router.py, connectors/*',
+    apiRoutes: ['GET /api/connectors', 'POST /api/connectors/{client_id}'],
+    deps: ['Firestore', 'Bright Data'],
+    moduleUses: [],
+  },
+  {
+    id: 'insamling',
+    emoji: '🕷️',
+    name: 'Insamling',
+    track: 'geogiraph',
+    description: 'Skrapar källor (aktiva/episodiska/webbsajt) till raw_items. Cadence-skydd + relevansfilter.',
+    frontend: '—',
+    backend: 'jobs/scrape_*.py, services/web_crawl.py, services/brightdata.py',
+    apiRoutes: ['POST /api/jobs/scrape-active', 'POST /api/jobs/scrape-episodic'],
+    deps: ['Firestore', 'Bright Data'],
+    moduleUses: [{ id: 'connectors', via: 'kör connector-scrapes' }],
+  },
+  {
+    id: 'claims',
+    emoji: '🧾',
+    name: 'Claim-extraktion',
+    track: 'geogiraph',
+    description: 'Fritext → narrativa claims med provenience. Generator + validator via Vertex EU.',
+    frontend: 'src/app/insider-graph/review',
+    backend: 'jobs/extract_all_claims.py, services/claim_extraction.py',
+    apiRoutes: ['GET /api/review/{client_id}/claims'],
+    deps: ['Firestore', 'Vertex EU'],
+    moduleUses: [
+      { id: 'insamling', via: 'läser raw_items' },
+      { id: 'grounding', via: 'deterministisk källvalidering' },
+      { id: 'review', via: 'låg confidence → granskning' },
+    ],
+  },
+  {
+    id: 'grounding',
+    emoji: '⚓',
+    name: 'Källgrind (anti-hallucination)',
+    track: 'geogiraph',
+    description: 'Deterministisk validering: citerade spann + numerisk närvaro. Ingen LLM — agenten hittar aldrig på data.',
+    frontend: '—',
+    backend: 'services/claim_grounding.py',
+    apiRoutes: [],
+    deps: ['Firestore'],
+    moduleUses: [],
+  },
+  {
+    id: 'compiler',
+    emoji: '🧬',
+    name: 'Schema-kompilering',
+    track: 'geogiraph',
+    description: 'Validerade claims → schema.org JSON-LD (Organization-rot, Person/Event/JobPosting, Claim→isBasedOn→source).',
+    frontend: '—',
+    backend: 'jobs/compile_all_schemas.py, schema_org/compiler.py',
+    apiRoutes: ['POST /api/jobs/compile'],
+    deps: ['Firestore', 'CDN'],
+    moduleUses: [{ id: 'claims', via: 'kompilerar validerade claims' }],
+  },
+  {
+    id: 'leverans',
+    emoji: '📡',
+    name: 'Leverans / CDN',
+    track: 'geogiraph',
+    description: 'Publicerar JSON-LD, profilsida och badge. Kunden injicerar identitets-snippet via GTM.',
+    frontend: 'src/app/insider-graph/leverans',
+    backend: 'routers/delivery.py, schema_org/profile_page.py, schema_org/badge.py',
+    apiRoutes: ['GET /api/delivery/{client_id}', 'GET /api/badge/{client_id}'],
+    deps: ['CDN'],
+    moduleUses: [{ id: 'compiler', via: 'publicerar kompilerad graf' }],
+  },
+  {
+    id: 'polling',
+    emoji: '🛰️',
+    name: 'AI-synlighet',
+    track: 'geogiraph',
+    description: 'Mäter Share of Voice, sentiment och paritet veckovis mot probe-motorerna.',
+    frontend: 'src/app/insider-graph/polling',
+    backend: 'jobs/polling_weekly.py, services/polling.py',
+    apiRoutes: ['GET /api/polling/{client_id}'],
+    deps: ['Firestore', 'Probe-motorer'],
+    moduleUses: [{ id: 'leverans', via: 'mäter publicerad närvaro' }],
+  },
+  {
+    id: 'risk',
+    emoji: '⚠️',
+    name: 'GEO-riskloop',
+    track: 'geogiraph',
+    description: 'Genererar persona-frågor, kör blint mot probe-motorer, klassar skador → findings + korrigerande claims.',
+    frontend: 'src/app/insider-graph/review',
+    backend: 'services/risk_detector.py, services/risk_corrector.py, services/monthly_report.py',
+    apiRoutes: ['GET /api/review/{client_id}/risks'],
+    deps: ['Firestore', 'Vertex EU', 'Probe-motorer'],
+    moduleUses: [
+      { id: 'polling', via: 'probe-motorer mäter risk' },
+      { id: 'review', via: 'findings → granskning' },
+    ],
+  },
+  {
+    id: 'esg',
+    emoji: '🌱',
+    name: 'ESG & CSRD-audit',
+    track: 'geogiraph',
+    description: 'Blind skanning av ESRS E/S/G-frågor → omissions-/ryktesrisk; kundverifierad data → korrigerande claims.',
+    frontend: 'src/app/insider-graph/esg/[client_id]',
+    backend: 'routers/esg.py, services/esg_scanner.py, services/esg_ingestion.py, services/esrs_mapping.py',
+    apiRoutes: ['GET /api/esg/{client_id}/status', 'POST /api/esg/enable'],
+    deps: ['Firestore', 'Vertex EU', 'Probe-motorer'],
+    moduleUses: [{ id: 'review', via: 'ESG-findings → granskning' }],
+  },
+  {
+    id: 'review',
+    emoji: '🔎',
+    name: 'Granskning',
+    track: 'geogiraph',
+    description: 'Ops godkänner/avvisar låg-confidence-claims och risk-/ESG-findings innan de når output.',
+    frontend: 'src/app/insider-graph/review',
+    backend: 'routers/review.py',
+    apiRoutes: ['POST /api/review/{client_id}/claims', 'POST /api/review/{client_id}/risks'],
+    deps: ['Firestore'],
+    moduleUses: [],
   },
 ];
 
-// Manuella positioner (top-left av varje nod) i viewBox 0 0 680 450 — ingen autolayout.
-export const MODULE_POSITIONS: Record<string, [number, number]> = {
+// Manuella positioner per spår (ingen autolayout).
+export const MODULE_POSITIONS_INSIDERS: Record<string, [number, number]> = {
   kallor: [40, 40],
   kunder: [520, 40],
   datasets: [40, 165],
   moduler: [280, 165],
   rapporter: [520, 165],
   aichat: [280, 290],
-  teamchat: [40, 380],
-  kanban: [280, 380],
-  agent: [520, 380],
+  agent: [520, 290],
 };
+export const GRAPH_VIEWBOX_INSIDERS = { w: 680, h: 380 };
+
+export const MODULE_POSITIONS_GEOGRAPH: Record<string, [number, number]> = {
+  onboarding: [40, 30],
+  connectors: [300, 30],
+  insamling: [300, 130],
+  review: [40, 250],
+  claims: [300, 250],
+  grounding: [560, 250],
+  compiler: [300, 360],
+  leverans: [300, 470],
+  polling: [560, 470],
+  risk: [560, 360],
+  esg: [560, 140],
+};
+export const GRAPH_VIEWBOX_GEOGRAPH = { w: 720, h: 560 };
 
 /* ------------------------------------------------------------------ */
 /* ADRs                                                                */
@@ -627,77 +880,92 @@ export const MODULE_POSITIONS: Record<string, [number, number]> = {
 export const ADRS: Adr[] = [
   {
     id: 'adr-001',
-    title: 'Moduler binder mot stabila SourceField, inte kolumnnamn',
-    date: '2026-04',
+    title: 'Två spår, två backends, två datalager',
+    date: '2026-05',
     status: 'Aktiv',
     context:
-      'LinkedIn-rapporternas kolumnrubriker ändras mellan exporter. Om moduler band direkt mot kolumnnamn skulle varje rapportändring knäcka KPI:erna.',
+      'The Insiders (KPI/LinkedIn-analys) och Geogiraph (AI-synlighet/GEO) är olika produktmodeller med olika datakarakteristik — relationell KPI-data vs heterogen claim-/grafdata.',
     decision:
-      'Moduler refererar SourceField.id. När en rapport ändras lägger vi till en ny SourceVersion med uppdaterade SourceFieldMapping-rader. Modulerna fortsätter fungera.',
+      'Separata Cloud Run-tjänster: insiders-api (Postgres) och insider-graph-api (Firestore). Delad Next.js-frontend och delad inloggning. Integration sker enkelriktat via API (insiders-api läser från graph-api).',
     consequences:
-      'Ett extra mappningslager (SourceField + SourceFieldMapping per version), men robusthet mot kolumnbyten och historik bevaras.',
-    revisitWhen: 'Om en källa byter datapunkter helt (inte bara namn) så att gamla SourceField saknar motsvarighet.',
+      'Ren separation och oberoende deploy. Men ingen DB-join mellan spåren — all korsdata går via HTTP, och chatten måste hämta Geogiraph-data live.',
+    revisitWhen: 'Om produkterna behöver delade rapporter som kräver en gemensam datamodell.',
   },
   {
     id: 'adr-002',
-    title: 'PostgreSQL i produktion, SQLite lokalt — samma ORM',
-    date: '2026-04',
+    title: 'Delad AI-chatt hämtar Geogiraph-data live i graf-läge',
+    date: '2026-05',
     status: 'Aktiv',
-    context: 'Vi vill ha noll uppsättning lokalt men relationell integritet och delad data i produktion.',
+    context:
+      'Assistenten är delad men får aldrig blanda spåren — den ska inte visa Insiders-kunder när användaren är i Geogiraph-läge.',
     decision:
-      'En SQLAlchemy-modell körs mot Cloud SQL Postgres i produktion (DATABASE_URL) och mot lokal SQLite-fil när variabeln saknas. db.py har separata auto-migrate-svep för båda.',
+      'ai_chat.py växlar kunskap på page_context ("graph_*") och hämtar då LIVE Geogiraph-kunder/connectors via GRAPH_API_URL (/api/clients + /api/connectors). Faller aldrig tillbaka på Postgres-kunder.',
     consequences:
-      'Snabb lokal iteration, men SQLite saknar ADD COLUMN IF NOT EXISTS — vi underhåller två migrationslistor som måste hållas i synk.',
-    revisitWhen: 'Om vi behöver Postgres-specifika typer (t.ex. jsonb-index) som SQLite inte kan spegla.',
+      'Korrekt, icke-läckande kontext och alltid färsk data. Men chatten beror på att graph-api svarar; vid avbrott visas tom lista hellre än fel spår.',
+    revisitWhen: 'Om kontextväxlingen blir för spröd eller graph-api-latensen stör chattupplevelsen.',
   },
   {
     id: 'adr-003',
-    title: 'Gemini 3 Flash via Vertex AI för dataset-sammanfattningar',
-    date: '2026-04',
+    title: 'EU-only dataresidens — resonemang via Vertex AI EU',
+    date: '2026-05',
     status: 'Aktiv',
     context:
-      'Nyuppladdade dataset behöver en kort, läsbar sammanfattning. Vi vill undvika API-nycklar att rotera och hålla data inom GCP.',
+      'Geogiraph bearbetar kunddata med LLM:er. Hårt EU-only-krav gäller. Claude är inte EU-resident via Anthropics förstapart.',
     decision:
-      'ai.py anropar gemini-3-flash-preview via Vertex AI med Cloud Runs default service account (vertexai=True).',
+      'Resonemangsmodeller (generator gemini-2.5-pro, validator/reasoner claude-opus-4-7) körs ENBART via Vertex AI i europe-west1 med service account-auth. ESG-resonemang använder Gemini eftersom Claude saknar EU-residens. Ingen förstaparts-US-väg finns kvar i koden.',
     consequences:
-      'Ingen nyckelhantering och billig inferens. Men gemini-3-flash-preview kräver location="global", vilket krockar med ett hårt EU-only-krav.',
-    revisitWhen:
-      'EU-only-datakravet: LLM-anrop ska routas via Vertex AI i EU-region (ej global/US-endpoint). Omprövas och byggs om för EU-residens.',
+      'Kunddata stannar i EU utan API-nycklar att rotera. Men modellvalet begränsas till vad som faktiskt serveras i EU-regionen.',
+    revisitWhen: 'När nyare modeller (t.ex. Gemini 3.x eller Claude) blir EU-resident-tillgängliga på Vertex.',
   },
   {
     id: 'adr-004',
-    title: 'NextAuth v5 + Google OAuth med e-postwhitelist',
-    date: '2026-04',
+    title: 'Probe-motorer är förstapart — avsiktligt utanför EU-grinden',
+    date: '2026-05',
     status: 'Aktiv',
-    context: 'Internt byråverktyg — bara teamet ska komma in, utan egen lösenordshantering.',
+    context:
+      'AI-synlighet och risk måste mätas mot de motorer riktiga användare faktiskt möter (gpt-4o, Gemini) — inte mot en EU-proxy som inte speglar verkligheten.',
     decision:
-      'Google OAuth via NextAuth v5. middleware.ts kräver session för alla rutter utom /login; team.ts är källan till tillåtna e-poster och roller.',
-    consequences: 'Enkel, säker inloggning. Whitelist underhålls manuellt och v5 är fortfarande beta.',
-    revisitWhen: 'Om kunder ska få egen inloggning, eller teamet växer så manuell whitelist blir ohållbar.',
+      'Probe-motorerna anropas som förstapart. Det är tillåtet eftersom payloaden är publik (bolagsnamn + generisk fråga), inte kunddata. Resonemangsspåret (som ser kunddata) är fortsatt EU-only.',
+    consequences:
+      'Mätningen speglar verkligheten. Men två LLM-spår med olika residensregler måste hållas isär disciplinerat i koden.',
+    revisitWhen: 'Om probe-frågor skulle behöva innehålla icke-publik kunddata.',
   },
   {
     id: 'adr-005',
-    title: 'Monorepo med per-tjänst Cloud Build-triggers, auto-deploy till staging',
-    date: '2026-04',
+    title: 'Deterministisk källgrind mot hallucination',
+    date: '2026-05',
     status: 'Aktiv',
-    context: 'Flera tjänster (frontend, api, graph-api) i ett repo ska kunna deployas oberoende utan manuella steg.',
+    context:
+      'En kunskapsgraf som publiceras externt får inte innehålla påhittade siffror eller citat.',
     decision:
-      'Varje tjänst har egen cloudbuild.yaml + trigger filtrerad på sin undermapp. Push till main bygger med Kaniko och deployar till Cloud Run. Staging är där vi verifierar.',
+      'claim_grounding.py validerar varje claim deterministiskt (citerade spann måste finnas i källan; siffror måste vara närvarande) — utan LLM. Låg-confidence-claims går till manuell granskning innan de inkluderas.',
     consequences:
-      'Push → live på minuter. Men samtidiga byggen kan racea — man måste vänta in kön innan en ny push.',
-    revisitWhen: 'Om vi behöver en separat prod-miljö skild från staging, eller godkännandesteg före deploy.',
+      'Hög tillförlitlighet i publicerad data. Men strikt grindning kan filtrera bort korrekta claims som formulerats om för fritt.',
+    revisitWhen: 'Om för många giltiga claims fastnar i grinden och kräver manuell granskning.',
   },
   {
     id: 'adr-006',
-    title: 'Insider Graph som egen tjänst med eget datalager',
+    title: 'Geogiraph-pipeline som schemalagda Cloud Run Jobs',
     date: '2026-05',
     status: 'Aktiv',
-    context: 'AI-synlighet/GEO är en egen produktmodell (connectors, polling, Firestore) som inte passar KPI-plattformens relationsmodell.',
+    context: 'Skrapning, extraktion, kompilering och mätning är tung batch som inte ska blockera API:t.',
     decision:
-      'insider-graph-api är en separat Cloud Run-tjänst med Firestore. Frontend pratar med den via graphFetch och en egen produktväljare i sidomenyn.',
+      'Pipelinen körs som Cloud Run Jobs (scrape-*, extract-all-claims, compile-all-schemas, polling-weekly, xml-sync, sunset-skills, quarterly-todo) via Cloud Scheduler + Eventarc. Alla jobb byggs ur samma image; graph-api-bygget uppdaterar jobb-images.',
     consequences:
-      'Ren separation och oberoende deploy, men ingen direkt join mellan GEO-data och KPI-data — integrationer går via API.',
-    revisitWhen: 'Om produkterna behöver delad data/rapporter som kräver gemensam datamodell.',
+      'Frikopplad, skalbar batch. Men nya jobb kräver BÅDE gcloud-create OCH cloudbuild-loopen — lätt att glömma ett av stegen.',
+    revisitWhen: 'Om jobb-orkestreringen växer ur Scheduler/Eventarc (t.ex. beroendekedjor mellan jobb).',
+  },
+  {
+    id: 'adr-007',
+    title: 'Moduler binder mot stabila SourceField (Insiders)',
+    date: '2026-04',
+    status: 'Aktiv',
+    context:
+      'LinkedIn-rapporternas kolumnrubriker ändras mellan exporter. Band mot kolumnnamn skulle knäcka KPI:erna.',
+    decision:
+      'Moduler refererar SourceField.id. Vid rapportändring läggs en ny SourceVersion med uppdaterade SourceFieldMapping-rader. Modulerna fortsätter fungera.',
+    consequences: 'Ett extra mappningslager, men robusthet mot kolumnbyten och bevarad historik.',
+    revisitWhen: 'Om en källa byter datapunkter helt så gamla SourceField saknar motsvarighet.',
   },
 ];
 
@@ -705,19 +973,18 @@ export const ADRS: Adr[] = [
 /* Designsystem                                                        */
 /* ------------------------------------------------------------------ */
 
-// Detta ÄR swatch-datan — enda stället där hex får stå (speglar globals.css).
 export const COLOR_TOKENS: ColorToken[] = [
-  { name: 'Bakgrund', token: '--brand-bg', value: '#0f111a', note: 'App-bakgrund (mörk)' },
+  { name: 'Bakgrund', token: '--brand-bg', value: '#0f111a', note: 'App-bakgrund (Insiders, mörk)' },
   { name: 'Panel', token: '--brand-panel', value: '#1e212b', note: 'Kort och paneler' },
   { name: 'Panel hover', token: '--brand-panel-hover', value: '#262936', note: 'Hover-yta' },
-  { name: 'Accent', token: '--brand-accent', value: '#00d4ff', note: 'Primär cyan — CTA/aktiv' },
+  { name: 'Accent', token: '--brand-accent', value: '#00d4ff', note: 'Insiders cyan — CTA/aktiv' },
   { name: 'Accent ljus', token: '--brand-accent-bright', value: '#00f2fe', note: 'Glow/highlight' },
   { name: 'Success', token: '--brand-success', value: '#22c55e', note: 'OK-status' },
   { name: 'Warning', token: '--brand-warning', value: '#f59e0b', note: 'Varning' },
   { name: 'Danger', token: '--brand-danger', value: '#ef4444', note: 'Fel/nedstatus' },
-  { name: 'Purple', token: '--brand-purple', value: '#b14ef4', note: 'Insider Graph-accent' },
+  { name: 'Geogiraph-accent', token: '--brand-purple', value: '#b14ef4', note: 'Geogiraph-spårets lila (~#9f51b6 i graf-vyer)' },
   { name: 'Blue', token: '--brand-blue', value: '#3b82f6', note: 'Sekundär diagramfärg' },
-  { name: 'Text', token: '--brand-text', value: '#ffffff', note: 'Primär text' },
+  { name: 'Text', token: '--brand-text', value: '#ffffff', note: 'Primär text (mörkt tema)' },
   { name: 'Muted', token: '--brand-muted', value: '#94a3b8', note: 'Sekundär text (slate-400)' },
   { name: 'Border', token: '--brand-border', value: 'rgba(255,255,255,0.08)', note: 'Kantlinjer' },
 ];
@@ -733,46 +1000,35 @@ export const TYPE_SCALE: TypeScaleItem[] = [
 
 export const DESIGN_RULES: { title: string; body: string }[] = [
   {
-    title: 'Inga hårdkodade hex',
-    body: 'Färger kommer från --brand-*-tokens i globals.css. Enda undantaget är COLOR_TOKENS-datan här, som visar själva värdena.',
+    title: 'Två teman, ett tokensystem',
+    body: 'Insiders kör mörkt tema med cyan accent; Geogiraph-vyerna scopar ett ljust tema (off-white, lila accent) i sin layout.tsx. Båda bygger på --brand-*-tokens.',
   },
   {
-    title: 'Mörk bas, cyan accent',
-    body: '--brand-bg som botten, --brand-accent (cyan) för CTA och aktiva tillstånd. Insider Graph-vyerna använder lila (--brand-purple).',
+    title: 'Inga hårdkodade hex',
+    body: 'Färger kommer från --brand-*-tokens i globals.css. Enda undantaget är COLOR_TOKENS-datan här, som visar själva värdena.',
   },
   {
     title: 'Inter Tight, tajt rubriktracking',
     body: 'Rubriker: vikt 600, letter-spacing -0.02em. Brödtext: vikt 400, line-height 1.5em.',
   },
   {
-    title: 'Glaspaneler + 16px-radie',
-    body: '.brand-glass-panel: panelbakgrund, 1px --brand-border, 16px rundning, mjuk skugga.',
+    title: 'Produktaccent signalerar spår',
+    body: 'Cyan = The Insiders, lila = Geogiraph. Sidebar, ProductSwitcher och aktiva tillstånd följer aktivt spår.',
   },
 ];
 
 export const CODE_EXAMPLES: { title: string; code: string }[] = [
-  {
-    title: 'Primär CTA',
-    code: '<button className="brand-btn-primary">Spara</button>',
-  },
-  {
-    title: 'Glaspanel',
-    code: '<div className="brand-glass-panel" style={{ padding: 16 }}>…</div>',
-  },
-  {
-    title: 'Token i CSS',
-    code: 'color: var(--brand-muted);\nborder: 1px solid var(--brand-border);',
-  },
+  { title: 'Primär CTA', code: '<button className="brand-btn-primary">Spara</button>' },
+  { title: 'Glaspanel', code: '<div className="brand-glass-panel" style={{ padding: 16 }}>…</div>' },
+  { title: 'Token i CSS', code: 'color: var(--brand-muted);\nborder: 1px solid var(--brand-border);' },
 ];
 
 /* ------------------------------------------------------------------ */
-/* Live — schema-fallback + ordlista                                   */
+/* Live — Postgres-schema (fallback) + Firestore-collections + ordlista */
 /* ------------------------------------------------------------------ */
 
-// Hårdkodad fallback för Live-flikens schema-browser. page.tsx försöker först
-// parsa backend/models.py från disk; i Cloud Run-containern finns inte den
-// filen (frontend-imagen strippar backend-källan), så denna lista används då.
-// Speglar backend/models.py. Domän gissas i page.tsx via inferDomain().
+// Hårdkodad fallback för schema-browsern. page.tsx försöker först parsa
+// backend/models.py från disk; i containern finns inte filen → denna används.
 export const SCHEMA_MODELS_FALLBACK: SchemaModel[] = [
   {
     name: 'Customer',
@@ -783,7 +1039,6 @@ export const SCHEMA_MODELS_FALLBACK: SchemaModel[] = [
       { name: 'slug', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: false },
       { name: 'name', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: false },
       { name: 'icp_json', type: 'JSON', optional: false, isList: false, isRelation: false, hasDefault: true },
-      { name: 'tags_json', type: 'JSON', optional: false, isList: false, isRelation: false, hasDefault: true },
       { name: 'datasets', type: 'Dataset', optional: false, isList: true, isRelation: true, hasDefault: false },
       { name: 'modules', type: 'Module', optional: false, isList: true, isRelation: true, hasDefault: false },
     ],
@@ -795,9 +1050,7 @@ export const SCHEMA_MODELS_FALLBACK: SchemaModel[] = [
     fields: [
       { name: 'id', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: true },
       { name: 'key', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: false },
-      { name: 'name', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: false },
       { name: 'platform', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: true },
-      { name: 'detect_rules_json', type: 'JSON', optional: false, isList: false, isRelation: false, hasDefault: true },
       { name: 'versions', type: 'SourceVersion', optional: false, isList: true, isRelation: true, hasDefault: false },
       { name: 'fields', type: 'SourceField', optional: false, isList: true, isRelation: true, hasDefault: false },
     ],
@@ -811,7 +1064,6 @@ export const SCHEMA_MODELS_FALLBACK: SchemaModel[] = [
       { name: 'key', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: false },
       { name: 'display_name', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: false },
       { name: 'data_type', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: true },
-      { name: 'unit', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: true },
     ],
   },
   {
@@ -821,11 +1073,8 @@ export const SCHEMA_MODELS_FALLBACK: SchemaModel[] = [
     fields: [
       { name: 'id', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: true },
       { name: 'customer_id', type: 'String', optional: false, isList: false, isRelation: true, hasDefault: false },
-      { name: 'original_filename', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: false },
       { name: 'sha256', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: false },
       { name: 'ai_summary', type: 'Text', optional: false, isList: false, isRelation: false, hasDefault: true },
-      { name: 'granularity', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: true },
-      { name: 'period_start', type: 'Date', optional: true, isList: false, isRelation: false, hasDefault: false },
       { name: 'rows', type: 'DatasetRow', optional: false, isList: true, isRelation: true, hasDefault: false },
     ],
   },
@@ -836,11 +1085,7 @@ export const SCHEMA_MODELS_FALLBACK: SchemaModel[] = [
     fields: [
       { name: 'id', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: true },
       { name: 'customer_id', type: 'String', optional: true, isList: false, isRelation: true, hasDefault: false },
-      { name: 'name', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: false },
-      { name: 'abbr', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: false },
       { name: 'formula_json', type: 'JSON', optional: false, isList: false, isRelation: false, hasDefault: true },
-      { name: 'thresholds_json', type: 'JSON', optional: false, isList: false, isRelation: false, hasDefault: true },
-      { name: 'inverted', type: 'Boolean', optional: false, isList: false, isRelation: false, hasDefault: true },
       { name: 'field_refs', type: 'ModuleFieldRef', optional: false, isList: true, isRelation: true, hasDefault: false },
     ],
   },
@@ -851,43 +1096,27 @@ export const SCHEMA_MODELS_FALLBACK: SchemaModel[] = [
     fields: [
       { name: 'id', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: true },
       { name: 'customer_id', type: 'String', optional: true, isList: false, isRelation: true, hasDefault: false },
-      { name: 'name', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: false },
       { name: 'config_json', type: 'JSON', optional: false, isList: false, isRelation: false, hasDefault: true },
     ],
   },
   {
     name: 'Issue',
     table: 'issues',
-    domain: 'Kanban',
+    domain: 'Admin (delad)',
     fields: [
       { name: 'id', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: true },
       { name: 'product', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: true },
-      { name: 'title', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: false },
       { name: 'status', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: true },
-      { name: 'comments', type: 'IssueComment', optional: false, isList: true, isRelation: true, hasDefault: false },
     ],
   },
   {
     name: 'AgentSession',
     table: 'agent_sessions',
-    domain: 'AI-agent',
+    domain: 'Admin (delad)',
     fields: [
       { name: 'id', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: true },
       { name: 'product', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: true },
-      { name: 'title', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: false },
-      { name: 'claude_session_id', type: 'String', optional: true, isList: false, isRelation: false, hasDefault: false },
       { name: 'tasks', type: 'AgentTask', optional: false, isList: true, isRelation: true, hasDefault: false },
-    ],
-  },
-  {
-    name: 'Conversation',
-    table: 'conversations',
-    domain: 'Chat',
-    fields: [
-      { name: 'id', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: true },
-      { name: 'name', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: false },
-      { name: 'members_json', type: 'JSON', optional: false, isList: false, isRelation: false, hasDefault: true },
-      { name: 'messages', type: 'ChatMessage', optional: false, isList: true, isRelation: true, hasDefault: false },
     ],
   },
   {
@@ -896,49 +1125,76 @@ export const SCHEMA_MODELS_FALLBACK: SchemaModel[] = [
     domain: 'AI-assistent',
     fields: [
       { name: 'id', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: true },
-      { name: 'session_id', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: false },
       { name: 'role', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: false },
-      { name: 'content', type: 'Text', optional: false, isList: false, isRelation: false, hasDefault: true },
       { name: 'page_context', type: 'String', optional: true, isList: false, isRelation: false, hasDefault: false },
-    ],
-  },
-  {
-    name: 'CustomerGoal',
-    table: 'customer_goals',
-    domain: 'Kunder',
-    fields: [
-      { name: 'id', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: true },
-      { name: 'customer_id', type: 'String', optional: false, isList: false, isRelation: true, hasDefault: false },
-      { name: 'metric_type', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: true },
-      { name: 'module_id', type: 'String', optional: true, isList: false, isRelation: true, hasDefault: false },
-      { name: 'target_value', type: 'Float', optional: true, isList: false, isRelation: false, hasDefault: false },
-      { name: 'status', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: true },
-    ],
-  },
-  {
-    name: 'AdminFile',
-    table: 'admin_files',
-    domain: 'Övrigt',
-    fields: [
-      { name: 'id', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: true },
-      { name: 'product', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: true },
-      { name: 'original_name', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: false },
-      { name: 'category', type: 'String', optional: false, isList: false, isRelation: false, hasDefault: true },
-      { name: 'size', type: 'Integer', optional: false, isList: false, isRelation: false, hasDefault: true },
     ],
   },
 ];
 
+// Geogiraphs Firestore är schemalöst — vi listar collections som referens.
+export const FIRESTORE_COLLECTIONS: FirestoreCollection[] = [
+  {
+    path: 'clients/{client_id}',
+    description: 'Kund/organisation. Aktiva connectors, tier, profil-URL, ESG-flagga.',
+    fields: ['company_name', 'company_linkedin_url', 'lei', 'active_connectors', 'settings', 'tier', 'esg_audit_enabled'],
+  },
+  {
+    path: 'clients/{id}/employees/{employee_id}',
+    description: 'Anställd som nod. node_type styr insamlingskadens.',
+    fields: ['name', 'linkedin_url', 'title', 'node_type', 'gender', 'opted_out'],
+  },
+  {
+    path: '…/raw_items/{item_id}',
+    description: 'Oprocessad källdata per nod (connector-output).',
+    fields: ['schema_type', 'url', 'published_at', 'content', 'confidence', 'extra'],
+  },
+  {
+    path: 'clients/{id}/claims/{claim_id}',
+    description: 'Narrativa/egenskaps-claims med provenience och granskningsstatus.',
+    fields: ['claim_kind', 'predicate', 'value', 'statement', 'source[]', 'confidence', 'needs_review', 'review_status'],
+  },
+  {
+    path: 'clients/{id}/polling_results/{week_id}',
+    description: 'Veckovis AI-synlighet: Share of Voice, sentiment, paritet.',
+    fields: ['share_of_voice', 'sentiment_score', 'parity_index', 'category_results', 'models_used', 'raw_responses'],
+  },
+  {
+    path: 'clients/{id}/risk_findings/{finding_id}',
+    description: 'GEO-riskloopens fynd per persona/motor med skadeklass.',
+    fields: ['persona', 'question', 'engine', 'harm', 'severity', 'status'],
+  },
+  {
+    path: 'clients/{id}/esg_findings/{finding_id}',
+    description: 'ESG/CSRD-skanningens fynd per ESRS-pelare.',
+    fields: ['pillar', 'question', 'engine', 'severity', 'status'],
+  },
+  {
+    path: 'clients/{id}/linkedin_snapshots/{id}',
+    description: 'Kvartalsvis LinkedIn-kapacitet (aggregerat, ingen PII).',
+    fields: ['skills[]', 'quarter', 'followers', 'status', 'verified_at'],
+  },
+];
+
 export const GLOSSARY: GlossaryItem[] = [
-  { term: 'SourceField', def: 'En stabil datapunkt (t.ex. impressions) som moduler binder mot. Lever över rapportversioner.' },
-  { term: 'SourceVersion', def: 'En version av en rapporttyp. Ny version skapas när kolumnerna ändras; mappar fält → kolumnnamn.' },
-  { term: 'SourceFieldMapping', def: 'Kopplar ett SourceField till det faktiska kolumnnamnet i en specifik SourceVersion.' },
-  { term: 'Dataset', def: 'En uppladdad och normaliserad fil. DatasetRow lagrar värden som { source_field_id: värde }.' },
+  // Delat / arkitektur
+  { term: 'Spår', def: 'De två produktlinjerna: The Insiders (KPI/LinkedIn-analys) och Geogiraph (AI-synlighet/GEO).' },
+  { term: 'Graf-läge', def: 'När frontend/chatt är i Geogiraph-kontext (pathname /insider-graph eller page_context "graph_*").' },
+  { term: 'GRAPH_API_URL', def: 'Env-var i insiders-api som pekar på insider-graph-api; används för live-hämtning av kunder/connectors i chatten.' },
+  { term: 'Produktscope', def: '"the-insiders" | "insider-graph" — kolumn på Issue/AgentSession/AdminFile som isolerar admin-data per spår.' },
+  // Insiders
+  { term: 'SourceField', def: 'Stabil datapunkt (t.ex. impressions) som KPI-moduler binder mot. Lever över rapportversioner.' },
   { term: 'Modul (KPI)', def: 'Ett mätetal definierat som en formel mot SourceField via ModuleFieldRef-alias.' },
-  { term: 'Granularitet', def: 'daily | monthly | aggregated | unknown — spåras per dataset för att undvika dubbelräkning.' },
-  { term: 'Produktscope', def: '"the-insiders" eller "insider-graph" — issues, agent-sessioner och filer scopas per produkt.' },
-  { term: 'Insider Graph', def: 'Systerprodukt för AI-synlighet/GEO med egen Cloud Run-tjänst och Firestore.' },
-  { term: 'Staging', def: 'insiders-frontend på Cloud Run — miljön där vi verifierar allt som pushas till main.' },
+  // Geogiraph
+  { term: 'Nod (node_type)', def: 'En anställd i grafen: aktiv / episodisk / passiv — styr hur ofta källor skrapas.' },
+  { term: 'Claim', def: 'Ett påstående med provenience (källa, confidence). Narrativt eller egenskaps-baserat; grindas mot källan.' },
+  { term: 'Källgrind', def: 'Deterministisk validering (citat + siffror måste finnas i källan) som stoppar hallucinerad data.' },
+  { term: 'JSON-LD / schema.org', def: 'Det maskinläsbara format kunskapsgrafen kompileras till och publiceras via CDN/GTM.' },
+  { term: 'Share of Voice', def: 'Andel AI-svar som nämner bolaget/medarbetarna i en kategori — kärnan i AI-synlighet.' },
+  { term: 'Paritetsindex', def: 'Andel kvinnor bland personer som AI rekommenderar — jämställdhetsmått i polling.' },
+  { term: 'Probe-motor', def: 'De förstaparts-AI-motorer (gpt-4o, Gemini) som mätningarna körs mot — speglar vad användare möter.' },
+  { term: 'ESRS', def: 'EU:s hållbarhetsrapporteringsstandard (E/S/G-pelare) som ESG-auditens frågor mappas mot.' },
+  { term: 'Vertex AI EU', def: 'Google-plattform i europe-west1 där alla resonemangsmodeller (Gemini/Claude) körs — EU-residens.' },
+  { term: 'Staging', def: 'insiders-frontend/-api/-graph-api på Cloud Run — miljön där vi verifierar allt som pushas till main.' },
 ];
 
 /* ------------------------------------------------------------------ */

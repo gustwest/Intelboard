@@ -20,6 +20,7 @@ from google.cloud import firestore
 
 import firestore_client as fs
 from services import llm as llm_factory
+from services import trust_gap_report
 
 log = logging.getLogger(__name__)
 
@@ -96,6 +97,9 @@ def build_report_model(client_id: str, month: str | None = None) -> dict[str, An
         "actions": actions,
         "resolved": {"count": len(resolved_f), "items": [_finding_row(d) for d in resolved_f]},
         "trend": trend,
+        # Humaniseringstäckning som SEKTION i samma rapport (spec §10). None om trust_gap
+        # ej beräknad än — sektionen visar då en upplysning, inte tomhet.
+        "humanization": trust_gap_report.build_report_model(client_id),
     }
 
 
@@ -314,6 +318,16 @@ def run(client_id: str, month: str | None = None) -> dict[str, Any] | None:
     fs.monthly_report_doc(client_id, model["month"]).set(stored)
     log.info("månadsrapport %s/%s persisterad (narrativ: %s)",
              client_id, model["month"], "ja" if model["draft_narrative"] else "nej")
+    # Affärshändelse → kund-tidslinjen (lazy import: undvik jobs↔services-cykel).
+    try:
+        from jobs._run_tracker import log_event
+
+        log_event("report_generated", client_id, {
+            "month": model["month"],
+            "score": (model.get("decision_confidence") or {}).get("score"),
+        })
+    except Exception:  # noqa: BLE001
+        log.debug("kunde inte logga report_generated-händelse", exc_info=True)
     return model
 
 
@@ -374,6 +388,19 @@ def _narrative_context(model: dict[str, Any]) -> dict[str, Any]:
         "åtgärder": model.get("actions"),
         "lösta_risker": (model.get("resolved") or {}).get("count", 0),
         "trend": model.get("trend"),
+        "humaniseringstäckning": _humanization_context(model.get("humanization")),
+    }
+
+
+def _humanization_context(h: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Trimmat humaniserings-underlag till narrativet — bara den redan översatta klartexten,
+    aldrig råa 0–1-tal (grundprincip 7)."""
+    if not h:
+        return None
+    return {
+        "täckning": h.get("coverage_plain"),
+        "att_göra": [f"{a['label']}: {a['why']} {a['action']}" for a in h.get("ranked_actions") or []],
+        "möjligheter_och_risker": h.get("opportunities_and_risks"),
     }
 
 
@@ -514,6 +541,11 @@ GEO Parity Index (separat): {_fmt_score(parity)}.</p>
 
 <h2>Effekt över tid</h2>
 {trend_html}
+
+<h2>Humaniseringstäckning</h2>
+<p class="note">Hur mänskligt och värdedrivet ni framstår för AI — men bara i den mån det går att belägga.
+Påstått och bevisat hålls isär; perception vägs aldrig in i poängen.</p>
+{trust_gap_report.render_fragment(report.get("humanization"))}
 </body></html>"""
 
 

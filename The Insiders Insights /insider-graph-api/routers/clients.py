@@ -15,9 +15,27 @@ from routers.inbox import _count_client  # samma "väntar på människa"-räknin
 
 router = APIRouter(prefix="/api/clients", tags=["clients"])
 
+# Mätkonfiguration — håll i synk med services/polling.py + services/risk_detector.py.
+MEASUREMENT_PERSONAS = ("buyer", "candidate", "investor")
+POLLING_CATEGORIES = ("affar", "finans", "innovation", "hr")
+
 
 class EmployeePatch(BaseModel):
     opted_out: bool | None = None
+
+
+class ClientConfigUpdate(BaseModel):
+    """Per-kund mätkonfiguration (AI-synlighet). Alla fält valfria — utelämnade rörs ej.
+
+    industry/topic/service_area fyller default-frågornas platshållare ({industry} m.fl.).
+    risk_personas väljer vilka personas riskloopen genererar/mäter. polling_questions
+    ersätter default-frågebatteriet per kategori (tomt = återgå till defaults)."""
+
+    industry: str | None = None
+    topic: str | None = None
+    service_area: str | None = None
+    risk_personas: list[str] | None = None
+    polling_questions: dict[str, list[str]] | None = None
 
 
 @router.get("")
@@ -83,8 +101,50 @@ def get_client(client_id: str) -> dict[str, Any]:
         "tier": data.get("tier", "default"),
         "profile_base_url": data.get("profile_base_url"),
         "last_compiled": _iso(data.get("last_compiled")),
+        # Mätkonfiguration (AI-synlighet) — driver MeasurementConfigEditor.
+        "industry": data.get("industry"),
+        "topic": data.get("topic"),
+        "service_area": data.get("service_area"),
+        "risk_personas": data.get("risk_personas") or list(MEASUREMENT_PERSONAS),
+        "polling_questions": data.get("polling_questions") or {},
         "employees": employees,
     }
+
+
+@router.put("/{client_id}/config")
+def update_client_config(client_id: str, payload: ClientConfigUpdate) -> dict[str, Any]:
+    """Spara per-kund mätkonfiguration. Top-level-fält på client-doc (så polling.py +
+    risk_detector.py läser dem direkt). Validerar personas och frågekategorier."""
+    ref = fs.client_doc(client_id)
+    if not ref.get().exists:
+        raise HTTPException(404, f"client not found: {client_id}")
+
+    update: dict[str, Any] = {}
+    for field in ("industry", "topic", "service_area"):
+        val = getattr(payload, field)
+        if val is not None:
+            update[field] = val.strip()
+
+    if payload.risk_personas is not None:
+        unknown = [p for p in payload.risk_personas if p not in MEASUREMENT_PERSONAS]
+        if unknown:
+            raise HTTPException(400, f"unknown personas: {unknown}")
+        # Bevara kanonisk ordning, dedupa.
+        update["risk_personas"] = [p for p in MEASUREMENT_PERSONAS if p in payload.risk_personas]
+
+    if payload.polling_questions is not None:
+        cleaned: dict[str, list[str]] = {}
+        for cat, qs in payload.polling_questions.items():
+            if cat not in POLLING_CATEGORIES:
+                raise HTTPException(400, f"unknown polling category: {cat}")
+            kept = [q.strip() for q in qs if q and q.strip()]
+            if kept:
+                cleaned[cat] = kept
+        update["polling_questions"] = cleaned  # tomt dict = återgå till defaults
+
+    if update:
+        ref.update(update)
+    return {"status": "ok", **update}
 
 
 @router.get("/{client_id}/pipeline")

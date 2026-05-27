@@ -98,6 +98,30 @@ def _finish(
         log.exception("job_runs: kunde inte skriva slutstatus (%s)", status)
 
 
+def log_event(kind: str, client_id: str | None = None, summary: dict[str, Any] | None = None) -> None:
+    """Logga en AFFÄRSHÄNDELSE (rapport genererad, underlag verifierat, claim godkänt …) i
+    SAMMA körningsspår (job_runs) som jobben, så kund-tidslinjen och aktivitetsflödet får med
+    den utan en parallell logg. Ögonblicklig (ingen running→klar-cykel): status="success",
+    duration 0, job_type=`event:<kind>`. Best-effort — får aldrig fälla anroparen."""
+    started = datetime.now(timezone.utc)
+    run_id = f"{started.strftime('%Y%m%dT%H%M%S%f')}-{uuid.uuid4().hex[:6]}"
+    try:
+        fs.job_run_doc(run_id).set(
+            {
+                "job_type": f"event:{kind}",
+                "client_id": client_id,
+                "status": "success",
+                "started_at": firestore.SERVER_TIMESTAMP,
+                "ended_at": firestore.SERVER_TIMESTAMP,
+                "duration_seconds": 0,
+                "summary": summary or {},
+                "expire_at": started + timedelta(days=90),
+            }
+        )
+    except Exception:  # noqa: BLE001
+        log.exception("job_runs: kunde inte logga händelse %s (%s)", kind, client_id)
+
+
 def tracked(job_type: str, client_id: str | None, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
     """Hjälpare för call sites som inte enkelt kan använda `with` (t.ex. en
     BackgroundTask som annars anropar en service-funktion direkt)."""
