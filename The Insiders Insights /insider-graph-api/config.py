@@ -32,10 +32,6 @@ class Settings(BaseSettings):
     # (GEO_GENERATOR_MODEL / GEO_VALIDATOR_MODEL, env-överstyrbara). BÅDA rollerna körs på
     # Gemini via Vertex EU — Claude är inte EU-resident i regionen, så ingen Claude-väg.
 
-    brightdata_api_key: str = ""
-    brightdata_linkedin_profile_dataset_id: str = ""
-    brightdata_linkedin_company_dataset_id: str = ""
-    brightdata_linkedin_posts_dataset_id: str = ""
     sendgrid_api_key: str = ""
 
     admin_api_key: str = ""

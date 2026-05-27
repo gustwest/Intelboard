@@ -50,7 +50,7 @@ def onboard_client(req: OnboardRequest) -> OnboardResponse:
             "company_name": req.company_name,
             "lei": req.lei,
             "company_linkedin_url": req.company_linkedin_url,
-            "active_connectors": list(req.active_connectors or ["linkedin"]),
+            "active_connectors": list(req.active_connectors or ["website"]),
             "tier": req.tier,
             "profile_base_url": profile_base_url,
             "settings": settings,

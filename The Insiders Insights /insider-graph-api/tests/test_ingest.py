@@ -58,7 +58,7 @@ class IngestNewClientTest(unittest.TestCase):
         fakefs.reset(client={"active_connectors": ["gleif"]})
 
         def boom(cid, client):
-            raise RuntimeError("brightdata nere")
+            raise RuntimeError("connector nere")
 
         scrape_active.run_for_client = boom
         ingest_new_client("acme")

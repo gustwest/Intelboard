@@ -5,9 +5,9 @@ veckovis). Vid onboarding vill vi att kunskapsgrafen ska vara befolkad från
 första stund, så vi kör samma per-kund-logik direkt och kompilerar grafen.
 
 Körs i en bakgrundstask (efter att onboarding-POST:en svarat), eftersom tunga
-connectors kan ta minuter — LinkedIn via Bright Data poll:ar upp till 5 min och
-website-crawlen besöker flera sidor. Att blockera HTTP-anropet så länge är inte
-gångbart; bakgrundskörning ger "direkt vid onboarding" utan timeout.
+connectors kan ta minuter — website-crawlen besöker flera sidor. Att blockera
+HTTP-anropet så länge är inte gångbart; bakgrundskörning ger "direkt vid
+onboarding" utan timeout.
 
 Mönstret (in-process BackgroundTasks för en kund i taget) speglar routers/jobs.py.
 """
