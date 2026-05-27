@@ -20,18 +20,20 @@ def get_badge(
     variant: Literal["footer", "pill"] = "footer",
     accent: str | None = None,
     delivery: Literal["static", "js"] = "static",
+    lang: Literal["sv", "no", "da", "fi", "en", "de", "fr", "it", "es"] = "sv",
 ) -> dict[str, str]:
     if not fs.client_doc(client_id).get().exists:
         raise HTTPException(404, f"client not found: {client_id}")
 
-    kwargs = {"theme": theme, "variant": variant, "accent": accent}
+    kwargs = {"theme": theme, "variant": variant, "accent": accent, "lang": lang}
     snippet = render_badge_js(client_id, **kwargs) if delivery == "js" else render_badge(client_id, **kwargs)
     # preview = alltid statisk inline-variant så den kan visas i UI:t (pill är fixed).
-    preview = render_badge(client_id, theme=theme, accent=accent, variant="footer")
+    preview = render_badge(client_id, theme=theme, accent=accent, variant="footer", lang=lang)
     return {
         "client_id": client_id,
         "profile_url": profile_url(client_id),
         "delivery": delivery,
+        "lang": lang,
         "snippet": snippet,
         "preview": preview,
     }

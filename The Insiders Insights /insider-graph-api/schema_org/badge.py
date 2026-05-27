@@ -18,7 +18,27 @@ import json
 import firestore_client as fs
 from schema_org.urls import canonical_url
 
-LABEL = "AI-Profil verifierad av Geogiraph"
+# Badge-etikett per språk. Svenska är default (bakåtkompatibelt). Nyckeln är
+# språkkod (ISO 639-1; "no" = norskt bokmål) som även sätts som `lang`-attribut.
+LABELS: dict[str, str] = {
+    "sv": "AI-profil verifierad av Geogiraph",
+    "no": "AI-profil verifisert av Geogiraph",
+    "da": "AI-profil verificeret af Geogiraph",
+    "fi": "Geogiraphin vahvistama tekoälyprofiili",
+    "en": "AI profile verified by Geogiraph",
+    "de": "KI-Profil verifiziert von Geogiraph",
+    "fr": "Profil IA vérifié par Geogiraph",
+    "it": "Profilo IA verificato da Geogiraph",
+    "es": "Perfil de IA verificado por Geogiraph",
+}
+DEFAULT_LANG = "sv"
+# Bakåtkompatibilitet: tidigare importerades LABEL direkt.
+LABEL = LABELS[DEFAULT_LANG]
+
+
+def label_for(lang: str | None) -> str:
+    """Etikett för språkkoden; faller tillbaka till svenska för okänt språk."""
+    return LABELS.get((lang or DEFAULT_LANG).lower(), LABELS[DEFAULT_LANG])
 
 # Liten "verifierad"-bock, ärver färg via currentColor.
 _CHECK_SVG = (
@@ -47,12 +67,18 @@ def render_badge(
     accent: str | None = None,
     variant: str = "footer",
     url: str | None = None,
+    lang: str | None = None,
 ) -> str:
-    """Statisk HTML-snutt. `variant`: "footer" (inline) eller "pill" (flytande)."""
+    """Statisk HTML-snutt. `variant`: "footer" (inline) eller "pill" (flytande).
+
+    `lang` väljer etikettens språk (se LABELS); default svenska.
+    """
     t = dict(_THEMES.get(theme, _THEMES["light"]))
     if accent:
         t["accent"] = accent
     href = html.escape(url or profile_url(client_id))
+    lang = (lang or DEFAULT_LANG).lower()
+    label = label_for(lang)
 
     base_css = (
         f"display:inline-flex;align-items:center;gap:0;"
@@ -64,11 +90,12 @@ def render_badge(
         base_css += "position:fixed;right:16px;bottom:16px;z-index:9999;box-shadow:0 2px 8px rgba(0,0,0,.12);"
 
     icon = f'<span style="color:{t["accent"]}">{_CHECK_SVG}</span>'
+    label_esc = html.escape(label)
     return (
-        f'<a href="{href}" target="_blank" rel="noopener" '
+        f'<a href="{href}" target="_blank" rel="noopener" lang="{lang}" '
         f'data-geogiraph-badge="{html.escape(client_id)}" '
-        f'aria-label="{LABEL}" title="{LABEL}" style="{base_css}">'
-        f'{icon}{LABEL}</a>'
+        f'aria-label="{label_esc}" title="{label_esc}" style="{base_css}">'
+        f'{icon}{label_esc}</a>'
     )
 
 
