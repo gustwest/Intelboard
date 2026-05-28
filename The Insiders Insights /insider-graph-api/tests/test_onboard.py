@@ -67,6 +67,11 @@ class OnboardIdentityMetadataTest(unittest.TestCase):
         stored = fakefs.STATE["client"]
         self.assertEqual(stored["logo_url"], "https://acme.se/logo.svg")
         self.assertEqual(stored["org_number"], "556677-8899")  # normaliserad
+        # Manuell input vid onboarding → provenance markeras "manual" + tidsstämpel.
+        self.assertEqual(stored["logo_url_source"], "manual")
+        self.assertEqual(stored["org_number_source"], "manual")
+        self.assertTrue(stored["logo_url_set_at"])
+        self.assertTrue(stored["org_number_set_at"])
 
     def test_org_number_with_dash_kept_canonical(self):
         fakefs.reset(client=None)
@@ -79,6 +84,9 @@ class OnboardIdentityMetadataTest(unittest.TestCase):
         stored = fakefs.STATE["client"]
         self.assertIsNone(stored["logo_url"])
         self.assertIsNone(stored["org_number"])
+        # Inga värden satta → ingen provenance (släpper platsen till auto-enrichment).
+        self.assertNotIn("logo_url_source", stored)
+        self.assertNotIn("org_number_source", stored)
 
 
 class PurgeEmployeeFromClaimsTest(unittest.TestCase):

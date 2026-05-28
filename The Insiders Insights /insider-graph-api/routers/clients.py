@@ -15,6 +15,7 @@ import ttl_cache
 from routers.inbox import _count_client  # samma "väntar på människa"-räkning som inkorgen
 from services import persona_derivation
 from services.discovery import _normalize_org_number
+from services.identity_enrichment import apply_identity_metadata
 from services.output_quality import AudiencePriority
 
 router = APIRouter(prefix="/api/clients", tags=["clients"])
@@ -114,8 +115,14 @@ def get_client(client_id: str) -> dict[str, Any]:
         "profile_base_url": data.get("profile_base_url"),
         "last_compiled": _iso(data.get("last_compiled")),
         # Identitetsmetadata (driver Organization.logo + Organization.identifier).
+        # Provenance per fält → UI:t kan visa "manuellt satt 2026-05-27" eller
+        # "auto-fyllt från website 2026-05-26" så ops aldrig undrar varifrån värdet kom.
         "logo_url": data.get("logo_url"),
+        "logo_url_source": data.get("logo_url_source"),
+        "logo_url_set_at": data.get("logo_url_set_at"),
         "org_number": data.get("org_number"),
+        "org_number_source": data.get("org_number_source"),
+        "org_number_set_at": data.get("org_number_set_at"),
         # Mätkonfiguration (AI-synlighet) — driver MeasurementConfigEditor.
         "industry": data.get("industry"),
         "topic": data.get("topic"),
@@ -166,16 +173,46 @@ def update_client_config(client_id: str, payload: ClientConfigUpdate) -> dict[st
         update["audience_priorities"] = [a.model_dump() for a in payload.audience_priorities]
         update["audience_priorities_set_at"] = datetime.now(timezone.utc).isoformat()
 
+    now_iso = datetime.now(timezone.utc).isoformat()
     if payload.logo_url is not None:
-        # Tom sträng → rensa fältet (UI nollställer manuellt-satt logo).
-        update["logo_url"] = payload.logo_url.strip() or None
+        # Tom sträng → rensa fältet OCH provenance (släpper tillbaka platsen till
+        # auto-enrichment vid nästa scrape-körning).
+        logo = payload.logo_url.strip() or None
+        update["logo_url"] = logo
+        update["logo_url_source"] = "manual" if logo else None
+        update["logo_url_set_at"] = now_iso if logo else None
 
     if payload.org_number is not None:
-        update["org_number"] = _normalize_org_number(payload.org_number)
+        org_nr = _normalize_org_number(payload.org_number)
+        update["org_number"] = org_nr
+        update["org_number_source"] = "manual" if org_nr else None
+        update["org_number_set_at"] = now_iso if org_nr else None
 
     if update:
         ref.update(update)
     return {"status": "ok", **update}
+
+
+@router.post("/{client_id}/enrich-identity")
+def enrich_identity(client_id: str) -> dict[str, Any]:
+    """Lift-only: kör apply_identity_metadata på BEFINTLIG rådata och rapportera vad
+    som hände — fyller manuellt-tomma fält från senaste scrape, rör inget annat.
+
+    UI:t (IdentityMetadataEditor "Hämta automatiskt"-knappen) anropar denna. Tunga
+    om-scrapes (för fältfärsk data) sker fortfarande via "Uppdatera profil"
+    (extract_claims-jobbet) eller cron — denna endpoint körs i request-tråden och
+    ska vara billig.
+
+    Returnerar:
+      updates: {fält: {value, source, set_at}} — vad som FAKTISKT skrevs
+      no_data_for: [fält] — vi försökte, men ingen kandidat i raw_items_company
+
+    Fält som redan är satta listas inte i nått av fälten (rörs ej, inget att säga).
+    """
+    if not fs.client_doc(client_id).get().exists:
+        raise HTTPException(404, f"client not found: {client_id}")
+    result = apply_identity_metadata(client_id)
+    return {"client_id": client_id, **result}
 
 
 @router.post("/{client_id}/derive-personas")

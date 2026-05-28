@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import datetime, timezone
 from typing import Iterable
 
 from google.cloud import firestore
@@ -45,20 +46,30 @@ def onboard_client(req: OnboardRequest) -> OnboardResponse:
         settings["website"] = {"start_url": req.website_start_url}
     if req.rss_feeds:
         settings["rss_feeds"] = [f.model_dump() for f in req.rss_feeds]
-    client_ref.set(
-        {
-            "company_name": req.company_name,
-            "lei": req.lei,
-            "org_number": _normalize_org_number(req.org_number),
-            "logo_url": (req.logo_url or "").strip() or None,
-            "company_linkedin_url": req.company_linkedin_url,
-            "active_connectors": list(req.active_connectors or ["website"]),
-            "tier": req.tier,
-            "profile_base_url": profile_base_url,
-            "settings": settings,
-            "created_at": firestore.SERVER_TIMESTAMP,
-        }
-    )
+    org_number = _normalize_org_number(req.org_number)
+    logo_url = (req.logo_url or "").strip() or None
+    now_iso = datetime.now(timezone.utc).isoformat()
+    payload: dict = {
+        "company_name": req.company_name,
+        "lei": req.lei,
+        "org_number": org_number,
+        "logo_url": logo_url,
+        "company_linkedin_url": req.company_linkedin_url,
+        "active_connectors": list(req.active_connectors or ["website"]),
+        "tier": req.tier,
+        "profile_base_url": profile_base_url,
+        "settings": settings,
+        "created_at": firestore.SERVER_TIMESTAMP,
+    }
+    # Provenance — markera ops-input som "manual" vid onboarding så UI:t kan visa
+    # "manuellt satt" och auto-enrichment vet att den inte ska skriva över.
+    if logo_url:
+        payload["logo_url_source"] = "manual"
+        payload["logo_url_set_at"] = now_iso
+    if org_number:
+        payload["org_number_source"] = "manual"
+        payload["org_number_set_at"] = now_iso
+    client_ref.set(payload)
 
     created_ids = _write_employees(req.client_id, req.employees)
     log.info("onboarded %s with %d employees", req.client_id, len(created_ids))
