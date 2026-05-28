@@ -53,6 +53,47 @@ def list_risk_findings(client_id: str) -> dict[str, Any]:
     return {"client_id": client_id, "findings": items}
 
 
+@router.get("/{client_id}/risks/timeline")
+def list_risk_timeline(client_id: str) -> dict[str, Any]:
+    """Closed-loop-tidslinje: ALLA findings (öppna + åtgärdade + lösta + avfärdade)
+    med lifecycle-tidsstämplar och kopplade korrigeringar (ammo_claim_ids). Driver
+    "vår mjukvara funkar"-vyn — detektion → åtgärd → resolved per risk."""
+    if not fs.client_doc(client_id).get().exists:
+        raise HTTPException(404, f"client not found: {client_id}")
+
+    items: list[dict[str, Any]] = []
+    for fid, data in fs.iter_risk_findings(client_id):
+        items.append(
+            {
+                "id": fid,
+                "persona": data.get("persona"),
+                "track": data.get("track"),
+                "question": data.get("question"),
+                "engine": data.get("engine"),
+                "harm": data.get("harm"),
+                "severity": data.get("severity"),
+                "engine_excerpt": data.get("engine_excerpt"),
+                "status": data.get("status") or "open",
+                "detected_at": _iso(data.get("detected_at")),
+                "action_at": _iso(data.get("action_at")),
+                "resolved_at": _iso(data.get("resolved_at")),
+                "action_taken": data.get("action_taken"),
+                "ammo_claim_ids": data.get("ammo_claim_ids") or [],
+                "clean_streak": data.get("clean_streak") or 0,
+            }
+        )
+    # Sortera efter senaste händelse (resolved/action/detected) — nyaste först.
+    def _recency(it: dict[str, Any]) -> str:
+        return it.get("resolved_at") or it.get("action_at") or it.get("detected_at") or ""
+    items.sort(key=_recency, reverse=True)
+
+    counts: dict[str, int] = {"open": 0, "actioned": 0, "resolved": 0, "dismissed": 0}
+    for it in items:
+        s = it.get("status") or "open"
+        counts[s] = counts.get(s, 0) + 1
+    return {"client_id": client_id, "findings": items, "counts": counts}
+
+
 class RiskAction(BaseModel):
     """Beslut på en risk-finding (GEO-riskloop skiva 2).
 

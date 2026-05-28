@@ -155,6 +155,32 @@ type ScheduleRow = {
 };
 type SchedulesResp = { available: boolean; location?: string; schedules: ScheduleRow[] };
 
+// --- Risk-tidslinje (speglar routers/review.py — closed-loop per risk) ---
+
+type RiskStatus = 'open' | 'actioned' | 'resolved' | 'dismissed';
+type RiskTimelineRow = {
+  id: string;
+  persona: string | null;
+  track: string | null;
+  question: string | null;
+  engine: string | null;
+  harm: string | null;
+  severity: 'high' | 'medium' | 'low' | null;
+  engine_excerpt: string | null;
+  status: RiskStatus;
+  detected_at: string | null;
+  action_at: string | null;
+  resolved_at: string | null;
+  action_taken: string | null;
+  ammo_claim_ids: string[];
+  clean_streak: number;
+};
+type RiskTimelineResp = {
+  client_id: string;
+  findings: RiskTimelineRow[];
+  counts: Record<RiskStatus, number>;
+};
+
 // --- Förtroendegap-cockpit (speglar services/trust_gap_report.py — översättningslagret §10.1) ---
 // declared = ni säger det · demonstrated = ni belägger det · perceived = AI uppfattar det
 
@@ -214,6 +240,7 @@ export default function GraphRiskLoopPage() {
   const [polling, setPolling] = useState<PollingWeek[] | null>(null);
   const [schedules, setSchedules] = useState<SchedulesResp | null>(null);
   const [humanization, setHumanization] = useState<Humanization | null>(null);
+  const [riskTimeline, setRiskTimeline] = useState<RiskTimelineResp | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const { latest, active: jobActive, trigger: runJob } = useJobRuns(selected);
@@ -320,6 +347,18 @@ export default function GraphRiskLoopPage() {
     };
   }, [selected, refreshTick]);
 
+  // Closed-loop tidslinje per risk — alla statusar, inte bara öppna.
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
+    graphFetch<RiskTimelineResp>(`/api/review/${selected}/risks/timeline`)
+      .then((d) => !cancelled && setRiskTimeline(d))
+      .catch(() => !cancelled && setRiskTimeline(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [selected, refreshTick]);
+
   // Hämta vald månads rapport.
   useEffect(() => {
     if (!selected || !month) return;
@@ -420,6 +459,9 @@ export default function GraphRiskLoopPage() {
 
       {/* Förtroendegap-cockpit — säger / belägger / AI uppfattar, per dimension */}
       {humanization?.available && <TrustGapCockpit model={humanization} />}
+
+      {/* Closed-loop tidslinje per risk — detektion → åtgärd → resolved, oberoende av månadsrapport */}
+      {riskTimeline && riskTimeline.findings.length > 0 && <RiskLifecycleTimeline data={riskTimeline} />}
 
       {months?.length === 0 && (!polling || polling.length === 0) && <EmptyState />}
 
@@ -929,6 +971,149 @@ function signedDelta(v: number | null | undefined): string {
   if (v > 0) return `+${v}`;
   if (v < 0) return `${v}`;
   return 'oförändrat';
+}
+
+const RISK_STATUS_SV: Record<RiskStatus, { label: string; color: string; bg: string }> = {
+  open: { label: 'Öppen', color: '#b91c1c', bg: 'rgba(239,68,68,0.12)' },
+  actioned: { label: 'Åtgärdad', color: '#9f51b6', bg: 'rgba(159,81,182,0.14)' },
+  resolved: { label: 'Löst', color: '#16a34a', bg: 'rgba(22,163,74,0.12)' },
+  dismissed: { label: 'Avfärdad', color: '#6a7e8a', bg: 'rgba(106,126,138,0.14)' },
+};
+
+function RiskLifecycleTimeline({ data }: { data: RiskTimelineResp }) {
+  const [filter, setFilter] = useState<RiskStatus | 'all'>('all');
+  const rows = filter === 'all' ? data.findings : data.findings.filter((r) => r.status === filter);
+  const total = data.findings.length;
+  const counts = data.counts;
+  return (
+    <div style={{ ...cardStyle, marginBottom: 16 }}>
+      <SectionHead
+        title="Riskens livscykel — detektion → åtgärd → löst"
+        hint="Per risk: när AI:n först gav ett farligt svar, när mjukvaran publicerade en korrigering, och när motorn slutat upprepa problemet. Beviset att loopen sluter sig."
+      />
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+        <RiskFilterChip label={`Alla (${total})`} active={filter === 'all'} onClick={() => setFilter('all')} />
+        {(['open', 'actioned', 'resolved', 'dismissed'] as RiskStatus[]).map((s) =>
+          counts[s] > 0 ? (
+            <RiskFilterChip
+              key={s}
+              label={`${RISK_STATUS_SV[s].label} (${counts[s]})`}
+              active={filter === s}
+              onClick={() => setFilter(s)}
+              tone={RISK_STATUS_SV[s]}
+            />
+          ) : null,
+        )}
+      </div>
+
+      {rows.length === 0 ? (
+        <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>Inga risker i den här statusen.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+          {rows.map((r, i) => <RiskTimelineCard key={r.id} row={r} isLast={i === rows.length - 1} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RiskFilterChip({ label, active, onClick, tone }: { label: string; active: boolean; onClick: () => void; tone?: { color: string; bg: string } }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '5px 12px',
+        background: active ? tone?.bg || 'rgba(159,81,182,0.14)' : 'transparent',
+        color: active ? tone?.color || C.accent : C.muted,
+        border: `1px solid ${active ? tone?.color || C.accent : C.border}`,
+        borderRadius: 999,
+        fontSize: 11,
+        fontWeight: 600,
+        cursor: 'pointer',
+        letterSpacing: '0.02em',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function RiskTimelineCard({ row, isLast }: { row: RiskTimelineRow; isLast: boolean }) {
+  const st = RISK_STATUS_SV[row.status];
+  const sev = row.severity ? SEVERITY[row.severity] : null;
+  const events = buildLifecycleEvents(row);
+  return (
+    <div style={{ padding: '14px 0', borderBottom: isLast ? 'none' : `1px solid ${C.border}` }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, color: '#3a4b56', lineHeight: 1.5 }}>{row.question || '—'}</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
+            {row.persona ? PERSONA_SV[row.persona] || row.persona : '—'}
+            {row.engine && ` · ${ENGINE_SV[row.engine] || row.engine}`}
+            {row.harm && ` · ${harmLabel(row.harm)}`}
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+          <span style={{ fontSize: 10, fontWeight: 600, color: st.color, background: st.bg, border: `1px solid ${st.color}33`, borderRadius: 6, padding: '3px 8px', letterSpacing: '0.04em' }}>{st.label}</span>
+          {sev && <span style={{ fontSize: 10, fontWeight: 600, color: sev.color, background: sev.bg, border: `1px solid ${sev.color}33`, borderRadius: 6, padding: '2px 7px' }}>{sev.label}</span>}
+        </div>
+      </div>
+
+      {row.engine_excerpt && (
+        <div style={{ fontSize: 11, color: C.dim, fontStyle: 'italic', margin: '4px 0 8px', padding: '6px 10px', background: 'rgba(58,75,86,0.04)', borderLeft: `2px solid ${C.border}`, lineHeight: 1.5 }}>
+          "{row.engine_excerpt}"
+        </div>
+      )}
+
+      {events.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0, marginTop: 10, fontSize: 11 }}>
+          {events.map((ev, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 0, flex: i === events.length - 1 ? '0 0 auto' : 1 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 90 }}>
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: ev.color, boxShadow: `0 0 0 3px ${ev.color}22` }} />
+                <div style={{ fontSize: 10, color: ev.color, fontWeight: 600 }}>{ev.label}</div>
+                <div style={{ fontSize: 10, color: C.dim, fontFamily: 'ui-monospace, monospace' }}>{ev.date}</div>
+                {ev.detail && <div style={{ fontSize: 10, color: C.muted, textAlign: 'center', lineHeight: 1.3 }}>{ev.detail}</div>}
+              </div>
+              {i < events.length - 1 && (
+                <div style={{ flex: 1, height: 2, background: ev.color, opacity: 0.4, margin: '0 4px', marginTop: -22 }} />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {row.ammo_claim_ids.length > 0 && (
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>
+          Korrigering kopplad: <code style={{ color: C.accent, fontSize: 11 }}>{row.ammo_claim_ids.join(', ')}</code>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function buildLifecycleEvents(row: RiskTimelineRow): { label: string; date: string; color: string; detail?: string }[] {
+  const out: { label: string; date: string; color: string; detail?: string }[] = [];
+  if (row.detected_at) out.push({ label: 'Detekterad', date: fmtDate(row.detected_at), color: '#b91c1c' });
+  if (row.action_at) {
+    out.push({
+      label: row.action_taken === 'reinforced_claim' ? 'Korrigerad' : row.status === 'dismissed' ? 'Avfärdad' : 'Åtgärdad',
+      date: fmtDate(row.action_at),
+      color: row.status === 'dismissed' ? '#6a7e8a' : '#9f51b6',
+    });
+  }
+  if (row.resolved_at) {
+    out.push({ label: 'Löst', date: fmtDate(row.resolved_at), color: '#16a34a', detail: `efter ${row.clean_streak} rena cykler` });
+  } else if (row.status === 'actioned' && row.clean_streak > 0) {
+    out.push({ label: 'Ren-streak', date: '—', color: '#0e7490', detail: `${row.clean_streak} cykler` });
+  }
+  return out;
+}
+
+function fmtDate(iso: string | null): string {
+  if (!iso) return '—';
+  return iso.slice(0, 10);
 }
 
 function Stat({ label, value, accent, color }: { label: string; value: string; accent?: boolean; color?: string }) {
