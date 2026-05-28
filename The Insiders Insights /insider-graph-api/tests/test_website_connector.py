@@ -61,6 +61,27 @@ class WebsiteConnectorTest(unittest.TestCase):
         readers.extract = lambda url, ct, raw: Document(text="", title=None, content_type="pdf", needs_ocr=True)
         self.assertEqual(self._run({"start_url": "https://kund.se"}), [])
 
+    def test_og_image_lifts_to_first_chunk_only(self):
+        """og:image hamnar i FÖRSTA chunkens extra.logo_url så identity-enrichment
+        inte snubblar över samma värde N gånger för samma sida."""
+        long_text = "Acme bygger plattformar. " * 200  # → flera chunks
+        website.crawl = lambda cfg: [FetchResult("https://kund.se", "html", b"")]
+        readers.extract = lambda url, ct, raw: Document(
+            text=long_text, title="Hem", content_type="html",
+            image="https://kund.se/og.png",
+        )
+        items = self._run({"start_url": "https://kund.se"})
+        self.assertGreater(len(items), 1)
+        self.assertEqual(items[0].extra["logo_url"], "https://kund.se/og.png")
+        for it in items[1:]:
+            self.assertNotIn("logo_url", it.extra)
+
+    def test_no_og_image_no_logo_field(self):
+        website.crawl = lambda cfg: [FetchResult("https://kund.se", "html", b"")]
+        readers.extract = lambda url, ct, raw: Document(text="text", title=None, content_type="html")
+        items = self._run({"start_url": "https://kund.se"})
+        self.assertNotIn("logo_url", items[0].extra)
+
     def test_total_budget_caps_output(self):
         website.TOTAL_CHUNK_BUDGET = 2
         long_text = "mening. " * 2000  # många chunks

@@ -15,6 +15,7 @@ import firestore_client as fs
 from config import settings
 from connectors.base import ConnectorConfig
 from jobs._run_tracker import record_run
+from services.identity_enrichment import apply_identity_metadata
 
 log = logging.getLogger("jobs.scrape_active")
 
@@ -33,6 +34,8 @@ def run_for_client(client_id: str, client: dict) -> None:
     with record_run("scrape_active", client_id):
         active_connectors = client.get("active_connectors", [])
         _run_company_level(client_id, client, active_connectors)
+        # GLEIF kan ha lyft fram org.nr — flytta upp till client_doc om manuell saknas.
+        apply_identity_metadata(client_id)
 
         # MVP: bara bolagsnivå. Per-medarbetare-profiler är avstängda by default.
         # Slås på antingen globalt (settings.scrape_employee_linkedin) eller per

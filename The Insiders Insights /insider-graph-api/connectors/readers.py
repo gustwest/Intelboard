@@ -30,6 +30,10 @@ class Document:
     title: str | None
     content_type: str       # "html" | "pdf"
     needs_ocr: bool = False
+    # og:image (eller annan canonical preview-bild) om sidan deklarerar en. Lyfts till
+    # raw_item.extra.logo_url av website-connectorn så identity-enrichment kan flytta
+    # värdet upp till client_doc.logo_url. Endast HTML-vägen populerar fältet.
+    image: str | None = None
 
 
 def detect_content_type(url: str, header_content_type: str | None) -> str | None:
@@ -90,13 +94,14 @@ def _extract_html(url: str, raw: bytes) -> Document | None:
         text = trafilatura.extract(html, url=url, favor_recall=True) or ""
         meta = trafilatura.extract_metadata(html)
         title = getattr(meta, "title", None) if meta else None
+        image = getattr(meta, "image", None) if meta else None
     except Exception as exc:  # parsing varierar vilt mellan sajter — var defensiv
         log.warning("html extract failed for %s: %s", url, exc)
         return None
     text = text.strip()
     if not text:
         return None
-    return Document(text=text, title=title, content_type="html")
+    return Document(text=text, title=title, content_type="html", image=image or None)
 
 
 def _extract_pdf(raw: bytes) -> Document | None:

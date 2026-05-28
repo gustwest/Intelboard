@@ -93,6 +93,10 @@ class WebsiteConnector(BaseConnector):
                     "chunk_total": total,
                     "content_type": doc.content_type,
                 }
+                if idx == 0 and doc.image:
+                    # Bara första chunken per sida bär og:image så identity-enrichment
+                    # inte snubblar över samma värde N gånger (en sida = en logo-kandidat).
+                    extra["logo_url"] = doc.image
                 items.append(
                     RawItem(
                         source="website",

@@ -20,6 +20,7 @@ import connectors
 import firestore_client as fs
 from connectors.base import ConnectorConfig
 from jobs._run_tracker import record_run
+from services.identity_enrichment import apply_identity_metadata
 
 log = logging.getLogger("jobs.scrape_website")
 
@@ -50,8 +51,10 @@ def crawl_client(client_id: str, client: dict, *, force: bool = False) -> int:
             col.document(item.item_id).set(_payload(item))  # idempotent
             count += 1
         fs.client_doc(client_id).update({"website_last_crawled_at": datetime.now(timezone.utc)})
-        log.info("website: wrote %s chunks for %s", count, client_id)
-        r.summary = {"chunks": count}
+        # Lyft og:image (om hittad) till client_doc.logo_url när ingen manuell finns.
+        identity = apply_identity_metadata(client_id)
+        log.info("website: wrote %s chunks for %s (identity: %s)", count, client_id, identity or "—")
+        r.summary = {"chunks": count, "identity_updates": list(identity)}
         return count
 
 

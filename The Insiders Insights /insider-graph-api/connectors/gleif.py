@@ -60,6 +60,10 @@ class GleifConnector(BaseConnector):
             extra["address"] = level1["address"]
         if level1.get("registration_status"):
             extra["registration_status"] = level1["registration_status"]
+        if level1.get("registered_as"):
+            # Lokal identifierare (svenska bolag: org.nr) — identity-enrichment
+            # lyfter värdet till client_doc.org_number om manuell input saknas.
+            extra["org_number"] = level1["registered_as"]
 
         parent = _get_parent(lei)
         if parent:
@@ -114,7 +118,24 @@ def _get_level1(lei: str) -> dict | None:
         "name": _legal_name(entity),
         "address": _format_address(entity.get("legalAddress") or {}),
         "registration_status": (attrs.get("registration") or {}).get("status"),
+        # Lokal registrerings-identifierare (svenska bolag: org.nr från Bolagsverket).
+        # Saknas för bolag där GLEIF inte exponerar den → None, ingen fallback.
+        "registered_as": _local_identifier(entity, attrs.get("registration") or {}),
     }
+
+
+def _local_identifier(entity: dict, registration: dict) -> str | None:
+    """Lokal registreringsidentifierare ur GLEIF. Två fält kan bära den:
+    `entity.registeredAs` (vanligt) och `registration.otherValidationAuthorities`
+    (fallback). Tar första icke-tomma sträng som finns."""
+    raw = entity.get("registeredAs")
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    for entry in registration.get("otherValidationAuthorities") or []:
+        candidate = entry.get("validationAuthorityEntityID") if isinstance(entry, dict) else None
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    return None
 
 
 def _get_parent(lei: str) -> dict | None:

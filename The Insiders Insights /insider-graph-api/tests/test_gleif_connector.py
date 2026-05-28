@@ -9,10 +9,12 @@ import connectors.gleif as gleif
 from connectors.base import ConnectorConfig
 
 
-def _record(lei, name, city=None, country=None, status=None):
+def _record(lei, name, city=None, country=None, status=None, registered_as=None):
     entity = {"legalName": {"name": name}}
     if city or country:
         entity["legalAddress"] = {"city": city, "country": country}
+    if registered_as:
+        entity["registeredAs"] = registered_as
     attrs = {"lei": lei, "entity": entity}
     if status:
         attrs["registration"] = {"status": status}
@@ -77,6 +79,28 @@ class GleifFetchTest(unittest.TestCase):
     def test_missing_lei_param_returns_empty(self):
         items = gleif.GleifConnector().fetch(ConnectorConfig(client_id="acme", params={}))
         self.assertEqual(items, [])
+
+    def test_registered_as_lifts_to_org_number(self):
+        """Lokal identifierare (svenska bolag: org.nr från Bolagsverket) → extra.org_number.
+        Identity-enrichment lyfter sedan upp värdet till client_doc."""
+        lei = "ACMELEI00000000000Y"
+        self._install({
+            f"/lei-records/{lei}": {"data": _record(lei, "Acme AB", registered_as="5566778899")},
+            f"/lei-records/{lei}/direct-parent": None,
+            f"/lei-records/{lei}/direct-children": None,
+        })
+        extra = self._fetch(lei)[0].extra
+        self.assertEqual(extra["org_number"], "5566778899")
+
+    def test_no_registered_as_no_org_number(self):
+        lei = "NOREG00000000000000Z"
+        self._install({
+            f"/lei-records/{lei}": {"data": _record(lei, "Foreign Co.")},
+            f"/lei-records/{lei}/direct-parent": None,
+            f"/lei-records/{lei}/direct-children": None,
+        })
+        extra = self._fetch(lei)[0].extra
+        self.assertNotIn("org_number", extra)
 
     def test_child_pagination_capped(self):
         lei = "LOOP00000000000000001"
