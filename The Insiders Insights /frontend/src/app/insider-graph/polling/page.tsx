@@ -181,6 +181,12 @@ type RiskTimelineResp = {
   counts: Record<RiskStatus, number>;
 };
 
+type RiskQuestionsResp = {
+  client_id: string;
+  questions: { id: string; persona: string | null; type: string | null; text: string | null; status: string }[];
+  counts: { open: number; approved: number; rejected: number };
+};
+
 // --- Förtroendegap-cockpit (speglar services/trust_gap_report.py — översättningslagret §10.1) ---
 // declared = ni säger det · demonstrated = ni belägger det · perceived = AI uppfattar det
 
@@ -241,6 +247,7 @@ export default function GraphRiskLoopPage() {
   const [schedules, setSchedules] = useState<SchedulesResp | null>(null);
   const [humanization, setHumanization] = useState<Humanization | null>(null);
   const [riskTimeline, setRiskTimeline] = useState<RiskTimelineResp | null>(null);
+  const [riskQuestions, setRiskQuestions] = useState<RiskQuestionsResp | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const { latest, active: jobActive, trigger: runJob } = useJobRuns(selected);
@@ -359,6 +366,18 @@ export default function GraphRiskLoopPage() {
     };
   }, [selected, refreshTick]);
 
+  // Riskloop-status — pending/approved questions, driver statuspanel + tomtillstånd.
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
+    graphFetch<RiskQuestionsResp>(`/api/review/${selected}/risk-questions?status=all`)
+      .then((d) => !cancelled && setRiskQuestions(d))
+      .catch(() => !cancelled && setRiskQuestions(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [selected, refreshTick]);
+
   // Hämta vald månads rapport.
   useEffect(() => {
     if (!selected || !month) return;
@@ -423,20 +442,23 @@ export default function GraphRiskLoopPage() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
         {renderJobBtn('Kör polling', 'polling', '/api/jobs/polling', 'polling', { onDone: () => setRefreshTick((t) => t + 1) })}
-        {renderJobBtn('Kör risk-detect', 'risk', `/api/jobs/risk-detect/${selected}`, 'risk_detect', { needsClient: true })}
+        {renderJobBtn('Generera frågor', 'generate', `/api/jobs/risk-generate/${selected}`, 'risk_generate', { needsClient: true, onDone: () => setRefreshTick((t) => t + 1) })}
+        {renderJobBtn('Kör risk-detect', 'risk', `/api/jobs/risk-detect/${selected}`, 'risk_detect', { needsClient: true, onDone: () => setRefreshTick((t) => t + 1) })}
         {renderJobBtn('Bygg månadsrapport', 'report', `/api/jobs/monthly-report/${selected}`, 'monthly_report', { needsClient: true, onDone: () => setRefreshTick((t) => t + 1) })}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 12, color: C.muted, marginLeft: 8 }}>
-          {([['polling', 'Polling'], ['risk_detect', 'Risk-detect'], ['monthly_report', 'Rapport']] as [string, string][]).map(([type, label]) => {
+          {([['polling', 'Polling'], ['risk_generate', 'Frågor'], ['risk_detect', 'Risk-detect'], ['monthly_report', 'Rapport']] as [string, string][]).map(([type, label]) => {
             const run = latest(type);
+            const stale = run?.status === 'running' && isStale(run.started_at, 10);
             return (
               <span key={type} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <Clock size={12} color={C.dim} />
+                <Clock size={12} color={stale ? '#b45309' : C.dim} />
                 <strong style={{ color: '#3a4b56', fontWeight: 600 }}>{label}:</strong>
                 {run ? (
                   <>
-                    <span>{fmtRelative(run.started_at)}</span>
+                    <span style={{ color: stale ? '#b45309' : undefined }}>{fmtRelative(run.started_at)}</span>
                     {run.status === 'success' && <Check size={12} color="#16a34a" />}
                     {run.status === 'failed' && <X size={12} color="#dc2626" />}
+                    {stale && <span title={`Kör fortfarande sedan ${run.started_at} — sannolikt zombie efter revision-rollover`} style={{ fontSize: 10, color: '#b45309', background: 'rgba(245,158,11,0.14)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 5, padding: '1px 6px', fontWeight: 600 }}>möjligen stoppad</span>}
                   </>
                 ) : (
                   <span style={{ color: C.dim }}>aldrig körd</span>
@@ -454,6 +476,16 @@ export default function GraphRiskLoopPage() {
         <SchedulesPanel rows={schedules.schedules} onToggle={toggleSchedule} />
       )}
 
+      {/* Riskloop-status — synliggör tredelade loopen generate → review → detect */}
+      {(riskQuestions || riskTimeline) && (
+        <RiskLoopStatus
+          questions={riskQuestions}
+          findings={riskTimeline}
+          latestDetect={latest('risk_detect')}
+          latestGenerate={latest('risk_generate')}
+        />
+      )}
+
       {/* Veckovis synlighet — det löpande, automatiska måttet (visas oavsett månadsrapport) */}
       {polling && polling.length > 0 && <WeeklyVisibility weeks={polling} />}
 
@@ -461,7 +493,7 @@ export default function GraphRiskLoopPage() {
       {humanization?.available && <TrustGapCockpit model={humanization} />}
 
       {/* Closed-loop tidslinje per risk — detektion → åtgärd → resolved, oberoende av månadsrapport */}
-      {riskTimeline && riskTimeline.findings.length > 0 && <RiskLifecycleTimeline data={riskTimeline} />}
+      {riskTimeline && <RiskLifecycleTimeline data={riskTimeline} approvedQuestions={riskQuestions?.counts.approved ?? null} />}
 
       {months?.length === 0 && (!polling || polling.length === 0) && <EmptyState />}
 
@@ -973,6 +1005,84 @@ function signedDelta(v: number | null | undefined): string {
   return 'oförändrat';
 }
 
+function isStale(startedAt: string | null | undefined, minutes: number): boolean {
+  if (!startedAt) return false;
+  const t = Date.parse(startedAt);
+  if (Number.isNaN(t)) return false;
+  return Date.now() - t > minutes * 60 * 1000;
+}
+
+function RiskLoopStatus({ questions, findings, latestDetect, latestGenerate }: {
+  questions: RiskQuestionsResp | null;
+  findings: RiskTimelineResp | null;
+  latestDetect: { status: string; started_at: string | null } | null | undefined;
+  latestGenerate: { status: string; started_at: string | null } | null | undefined;
+}) {
+  const qc = questions?.counts || { open: 0, approved: 0, rejected: 0 };
+  const fc = findings?.counts || { open: 0, actioned: 0, resolved: 0, dismissed: 0 };
+  const totalApproved = qc.approved;
+  const hasPending = qc.open > 0;
+  const hasApproved = totalApproved > 0;
+  const hasOpenRisks = fc.open > 0;
+  const detectStale = latestDetect?.status === 'running' && isStale(latestDetect.started_at, 10);
+
+  // Bestäm nästa rekommenderade steg i den tredelade loopen.
+  let nextStep: { label: string; tone: 'urgent' | 'normal' | 'good' };
+  if (!hasApproved && !hasPending) {
+    nextStep = { label: 'Generera frågor — loopen är inte aktiverad än', tone: 'urgent' };
+  } else if (hasPending) {
+    nextStep = { label: `Granska & godkänn ${qc.open} väntande fråga${qc.open === 1 ? '' : 'or'} i Granska-fliken`, tone: 'urgent' };
+  } else if (hasOpenRisks) {
+    nextStep = { label: `Granska ${fc.open} öppna risk${fc.open === 1 ? '' : 'er'} — agera i Granska-fliken`, tone: 'urgent' };
+  } else if (hasApproved) {
+    nextStep = { label: `Loopen rullar — ${totalApproved} godkända frågor mäts varje vecka`, tone: 'good' };
+  } else {
+    nextStep = { label: 'Loopen är inaktiv', tone: 'normal' };
+  }
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: 16 }}>
+      <SectionHead
+        title="Riskloop-status — generera → granska → mät"
+        hint="Tredelad loop: risk-generate skapar frågor (kräver godkännande), risk-detect kör endast godkända frågor mot motorerna, fynd → korrigeringar → lösta efter två rena cykler."
+      />
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 14 }}>
+        <LoopStat label="Väntar granskning" value={qc.open} tone={hasPending ? 'urgent' : 'idle'} hint={hasPending ? 'godkänn i Granska-fliken' : 'inga'} />
+        <LoopStat label="Godkända frågor" value={totalApproved} tone={hasApproved ? 'good' : 'idle'} hint={hasApproved ? 'mäts veckovis' : 'kör risk-generate'} />
+        <LoopStat label="Öppna risker" value={fc.open} tone={hasOpenRisks ? 'urgent' : 'idle'} hint={`${fc.actioned} åtgärdade · ${fc.resolved} lösta`} />
+        <LoopStat label="Senaste detect" value={latestDetect ? (detectStale ? 'stale' : latestDetect.status) : '—'} tone={detectStale ? 'urgent' : latestDetect?.status === 'success' ? 'good' : 'idle'} hint={latestGenerate ? `gen: ${latestGenerate.status}` : 'risk-generate ej kört'} />
+      </div>
+
+      <div style={{
+        padding: '10px 14px',
+        background: nextStep.tone === 'urgent' ? 'rgba(245,158,11,0.08)' : nextStep.tone === 'good' ? 'rgba(22,163,74,0.06)' : 'rgba(106,126,138,0.06)',
+        border: `1px solid ${nextStep.tone === 'urgent' ? 'rgba(245,158,11,0.3)' : nextStep.tone === 'good' ? 'rgba(22,163,74,0.25)' : C.border}`,
+        borderRadius: 8,
+        fontSize: 12,
+        color: '#3a4b56',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+      }}>
+        <strong style={{ color: nextStep.tone === 'urgent' ? '#b45309' : nextStep.tone === 'good' ? '#16a34a' : C.muted, letterSpacing: '0.02em' }}>NÄSTA STEG:</strong>
+        <span>{nextStep.label}</span>
+      </div>
+    </div>
+  );
+}
+
+function LoopStat({ label, value, tone, hint }: { label: string; value: number | string; tone: 'urgent' | 'good' | 'idle'; hint?: string }) {
+  const color = tone === 'urgent' ? '#b45309' : tone === 'good' ? '#16a34a' : C.muted;
+  return (
+    <div>
+      <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 24, fontWeight: 600, color, letterSpacing: '-0.02em' }}>{value}</div>
+      {hint && <div style={{ fontSize: 10, color: C.dim, marginTop: 2 }}>{hint}</div>}
+    </div>
+  );
+}
+
 const RISK_STATUS_SV: Record<RiskStatus, { label: string; color: string; bg: string }> = {
   open: { label: 'Öppen', color: '#b91c1c', bg: 'rgba(239,68,68,0.12)' },
   actioned: { label: 'Åtgärdad', color: '#9f51b6', bg: 'rgba(159,81,182,0.14)' },
@@ -980,7 +1090,7 @@ const RISK_STATUS_SV: Record<RiskStatus, { label: string; color: string; bg: str
   dismissed: { label: 'Avfärdad', color: '#6a7e8a', bg: 'rgba(106,126,138,0.14)' },
 };
 
-function RiskLifecycleTimeline({ data }: { data: RiskTimelineResp }) {
+function RiskLifecycleTimeline({ data, approvedQuestions }: { data: RiskTimelineResp; approvedQuestions: number | null }) {
   const [filter, setFilter] = useState<RiskStatus | 'all'>('all');
   const rows = filter === 'all' ? data.findings : data.findings.filter((r) => r.status === filter);
   const total = data.findings.length;
@@ -992,28 +1102,54 @@ function RiskLifecycleTimeline({ data }: { data: RiskTimelineResp }) {
         hint="Per risk: när AI:n först gav ett farligt svar, när mjukvaran publicerade en korrigering, och när motorn slutat upprepa problemet. Beviset att loopen sluter sig."
       />
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
-        <RiskFilterChip label={`Alla (${total})`} active={filter === 'all'} onClick={() => setFilter('all')} />
-        {(['open', 'actioned', 'resolved', 'dismissed'] as RiskStatus[]).map((s) =>
-          counts[s] > 0 ? (
-            <RiskFilterChip
-              key={s}
-              label={`${RISK_STATUS_SV[s].label} (${counts[s]})`}
-              active={filter === s}
-              onClick={() => setFilter(s)}
-              tone={RISK_STATUS_SV[s]}
-            />
-          ) : null,
-        )}
-      </div>
+      {total > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+          <RiskFilterChip label={`Alla (${total})`} active={filter === 'all'} onClick={() => setFilter('all')} />
+          {(['open', 'actioned', 'resolved', 'dismissed'] as RiskStatus[]).map((s) =>
+            counts[s] > 0 ? (
+              <RiskFilterChip
+                key={s}
+                label={`${RISK_STATUS_SV[s].label} (${counts[s]})`}
+                active={filter === s}
+                onClick={() => setFilter(s)}
+                tone={RISK_STATUS_SV[s]}
+              />
+            ) : null,
+          )}
+        </div>
+      )}
 
-      {rows.length === 0 ? (
+      {total === 0 ? (
+        <RiskTimelineEmpty approvedQuestions={approvedQuestions} />
+      ) : rows.length === 0 ? (
         <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>Inga risker i den här statusen.</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
           {rows.map((r, i) => <RiskTimelineCard key={r.id} row={r} isLast={i === rows.length - 1} />)}
         </div>
       )}
+    </div>
+  );
+}
+
+function RiskTimelineEmpty({ approvedQuestions }: { approvedQuestions: number | null }) {
+  // Kontextuell tomtext beroende på var i tredelade loopen kunden står.
+  if (approvedQuestions === null) {
+    return <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>Inga risker att visa ännu.</p>;
+  }
+  if (approvedQuestions === 0) {
+    return (
+      <div style={{ padding: '12px 14px', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 8, fontSize: 13, color: '#3a4b56', lineHeight: 1.55 }}>
+        <strong style={{ color: '#b45309' }}>Loopen är inte aktiverad än.</strong> Inga godkända frågor finns — det betyder att risk-detect kör en no-op
+        ({'questions_asked: 0'}). Kör <code style={{ color: C.accent }}>risk-generate</code> i jobbraden ovan, sedan godkänn frågor i Granska-fliken;
+        därefter kommer denna tidslinje fyllas allt eftersom motorerna producerar farliga svar.
+      </div>
+    );
+  }
+  return (
+    <div style={{ padding: '12px 14px', background: 'rgba(22,163,74,0.06)', border: '1px solid rgba(22,163,74,0.2)', borderRadius: 8, fontSize: 13, color: '#3a4b56', lineHeight: 1.55 }}>
+      <strong style={{ color: '#16a34a' }}>Inga risker hittade.</strong> {approvedQuestions} godkända fråga{approvedQuestions === 1 ? '' : 'or'} kördes
+      — motorerna svarade säkert på alla. Tidslinjen fylls den vecka något bryter mönstret.
     </div>
   );
 }

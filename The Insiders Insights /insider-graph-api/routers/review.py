@@ -158,15 +158,22 @@ def decide_risk(
 
 
 @router.get("/{client_id}/risk-questions")
-def list_pending_risk_questions(client_id: str) -> dict[str, Any]:
+def list_pending_risk_questions(client_id: str, status: str = "open") -> dict[str, Any]:
     """Genererade frågebatterier som väntar på godkännande (review-grind, spec §5.1).
-    Endast godkända frågor körs skarpt av risk-detect."""
+    Endast godkända frågor körs skarpt av risk-detect.
+
+    `status`: "open" (default), "approved", "rejected" eller "all".
+    Svaret innehåller `counts` med totaler per status oavsett filter — driver
+    riskloop-statuspanelen i AI-synlighet-fliken."""
     if not fs.client_doc(client_id).get().exists:
         raise HTTPException(404, f"client not found: {client_id}")
 
     items: list[dict[str, Any]] = []
+    counts: dict[str, int] = {"open": 0, "approved": 0, "rejected": 0}
     for qid, q in fs.iter_risk_questions(client_id):
-        if q.get("status") not in (None, "open"):
+        s = q.get("status") or "open"
+        counts[s] = counts.get(s, 0) + 1
+        if status != "all" and s != status:
             continue
         items.append(
             {
@@ -178,11 +185,12 @@ def list_pending_risk_questions(client_id: str) -> dict[str, Any]:
                 "decision_criterion": q.get("decision_criterion"),
                 "harm_modes": q.get("harm_modes"),
                 "type": q.get("type"),
+                "status": s,
                 "generated_at": _iso(q.get("generated_at")),
             }
         )
     items.sort(key=lambda x: (x.get("persona") or "", x.get("track") or ""))
-    return {"client_id": client_id, "questions": items}
+    return {"client_id": client_id, "questions": items, "counts": counts}
 
 
 class RiskQuestionAction(BaseModel):
