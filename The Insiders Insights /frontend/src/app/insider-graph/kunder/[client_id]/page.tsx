@@ -13,6 +13,7 @@ import ESGAddon from '../../_components/ESGAddon';
 import PipelineStatus from '../../_components/PipelineStatus';
 import ConnectorsEditor from '../../_components/ConnectorsEditor';
 import MeasurementConfigEditor from '../../_components/MeasurementConfigEditor';
+import IdentityMetadataEditor from '../../_components/IdentityMetadataEditor';
 import AudiencePrioritiesEditor from '../../_components/AudiencePrioritiesEditor';
 import { graphFetch } from '../../_lib/api';
 import { useJobRuns, fmtRelative } from '../../_lib/jobRuns';
@@ -223,6 +224,9 @@ export default function ClientDetailPage() {
 
           {/* Mätkonfiguration — bransch-platshållare, personas, egna pollingfrågor (AI-synlighet) */}
           <MeasurementConfigEditor clientId={clientId} />
+
+          {/* Identitetsmetadata — logotyp + svenskt org.nr (drivs in i schema.org-grafen) */}
+          <IdentityMetadataEditor clientId={clientId} />
 
           {/* Audience-priorities — vem ska bli citerad av AI-motorer (driver output-kvalitet) */}
           <AudiencePrioritiesEditor clientId={clientId} />

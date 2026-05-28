@@ -57,6 +57,30 @@ class OnboardConnectorParamsTest(unittest.TestCase):
         self.assertFalse(settings["scrape_employee_profiles"])
 
 
+class OnboardIdentityMetadataTest(unittest.TestCase):
+    """Logo + svenskt org.nr fångas vid onboarding; org.nr normaliseras till
+    kanonisk NNNNNN-NNNN-form så jämförelse och AI-motorernas matchning fungerar."""
+
+    def test_logo_and_org_number_stored(self):
+        fakefs.reset(client=None)
+        onboard_client(_req(logo_url="https://acme.se/logo.svg", org_number="5566778899"))
+        stored = fakefs.STATE["client"]
+        self.assertEqual(stored["logo_url"], "https://acme.se/logo.svg")
+        self.assertEqual(stored["org_number"], "556677-8899")  # normaliserad
+
+    def test_org_number_with_dash_kept_canonical(self):
+        fakefs.reset(client=None)
+        onboard_client(_req(org_number="556677-8899"))
+        self.assertEqual(fakefs.STATE["client"]["org_number"], "556677-8899")
+
+    def test_no_identity_metadata_leaves_fields_none(self):
+        fakefs.reset(client=None)
+        onboard_client(_req())
+        stored = fakefs.STATE["client"]
+        self.assertIsNone(stored["logo_url"])
+        self.assertIsNone(stored["org_number"])
+
+
 class PurgeEmployeeFromClaimsTest(unittest.TestCase):
     def test_subject_claims_deleted_source_claims_pruned(self):
         fakefs.reset(claims={

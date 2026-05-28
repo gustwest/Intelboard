@@ -188,6 +188,50 @@ class SnippetContentRichnessTest(unittest.TestCase):
         self.assertNotIn(": ", body)    # ingen mellanslag efter kolon
 
 
+class IdentityMetadataTest(unittest.TestCase):
+    """Identitetsmetadata (logo + svenskt org.nr) ska lyftas direkt på org-noden i
+    BÅDA artefakterna (snippet OCH kompilerad graf) — annars ser motorerna olika
+    entitetskort beroende på var de läser. Identifier som PropertyValue med
+    propertyID gör org.nr entydigt (en strängsiffra ensam är tvetydig)."""
+
+    def test_logo_url_lifts_into_snippet_and_graph(self):
+        _seed(client={
+            "company_name": "Acme AB",
+            "website": "https://acme.se",
+            "logo_url": "https://acme.se/logo.svg",
+        })
+        snippet = _parse(render_identity_snippet("acme"))
+        org = _org_node(compile_client("acme"))
+        self.assertEqual(snippet["logo"], "https://acme.se/logo.svg")
+        self.assertEqual(org["logo"], "https://acme.se/logo.svg")
+
+    def test_org_number_becomes_property_value_with_se_orgnr_id(self):
+        _seed(client={
+            "company_name": "Acme AB",
+            "website": "https://acme.se",
+            "org_number": "556677-8899",
+        })
+        snippet = _parse(render_identity_snippet("acme"))
+        org = _org_node(compile_client("acme"))
+        expected = [{
+            "@type": "PropertyValue",
+            "propertyID": "SE-orgnr",
+            "value": "556677-8899",
+        }]
+        self.assertEqual(snippet["identifier"], expected)
+        self.assertEqual(org["identifier"], expected)
+
+    def test_logo_and_orgnr_absent_when_not_set(self):
+        """Inga gissningar — saknas fältet, saknas det i grafen och snippeten."""
+        _seed()  # default seed har ingen logo eller org_number
+        snippet = _parse(render_identity_snippet("acme"))
+        org = _org_node(compile_client("acme"))
+        self.assertNotIn("logo", snippet)
+        self.assertNotIn("logo", org)
+        self.assertNotIn("identifier", snippet)
+        self.assertNotIn("identifier", org)
+
+
 class FreshClientFallbackTest(unittest.TestCase):
     """En kund utan claims/källor ska fortfarande få en giltig snippet —
     färre fält, men @id, name, url och subjectOf-pekare måste finnas."""

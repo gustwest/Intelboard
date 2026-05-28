@@ -31,14 +31,26 @@ def render_identity_snippet(client_id: str) -> str:
     }
     if website:
         org["url"] = website
+    if data.get("logo_url"):
+        # Logo direkt i snippet → motorerna behöver inte gissa via favicon eller
+        # och bygger genast en korrekt knowledge-panel/avatar.
+        org["logo"] = data["logo_url"]
     if model.description:
         org["description"] = model.description
 
-    # leiCode/identifier lyfts ur fakta-noden — motorerna får en hård identifierare
-    # direkt i snippet (annars måste de följa subjectOf eller crawla profilsidan).
+    # Hårda identifierare direkt i snippet: motorerna behöver inte följa subjectOf
+    # för att disambiguera bolaget. leiCode lyfts ur fakta (kommer via GLEIF-
+    # connectorn); org.nr ligger på client_doc (manuell input eller framtida
+    # GLEIF-local-identifier-auto-extraktion).
     lei = next((f.value for f in model.facts if f.predicate == "leiCode"), None)
     if lei:
         org["leiCode"] = lei
+    if data.get("org_number"):
+        org["identifier"] = [{
+            "@type": "PropertyValue",
+            "propertyID": "SE-orgnr",
+            "value": data["org_number"],
+        }]
 
     if model.last_updated:
         # Berättar för motorn vilken version av identitets-fakta som gäller.

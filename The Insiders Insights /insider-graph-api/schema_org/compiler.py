@@ -260,6 +260,19 @@ def compile_client(client_id: str) -> dict[str, Any]:
         # Canonical homepage. Snippet i kundens <head> delar samma `url` — så
         # motorerna ser ETT konsistent entitetskort var de än läser den.
         organization["url"] = data["website"]
+    if data.get("logo_url"):
+        # Schema.org Organization.logo accepterar URL eller ImageObject. URL räcker —
+        # motorerna laddar den och bygger sina egna avatar-/knowledge-paneler.
+        organization["logo"] = data["logo_url"]
+    if data.get("org_number"):
+        # Svenskt org.nr — PropertyValue med propertyID gör identifieraren entydig.
+        # `identifier` är en lista i schema.org-modellen → vi initierar som lista även
+        # om vi (idag) bara skickar ett värde, så framtida LEI/VAT enkelt läggs till.
+        organization["identifier"] = [{
+            "@type": "PropertyValue",
+            "propertyID": "SE-orgnr",
+            "value": data["org_number"],
+        }]
     for fact in model.facts:
         if fact.predicate == "aggregateRating":
             # Medarbetaromdöme (eNPS o.dyl.) → riktig AggregateRating-nod, inte ett platt tal.

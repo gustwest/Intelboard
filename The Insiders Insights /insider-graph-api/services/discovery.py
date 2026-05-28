@@ -49,6 +49,8 @@ def onboard_client(req: OnboardRequest) -> OnboardResponse:
         {
             "company_name": req.company_name,
             "lei": req.lei,
+            "org_number": _normalize_org_number(req.org_number),
+            "logo_url": (req.logo_url or "").strip() or None,
             "company_linkedin_url": req.company_linkedin_url,
             "active_connectors": list(req.active_connectors or ["website"]),
             "tier": req.tier,
@@ -97,3 +99,18 @@ def _write_employees(client_id: str, employees: Iterable[EmployeeInput]) -> list
 
 def _episodic_email(client_id: str, employee_id: str) -> str:
     return f"{client_id}.{employee_id}@inbox.insidergraph.io"
+
+
+def _normalize_org_number(value: str | None) -> str | None:
+    """Svenskt org.nr på kanonisk form NNNNNN-NNNN.
+
+    Ops/kunder skriver omväxlande med eller utan bindestreck — normalisera vid
+    skrivning så jämförelse, deduplicering och AI-motorernas matchning fungerar.
+    Returnerar None om input inte är 10 siffror (vi gör ingen Luhn-check här).
+    """
+    if not value:
+        return None
+    digits = re.sub(r"\D", "", value)
+    if len(digits) != 10:
+        return value.strip() or None  # bevara avvikelse — synlig för ops vid granskning
+    return f"{digits[:6]}-{digits[6:]}"

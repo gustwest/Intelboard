@@ -29,6 +29,13 @@ class OnboardRequest(BaseModel):
     company_linkedin_url: str | None = None
     # LEI-kod (Legal Entity Identifier) — matar GLEIF-connectorn (koncernstruktur).
     lei: str | None = None
+    # Svenskt organisationsnummer (10 siffror, ev. med bindestreck). Lyfts till
+    # Organization.identifier (PropertyValue, propertyID="SE-orgnr") så AI-motorer får
+    # en hård svensk identifierare. Auto-extraherbart via GLEIF (local_identifiers).
+    org_number: str | None = None
+    # Direkt-URL till företagets logotyp (raster eller SVG). Lyfts till Organization.logo.
+    # Auto-extraherbart via website-connectorns og:image — manuell input vinner alltid.
+    logo_url: str | None = None
     active_connectors: list[str] | None = None
     employees: list[EmployeeInput] = Field(default_factory=list)
     # Connector-params som matar respektive connectors fetch(). Lagras under

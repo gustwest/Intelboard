@@ -14,6 +14,7 @@ import firestore_client as fs
 import ttl_cache
 from routers.inbox import _count_client  # samma "väntar på människa"-räkning som inkorgen
 from services import persona_derivation
+from services.discovery import _normalize_org_number
 from services.output_quality import AudiencePriority
 
 router = APIRouter(prefix="/api/clients", tags=["clients"])
@@ -42,6 +43,11 @@ class ClientConfigUpdate(BaseModel):
     risk_personas: list[str] | None = None
     polling_questions: dict[str, list[str]] | None = None
     audience_priorities: list[AudiencePriority] | None = None
+    # Identitetsmetadata som lyfts till Organization.logo + Organization.identifier
+    # på compiler-grafen och i delivery-snippeten. Manuell input vinner alltid över
+    # auto-extraherade värden (ops-redigering är sanning).
+    logo_url: str | None = None
+    org_number: str | None = None
 
 
 @router.get("")
@@ -107,6 +113,9 @@ def get_client(client_id: str) -> dict[str, Any]:
         "tier": data.get("tier", "default"),
         "profile_base_url": data.get("profile_base_url"),
         "last_compiled": _iso(data.get("last_compiled")),
+        # Identitetsmetadata (driver Organization.logo + Organization.identifier).
+        "logo_url": data.get("logo_url"),
+        "org_number": data.get("org_number"),
         # Mätkonfiguration (AI-synlighet) — driver MeasurementConfigEditor.
         "industry": data.get("industry"),
         "topic": data.get("topic"),
@@ -156,6 +165,13 @@ def update_client_config(client_id: str, payload: ClientConfigUpdate) -> dict[st
         # Spara som dict-lista (Firestore hanterar inte Pydantic-modeller direkt).
         update["audience_priorities"] = [a.model_dump() for a in payload.audience_priorities]
         update["audience_priorities_set_at"] = datetime.now(timezone.utc).isoformat()
+
+    if payload.logo_url is not None:
+        # Tom sträng → rensa fältet (UI nollställer manuellt-satt logo).
+        update["logo_url"] = payload.logo_url.strip() or None
+
+    if payload.org_number is not None:
+        update["org_number"] = _normalize_org_number(payload.org_number)
 
     if update:
         ref.update(update)
