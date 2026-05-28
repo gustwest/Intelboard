@@ -1,11 +1,40 @@
-"""Polling-resultat — read-endpoints för dashboards."""
-from typing import Any
+"""Polling-resultat — read-endpoints för dashboards.
+
+Aggregat per motor härleds vid läsning från raw_responses (ej lagrat), så att UI:t
+kan visa per-motor-trend för befintlig historik utan schemamigration.
+"""
+from collections import defaultdict
+from typing import Any, Iterable
 
 from fastapi import APIRouter, HTTPException
 
 import firestore_client as fs
 
 router = APIRouter(prefix="/api/polling", tags=["polling"])
+
+
+def _aggregate_per_engine(raw_responses: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Grupera raw_responses per motor → SoV/sentiment + mention-räknare. Tom dict om data saknas."""
+    by_engine: dict[str, dict[str, list[Any]]] = defaultdict(lambda: {"answers": [], "mentions": [], "sentiments": []})
+    for r in raw_responses or []:
+        model = r.get("model") or "okänd"
+        by_engine[model]["answers"].append(r)
+        if r.get("mentioned"):
+            by_engine[model]["mentions"].append(r)
+            if r.get("sentiment") is not None:
+                by_engine[model]["sentiments"].append(r["sentiment"])
+    out: dict[str, dict[str, Any]] = {}
+    for model, buckets in by_engine.items():
+        total = len(buckets["answers"])
+        mentions = len(buckets["mentions"])
+        sents = buckets["sentiments"]
+        out[model] = {
+            "share_of_voice": (mentions / total) if total else 0.0,
+            "sentiment_score": (sum(sents) / len(sents)) if sents else None,
+            "answer_count": total,
+            "mention_count": mentions,
+        }
+    return out
 
 
 @router.get("/{client_id}")
@@ -26,6 +55,7 @@ def list_results(client_id: str, limit: int = 12) -> dict[str, Any]:
                 "total_answers": data.get("total_answers"),
                 "answers_with_mention": data.get("answers_with_mention"),
                 "models_used": data.get("models_used"),
+                "per_engine": _aggregate_per_engine(data.get("raw_responses") or []),
             }
         )
     weeks.sort(key=lambda w: w["week_id"], reverse=True)

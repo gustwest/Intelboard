@@ -105,15 +105,31 @@ type CategoryResult = {
   mention_count: number;
 };
 
+type EngineResult = {
+  share_of_voice: number;
+  sentiment_score: number | null;
+  answer_count: number;
+  mention_count: number;
+};
+
 type PollingWeek = {
   week_id: string;
   share_of_voice: number | null;
   sentiment_score: number | null;
   parity_index: number | null;
   category_results: Record<string, CategoryResult> | null;
+  per_engine: Record<string, EngineResult> | null;
   total_answers: number | null;
   answers_with_mention: number | null;
   models_used: string[] | null;
+};
+
+const ENGINE_SV: Record<string, string> = {
+  'gpt-4o': 'ChatGPT',
+  chatgpt: 'ChatGPT',
+  gemini: 'Gemini',
+  perplexity: 'Perplexity',
+  claude: 'Claude',
 };
 
 const CATEGORY_SV: Record<string, string> = {
@@ -139,8 +155,22 @@ type ScheduleRow = {
 };
 type SchedulesResp = { available: boolean; location?: string; schedules: ScheduleRow[] };
 
-// --- Humaniseringsbild (speglar services/trust_gap_report.py — översättningslagret §10.1) ---
+// --- Förtroendegap-cockpit (speglar services/trust_gap_report.py — översättningslagret §10.1) ---
+// declared = ni säger det · demonstrated = ni belägger det · perceived = AI uppfattar det
 
+type PerceivedRaw = {
+  status?: string | null;
+  salience?: number | null;
+  valence?: number | null;
+  confidence?: number | null;
+};
+type DimensionRaw = {
+  declared?: number | null;
+  demonstrated?: number | null;
+  score?: number | null;
+  credibility_gap?: number | null;
+  perceived?: PerceivedRaw | null;
+};
 type HumanizationDim = {
   dimension: string;
   label: string;
@@ -149,6 +179,13 @@ type HumanizationDim = {
   perception_by_engine: string[];
   action: string;
   confidence_note: string | null;
+  raw?: DimensionRaw;
+};
+type HumanizationTrend = {
+  previous_date?: string | null;
+  demonstrated_delta?: number | null;
+  declared_delta?: number | null;
+  note?: string | null;
 };
 type Humanization = {
   available: boolean;
@@ -156,6 +193,8 @@ type Humanization = {
   dimensions?: HumanizationDim[];
   ranked_actions?: { label: string; why: string; action: string }[];
   opportunities_and_risks?: string[];
+  trend?: HumanizationTrend;
+  raw?: { overall_score?: number | null; coverage?: { declared?: number; demonstrated?: number; of?: number } };
 };
 
 const PERSONAS: Persona[] = ['buyer', 'candidate', 'investor'];
@@ -379,8 +418,8 @@ export default function GraphRiskLoopPage() {
       {/* Veckovis synlighet — det löpande, automatiska måttet (visas oavsett månadsrapport) */}
       {polling && polling.length > 0 && <WeeklyVisibility weeks={polling} />}
 
-      {/* Humaniseringsbild — hur AI uppfattar kundens mänsklighet (kultur-/värmedimensioner) */}
-      {humanization?.available && <HumanizationView model={humanization} />}
+      {/* Förtroendegap-cockpit — säger / belägger / AI uppfattar, per dimension */}
+      {humanization?.available && <TrustGapCockpit model={humanization} />}
 
       {months?.length === 0 && (!polling || polling.length === 0) && <EmptyState />}
 
@@ -640,11 +679,25 @@ function SchedulesPanel({ rows, onToggle }: { rows: ScheduleRow[]; onToggle: (na
 function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
   const latest = weeks[0];
   // Trenden ritas äldst → nyast (API:t ger nyast först).
-  const sovSeries = [...weeks].reverse().filter((w) => w.share_of_voice != null) as (PollingWeek & { share_of_voice: number })[];
+  const chrono = [...weeks].reverse();
+  const sovSeries = chrono.filter((w) => w.share_of_voice != null) as (PollingWeek & { share_of_voice: number })[];
   const sent = sentimentLabel(latest.sentiment_score);
   const cats = latest.category_results
     ? Object.entries(latest.category_results).sort((a, b) => b[1].share_of_voice - a[1].share_of_voice)
     : [];
+
+  // Per-kategori-trend (12v): plocka SoV per vecka för varje kategori.
+  const catTrend: Record<string, (number | null)[]> = {};
+  if (cats.length > 0) {
+    for (const [cat] of cats) catTrend[cat] = chrono.map((w) => w.category_results?.[cat]?.share_of_voice ?? null);
+  }
+
+  // Per-motor (senaste veckan + 12v-trend).
+  const engineEntries = latest.per_engine
+    ? Object.entries(latest.per_engine).sort((a, b) => b[1].share_of_voice - a[1].share_of_voice)
+    : [];
+  const engineTrend: Record<string, (number | null)[]> = {};
+  for (const [eng] of engineEntries) engineTrend[eng] = chrono.map((w) => w.per_engine?.[eng]?.share_of_voice ?? null);
 
   return (
     <div style={{ ...cardStyle, marginBottom: 16 }}>
@@ -681,22 +734,49 @@ function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
       )}
 
       {cats.length > 0 && (
-        <div>
-          <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 8 }}>Per kategori — senaste veckan</div>
-          <div style={{ ...catGrid, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 8, marginBottom: 6 }}>
+        <div style={{ marginBottom: engineEntries.length ? 18 : 0 }}>
+          <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 8 }}>Per kategori — senaste veckan + trend</div>
+          <div style={{ ...catGridTrend, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 8, marginBottom: 6 }}>
             <span>Kategori</span>
-            <span>Share of Voice</span>
+            <span>SoV</span>
             <span>Sentiment</span>
             <span>Svar</span>
+            <span>Trend (12v)</span>
           </div>
           {cats.map(([cat, r]) => {
             const cs = sentimentLabel(r.sentiment_score);
             return (
-              <div key={cat} style={{ ...catGrid, padding: '8px 0', borderBottom: `1px solid ${C.border}`, fontSize: 12, alignItems: 'center' }}>
+              <div key={cat} style={{ ...catGridTrend, padding: '8px 0', borderBottom: `1px solid ${C.border}`, fontSize: 12, alignItems: 'center' }}>
                 <span style={{ color: '#3a4b56' }}>{CATEGORY_SV[cat] || cat}</span>
                 <span style={{ color: '#3a4b56' }}>{Math.round(r.share_of_voice * 100)}%</span>
                 <span style={{ color: cs.color }}>{cs.text}</span>
                 <span style={{ color: C.dim }}>{Math.round(r.mention_count)}/{Math.round(r.answer_count)}</span>
+                <Sparkline series={catTrend[cat]} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {engineEntries.length > 0 && (
+        <div>
+          <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 8 }}>Per AI-motor — senaste veckan + trend</div>
+          <div style={{ ...engineGrid, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 8, marginBottom: 6 }}>
+            <span>Motor</span>
+            <span>SoV</span>
+            <span>Sentiment</span>
+            <span>Nämner</span>
+            <span>Trend (12v)</span>
+          </div>
+          {engineEntries.map(([eng, r]) => {
+            const es = sentimentLabel(r.sentiment_score);
+            return (
+              <div key={eng} style={{ ...engineGrid, padding: '8px 0', borderBottom: `1px solid ${C.border}`, fontSize: 12, alignItems: 'center' }}>
+                <span style={{ color: '#3a4b56', fontWeight: 600 }}>{ENGINE_SV[eng] || eng}</span>
+                <span style={{ color: '#3a4b56' }}>{Math.round(r.share_of_voice * 100)}%</span>
+                <span style={{ color: es.color }}>{es.text}</span>
+                <span style={{ color: C.dim }}>{r.mention_count}/{r.answer_count}</span>
+                <Sparkline series={engineTrend[eng]} />
               </div>
             );
           })}
@@ -706,16 +786,59 @@ function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
   );
 }
 
-function HumanizationView({ model }: { model: Humanization }) {
+function Sparkline({ series, width = 88, height = 22 }: { series: (number | null)[] | undefined; width?: number; height?: number }) {
+  const pts = (series || []).filter((v): v is number => v != null);
+  if (pts.length < 2) return <span style={{ fontSize: 10, color: C.dim }}>—</span>;
+  const max = Math.max(...pts, 0.001);
+  const step = width / (pts.length - 1);
+  const path = pts.map((v, i) => `${i === 0 ? 'M' : 'L'}${(i * step).toFixed(1)},${(height - (v / max) * (height - 2) - 1).toFixed(1)}`).join(' ');
+  const last = pts[pts.length - 1];
+  const first = pts[0];
+  const delta = last - first;
+  const color = delta > 0.02 ? '#16a34a' : delta < -0.02 ? '#b91c1c' : C.muted;
+  return (
+    <svg width={width} height={height} style={{ display: 'block' }} aria-label={`trend ${Math.round(first * 100)}→${Math.round(last * 100)}%`}>
+      <path d={path} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={width} cy={height - (last / max) * (height - 2) - 1} r={2} fill={color} />
+    </svg>
+  );
+}
+
+function TrustGapCockpit({ model }: { model: Humanization }) {
   const dims = model.dimensions || [];
   const flags = model.opportunities_and_risks || [];
+  const ranked = model.ranked_actions || [];
+  const trend = model.trend;
   return (
     <div style={{ ...cardStyle, marginBottom: 16 }}>
       <SectionHead
-        title="Hur AI uppfattar er mänsklighet"
-        hint="AI-motorernas bild av er på kultur- och värdedimensionerna — synlighet och omdöme hålls isär. Detta är PERCEPTION (vad motorerna säger), inte poängen: bevis räknas separat, perception vägs aldrig in."
+        title="Förtroendegap — säger, belägger, AI uppfattar"
+        hint="Tre lager per dimension: vad ni SÄGER om er själva, vad ni BELÄGGER med oberoende underlag, och hur AI UPPFATTAR er. Gap där emellan är handlingen — perception vägs aldrig in i poängen."
       />
       <p style={{ fontSize: 13, color: '#3a4b56', margin: '0 0 14px', lineHeight: 1.6 }}>{model.coverage_plain}</p>
+
+      {trend?.previous_date && (
+        <div style={{ fontSize: 12, color: C.muted, margin: '0 0 14px', lineHeight: 1.5 }}>
+          <strong style={{ color: '#3a4b56' }}>Sedan {trend.previous_date}:</strong>{' '}
+          belagda områden {signedDelta(trend.demonstrated_delta)} · uttalade områden {signedDelta(trend.declared_delta)}.
+        </div>
+      )}
+      {trend?.note && !trend.previous_date && (
+        <div style={{ fontSize: 12, color: C.dim, margin: '0 0 14px', fontStyle: 'italic' }}>{trend.note}</div>
+      )}
+
+      {ranked.length > 0 && (
+        <div style={{ marginBottom: 16, padding: '12px 14px', background: 'rgba(159,81,182,0.06)', border: '1px solid rgba(159,81,182,0.18)', borderRadius: 8 }}>
+          <div style={{ fontSize: 11, color: C.accent, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Att göra — mest angeläget först</div>
+          <ol style={{ margin: 0, paddingLeft: 18, color: '#3a4b56', fontSize: 13, lineHeight: 1.65 }}>
+            {ranked.map((a, i) => (
+              <li key={i} style={{ marginBottom: i < ranked.length - 1 ? 6 : 0 }}>
+                <strong>{a.label}:</strong> {a.why} <span style={{ color: '#16a34a' }}>{a.action}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
 
       {flags.length > 0 && (
         <div style={{ marginBottom: 14 }}>
@@ -727,21 +850,85 @@ function HumanizationView({ model }: { model: Humanization }) {
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {dims.map((d) => (
-          <div key={d.dimension} style={{ padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56' }}>{d.label}</div>
-            <div style={{ fontSize: 12, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>{d.perception_plain}</div>
-            {d.perception_by_engine.length > 0 && (
-              <ul style={{ margin: '4px 0 0', paddingLeft: 16, color: C.dim, fontSize: 11, lineHeight: 1.5 }}>
-                {d.perception_by_engine.map((line, i) => <li key={i}>{line}</li>)}
-              </ul>
-            )}
-            {d.confidence_note && <div style={{ fontSize: 11, color: C.dim, marginTop: 3, fontStyle: 'italic' }}>{d.confidence_note}</div>}
-          </div>
-        ))}
+        {dims.map((d) => <DimensionRow key={d.dimension} dim={d} />)}
       </div>
     </div>
   );
+}
+
+function DimensionRow({ dim }: { dim: HumanizationDim }) {
+  const raw = dim.raw || {};
+  const declared = typeof raw.declared === 'number' ? raw.declared : null;
+  const demonstrated = typeof raw.demonstrated === 'number' ? raw.demonstrated : null;
+  const perceived = raw.perceived || null;
+  // Perceived som "AI ser er" = salience × valens-mappad till 0..1 (valens 0.5 = neutralt, 1 = positivt, 0 = svalt).
+  // Salience-golv 0.25 → annars "not visible" och inga staplar.
+  const salience = typeof perceived?.salience === 'number' ? perceived.salience : null;
+  const valence = typeof perceived?.valence === 'number' ? perceived.valence : null;
+  const perceivedBar = salience != null && salience >= 0.25 && valence != null ? salience * valence : null;
+  const overClaim = demonstrated != null && perceived?.status !== 'not_visible' && valence != null && (valence - (demonstrated ?? 0)) > 0.2;
+  const opportunity = demonstrated != null && valence != null && ((demonstrated ?? 0) - valence) > 0.2;
+  return (
+    <div style={{ padding: '14px 0', borderBottom: `1px solid ${C.border}` }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56' }}>{dim.label}</div>
+        {overClaim && <span style={trustGapBadge('#b45309', 'rgba(245,158,11,0.14)')}>Risk: över-claim</span>}
+        {opportunity && <span style={trustGapBadge('#0e7490', 'rgba(14,116,144,0.12)')}>Möjlighet: berätta mer</span>}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 10 }}>
+        <TrustBar label="Säger" value={declared} hint="0 / 1" tone="declared" />
+        <TrustBar label="Belägger" value={demonstrated} hint="0 → 1" tone="demonstrated" />
+        <TrustBar
+          label="AI uppfattar"
+          value={perceivedBar}
+          hint={perceived?.status === 'not_visible' ? 'AI ser er inte här ännu' : valence != null ? `salience ${salience?.toFixed(2) ?? '—'} · valens ${valence?.toFixed(2) ?? '—'}` : 'för lite synlighet'}
+          tone="perceived"
+        />
+      </div>
+      <div style={{ fontSize: 12, color: '#3a4b56', marginTop: 4, lineHeight: 1.5 }}>{dim.evidence_plain}</div>
+      <div style={{ fontSize: 12, color: C.muted, marginTop: 4, lineHeight: 1.5 }}>{dim.perception_plain}</div>
+      {dim.perception_by_engine.length > 0 && (
+        <ul style={{ margin: '6px 0 0', paddingLeft: 16, color: C.dim, fontSize: 11, lineHeight: 1.5 }}>
+          {dim.perception_by_engine.map((line, i) => <li key={i}>{line}</li>)}
+        </ul>
+      )}
+      <div style={{ fontSize: 12, color: '#16a34a', marginTop: 6, lineHeight: 1.5 }}>
+        <strong>Att göra:</strong> {dim.action}
+      </div>
+      {dim.confidence_note && <div style={{ fontSize: 11, color: C.dim, marginTop: 4, fontStyle: 'italic' }}>{dim.confidence_note}</div>}
+    </div>
+  );
+}
+
+function TrustBar({ label, value, hint, tone }: { label: string; value: number | null; hint?: string; tone: 'declared' | 'demonstrated' | 'perceived' }) {
+  const colors = {
+    declared: { fill: '#6a7e8a', track: 'rgba(106,126,138,0.14)' },
+    demonstrated: { fill: '#9f51b6', track: 'rgba(159,81,182,0.14)' },
+    perceived: { fill: '#0e7490', track: 'rgba(14,116,144,0.14)' },
+  }[tone];
+  const pctVal = value != null ? Math.max(0, Math.min(1, value)) * 100 : 0;
+  return (
+    <div>
+      <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginBottom: 4 }}>{label}</div>
+      <div style={{ height: 8, background: colors.track, borderRadius: 4, overflow: 'hidden' }}>
+        {value != null && (
+          <div style={{ width: `${pctVal}%`, height: '100%', background: colors.fill, borderRadius: 4, transition: 'width .3s' }} />
+        )}
+      </div>
+      <div style={{ fontSize: 10, color: C.dim, marginTop: 4 }}>{hint}</div>
+    </div>
+  );
+}
+
+function trustGapBadge(color: string, bg: string): React.CSSProperties {
+  return { fontSize: 10, fontWeight: 600, color, background: bg, border: `1px solid ${color}33`, borderRadius: 6, padding: '2px 8px', letterSpacing: '0.04em' };
+}
+
+function signedDelta(v: number | null | undefined): string {
+  if (v == null) return 'oförändrat';
+  if (v > 0) return `+${v}`;
+  if (v < 0) return `${v}`;
+  return 'oförändrat';
 }
 
 function Stat({ label, value, accent, color }: { label: string; value: string; accent?: boolean; color?: string }) {
@@ -803,6 +990,18 @@ const rowGrid: React.CSSProperties = {
 const catGrid: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns: '1.5fr 1.2fr 1.4fr 0.8fr',
+  gap: 12,
+};
+
+const catGridTrend: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '1.4fr 0.8fr 1.3fr 0.8fr 1.1fr',
+  gap: 12,
+};
+
+const engineGrid: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '1.2fr 0.8fr 1.3fr 0.8fr 1.1fr',
   gap: 12,
 };
 
