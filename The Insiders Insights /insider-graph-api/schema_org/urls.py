@@ -64,3 +64,14 @@ def canonical_url(client_id: str, profile_base_url: str | None = None) -> str:
     if settings.cdn_clean_urls:
         return f"{settings.cdn_base_url}/{client_id}/"
     return f"{DEFAULT_BASE}/{client_id}"
+
+
+def external_same_as(data: dict) -> list[str]:
+    """Externa identitetslänkar för Organization.sameAs ur ett client_doc.
+
+    Konventionen vi följer (schema.org/Organization): webbplatsen är `url`, INTE
+    sameAs — men befintliga snippets+kompilatorgrafer har historiskt listat
+    webbplatsen i sameAs också. Vi behåller det för bakåtkompatibilitet (motorer
+    klagar inte; det är bara redundant), men exponerar bygget på ETT ställe så
+    delivery och compiler aldrig hamnar i olika listor."""
+    return [u for u in [data.get("website"), data.get("company_linkedin_url")] if u]

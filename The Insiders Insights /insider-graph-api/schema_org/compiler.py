@@ -30,7 +30,7 @@ from schema_org.claims import (
     derive_property_claims,
     derive_skill_claims,
 )
-from schema_org.urls import canonical_url
+from schema_org.urls import canonical_url, external_same_as
 from schemas import Claim, ClaimSource
 
 DEFAULT_MANUAL_LABEL = "uppgift från bolaget"
@@ -119,7 +119,7 @@ def build_render_model(client_id: str) -> RenderModel:
     base = canonical_url(client_id, data.get("profile_base_url"))
     org_id = f"{base}#org"
 
-    same_as = [u for u in [data.get("website"), data.get("company_linkedin_url")] if u]
+    same_as = list(external_same_as(data))
     persons = [
         {
             "@type": "Person",
@@ -250,11 +250,16 @@ def compile_client(client_id: str) -> dict[str, Any]:
     model = build_render_model(client_id)
     by_number = {s.number: s for s in model.sources}
 
+    data = fs.client_doc(client_id).get().to_dict() or {}
     organization: dict[str, Any] = {
         "@type": "Organization",
         "@id": model.org_id,
         "name": model.company_name,
     }
+    if data.get("website"):
+        # Canonical homepage. Snippet i kundens <head> delar samma `url` — så
+        # motorerna ser ETT konsistent entitetskort var de än läser den.
+        organization["url"] = data["website"]
     for fact in model.facts:
         if fact.predicate == "aggregateRating":
             # Medarbetaromdöme (eNPS o.dyl.) → riktig AggregateRating-nod, inte ett platt tal.
