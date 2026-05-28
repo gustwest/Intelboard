@@ -18,25 +18,28 @@ def _llm_returns(payload):
 
 
 def _website_item(*, url, title, text, item_id="w1"):
+    """Speglar website-connectorns faktiska RawItem-form (content + extra.name)."""
     return {
         item_id: {
             "url": url,
-            "title": title,
-            "text": text,
+            "source": "website",
             "schema_type": "Organization",
-            "fetched_at": "2026-05-28T08:00:00Z",
+            "content": text,
+            "published_at": "2026-05-28T08:00:00Z",
+            "extra": {"name": title, "doc_url": url, "chunk_index": 0, "chunk_total": 1},
         }
     }
 
 
 def _job_item(*, title, text, item_id="j1"):
+    """Speglar jobfeed-connectorns faktiska RawItem-form."""
     return {
         item_id: {
-            "title": title,
-            "text": text,
+            "source": "jobfeed",
             "schema_type": "JobPosting",
-            "extra": {"job_id": "ext-" + item_id, "source_label": "jobfeed"},
-            "fetched_at": "2026-05-28T08:00:00Z",
+            "content": text,
+            "published_at": "2026-05-28T08:00:00Z",
+            "extra": {"name": title, "job_id": "ext-" + item_id, "jobLocation": "Stockholm"},
         }
     }
 
@@ -147,7 +150,7 @@ class DerivationLlmAvailable(unittest.TestCase):
         collected = pd._collect_website_items("acme")
         self.assertEqual(len(collected), pd.MAX_WEBSITE_ITEMS)
         # De längsta texterna (5000 tecken) ska komma först
-        self.assertGreater(len(collected[0]["text"]), 1000)
+        self.assertGreater(len(collected[0]["content"]), 1000)
 
     def test_distinguishes_website_from_jobfeed_items(self):
         items = {
@@ -159,8 +162,8 @@ class DerivationLlmAvailable(unittest.TestCase):
         jobs = pd._collect_job_items("acme")
         self.assertEqual(len(web), 1)
         self.assertEqual(len(jobs), 1)
-        self.assertIn("om-text", web[0]["text"])
-        self.assertIn("job-text", jobs[0]["text"])
+        self.assertIn("om-text", web[0]["content"])
+        self.assertIn("job-text", jobs[0]["content"])
 
 
 class DerivationLlmUnavailable(unittest.TestCase):
@@ -181,10 +184,10 @@ class DerivationLlmUnavailable(unittest.TestCase):
 
 class PromptShape(unittest.TestCase):
     def test_includes_website_and_job_sections(self):
-        web = [{"url": "https://x.se/om", "title": "Om", "text": "Vi är ett B2B SaaS-bolag" * 5,
+        web = [{"url": "https://x.se/om", "title": "Om", "content": "Vi är ett B2B SaaS-bolag" * 5,
                 "schema_type": "Organization"}]
-        jobs = [{"title": "Senior Engineer", "text": "Vi söker en senior...", "location": "Stockholm",
-                 "fetched_at": "2026-05-28T08:00:00Z"}]
+        jobs = [{"title": "Senior Engineer", "content": "Vi söker en senior...", "location": "Stockholm",
+                 "published_at": "2026-05-28T08:00:00Z"}]
         prompt = pd._build_user_prompt(web, jobs, "Acme AB")
         self.assertIn("Acme AB", prompt)
         self.assertIn("[WEBSITE", prompt)

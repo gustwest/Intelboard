@@ -76,23 +76,31 @@ def derive_audience_priorities(client_id: str, company_name: str | None = None) 
 
 def _collect_website_items(client_id: str) -> list[dict[str, Any]]:
     """Hämta website-items ur raw_items_company. Filtrerar bort jobfeed-items
-    (samma collection) och prioriterar sidor med längst text (proxy för innehåll)."""
-    items: list[dict[str, Any]] = []
+    (samma collection) och dedupar per URL — website-connectorn skriver MÅNGA
+    chunks per sida (upp till 300 totalt), vi vill inte spränga prompten med
+    20 chunks från samma about-sida. Tar mest informativa chunken per URL."""
+    by_url: dict[str, dict[str, Any]] = {}
     for snap in fs.raw_items_company_col(client_id).stream():
         data = snap.to_dict() or {}
         if _is_job_item(data):
             continue
-        text = data.get("text") or data.get("body") or ""
-        if not text:
+        content = data.get("content") or data.get("text") or data.get("body") or ""
+        if not content:
             continue
-        items.append({
-            "url": data.get("url") or data.get("source_url") or "",
-            "title": data.get("title") or data.get("name") or "",
-            "text": text,
-            "schema_type": data.get("schema_type"),
-        })
-    # Längst text först → vi får mer signal i begränsat antal items
-    items.sort(key=lambda it: len(it["text"]), reverse=True)
+        url = data.get("url") or (data.get("extra") or {}).get("doc_url") or ""
+        title = (data.get("extra") or {}).get("name") or data.get("title") or ""
+        # Per URL: behåll chunken med längst content (= mest signal)
+        existing = by_url.get(url)
+        if existing is None or len(content) > len(existing["content"]):
+            by_url[url] = {
+                "url": url,
+                "title": title,
+                "content": content,
+                "schema_type": data.get("schema_type"),
+            }
+    items = list(by_url.values())
+    # Längst innehåll först → mer signal per slot
+    items.sort(key=lambda it: len(it["content"]), reverse=True)
     return items[:MAX_WEBSITE_ITEMS]
 
 
@@ -103,25 +111,27 @@ def _collect_job_items(client_id: str) -> list[dict[str, Any]]:
         data = snap.to_dict() or {}
         if not _is_job_item(data):
             continue
-        text = data.get("text") or data.get("body") or data.get("description") or ""
+        content = data.get("content") or data.get("text") or data.get("body") or ""
+        extra = data.get("extra") or {}
         items.append({
-            "title": data.get("title") or data.get("name") or "",
-            "text": text,
-            "location": (data.get("extra") or {}).get("location"),
-            "fetched_at": data.get("fetched_at") or data.get("created_at") or "",
+            "title": extra.get("name") or data.get("title") or "",
+            "content": content,
+            "location": extra.get("jobLocation") or extra.get("location"),
+            "published_at": data.get("published_at") or data.get("fetched_at") or "",
         })
-    items.sort(key=lambda it: it.get("fetched_at") or "", reverse=True)
+    items.sort(key=lambda it: str(it.get("published_at") or ""), reverse=True)
     return items[:MAX_JOB_ITEMS]
 
 
 def _is_job_item(data: dict[str, Any]) -> bool:
-    """Heurustik: jobfeed-items har antingen schema_type=JobPosting eller en job_id i extra."""
+    """Heuristik: jobfeed-items har antingen schema_type=JobPosting, source=jobfeed
+    eller en job_id i extra. (Den faktiska RawItem-modellen sätter alla tre.)"""
     if (data.get("schema_type") or "").lower() == "jobposting":
+        return True
+    if (data.get("source") or "").lower() == "jobfeed":
         return True
     extra = data.get("extra") or {}
     if extra.get("job_id"):
-        return True
-    if (extra.get("source_label") or "").lower() in ("jobfeed", "teamtailor", "jobylon"):
         return True
     return False
 
@@ -187,8 +197,9 @@ def _build_user_prompt(
     if website_items:
         parts.append(f"\n[WEBSITE — {len(website_items)} sidor]")
         for it in website_items:
-            snippet = (it["text"] or "")[:SNIPPET_CHARS]
-            if len(it["text"]) > SNIPPET_CHARS:
+            content = it.get("content", "")
+            snippet = content[:SNIPPET_CHARS]
+            if len(content) > SNIPPET_CHARS:
                 snippet += "…"
             parts.append(f"URL: {it['url']}\nTitel: {it['title']}\nText: {snippet}\n")
     else:
@@ -197,8 +208,9 @@ def _build_user_prompt(
     if job_items:
         parts.append(f"\n[JOBBANNONSER — {len(job_items)} aktuella]")
         for it in job_items:
-            snippet = (it["text"] or "")[:SNIPPET_CHARS]
-            if len(it["text"]) > SNIPPET_CHARS:
+            content = it.get("content", "")
+            snippet = content[:SNIPPET_CHARS]
+            if len(content) > SNIPPET_CHARS:
                 snippet += "…"
             loc = f" ({it['location']})" if it.get("location") else ""
             parts.append(f"Roll: {it['title']}{loc}\nBeskrivning: {snippet}\n")
