@@ -176,6 +176,23 @@ def iter_esg_reports(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
         yield doc.id, doc.to_dict() or {}
 
 
+def output_quality_logs_col(client_id: str):
+    """Shadow-mode-loggar från output-kvalitets-rubric:en (services/output_quality_shadow).
+
+    Skrivs som best-effort vid varje compile_schema-körning. Driver framtida
+    connector-score-vyn (steg 5) och promotion-beslut (shadow → active gate)."""
+    return client_doc(client_id).collection("output_quality_logs")
+
+
+def output_quality_log_doc(client_id: str, log_id: str):
+    return output_quality_logs_col(client_id).document(log_id)
+
+
+def iter_output_quality_logs(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
+    for doc in output_quality_logs_col(client_id).stream():
+        yield doc.id, doc.to_dict() or {}
+
+
 def job_feed_state_doc(client_id: str):
     """Senast sedda annons-id för jobfeed-connectorn (spec §1.2 / §3).
 

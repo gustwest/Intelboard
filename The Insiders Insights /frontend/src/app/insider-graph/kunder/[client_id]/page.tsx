@@ -13,6 +13,7 @@ import ESGAddon from '../../_components/ESGAddon';
 import PipelineStatus from '../../_components/PipelineStatus';
 import ConnectorsEditor from '../../_components/ConnectorsEditor';
 import MeasurementConfigEditor from '../../_components/MeasurementConfigEditor';
+import AudiencePrioritiesEditor from '../../_components/AudiencePrioritiesEditor';
 import { graphFetch } from '../../_lib/api';
 import { useJobRuns, fmtRelative } from '../../_lib/jobRuns';
 
@@ -222,6 +223,9 @@ export default function ClientDetailPage() {
 
           {/* Mätkonfiguration — bransch-platshållare, personas, egna pollingfrågor (AI-synlighet) */}
           <MeasurementConfigEditor clientId={clientId} />
+
+          {/* Audience-priorities — vem ska bli citerad av AI-motorer (driver output-kvalitet) */}
+          <AudiencePrioritiesEditor clientId={clientId} />
 
           {/* AI-synlighet — ESG & CSRD Perception Audit (valbart tillägg, per kund) */}
           <ESGAddon clientId={clientId} />

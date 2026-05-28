@@ -88,6 +88,7 @@ def reset(
     verifications: dict[str, dict] | None = None,
     trust_gap: dict | None = None,
     trust_gap_snapshots: dict[str, dict] | None = None,
+    output_quality_logs: dict[str, dict] | None = None,
 ) -> None:
     STATE.clear()
     STATE.update(
@@ -112,6 +113,7 @@ def reset(
         verifications=verifications or {},
         trust_gap=trust_gap,  # None → "finns inte" (exists=False)
         trust_gap_snapshots=trust_gap_snapshots or {},
+        output_quality_logs=output_quality_logs or {},
         writes={},
     )
 
@@ -376,6 +378,37 @@ def trust_gap_snapshot_doc(client_id: str, date: str) -> _DocRef:
 
 def iter_trust_gap_snapshots(client_id: str):
     return list(STATE.get("trust_gap_snapshots", {}).items())
+
+
+def _oq_logs_bucket(client_id: str) -> dict:
+    """output_quality_logs är per-kund i produktion. Modelleras därför som dict-of-dict.
+
+    Bakåtkompatibelt: om `STATE["output_quality_logs"]` är en flat dict (existerande
+    tester) behandlas det som "den enda klientens" loggar — den används för alla
+    client_id-anrop. Cross-client-tester sätter STATE["output_quality_logs_by_client"]
+    explicit."""
+    by_client = STATE.get("output_quality_logs_by_client")
+    if by_client is not None:
+        return by_client.setdefault(client_id, {})
+    # Fallback: delad bucket (kompatibilitet med befintliga single-client-tester)
+    return STATE.setdefault("output_quality_logs", {})
+
+
+def output_quality_logs_col(client_id: str) -> _Col:
+    return _Col(_oq_logs_bucket(client_id), writable=True)
+
+
+def output_quality_log_doc(client_id: str, log_id: str) -> _DocRef:
+    bucket = _oq_logs_bucket(client_id)
+    return _DocRef(
+        log_id,
+        bucket.get(log_id),
+        on_set=lambda i, p: bucket.__setitem__(i, p),
+    )
+
+
+def iter_output_quality_logs(client_id: str):
+    return list(_oq_logs_bucket(client_id).items())
 
 
 def verifications_col(client_id: str) -> _Col:

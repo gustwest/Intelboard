@@ -17,6 +17,7 @@ import {
   Radar,
   Inbox,
   Rocket,
+  Gauge,
 } from 'lucide-react';
 import ProductSwitcher, { activeProductId } from './ProductSwitcher';
 import { graphFetch } from '@/app/insider-graph/_lib/api';
@@ -58,7 +59,10 @@ const GRAPH_GROUPS: NavGroup[] = [
   },
   {
     title: 'Mät',
-    links: [{ href: '/insider-graph/polling', label: 'AI-synlighet', icon: Radar, badge: 'risk' }],
+    links: [
+      { href: '/insider-graph/polling', label: 'AI-synlighet', icon: Radar, badge: 'risk' },
+      { href: '/insider-graph/output-quality', label: 'Output-kvalitet', icon: Gauge },
+    ],
   },
   { title: null, links: [{ href: '/insider-graph/admin', label: 'Admin', icon: ShieldAlert }] },
 ];

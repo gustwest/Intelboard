@@ -4,6 +4,7 @@ Läsning (lista/hämta) + skrivning: opt-out per medarbetare, GDPR-radering av
 en medarbetare (employee-doc + raw_items + claims som refererar hen) samt
 radering av en hel kund (alla subcollections via recursive_delete).
 """
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -12,6 +13,8 @@ from pydantic import BaseModel
 import firestore_client as fs
 import ttl_cache
 from routers.inbox import _count_client  # samma "väntar på människa"-räkning som inkorgen
+from services import persona_derivation
+from services.output_quality import AudiencePriority
 
 router = APIRouter(prefix="/api/clients", tags=["clients"])
 
@@ -29,13 +32,16 @@ class ClientConfigUpdate(BaseModel):
 
     industry/topic/service_area fyller default-frågornas platshållare ({industry} m.fl.).
     risk_personas väljer vilka personas riskloopen genererar/mäter. polling_questions
-    ersätter default-frågebatteriet per kategori (tomt = återgå till defaults)."""
+    ersätter default-frågebatteriet per kategori (tomt = återgå till defaults).
+    audience_priorities driver output-kvalitets-rubric:en ([[project_icp_multi_audience]])
+    och sätts antingen manuellt eller via /derive-personas-endpointen."""
 
     industry: str | None = None
     topic: str | None = None
     service_area: str | None = None
     risk_personas: list[str] | None = None
     polling_questions: dict[str, list[str]] | None = None
+    audience_priorities: list[AudiencePriority] | None = None
 
 
 @router.get("")
@@ -107,6 +113,10 @@ def get_client(client_id: str) -> dict[str, Any]:
         "service_area": data.get("service_area"),
         "risk_personas": data.get("risk_personas") or list(MEASUREMENT_PERSONAS),
         "polling_questions": data.get("polling_questions") or {},
+        # Output-kvalitets-personor (audience_priorities). Sätt av användaren eller
+        # härlett via /derive-personas. None om aldrig satt (UI visar tom-state).
+        "audience_priorities": data.get("audience_priorities"),
+        "audience_priorities_set_at": _iso(data.get("audience_priorities_set_at")),
         "employees": employees,
     }
 
@@ -142,9 +152,49 @@ def update_client_config(client_id: str, payload: ClientConfigUpdate) -> dict[st
                 cleaned[cat] = kept
         update["polling_questions"] = cleaned  # tomt dict = återgå till defaults
 
+    if payload.audience_priorities is not None:
+        # Spara som dict-lista (Firestore hanterar inte Pydantic-modeller direkt).
+        update["audience_priorities"] = [a.model_dump() for a in payload.audience_priorities]
+        update["audience_priorities_set_at"] = datetime.now(timezone.utc).isoformat()
+
     if update:
         ref.update(update)
     return {"status": "ok", **update}
+
+
+@router.post("/{client_id}/derive-personas")
+def derive_personas(client_id: str) -> dict[str, Any]:
+    """Auto-härled audience_priorities ur befintlig hemsidedata + jobbannonser.
+
+    Persisterar ingenting — returnerar bara förslag som UI:t visar för granskning.
+    Användaren väljer sedan att spara via PUT /config eller kasta. Det möjliggör
+    "pinning" utan att vi behöver track:a last-edited-by-fält i Firestore.
+
+    Returnerar 503 om LLM:n inte är tillgänglig (Vertex AI EU saknas) och 422
+    om vi inte har tillräckligt med källdata för att kunna härleda något.
+    """
+    snap = fs.client_doc(client_id).get()
+    if not snap.exists:
+        raise HTTPException(404, f"client not found: {client_id}")
+    data = snap.to_dict() or {}
+
+    result = persona_derivation.derive_audience_priorities(
+        client_id, company_name=data.get("company_name")
+    )
+    if result.llm_unavailable:
+        raise HTTPException(503, "persona-derivation LLM otillgänglig (Vertex AI EU ej konfigurerad)")
+    if result.insufficient_data:
+        raise HTTPException(
+            422,
+            "för lite källdata för att härleda audience_priorities — kör website-/jobfeed-connectorn först",
+        )
+
+    return {
+        "client_id": client_id,
+        "audience_priorities": [a.model_dump() for a in result.audience_priorities],
+        "source_counts": result.source_counts,
+        "derived_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @router.get("/{client_id}/pipeline")

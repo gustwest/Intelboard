@@ -23,6 +23,19 @@ log = logging.getLogger("jobs.compile_schema")
 
 def run(client_id: str) -> None:
     with record_run("compile_schema", client_id) as r:
+        # Output-kvalitets-gate: aktivt block/transform-läge på LinkedIn-demografi
+        # (steg 4 i rollouten). Mutera berörda claims FÖRE compile_client så att den
+        # ser den filtrerade staten. Andra connectors stannar i shadow mode (kallas
+        # efter publicering nedan). Best-effort — får inte fälla leveransen.
+        try:
+            from services import output_quality_gate
+
+            gate_summary = output_quality_gate.apply_gate(client_id)
+            if gate_summary:
+                r.summary["output_quality_gate"] = gate_summary
+        except Exception as exc:  # noqa: BLE001
+            log.warning("output_quality_gate failed for %s (non-fatal): %s", client_id, exc)
+
         graph = compile_client(client_id)
         payload = json.dumps(graph, ensure_ascii=False, default=str)
         profile_html = render_profile_html(client_id)
@@ -81,6 +94,19 @@ def run(client_id: str) -> None:
             compute_trust_gap.run(client_id)
         except Exception as exc:  # noqa: BLE001
             log.warning("compute_trust_gap failed for %s (non-fatal): %s", client_id, exc)
+
+        # Output-kvalitets-rubric i SHADOW MODE: scorea de claims som faktiskt
+        # publicerats, logga resultatet. Påverkar ALDRIG denna leverans — det här är
+        # diagnos-loggen som driver promotion-beslut till active gate (steg 4 + 5).
+        # Best-effort, samma sköld som compute_trust_gap ovan.
+        try:
+            from services import output_quality_shadow
+
+            shadow_summary = output_quality_shadow.run_shadow(client_id, source="compile_schema")
+            if shadow_summary:
+                r.summary["output_quality"] = shadow_summary
+        except Exception as exc:  # noqa: BLE001
+            log.warning("output_quality_shadow failed for %s (non-fatal): %s", client_id, exc)
 
 
 if __name__ == "__main__":
