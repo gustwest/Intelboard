@@ -154,6 +154,9 @@ def apply_suggestion(
         return {"status": "noop", "claim_id": claim_id, "reason": "already_applied"}
 
     now_iso = datetime.now(timezone.utc).isoformat()
+    # VIKTIGT: validated_at och reviewed_at MÅSTE vara ISO-strängar — Claim-modellen
+    # i schemas.py har `validated_at: str | None` och kraschar compile_client om vi
+    # skriver firestore.SERVER_TIMESTAMP (blir DatetimeWithNanoseconds vid läsning).
     update: dict[str, Any] = {
         "statement": new_statement,
         # Bevara originalet bara om vi inte redan har det
@@ -161,13 +164,17 @@ def apply_suggestion(
         "review_status": "approved",
         "needs_review": False,
         "included_in_output": True,
-        "reviewed_at": firestore.SERVER_TIMESTAMP,
+        "reviewed_at": now_iso,
         "suggestion_applied_at": now_iso,
         "suggestion_applied_from_log": payload.source_log_id,
         # Markera den som validerad — det här är en mänsklig godkännande, ej maskin.
-        "validated_at": existing.get("validated_at") or firestore.SERVER_TIMESTAMP,
+        "validated_at": existing.get("validated_at") or now_iso,
         "validated_by": existing.get("validated_by") or "granskare (applicerat förslag)",
     }
+    # Om existing validated_at är ett DatetimeWithNanoseconds-objekt (gammal bug),
+    # konvertera till ISO. Annars kraschar Claim(**raw) vid nästa compile.
+    if update["validated_at"] and not isinstance(update["validated_at"], str):
+        update["validated_at"] = now_iso
     doc_ref.update(update)
 
     # Affärshändelse → kund-tidslinjen

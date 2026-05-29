@@ -373,10 +373,15 @@ def decide_claim(client_id: str, claim_id: str, action: ClaimReviewAction) -> di
         raise HTTPException(404, "claim not found")
     existing = snap.to_dict() or {}
 
+    # VIKTIGT: reviewed_at/validated_at MÅSTE vara ISO-strängar. Claim-modellen
+    # i schemas.py har `validated_at: str | None` och kraschar compile_client om
+    # vi skriver firestore.SERVER_TIMESTAMP (blir DatetimeWithNanoseconds vid läsning).
+    from datetime import datetime, timezone
+    now_iso = datetime.now(timezone.utc).isoformat()
     update: dict[str, Any] = {
         "review_status": "approved" if action.decision == "approve" else "rejected",
         "review_note": action.note,
-        "reviewed_at": firestore.SERVER_TIMESTAMP,
+        "reviewed_at": now_iso,
         "included_in_output": action.decision == "approve",
         "needs_review": False,
     }
@@ -384,7 +389,8 @@ def decide_claim(client_id: str, claim_id: str, action: ClaimReviewAction) -> di
         # Godkännandet är i sig en validering. Behåll maskin-stämpeln om den finns
         # (narrative-claims validerade av Claude); annars stämpla den mänskliga
         # granskningen så även property/manuella claims bär en validerings-notis.
-        update["validated_at"] = existing.get("validated_at") or firestore.SERVER_TIMESTAMP
+        prior = existing.get("validated_at")
+        update["validated_at"] = prior if isinstance(prior, str) else now_iso
         update["validated_by"] = existing.get("validated_by") or "granskare (manuellt godkänd)"
     if action.statement is not None:  # ops redigerade påståendet före godkännande
         update["statement"] = action.statement
