@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Gauge, ArrowLeft, Sparkles, ChevronRight, ChevronDown, Filter, Check, Loader2 } from 'lucide-react';
+import { Gauge, ArrowLeft, Sparkles, ChevronRight, ChevronDown, Filter, Check, Loader2, Combine, X, AlertCircle } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../../../_components/GraphPageShell';
 import { graphFetch } from '../../../_lib/api';
 import {
@@ -57,6 +57,68 @@ export default function OutputQualityDetailPage() {
   // Status per claim när användaren applicerar förslaget: idle | applying | applied | error
   const [applyState, setApplyState] = useState<Record<string, 'idle' | 'applying' | 'applied' | 'error'>>({});
   const [applyError, setApplyError] = useState<Record<string, string>>({});
+
+  // Aggregation-modal
+  const [aggModal, setAggModal] = useState<null | {
+    dimension: string;
+    claim_ids: string[];
+    narratives: string[];
+    loading: boolean;
+    applying: boolean;
+    applied: boolean;
+    error: string | null;
+  }>(null);
+  // Dimensioner som redan aggregerats lokalt (för att grayout flaggan)
+  const [aggregatedDims, setAggregatedDims] = useState<Set<string>>(new Set());
+
+  async function startAggregation(dimension: string) {
+    const ids = perClaim
+      .filter((c) => c.dimension_hint === dimension)
+      .map((c) => c.claim_id)
+      .filter((c): c is string => !!c);
+    if (ids.length < 2) {
+      setError(`För få claims (${ids.length}) i dimensionen '${dimension}' för att aggregera.`);
+      return;
+    }
+    setAggModal({ dimension, claim_ids: ids, narratives: [], loading: true, applying: false, applied: false, error: null });
+    try {
+      const r = await graphFetch<{ narratives: string[] }>(
+        `/api/output-quality/aggregate/${clientId}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ claim_ids: ids, dimension_hint: dimension, source_log_id: selectedId, apply: false }),
+        },
+      );
+      setAggModal((p) => p && { ...p, narratives: r.narratives || [], loading: false });
+    } catch (e) {
+      setAggModal((p) => p && { ...p, loading: false, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  async function applyAggregation() {
+    if (!aggModal) return;
+    setAggModal((p) => p && { ...p, applying: true, error: null });
+    try {
+      await graphFetch(
+        `/api/output-quality/aggregate/${clientId}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            claim_ids: aggModal.claim_ids,
+            dimension_hint: aggModal.dimension,
+            source_log_id: selectedId,
+            apply: true,
+          }),
+        },
+      );
+      setAggregatedDims((s) => new Set([...s, aggModal.dimension]));
+      setAggModal((p) => p && { ...p, applying: false, applied: true });
+    } catch (e) {
+      setAggModal((p) => p && { ...p, applying: false, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
 
   async function applySuggestion(claimId: string, suggestion: string) {
     setApplyState((p) => ({ ...p, [claimId]: 'applying' }));
@@ -220,7 +282,32 @@ export default function OutputQualityDetailPage() {
 
                 {detail.bundle_flags.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-                    {detail.bundle_flags.map((f, i) => <BundleFlagChip key={i} flag={f} />)}
+                    {detail.bundle_flags.map((f, i) => {
+                      const aggregatable = f.type === 'high_redundancy' && !!f.dimension_hint;
+                      const alreadyAgg = aggregatable && aggregatedDims.has(f.dimension_hint as string);
+                      if (!aggregatable) return <BundleFlagChip key={i} flag={f} />;
+                      return (
+                        <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <BundleFlagChip flag={f} />
+                          <button
+                            onClick={() => startAggregation(f.dimension_hint as string)}
+                            disabled={alreadyAgg}
+                            title={alreadyAgg ? 'Redan aggregerad — vänta tills compile_schema kört' : 'Syntetisera dessa claims till 1-2 narratives'}
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 3,
+                              padding: '3px 8px',
+                              background: alreadyAgg ? 'rgba(34,197,94,0.12)' : 'rgba(159,81,182,0.16)',
+                              color: alreadyAgg ? '#16a34a' : '#9f51b6',
+                              border: `1px solid ${alreadyAgg ? 'rgba(34,197,94,0.3)' : 'rgba(159,81,182,0.3)'}`,
+                              borderRadius: 999, fontSize: 10, fontWeight: 600,
+                              cursor: alreadyAgg ? 'default' : 'pointer',
+                            }}
+                          >
+                            {alreadyAgg ? <><Check size={10} /> Aggregerad</> : <><Combine size={10} /> Aggregera</>}
+                          </button>
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
 
@@ -451,6 +538,89 @@ export default function OutputQualityDetailPage() {
           )}
         </div>
       </div>
+
+      {aggModal && (
+        <div
+          onClick={() => !aggModal.applying && setAggModal(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 24 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14, width: '100%', maxWidth: 600, padding: 24, maxHeight: '85vh', overflowY: 'auto' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#3a4b56', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Combine size={18} color="#9f51b6" /> Aggregera dimension: <code style={{ background: '#eef0f1', padding: '2px 6px', borderRadius: 4, fontSize: 13 }}>{aggModal.dimension}</code>
+              </h2>
+              <button onClick={() => !aggModal.applying && setAggModal(null)} disabled={aggModal.applying}
+                style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, margin: '0 0 16px' }}>
+              {aggModal.claim_ids.length} atomära claims i dimensionen kommer ersättas med 1–2 syntetiserade narratives.
+              Originalen behålls i Firestore som evidens men flaggas som <code style={{ fontSize: 11 }}>aggregated</code> och dyker inte upp i nästa JSON-LD/profilsida.
+            </p>
+
+            {aggModal.loading ? (
+              <div style={{ padding: 24, textAlign: 'center', color: C.muted, fontSize: 13 }}>
+                <Loader2 size={18} style={{ animation: 'spin 0.8s linear infinite', verticalAlign: 'middle', marginRight: 8 }} />
+                LLM:en syntetiserar förslag…
+              </div>
+            ) : aggModal.error ? (
+              <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', color: '#b91c1c', fontSize: 12, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <AlertCircle size={14} /> {aggModal.error}
+              </div>
+            ) : aggModal.applied ? (
+              <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 8, padding: '14px 16px', color: '#16a34a', fontSize: 13, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Check size={16} /> Aggregeringen är sparad. Nästa publicering (compile_schema) hämtar de nya narratives — triggas i bakgrunden.
+              </div>
+            ) : aggModal.narratives.length === 0 ? (
+              <div style={{ padding: 16, textAlign: 'center', color: C.muted, fontSize: 12 }}>
+                LLM:en kunde inte producera förslag.
+              </div>
+            ) : (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+                  Föreslagna narratives ({aggModal.narratives.length})
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {aggModal.narratives.map((n, i) => (
+                    <div key={i} style={{ fontSize: 13, color: '#3a4b56', padding: '10px 14px', background: 'rgba(159,81,182,0.08)', borderLeft: '3px solid #9f51b6', borderRadius: 4, lineHeight: 1.55 }}>
+                      {n}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                onClick={() => setAggModal(null)}
+                disabled={aggModal.applying}
+                style={{ padding: '8px 14px', background: 'transparent', color: '#3a4b56', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+              >
+                {aggModal.applied ? 'Stäng' : 'Avbryt'}
+              </button>
+              {!aggModal.applied && aggModal.narratives.length > 0 && !aggModal.loading && (
+                <button
+                  onClick={applyAggregation}
+                  disabled={aggModal.applying}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '8px 14px', background: '#9f51b6', color: '#fff',
+                    border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                    cursor: aggModal.applying ? 'wait' : 'pointer',
+                  }}
+                >
+                  {aggModal.applying ? <><Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> Applicerar…</> : <><Check size={14} /> Bekräfta och spara</>}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </GraphPageShell>
   );
 }

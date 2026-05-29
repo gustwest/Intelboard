@@ -22,6 +22,7 @@ from google.cloud import firestore
 from pydantic import BaseModel, Field
 
 import firestore_client as fs
+from services.claim_aggregation import AggregationResult, aggregate_claims
 from services.output_quality import RubricRequest, RubricResponse, score_bundle
 from services.output_quality_aggregator import DEFAULT_WINDOW_DAYS, aggregate_connector_scores
 
@@ -196,3 +197,55 @@ def apply_suggestion(
         "new_statement": new_statement,
         "applied_at": now_iso,
     }
+
+
+# --- Aggregera dimension: kollapsa N atomära claims till 1-2 narratives ---
+
+
+class AggregateRequest(BaseModel):
+    """Frontend skickar de claim_ids som ska kollapsas + (valfritt) dimension_hint
+    + apply-flagga. Preview (`apply=false`) gör bara LLM-syntesen utan mutation;
+    apply (`apply=true`) skapar nya claims och deaktiverar originalen."""
+
+    claim_ids: list[str] = Field(..., min_length=2)
+    dimension_hint: str | None = None
+    source_log_id: str | None = None  # för audit (vilken logg flaggan kom från)
+    apply: bool = False
+
+
+@router.post("/aggregate/{client_id}", response_model=AggregationResult)
+def aggregate_dimension(
+    client_id: str,
+    payload: AggregateRequest,
+    background: BackgroundTasks,
+) -> AggregationResult:
+    """Syntetisera N atomära claims i samma dimension till 1-2 narratives.
+
+    Två-stegs UX: först preview (apply=false), sen apply (apply=true) efter
+    att användaren bekräftat förslaget. Vid apply: claim_docs muteras, ett
+    compile_schema triggas i bakgrunden så outputen uppdateras snart."""
+    if not fs.client_doc(client_id).get().exists:
+        raise HTTPException(404, f"client not found: {client_id}")
+
+    result = aggregate_claims(
+        client_id=client_id,
+        claim_ids=payload.claim_ids,
+        dimension_hint=payload.dimension_hint,
+        apply=payload.apply,
+    )
+    if result.llm_unavailable:
+        raise HTTPException(503, "validator-LLM otillgänglig (Vertex AI EU ej konfigurerad)")
+    if not result.narratives:
+        raise HTTPException(
+            422,
+            "för få aggregerbara claims (originalen kan ha avvisats eller redan aggregerats)",
+        )
+
+    if result.applied:
+        # Recompile i bakgrunden så grafen uppdateras snart
+        def _recompile() -> None:
+            from jobs import compile_schema
+            compile_schema.run(client_id)
+        background.add_task(_recompile)
+
+    return result
