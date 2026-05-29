@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Radar, RefreshCw, Play, Loader2, Check, X, Clock, Pause, CalendarClock } from 'lucide-react';
+import { Radar, RefreshCw, Play, Loader2, Check, X, Pause, CalendarClock } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import { graphFetch } from '../_lib/api';
 import { useJobRuns, fmtRelative } from '../_lib/jobRuns';
@@ -256,7 +256,7 @@ export default function GraphRiskLoopPage() {
   const [mode, setMode] = useState<ViewMode>('ops');
   const [error, setError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
-  const { latest, active: jobActive, trigger: runJob } = useJobRuns(selected);
+  const { latest, runs: jobRuns, active: jobActive, trigger: runJob } = useJobRuns(selected);
 
   // Återställ sparat kund-val + läge innan första render (en gång).
   useEffect(() => {
@@ -440,37 +440,18 @@ export default function GraphRiskLoopPage() {
         hero={buildHero(report, riskQuestions, polling)}
       />
 
-      {/* Jobbkontroller + senast körd (endast ops-läge) */}
+      {/* Jobbkontroller + aktivitetsfeed (endast ops-läge) */}
       {mode === 'ops' && (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-        {renderJobBtn('Kör polling', 'polling', '/api/jobs/polling', 'polling', { onDone: () => setRefreshTick((t) => t + 1) })}
-        {renderJobBtn('Generera frågor', 'generate', `/api/jobs/risk-generate/${selected}`, 'risk_generate', { needsClient: true, onDone: () => setRefreshTick((t) => t + 1) })}
-        {renderJobBtn('Kör risk-detect', 'risk', `/api/jobs/risk-detect/${selected}`, 'risk_detect', { needsClient: true, onDone: () => setRefreshTick((t) => t + 1) })}
-        {renderJobBtn('Bygg månadsrapport', 'report', `/api/jobs/monthly-report/${selected}`, 'monthly_report', { needsClient: true, onDone: () => setRefreshTick((t) => t + 1) })}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 12, color: C.muted, marginLeft: 8 }}>
-          {([['polling', 'Polling'], ['risk_generate', 'Frågor'], ['risk_detect', 'Risk-detect'], ['monthly_report', 'Rapport']] as [string, string][]).map(([type, label]) => {
-            const run = latest(type);
-            const stale = run?.status === 'running' && isStale(run.started_at, 10);
-            return (
-              <span key={type} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <Clock size={12} color={stale ? '#b45309' : C.dim} />
-                <strong style={{ color: '#3a4b56', fontWeight: 600 }}>{label}:</strong>
-                {run ? (
-                  <>
-                    <span style={{ color: stale ? '#b45309' : undefined }}>{fmtRelative(run.started_at)}</span>
-                    {run.status === 'success' && <Check size={12} color="#16a34a" />}
-                    {run.status === 'failed' && <X size={12} color="#dc2626" />}
-                    {stale && <span title={`Kör fortfarande sedan ${run.started_at} — sannolikt zombie efter revision-rollover`} style={{ fontSize: 10, color: '#b45309', background: 'rgba(245,158,11,0.14)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 5, padding: '1px 6px', fontWeight: 600 }}>möjligen stoppad</span>}
-                  </>
-                ) : (
-                  <span style={{ color: C.dim }}>aldrig körd</span>
-                )}
-              </span>
-            );
-          })}
+      <>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+          <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+          {renderJobBtn('Kör polling', 'polling', '/api/jobs/polling', 'polling', { onDone: () => setRefreshTick((t) => t + 1) })}
+          {renderJobBtn('Generera frågor', 'generate', `/api/jobs/risk-generate/${selected}`, 'risk_generate', { needsClient: true, onDone: () => setRefreshTick((t) => t + 1) })}
+          {renderJobBtn('Kör risk-detect', 'risk', `/api/jobs/risk-detect/${selected}`, 'risk_detect', { needsClient: true, onDone: () => setRefreshTick((t) => t + 1) })}
+          {renderJobBtn('Bygg månadsrapport', 'report', `/api/jobs/monthly-report/${selected}`, 'monthly_report', { needsClient: true, onDone: () => setRefreshTick((t) => t + 1) })}
         </div>
-      </div>
+        <ActivityFeed runs={jobRuns} />
+      </>
       )}
 
       {error && <div style={errorStyle}>{error}</div>}
@@ -1178,6 +1159,74 @@ function isStale(startedAt: string | null | undefined, minutes: number): boolean
   const t = Date.parse(startedAt);
   if (Number.isNaN(t)) return false;
   return Date.now() - t > minutes * 60 * 1000;
+}
+
+// --- Aktivitetsfeed -----------------------------------------------------------
+
+const JOB_LABEL: Record<string, string> = {
+  polling: 'Polling',
+  risk_generate: 'Generera frågor',
+  risk_detect: 'Risk-detect',
+  monthly_report: 'Månadsrapport',
+  compute_trust_gap: 'Trust gap',
+  compile_schema: 'Kompilera schema',
+  scrape_active: 'Scrape',
+  extract_claims: 'Extrahera claims',
+  quarterly_todo: 'Kvartalsuppgift',
+  'event:report_generated': 'Rapport publicerad',
+};
+
+const ACTIVITY_FEED_TYPES = new Set([
+  'polling', 'risk_generate', 'risk_detect', 'monthly_report',
+  'compute_trust_gap', 'compile_schema', 'event:report_generated',
+]);
+
+function summaryBlurb(jobType: string, summary: Record<string, unknown>): string {
+  if (!summary || Object.keys(summary).length === 0) return '';
+  const parts: string[] = [];
+  for (const [k, v] of Object.entries(summary)) {
+    if (v == null || v === false || v === '') continue;
+    if (typeof v === 'object') continue;
+    parts.push(`${k}=${v}`);
+  }
+  return parts.slice(0, 3).join(' · ');
+}
+
+function ActivityFeed({ runs }: { runs: import('../_lib/jobRuns').JobRun[] | null }) {
+  if (runs === null) return <div style={{ fontSize: 12, color: C.dim, marginBottom: 16 }}>Laddar händelser…</div>;
+  const filtered = runs.filter((r) => ACTIVITY_FEED_TYPES.has(r.job_type)).slice(0, 12);
+  if (filtered.length === 0) {
+    return <div style={{ fontSize: 12, color: C.dim, marginBottom: 16 }}>Inga händelser ännu.</div>;
+  }
+  return (
+    <div style={{ ...cardStyle, padding: '12px 16px', marginBottom: 16 }}>
+      <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginBottom: 10 }}>
+        Senaste händelser
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {filtered.map((r) => {
+          const stale = r.status === 'running' && isStale(r.started_at, 10);
+          const dot = stale ? '#b45309' : r.status === 'success' ? '#16a34a' : r.status === 'failed' ? '#b91c1c' : '#0e7490';
+          const label = JOB_LABEL[r.job_type] || r.job_type;
+          const blurb = summaryBlurb(r.job_type, r.summary);
+          return (
+            <div key={r.id} style={{ display: 'grid', gridTemplateColumns: '90px 14px 1fr auto', alignItems: 'center', gap: 10, fontSize: 12, padding: '4px 0' }}>
+              <span style={{ color: stale ? '#b45309' : C.muted, fontFamily: 'ui-monospace, monospace' }}>{fmtRelative(r.started_at)}</span>
+              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: dot, boxShadow: `0 0 0 3px ${dot}22` }} />
+              <span style={{ color: '#3a4b56' }}>
+                <strong style={{ fontWeight: 600 }}>{label}</strong>
+                {blurb && <span style={{ color: C.dim, marginLeft: 8 }}>{blurb}</span>}
+                {r.error_message && <span style={{ color: '#b91c1c', marginLeft: 8 }}>· {r.error_message}</span>}
+              </span>
+              <span style={{ fontSize: 10, fontWeight: 600, color: dot, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                {stale ? 'möjligen stoppad' : r.status}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function RiskLoopStatus({ questions, findings, latestDetect, latestGenerate }: {
