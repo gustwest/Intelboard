@@ -119,8 +119,9 @@ class RubricLlmAvailable(unittest.TestCase):
         self.assertIn("missing_persona", types)
         self.assertEqual(r.verdict, "needs_review")
 
-    def test_schema_slot_mismatch_blocks(self):
-        # Vecka 1-2: schema_slot_mismatch är ett "hårt objektivt fel" → block.
+    def test_schema_slot_mismatch_flags_but_no_longer_blocks(self):
+        # Vecka 1-2: schema_slot_mismatch flaggas men blockerar INTE längre — LLM:ens
+        # schema_passform-score visade sig vara för brusig för att vara block-värdig.
         claims = [RubricClaim(claim_id="c1", statement="Något", has_source=True)]
         oq.invoke_json = _llm_returns([
             _scored(0, hint="other", audience="customer", slot=1)
@@ -128,7 +129,7 @@ class RubricLlmAvailable(unittest.TestCase):
         r = score_bundle(RubricRequest(
             claims=claims, audience_priorities=self._audience("customer")
         ))
-        self.assertEqual(r.verdict, "block")
+        self.assertEqual(r.verdict, "needs_review")
         self.assertTrue(any(f.type == "schema_slot_mismatch" for f in r.bundle_flags))
 
     def test_low_average_triggers_needs_review(self):

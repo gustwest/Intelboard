@@ -427,12 +427,19 @@ def _compute_bundle_score(per_claim: list[ClaimScore]) -> float:
 def _determine_verdict(
     bundle_score: float, bundle_flags: list[BundleFlag]
 ) -> Literal["pass", "needs_review", "block"]:
-    """Vecka 1–2: endast hårda objektiva fel blockerar. Allt annat → needs_review eller pass."""
-    if any(f.type == "schema_slot_mismatch" for f in bundle_flags):
-        return "block"
+    """Vecka 1–2: ingenting blockerar leveransen — bara needs_review eller pass.
+
+    Tidigare blockerade schema_slot_mismatch, men aggregations-narratives har visat
+    sig få sporadiskt låg `schema_passform`-score från LLM:en utan att det är ett
+    verkligt fel. Tröskeln var för aggressiv. Flaggan finns kvar i bundle_flags för
+    granskning men driver inte längre block-verdict. Block kan återinföras när vi
+    har kalibrerat LLM:ens schema-passform-score mot perception-utfall."""
     if bundle_score < BUNDLE_NEEDS_REVIEW_BELOW:
         return "needs_review"
-    if any(f.type in ("high_redundancy", "missing_persona", "volume_too_high") for f in bundle_flags):
+    if any(
+        f.type in ("high_redundancy", "missing_persona", "volume_too_high", "schema_slot_mismatch")
+        for f in bundle_flags
+    ):
         return "needs_review"
     return "pass"
 
