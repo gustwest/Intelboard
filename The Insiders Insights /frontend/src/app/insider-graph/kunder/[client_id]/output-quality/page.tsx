@@ -72,10 +72,16 @@ export default function OutputQualityDetailPage() {
   const [aggregatedDims, setAggregatedDims] = useState<Set<string>>(new Set());
 
   async function startAggregation(dimension: string) {
-    const ids = perClaim
+    // Hitta claim_ids i dimensionen — från per_claim (compile-loggar) ELLER
+    // actions (gate-loggar). Båda har dimension_hint per item och claim_id.
+    const fromPerClaim = (detail?.per_claim || [])
       .filter((c) => c.dimension_hint === dimension)
       .map((c) => c.claim_id)
       .filter((c): c is string => !!c);
+    const fromActions = (detail?.actions || [])
+      .filter((a) => a.dimension_hint === dimension)
+      .map((a) => a.claim_id);
+    const ids = Array.from(new Set([...fromPerClaim, ...fromActions]));
     if (ids.length < 2) {
       setError(`För få claims (${ids.length}) i dimensionen '${dimension}' för att aggregera.`);
       return;
@@ -144,7 +150,13 @@ export default function OutputQualityDetailPage() {
     try {
       const r = await graphFetch<{ items: LogSummary[] }>(`/api/output-quality/logs/${clientId}?limit=50`);
       setLogs(r.items);
-      if (r.items.length > 0 && !selectedId) setSelectedId(r.items[0].log_id);
+      if (r.items.length > 0 && !selectedId) {
+        // Defaulta till senaste compile_schema-loggen — den har per_claim och fungerar
+        // med aggregera-knappen. Gate-loggar har bara actions; om INGEN compile finns
+        // faller vi tillbaka till allra senaste.
+        const firstCompile = r.items.find((l) => l.source === 'compile_schema');
+        setSelectedId((firstCompile || r.items[0]).log_id);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
