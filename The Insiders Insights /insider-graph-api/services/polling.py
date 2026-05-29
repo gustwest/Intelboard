@@ -63,6 +63,7 @@ class QuestionAnswer:
     mentioned: bool = False
     sentiment: float | None = None
     persons_mentioned: list[str] = field(default_factory=list)
+    orgs_mentioned: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -73,6 +74,7 @@ class PollingResult:
     sentiment_score: float | None
     parity_index: float | None
     category_results: dict[str, dict[str, float]]
+    category_competitors: dict[str, list[dict[str, Any]]]
     models_used: list[str]
     total_answers: int
     answers_with_mention: int
@@ -111,6 +113,9 @@ def run_for_client(client_id: str) -> PollingResult | None:
     for ans in answers:
         if ans.mentioned:
             ans.sentiment = _judge_sentiment(judge, ans.answer, company_name)
+        # Konkurrent-kontext: vilka andra org nämns? Alla svar, inte bara där vi nämns
+        # — för det är just "AI nämner X, inte oss" som ger den starkaste signalen.
+        ans.orgs_mentioned = _extract_orgs(judge, ans.answer, company_name, employee_names)
 
     result = _aggregate(client_id, company_name, answers, employee_gender)
     _write(result)
@@ -203,6 +208,55 @@ def _extract_persons(answer: str, employee_names: list[str]) -> list[str]:
     return found
 
 
+def _extract_orgs(llm: Any, answer: str, own_company: str, employee_names: list[str]) -> list[str]:
+    """LLM-NER för organisationsnamn i ett AI-svar. Egen org + medarbetar­namn filtreras bort
+    så att aggregatet i UI:t blir konkurrent-kontext: 'vilka andra nämns när vi inte gör det'.
+
+    Bara öppna svar med substans tas igenom (kort/tom text → tom lista).
+    Robust mot icke-JSON-utgångar — det är ett soft-signal-fält, inte beslutspåverkande."""
+    if not answer or len(answer.strip()) < 20:
+        return []
+    prompt = [
+        SystemMessage(
+            content=(
+                "Du är NER-extraktor. Returnera ETT JSON-objekt med formatet "
+                '{"orgs": ["Företag A", "Företag B"]} — bara namn på företag, byråer, '
+                "leverantörer eller organisationer som faktiskt nämns i texten. "
+                "INTE personnamn. INTE produkter. INTE allmänna ord ('konsultbyrå', 'företag'). "
+                "Tom lista om inga finns. Returnera bara JSON."
+            )
+        ),
+        HumanMessage(content=f"Text:\n{answer[:2200]}"),
+    ]
+    try:
+        resp = llm.invoke(prompt)
+        raw = resp.content if hasattr(resp, "content") else str(resp)
+        match = re.search(r"\{[\s\S]*?\}", raw)
+        if not match:
+            return []
+        data = json.loads(match.group(0))
+        orgs = data.get("orgs") or []
+        own_lower = (own_company or "").lower().strip()
+        emp_lower = {n.lower().strip() for n in employee_names if n}
+        out: list[str] = []
+        seen: set[str] = set()
+        for o in orgs:
+            if not isinstance(o, str):
+                continue
+            s = o.strip()
+            if not s or len(s) > 80:
+                continue
+            sl = s.lower()
+            if sl == own_lower or sl in emp_lower or sl in seen:
+                continue
+            seen.add(sl)
+            out.append(s)
+        return out[:8]
+    except Exception as exc:
+        log.warning("org extraction failed: %s", exc)
+        return []
+
+
 def _judge_sentiment(llm: Any, answer: str, company_name: str) -> float | None:
     prompt = [
         SystemMessage(
@@ -245,6 +299,7 @@ def _aggregate(
     parity = _calculate_parity(all_persons, employee_gender)
 
     category_results: dict[str, dict[str, float]] = {}
+    category_competitors: dict[str, list[dict[str, Any]]] = {}
     for cat in {a.category for a in answers}:
         cat_answers = [a for a in answers if a.category == cat]
         cat_with = [a for a in cat_answers if a.mentioned]
@@ -257,6 +312,24 @@ def _aggregate(
             "answer_count": float(len(cat_answers)),
             "mention_count": float(len(cat_with)),
         }
+        # Konkurrent-aggregat per kategori: vilka andra org nämns mest? Top 5 + share
+        # av kategorins svar. Tom lista om ingen extraktion gav träffar — t.ex. vid
+        # kort/tomt LLM-svar.
+        counts: dict[str, int] = {}
+        for a in cat_answers:
+            for org in a.orgs_mentioned:
+                key = org.strip()
+                if key:
+                    counts[key] = counts.get(key, 0) + 1
+        ordered = sorted(counts.items(), key=lambda x: (-x[1], x[0]))[:5]
+        category_competitors[cat] = [
+            {
+                "name": name,
+                "mentions": n,
+                "share": (n / len(cat_answers)) if cat_answers else 0.0,
+            }
+            for name, n in ordered
+        ]
 
     raw_responses = [
         {
@@ -267,6 +340,7 @@ def _aggregate(
             "mentioned": a.mentioned,
             "sentiment": a.sentiment,
             "persons_mentioned": a.persons_mentioned,
+            "orgs_mentioned": a.orgs_mentioned,
         }
         for a in answers
     ]
@@ -278,6 +352,7 @@ def _aggregate(
         sentiment_score=avg_sentiment,
         parity_index=parity,
         category_results=category_results,
+        category_competitors=category_competitors,
         models_used=sorted({a.model for a in answers}),
         total_answers=total,
         answers_with_mention=len(with_mention),
@@ -310,6 +385,7 @@ def _write(result: PollingResult) -> None:
             "sentiment_score": result.sentiment_score,
             "parity_index": result.parity_index,
             "category_results": result.category_results,
+            "category_competitors": result.category_competitors,
             "models_used": result.models_used,
             "total_answers": result.total_answers,
             "answers_with_mention": result.answers_with_mention,

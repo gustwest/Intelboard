@@ -112,12 +112,19 @@ type EngineResult = {
   mention_count: number;
 };
 
+type Competitor = {
+  name: string;
+  mentions: number;
+  share: number;
+};
+
 type PollingWeek = {
   week_id: string;
   share_of_voice: number | null;
   sentiment_score: number | null;
   parity_index: number | null;
   category_results: Record<string, CategoryResult> | null;
+  category_competitors: Record<string, Competitor[]> | null;
   per_engine: Record<string, EngineResult> | null;
   total_answers: number | null;
   answers_with_mention: number | null;
@@ -802,18 +809,16 @@ function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
             <span>Svar</span>
             <span>Trend (12v)</span>
           </div>
-          {cats.map(([cat, r]) => {
-            const cs = sentimentLabel(r.sentiment_score);
-            return (
-              <div key={cat} style={{ ...catGridTrend, padding: '8px 0', borderBottom: `1px solid ${C.border}`, fontSize: 12, alignItems: 'center' }}>
-                <span style={{ color: '#3a4b56' }}>{CATEGORY_SV[cat] || cat}</span>
-                <span style={{ color: '#3a4b56' }}>{Math.round(r.share_of_voice * 100)}%</span>
-                <span style={{ color: cs.color }}>{cs.text}</span>
-                <span style={{ color: C.dim }}>{Math.round(r.mention_count)}/{Math.round(r.answer_count)}</span>
-                <Sparkline series={catTrend[cat]} />
-              </div>
-            );
-          })}
+          {cats.map(([cat, r]) => (
+            <CategoryRow
+              key={cat}
+              cat={cat}
+              row={r}
+              competitors={latest.category_competitors?.[cat] || []}
+              clientSoV={r.share_of_voice}
+              trend={catTrend[cat]}
+            />
+          ))}
         </div>
       )}
 
@@ -841,6 +846,77 @@ function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function CategoryRow({ cat, row, competitors, clientSoV, trend }: {
+  cat: string;
+  row: CategoryResult;
+  competitors: Competitor[];
+  clientSoV: number;
+  trend: (number | null)[] | undefined;
+}) {
+  const [open, setOpen] = useState(false);
+  const cs = sentimentLabel(row.sentiment_score);
+  const canExpand = competitors.length > 0;
+  return (
+    <>
+      <div
+        style={{
+          ...catGridTrend,
+          padding: '8px 0',
+          borderBottom: open ? 'none' : `1px solid ${C.border}`,
+          fontSize: 12,
+          alignItems: 'center',
+          cursor: canExpand ? 'pointer' : 'default',
+        }}
+        onClick={() => canExpand && setOpen((o) => !o)}
+        title={canExpand ? 'Klicka för att se vilka konkurrenter AI nämner i den här kategorin' : 'Konkurrent-data fylls vid nästa polling-körning'}
+      >
+        <span style={{ color: '#3a4b56', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {canExpand && <span style={{ fontSize: 9, color: C.muted, transition: 'transform 0.2s', display: 'inline-block', transform: open ? 'rotate(90deg)' : 'none' }}>▶</span>}
+          {CATEGORY_SV[cat] || cat}
+        </span>
+        <span style={{ color: '#3a4b56' }}>{Math.round(row.share_of_voice * 100)}%</span>
+        <span style={{ color: cs.color }}>{cs.text}</span>
+        <span style={{ color: C.dim }}>{Math.round(row.mention_count)}/{Math.round(row.answer_count)}</span>
+        <Sparkline series={trend} />
+      </div>
+      {open && (
+        <div style={{ padding: '8px 12px 14px 22px', borderBottom: `1px solid ${C.border}`, background: 'rgba(106,126,138,0.03)' }}>
+          <div style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginBottom: 8 }}>
+            Vilka AI nämner istället — top {competitors.length}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <CompetitorBar name="Ni" share={clientSoV} highlight />
+            {competitors.map((c) => (
+              <CompetitorBar key={c.name} name={c.name} share={c.share} mentions={c.mentions} />
+            ))}
+          </div>
+          <p style={{ fontSize: 10, color: C.dim, marginTop: 10, marginBottom: 0, lineHeight: 1.5 }}>
+            Andel av kategorins {Math.round(row.answer_count)} AI-svar där respektive aktör nämns. Stora gap är en tydlig "varför" — antingen att berätta tydligare, eller en konkurrent som äger berättelsen.
+          </p>
+        </div>
+      )}
+    </>
+  );
+}
+
+function CompetitorBar({ name, share, mentions, highlight }: { name: string; share: number; mentions?: number; highlight?: boolean }) {
+  const pctVal = Math.max(0, Math.min(1, share)) * 100;
+  const color = highlight ? C.accent : '#6a7e8a';
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 60px', alignItems: 'center', gap: 10, fontSize: 12 }}>
+      <span style={{ color: highlight ? C.accent : '#3a4b56', fontWeight: highlight ? 600 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {name}
+      </span>
+      <div style={{ height: 8, background: 'rgba(106,126,138,0.12)', borderRadius: 4, overflow: 'hidden' }}>
+        <div style={{ width: `${pctVal}%`, height: '100%', background: color, opacity: 0.85, borderRadius: 4 }} />
+      </div>
+      <span style={{ color: C.muted, fontFamily: 'ui-monospace, monospace', textAlign: 'right' }}>
+        {Math.round(share * 100)}%{mentions != null ? ` · ${mentions}` : ''}
+      </span>
     </div>
   );
 }

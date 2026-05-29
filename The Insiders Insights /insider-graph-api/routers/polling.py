@@ -52,6 +52,7 @@ def list_results(client_id: str, limit: int = 12) -> dict[str, Any]:
                 "sentiment_score": data.get("sentiment_score"),
                 "parity_index": data.get("parity_index"),
                 "category_results": data.get("category_results"),
+                "category_competitors": data.get("category_competitors") or {},
                 "total_answers": data.get("total_answers"),
                 "answers_with_mention": data.get("answers_with_mention"),
                 "models_used": data.get("models_used"),
