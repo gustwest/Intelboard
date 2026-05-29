@@ -237,6 +237,11 @@ const SEVERITY: Record<string, { label: string; color: string; bg: string }> = {
   low: { label: 'Låg', color: '#6a7e8a', bg: 'rgba(106,126,138,0.12)' },
 };
 
+type ViewMode = 'ops' | 'customer';
+
+const LS_CLIENT = 'ig-polling-client';
+const LS_MODE = 'ig-polling-mode';
+
 export default function GraphRiskLoopPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -248,18 +253,40 @@ export default function GraphRiskLoopPage() {
   const [humanization, setHumanization] = useState<Humanization | null>(null);
   const [riskTimeline, setRiskTimeline] = useState<RiskTimelineResp | null>(null);
   const [riskQuestions, setRiskQuestions] = useState<RiskQuestionsResp | null>(null);
+  const [mode, setMode] = useState<ViewMode>('ops');
   const [error, setError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const { latest, active: jobActive, trigger: runJob } = useJobRuns(selected);
+
+  // Återställ sparat kund-val + läge innan första render (en gång).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const m = window.localStorage.getItem(LS_MODE);
+    if (m === 'ops' || m === 'customer') setMode(m);
+    const c = window.localStorage.getItem(LS_CLIENT);
+    if (c) setSelected(c);
+  }, []);
 
   useEffect(() => {
     graphFetch<{ clients: Client[] }>('/api/clients')
       .then((d) => {
         setClients(d.clients);
-        if (d.clients.length && !selected) setSelected(d.clients[0].client_id);
+        if (d.clients.length && !selected) {
+          const saved = typeof window !== 'undefined' ? window.localStorage.getItem(LS_CLIENT) : null;
+          const found = saved && d.clients.find((c) => c.client_id === saved) ? saved : d.clients[0].client_id;
+          setSelected(found);
+        }
       })
       .catch((e) => setError(e.message));
   }, []);
+
+  // Persist kund-val + läge.
+  useEffect(() => {
+    if (typeof window !== 'undefined' && selected) window.localStorage.setItem(LS_CLIENT, selected);
+  }, [selected]);
+  useEffect(() => {
+    if (typeof window !== 'undefined') window.localStorage.setItem(LS_MODE, mode);
+  }, [mode]);
 
   // Schemastatus (globalt, ej kundberoende) — verkligt Cloud Scheduler-läge + paus.
   useEffect(() => {
@@ -399,46 +426,22 @@ export default function GraphRiskLoopPage() {
       icon={<Radar size={22} />}
       subtitle="Riskloopen: hur säkert AI-motorerna svarar om kunden inför beslutskritiska frågor — beslutssäkerhet, kvarvarande risker och effekt över tid."
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-        <label style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>Kund:</label>
-        <select value={selected || ''} onChange={(e) => setSelected(e.target.value)} style={selectStyle}>
-          {clients.length === 0 && <option value="">Inga kunder</option>}
-          {clients.map((c) => (
-            <option key={c.client_id} value={c.client_id}>
-              {c.company_name || c.client_id}
-            </option>
-          ))}
-        </select>
+      <StickyContextBar
+        clients={clients}
+        selected={selected}
+        onSelectClient={setSelected}
+        months={months}
+        month={month}
+        onSelectMonth={setMonth}
+        onRefresh={() => setRefreshTick((t) => t + 1)}
+        isDraft={!!report?.is_draft}
+        mode={mode}
+        onModeChange={setMode}
+        hero={buildHero(report, riskQuestions, polling)}
+      />
 
-        {months && months.length > 0 && (
-          <>
-            <label style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>Rapport:</label>
-            <select value={month || ''} onChange={(e) => setMonth(e.target.value)} style={selectStyle}>
-              {months.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </>
-        )}
-
-        <button
-          onClick={() => month && selected && graphFetch<Report>(`/api/reports/${selected}/${month}`).then(setReport).catch((e) => setError(e.message))}
-          title="Uppdatera"
-          style={{ padding: '8px 10px', background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer' }}
-        >
-          <RefreshCw size={14} />
-        </button>
-
-        {report?.is_draft && (
-          <span style={{ fontSize: 11, fontWeight: 600, color: C.accent, background: 'rgba(159,81,182,0.12)', border: '1px solid rgba(159,81,182,0.3)', borderRadius: 6, padding: '4px 8px' }}>
-            Internt utkast
-          </span>
-        )}
-      </div>
-
-      {/* Jobbkontroller + senast körd */}
+      {/* Jobbkontroller + senast körd (endast ops-läge) */}
+      {mode === 'ops' && (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
         {renderJobBtn('Kör polling', 'polling', '/api/jobs/polling', 'polling', { onDone: () => setRefreshTick((t) => t + 1) })}
@@ -468,16 +471,17 @@ export default function GraphRiskLoopPage() {
           })}
         </div>
       </div>
+      )}
 
       {error && <div style={errorStyle}>{error}</div>}
 
-      {/* Schemalagda körningar — verkligt Cloud Scheduler-läge + paus/återuppta */}
-      {schedules?.available && schedules.schedules.length > 0 && (
+      {/* Schemalagda körningar — endast ops-läge (admin-info) */}
+      {mode === 'ops' && schedules?.available && schedules.schedules.length > 0 && (
         <SchedulesPanel rows={schedules.schedules} onToggle={toggleSchedule} />
       )}
 
-      {/* Riskloop-status — synliggör tredelade loopen generate → review → detect */}
-      {(riskQuestions || riskTimeline) && (
+      {/* Riskloop-status — endast ops-läge (intern admin-loop, ej kundens öga) */}
+      {mode === 'ops' && (riskQuestions || riskTimeline) && (
         <RiskLoopStatus
           questions={riskQuestions}
           findings={riskTimeline}
@@ -489,8 +493,8 @@ export default function GraphRiskLoopPage() {
       {/* Veckovis synlighet — det löpande, automatiska måttet (visas oavsett månadsrapport) */}
       {polling && polling.length > 0 && <WeeklyVisibility weeks={polling} />}
 
-      {/* Förtroendegap-cockpit — säger / belägger / AI uppfattar, per dimension */}
-      {humanization?.available && <TrustGapCockpit model={humanization} />}
+      {/* Förtroendegap-cockpit — staplar i ops, bara plain-text i kund-läge */}
+      {humanization?.available && <TrustGapCockpit model={humanization} mode={mode} />}
 
       {/* Closed-loop tidslinje per risk — detektion → åtgärd → resolved, oberoende av månadsrapport */}
       {riskTimeline && <RiskLifecycleTimeline data={riskTimeline} approvedQuestions={riskQuestions?.counts.approved ?? null} />}
@@ -878,7 +882,7 @@ function Sparkline({ series, width = 88, height = 22 }: { series: (number | null
   );
 }
 
-function TrustGapCockpit({ model }: { model: Humanization }) {
+function TrustGapCockpit({ model, mode }: { model: Humanization; mode: ViewMode }) {
   const dims = model.dimensions || [];
   const flags = model.opportunities_and_risks || [];
   const ranked = model.ranked_actions || [];
@@ -924,13 +928,13 @@ function TrustGapCockpit({ model }: { model: Humanization }) {
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {dims.map((d) => <DimensionRow key={d.dimension} dim={d} />)}
+        {dims.map((d) => <DimensionRow key={d.dimension} dim={d} mode={mode} />)}
       </div>
     </div>
   );
 }
 
-function DimensionRow({ dim }: { dim: HumanizationDim }) {
+function DimensionRow({ dim, mode }: { dim: HumanizationDim; mode: ViewMode }) {
   const raw = dim.raw || {};
   const declared = typeof raw.declared === 'number' ? raw.declared : null;
   const demonstrated = typeof raw.demonstrated === 'number' ? raw.demonstrated : null;
@@ -949,16 +953,18 @@ function DimensionRow({ dim }: { dim: HumanizationDim }) {
         {overClaim && <span style={trustGapBadge('#b45309', 'rgba(245,158,11,0.14)')}>Risk: över-claim</span>}
         {opportunity && <span style={trustGapBadge('#0e7490', 'rgba(14,116,144,0.12)')}>Möjlighet: berätta mer</span>}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 10 }}>
-        <TrustBar label="Säger" value={declared} hint="0 / 1" tone="declared" />
-        <TrustBar label="Belägger" value={demonstrated} hint="0 → 1" tone="demonstrated" />
-        <TrustBar
-          label="AI uppfattar"
-          value={perceivedBar}
-          hint={perceived?.status === 'not_visible' ? 'AI ser er inte här ännu' : valence != null ? `salience ${salience?.toFixed(2) ?? '—'} · valens ${valence?.toFixed(2) ?? '—'}` : 'för lite synlighet'}
-          tone="perceived"
-        />
-      </div>
+      {mode === 'ops' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 10 }}>
+          <TrustBar label="Säger" value={declared} hint="0 / 1" tone="declared" />
+          <TrustBar label="Belägger" value={demonstrated} hint="0 → 1" tone="demonstrated" />
+          <TrustBar
+            label="AI uppfattar"
+            value={perceivedBar}
+            hint={perceived?.status === 'not_visible' ? 'AI ser er inte här ännu' : valence != null ? `salience ${salience?.toFixed(2) ?? '—'} · valens ${valence?.toFixed(2) ?? '—'}` : 'för lite synlighet'}
+            tone="perceived"
+          />
+        </div>
+      )}
       <div style={{ fontSize: 12, color: '#3a4b56', marginTop: 4, lineHeight: 1.5 }}>{dim.evidence_plain}</div>
       <div style={{ fontSize: 12, color: C.muted, marginTop: 4, lineHeight: 1.5 }}>{dim.perception_plain}</div>
       {dim.perception_by_engine.length > 0 && (
@@ -1003,6 +1009,168 @@ function signedDelta(v: number | null | undefined): string {
   if (v > 0) return `+${v}`;
   if (v < 0) return `${v}`;
   return 'oförändrat';
+}
+
+// --- Sticky kontextrad + hero -------------------------------------------------
+
+type Hero = {
+  primary: string;
+  unit?: string;
+  delta?: string;
+  deltaTone?: 'up' | 'down' | 'flat';
+  stage?: string;
+  tagline: string;
+};
+
+function buildHero(report: Report | null, riskQuestions: RiskQuestionsResp | null, polling: PollingWeek[] | null): Hero {
+  // Primärt huvudtal: Beslutssäkerhet ur senaste rapporten.
+  const conf = report?.decision_confidence ?? null;
+  if (conf?.score != null) {
+    const delta = report?.trend?.delta;
+    let deltaStr: string | undefined;
+    let deltaTone: 'up' | 'down' | 'flat' | undefined;
+    if (delta != null) {
+      deltaTone = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
+      deltaStr = delta > 0 ? `↑${delta} sedan föregående månad` : delta < 0 ? `↓${Math.abs(delta)} sedan föregående månad` : 'oförändrat sedan föregående månad';
+    }
+    return {
+      primary: String(conf.score),
+      unit: '/ 100',
+      delta: deltaStr,
+      deltaTone,
+      stage: conf.stage,
+      tagline: 'Beslutssäkerhet — hur säkert AI-motorerna svarar om er på beslutskritiska frågor.',
+    };
+  }
+  // Fallback 1: godkända frågor finns men ingen rapport än → loopen rullar.
+  const approved = riskQuestions?.counts.approved ?? 0;
+  if (approved > 0) {
+    return {
+      primary: String(approved),
+      unit: 'frågor mäts',
+      stage: 'Loopen rullar',
+      tagline: 'Beslutssäkerhet beräknas vid första månadsrapporten — frågorna mäts varje vecka under tiden.',
+    };
+  }
+  // Fallback 2: bara veckodata.
+  const latestWeek = polling?.[0];
+  if (latestWeek?.share_of_voice != null) {
+    return {
+      primary: `${Math.round(latestWeek.share_of_voice * 100)}%`,
+      unit: 'Share of Voice',
+      stage: 'Tidigt läge',
+      tagline: 'Beslutssäkerhet kräver godkända frågor + första månadsrapporten. Tills dess: rå synlighet.',
+    };
+  }
+  return {
+    primary: '—',
+    stage: 'Loopen är inte aktiv',
+    tagline: 'Starta loopen: kör polling, generera frågor, godkänn, mät.',
+  };
+}
+
+function StickyContextBar({ clients, selected, onSelectClient, months, month, onSelectMonth, onRefresh, isDraft, mode, onModeChange, hero }: {
+  clients: Client[];
+  selected: string | null;
+  onSelectClient: (v: string) => void;
+  months: string[] | null;
+  month: string | null;
+  onSelectMonth: (v: string) => void;
+  onRefresh: () => void;
+  isDraft: boolean;
+  mode: ViewMode;
+  onModeChange: (m: ViewMode) => void;
+  hero: Hero;
+}) {
+  const deltaColor = hero.deltaTone === 'up' ? '#16a34a' : hero.deltaTone === 'down' ? '#b91c1c' : C.muted;
+  return (
+    <div
+      style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 10,
+        margin: '0 -24px 20px',
+        padding: '14px 24px',
+        background: 'rgba(248,249,250,0.92)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        borderBottom: `1px solid ${C.border}`,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <label style={{ fontSize: 11, color: C.muted, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Kund</label>
+          <select value={selected || ''} onChange={(e) => onSelectClient(e.target.value)} style={selectStyle}>
+            {clients.length === 0 && <option value="">Inga kunder</option>}
+            {clients.map((c) => (
+              <option key={c.client_id} value={c.client_id}>{c.company_name || c.client_id}</option>
+            ))}
+          </select>
+
+          {months && months.length > 0 && (
+            <>
+              <label style={{ fontSize: 11, color: C.muted, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginLeft: 8 }}>Rapport</label>
+              <select value={month || ''} onChange={(e) => onSelectMonth(e.target.value)} style={selectStyle}>
+                {months.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </>
+          )}
+
+          <button
+            onClick={onRefresh}
+            title="Uppdatera all data"
+            style={{ padding: '8px 10px', background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}
+          >
+            <RefreshCw size={14} />
+          </button>
+
+          {isDraft && (
+            <span style={{ fontSize: 10, fontWeight: 600, color: C.accent, background: 'rgba(159,81,182,0.12)', border: '1px solid rgba(159,81,182,0.3)', borderRadius: 5, padding: '3px 8px', letterSpacing: '0.04em' }}>
+              INTERNT UTKAST
+            </span>
+          )}
+        </div>
+
+        <div style={{ flex: 1 }} />
+
+        {/* Ops/Kund segmented toggle */}
+        <div style={{ display: 'inline-flex', background: 'rgba(106,126,138,0.08)', borderRadius: 8, padding: 3, border: `1px solid ${C.border}` }}>
+          {(['ops', 'customer'] as ViewMode[]).map((m) => (
+            <button
+              key={m}
+              onClick={() => onModeChange(m)}
+              title={m === 'ops' ? 'Ops-läge: full insyn, jobbknappar, raw siffror' : 'Kund-läge: presentationsklar — bara plain-text + trender'}
+              style={{
+                padding: '6px 14px',
+                background: mode === m ? '#ffffff' : 'transparent',
+                color: mode === m ? '#3a4b56' : C.muted,
+                border: 'none',
+                borderRadius: 6,
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: 'pointer',
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+                boxShadow: mode === m ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+              }}
+            >
+              {m === 'ops' ? 'Ops' : 'Kund'}
+            </button>
+          ))}
+        </div>
+
+        {/* Hero-tal */}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
+          <span style={{ fontSize: 32, fontWeight: 600, letterSpacing: '-0.02em', color: '#3a4b56', lineHeight: 1 }}>{hero.primary}</span>
+          {hero.unit && <span style={{ fontSize: 12, color: C.muted }}>{hero.unit}</span>}
+          {hero.stage && <span style={{ fontSize: 11, fontWeight: 600, color: C.accent, background: 'rgba(159,81,182,0.1)', padding: '3px 8px', borderRadius: 5, letterSpacing: '0.04em' }}>{hero.stage}</span>}
+          {hero.delta && <span style={{ fontSize: 11, fontWeight: 600, color: deltaColor }}>{hero.delta}</span>}
+        </div>
+      </div>
+
+      <p style={{ margin: '8px 0 0', fontSize: 11, color: C.muted, lineHeight: 1.5 }}>{hero.tagline}</p>
+    </div>
+  );
 }
 
 function isStale(startedAt: string | null | undefined, minutes: number): boolean {
