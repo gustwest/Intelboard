@@ -15,8 +15,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -27,6 +28,11 @@ from langchain_core.messages import HumanMessage, SystemMessage
 import firestore_client as fs
 from config import settings
 from services import llm as llm_factory
+
+# Konkurrent-extraktion via judge-LLM (gemini). Kan stängas av om gRPC-klienten hänger
+# i prod — fältet category_competitors blir tomt men polling-jobbet fortsätter.
+POLLING_EXTRACT_ORGS = os.environ.get("POLLING_EXTRACT_ORGS", "1") not in ("0", "false", "False", "")
+POLLING_ORG_TIMEOUT_SEC = float(os.environ.get("POLLING_ORG_TIMEOUT_SEC", "8"))
 
 log = logging.getLogger(__name__)
 
@@ -115,7 +121,10 @@ def run_for_client(client_id: str) -> PollingResult | None:
             ans.sentiment = _judge_sentiment(judge, ans.answer, company_name)
         # Konkurrent-kontext: vilka andra org nämns? Alla svar, inte bara där vi nämns
         # — för det är just "AI nämner X, inte oss" som ger den starkaste signalen.
-        ans.orgs_mentioned = _extract_orgs(judge, ans.answer, company_name, employee_names)
+        # Timeout-skyddat: gemini-gRPC-klienten har visat sig hänga utan timeout, vilket
+        # blockerar hela polling-jobbet. Hopp över org-extraktion om något fastnar.
+        if POLLING_EXTRACT_ORGS:
+            ans.orgs_mentioned = _safe_extract_orgs(judge, ans.answer, company_name, employee_names)
 
     result = _aggregate(client_id, company_name, answers, employee_gender)
     _write(result)
@@ -206,6 +215,23 @@ def _extract_persons(answer: str, employee_names: list[str]) -> list[str]:
         if name and name.lower() in haystack:
             found.append(name)
     return found
+
+
+def _safe_extract_orgs(llm: Any, answer: str, own_company: str, employee_names: list[str]) -> list[str]:
+    """Timeout-skyddad wrapper runt _extract_orgs — gemini-gRPC kan hänga utan timeout.
+    Vi vägrar att låta org-extraktion blockera polling-jobbet."""
+    if not answer or len(answer.strip()) < 20:
+        return []
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(_extract_orgs, llm, answer, own_company, employee_names)
+        try:
+            return future.result(timeout=POLLING_ORG_TIMEOUT_SEC)
+        except FuturesTimeout:
+            log.warning("org extraction timed out after %ss — skipping for this answer", POLLING_ORG_TIMEOUT_SEC)
+            return []
+        except Exception as exc:
+            log.warning("org extraction wrapper failed: %s", exc)
+            return []
 
 
 def _extract_orgs(llm: Any, answer: str, own_company: str, employee_names: list[str]) -> list[str]:
