@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Radar, RefreshCw, Play, Loader2, Check, X, Pause, CalendarClock } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
-import { graphFetch } from '../_lib/api';
+import { graphFetch, GRAPH_API } from '../_lib/api';
 import { useJobRuns, fmtRelative } from '../_lib/jobRuns';
 
 // --- Riskloopens render-modell (speglar services/monthly_report.py) ---
@@ -456,6 +456,7 @@ export default function GraphRiskLoopPage() {
         mode={mode}
         onModeChange={setMode}
         hero={buildHero(report, riskQuestions, polling)}
+        reportShareUrl={month && selected && report ? `/api/reports/${selected}/${month}/html` : null}
       />
 
       {/* Jobbkontroller + aktivitetsfeed (endast ops-läge) */}
@@ -1168,7 +1169,7 @@ function buildHero(report: Report | null, riskQuestions: RiskQuestionsResp | nul
   };
 }
 
-function StickyContextBar({ clients, selected, onSelectClient, months, month, onSelectMonth, onRefresh, isDraft, mode, onModeChange, hero }: {
+function StickyContextBar({ clients, selected, onSelectClient, months, month, onSelectMonth, onRefresh, isDraft, mode, onModeChange, hero, reportShareUrl }: {
   clients: Client[];
   selected: string | null;
   onSelectClient: (v: string) => void;
@@ -1180,7 +1181,20 @@ function StickyContextBar({ clients, selected, onSelectClient, months, month, on
   mode: ViewMode;
   onModeChange: (m: ViewMode) => void;
   hero: Hero;
+  reportShareUrl: string | null;
 }) {
+  const [copied, setCopied] = useState(false);
+  const fullShareUrl = reportShareUrl ? `${GRAPH_API}${reportShareUrl}` : '';
+  async function copyShareLink() {
+    if (!fullShareUrl) return;
+    try {
+      await navigator.clipboard.writeText(fullShareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      window.prompt('Kopiera länken:', fullShareUrl);
+    }
+  }
   const deltaColor = hero.deltaTone === 'up' ? '#16a34a' : hero.deltaTone === 'down' ? '#b91c1c' : C.muted;
   return (
     <div
@@ -1227,6 +1241,27 @@ function StickyContextBar({ clients, selected, onSelectClient, months, month, on
             <span style={{ fontSize: 10, fontWeight: 600, color: C.accent, background: 'rgba(159,81,182,0.12)', border: '1px solid rgba(159,81,182,0.3)', borderRadius: 5, padding: '3px 8px', letterSpacing: '0.04em' }}>
               INTERNT UTKAST
             </span>
+          )}
+
+          {reportShareUrl && (
+            <>
+              <a
+                href={fullShareUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Öppna utskriftsvyn — Skriv ut eller Spara som PDF där"
+                style={{ padding: '6px 10px', fontSize: 11, fontWeight: 600, color: C.muted, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 6, textDecoration: 'none', cursor: 'pointer', letterSpacing: '0.02em' }}
+              >
+                Utskriftsvy / PDF
+              </a>
+              <button
+                onClick={copyShareLink}
+                title="Kopiera direktlänk till denna månadsrapport"
+                style={{ padding: '6px 10px', fontSize: 11, fontWeight: 600, color: copied ? S.resolved.fg : C.muted, background: copied ? S.resolved.bg : 'transparent', border: `1px solid ${copied ? S.resolved.border : C.border}`, borderRadius: 6, cursor: 'pointer', letterSpacing: '0.02em' }}
+              >
+                {copied ? 'Länk kopierad' : 'Kopiera länk'}
+              </button>
+            </>
           )}
         </div>
 

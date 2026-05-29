@@ -504,7 +504,24 @@ def render_report_html(report: dict[str, Any]) -> str:
  .bar > i{{position:absolute;left:0;top:0;height:100%;border-radius:7px;background:linear-gradient(90deg,#e6a23c,#67c23a)}}
  .bar > b{{position:absolute;top:-3px;width:2px;height:20px;background:#c0392b}}
  .scale-labels{{display:flex;justify-content:space-between;font-size:.72rem;color:#999}}
+ .toolbar{{display:flex;gap:.5rem;align-items:center;justify-content:flex-end;margin:0 0 1rem}}
+ .toolbar button{{font:inherit;padding:.4rem .9rem;border:1px solid #ccc;background:#fff;border-radius:6px;cursor:pointer;font-size:.85rem;color:#333}}
+ .toolbar button:hover{{background:#f5f5f5}}
+ @media print {{
+   body{{max-width:none;margin:0;padding:1rem;color:#000;font-size:11pt}}
+   .toolbar{{display:none}}
+   .banner{{background:#fff;border:1px dashed #999;color:#444;font-size:.8rem}}
+   h2{{break-after:avoid;page-break-after:avoid;margin-top:1.4rem}}
+   table{{break-inside:auto;page-break-inside:auto}}
+   tr{{break-inside:avoid;page-break-inside:avoid}}
+   .draft{{break-inside:avoid;page-break-inside:avoid}}
+   .note{{color:#555}}
+   a{{color:#000;text-decoration:none}}
+ }}
 </style></head><body>
+<div class="toolbar">
+  <button onclick="window.print()">Skriv ut / Spara som PDF</button>
+</div>
 <p class="banner"><strong>Internt utkast.</strong> Synas av teamet och färdigställs som
 ledningsgruppsrapport utanför verktyget. Inga kausalitetspåståenden — formuleringen är
 "ökar sannolikheten", inte garanti.</p>
