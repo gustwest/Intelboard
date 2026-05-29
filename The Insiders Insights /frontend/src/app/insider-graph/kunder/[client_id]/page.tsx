@@ -15,6 +15,7 @@ import ConnectorsEditor from '../../_components/ConnectorsEditor';
 import MeasurementConfigEditor from '../../_components/MeasurementConfigEditor';
 import IdentityMetadataEditor from '../../_components/IdentityMetadataEditor';
 import AudiencePrioritiesEditor from '../../_components/AudiencePrioritiesEditor';
+import OutputQualityPanel from '../../_components/OutputQualityPanel';
 import { graphFetch } from '../../_lib/api';
 import { useJobRuns, fmtRelative } from '../../_lib/jobRuns';
 
@@ -230,6 +231,9 @@ export default function ClientDetailPage() {
 
           {/* Audience-priorities — vem ska bli citerad av AI-motorer (driver output-kvalitet) */}
           <AudiencePrioritiesEditor clientId={clientId} />
+
+          {/* Output-kvalitet — senaste rubric-scoring + länk till detaljvyn */}
+          <OutputQualityPanel clientId={clientId} />
 
           {/* AI-synlighet — ESG & CSRD Perception Audit (valbart tillägg, per kund) */}
           <ESGAddon clientId={clientId} />
