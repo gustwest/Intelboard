@@ -17,10 +17,11 @@ import json
 import logging
 import os
 import re
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout, as_completed
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 from google.cloud import firestore
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -32,7 +33,41 @@ from services import llm as llm_factory
 # Konkurrent-extraktion via judge-LLM (gemini). Kan stängas av om gRPC-klienten hänger
 # i prod — fältet category_competitors blir tomt men polling-jobbet fortsätter.
 POLLING_EXTRACT_ORGS = os.environ.get("POLLING_EXTRACT_ORGS", "1") not in ("0", "false", "False", "")
+# Per-anrop-timeouter — polling-jobbet får ALDRIG hänga, oavsett LLM-läge. Justera via env.
+POLLING_ASK_TIMEOUT_SEC = float(os.environ.get("POLLING_ASK_TIMEOUT_SEC", "30"))
+POLLING_JUDGE_TIMEOUT_SEC = float(os.environ.get("POLLING_JUDGE_TIMEOUT_SEC", "12"))
 POLLING_ORG_TIMEOUT_SEC = float(os.environ.get("POLLING_ORG_TIMEOUT_SEC", "8"))
+
+T = TypeVar("T")
+
+
+def _call_with_timeout(fn: Callable[[], T], timeout: float, default: T, what: str) -> T:
+    """Daemon-tråd + join(timeout): vi väntar max `timeout` på fn() och returnerar default
+    om den hänger. Tråden fortsätter köra i bakgrunden tills den dör naturligt eller
+    containern skalas ner — men polling-jobbet kommer ALDRIG att blockeras.
+
+    Detta är det enda pålitliga mönstret för att skydda mot blockerande IO i Python
+    (signal-baserad timeout funkar bara på huvudtråden; futures.result(timeout) friar
+    inte upp den underliggande tråden)."""
+    result: list[T] = [default]
+    err: list[BaseException | None] = [None]
+
+    def target() -> None:
+        try:
+            result[0] = fn()
+        except BaseException as exc:  # log + svälj — försök ska aldrig fälla jobbet
+            err[0] = exc
+
+    t = threading.Thread(target=target, daemon=True, name=f"polling-{what}")
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        log.warning("%s timed out after %ss — using default", what, timeout)
+        return default
+    if err[0] is not None:
+        log.warning("%s failed: %s", what, err[0])
+        return default
+    return result[0]
 
 log = logging.getLogger(__name__)
 
@@ -118,13 +153,16 @@ def run_for_client(client_id: str) -> PollingResult | None:
     judge = next(iter(models.values()))
     for ans in answers:
         if ans.mentioned:
-            ans.sentiment = _judge_sentiment(judge, ans.answer, company_name)
+            ans.sentiment = _safe_judge_sentiment(judge, ans.answer, company_name)
         # Konkurrent-kontext: vilka andra org nämns? Alla svar, inte bara där vi nämns
         # — för det är just "AI nämner X, inte oss" som ger den starkaste signalen.
-        # Timeout-skyddat: gemini-gRPC-klienten har visat sig hänga utan timeout, vilket
-        # blockerar hela polling-jobbet. Hopp över org-extraktion om något fastnar.
-        if POLLING_EXTRACT_ORGS:
-            ans.orgs_mentioned = _safe_extract_orgs(judge, ans.answer, company_name, employee_names)
+        if POLLING_EXTRACT_ORGS and ans.answer and len(ans.answer.strip()) >= 20:
+            ans.orgs_mentioned = _call_with_timeout(
+                lambda: _extract_orgs(judge, ans.answer, company_name, employee_names),
+                timeout=POLLING_ORG_TIMEOUT_SEC,
+                default=[],
+                what="extract_orgs",
+            )
 
     result = _aggregate(client_id, company_name, answers, employee_gender)
     _write(result)
@@ -162,6 +200,9 @@ def _collect_answers(
     questions: list[tuple[str, str]],
     models: dict[str, Any],
 ) -> list[QuestionAnswer]:
+    """Parallell ask-fas med per-anrop-timeout. Worker-tråden anropar _safe_ask som
+    daemon-skyddar den faktiska LLM-anropet — om gpt-4o/gemini hänger kommer worker
+    att returnera "" efter POLLING_ASK_TIMEOUT_SEC istället för att blockera hela jobbet."""
     tasks = []
     for category, question in questions:
         for model_name, llm in models.items():
@@ -169,7 +210,7 @@ def _collect_answers(
 
     results: list[QuestionAnswer] = []
     with ThreadPoolExecutor(max_workers=min(8, len(tasks))) as pool:
-        futures = {pool.submit(_ask, q, llm): (category, q, model) for category, q, model, llm in tasks}
+        futures = {pool.submit(_safe_ask, q, llm, model): (category, q, model) for category, q, model, llm in tasks}
         for fut in as_completed(futures):
             category, question, model_name = futures[fut]
             try:
@@ -181,6 +222,16 @@ def _collect_answers(
                 QuestionAnswer(category=category, question=question, model=model_name, answer=answer)
             )
     return results
+
+
+def _safe_ask(question: str, llm: Any, model_name: str) -> str:
+    """Timeout-skyddat _ask. Returnerar "" om LLM-klienten hänger eller felar."""
+    return _call_with_timeout(
+        lambda: _ask(question, llm),
+        timeout=POLLING_ASK_TIMEOUT_SEC,
+        default="",
+        what=f"ask[{model_name}]",
+    )
 
 
 def _ask(question: str, llm: Any) -> str:
@@ -217,21 +268,14 @@ def _extract_persons(answer: str, employee_names: list[str]) -> list[str]:
     return found
 
 
-def _safe_extract_orgs(llm: Any, answer: str, own_company: str, employee_names: list[str]) -> list[str]:
-    """Timeout-skyddad wrapper runt _extract_orgs — gemini-gRPC kan hänga utan timeout.
-    Vi vägrar att låta org-extraktion blockera polling-jobbet."""
-    if not answer or len(answer.strip()) < 20:
-        return []
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(_extract_orgs, llm, answer, own_company, employee_names)
-        try:
-            return future.result(timeout=POLLING_ORG_TIMEOUT_SEC)
-        except FuturesTimeout:
-            log.warning("org extraction timed out after %ss — skipping for this answer", POLLING_ORG_TIMEOUT_SEC)
-            return []
-        except Exception as exc:
-            log.warning("org extraction wrapper failed: %s", exc)
-            return []
+def _safe_judge_sentiment(llm: Any, answer: str, company_name: str) -> float | None:
+    """Timeout-skyddat _judge_sentiment. None om LLM-klienten hänger eller felar."""
+    return _call_with_timeout(
+        lambda: _judge_sentiment(llm, answer, company_name),
+        timeout=POLLING_JUDGE_TIMEOUT_SEC,
+        default=None,
+        what="judge_sentiment",
+    )
 
 
 def _extract_orgs(llm: Any, answer: str, own_company: str, employee_names: list[str]) -> list[str]:
