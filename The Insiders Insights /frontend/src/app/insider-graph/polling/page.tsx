@@ -238,10 +238,21 @@ type Humanization = {
 
 const PERSONAS: Persona[] = ['buyer', 'candidate', 'investor'];
 
+// Konsekvent status-palett: röd = öppen/risk, gul = väntar handling, grön = löst, lila = pågående,
+// blå = info, grå = neutral. Används överallt där status visas (badges, dots, banderoller).
+const S = {
+  open: { fg: '#b91c1c', bg: 'rgba(239,68,68,0.10)', border: 'rgba(239,68,68,0.28)' },
+  waiting: { fg: '#b45309', bg: 'rgba(245,158,11,0.10)', border: 'rgba(245,158,11,0.28)' },
+  inProgress: { fg: '#9f51b6', bg: 'rgba(159,81,182,0.10)', border: 'rgba(159,81,182,0.28)' },
+  resolved: { fg: '#16a34a', bg: 'rgba(22,163,74,0.08)', border: 'rgba(22,163,74,0.25)' },
+  info: { fg: '#0e7490', bg: 'rgba(14,116,144,0.08)', border: 'rgba(14,116,144,0.25)' },
+  neutral: { fg: '#6a7e8a', bg: 'rgba(106,126,138,0.10)', border: 'rgba(106,126,138,0.22)' },
+};
+
 const SEVERITY: Record<string, { label: string; color: string; bg: string }> = {
-  high: { label: 'Hög', color: '#b91c1c', bg: 'rgba(239,68,68,0.12)' },
-  medium: { label: 'Medel', color: '#b45309', bg: 'rgba(245,158,11,0.14)' },
-  low: { label: 'Låg', color: '#6a7e8a', bg: 'rgba(106,126,138,0.12)' },
+  high: { label: 'Hög', color: S.open.fg, bg: S.open.bg },
+  medium: { label: 'Medel', color: S.waiting.fg, bg: S.waiting.bg },
+  low: { label: 'Låg', color: S.neutral.fg, bg: S.neutral.bg },
 };
 
 type ViewMode = 'ops' | 'customer';
@@ -591,11 +602,33 @@ export default function GraphRiskLoopPage() {
 
 /* --- delkomponenter --- */
 
-function SectionHead({ title, hint }: { title: string; hint?: string }) {
+function SectionHead({ title, hint, collapsible, open, onToggle, badge }: {
+  title: string;
+  hint?: string;
+  collapsible?: boolean;
+  open?: boolean;
+  onToggle?: () => void;
+  badge?: string;
+}) {
   return (
-    <div style={{ marginBottom: 12 }}>
-      <h2 style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56', margin: 0 }}>{title}</h2>
-      {hint && <p style={{ fontSize: 12, color: C.muted, margin: '4px 0 0', lineHeight: 1.5 }}>{hint}</p>}
+    <div
+      style={{
+        marginBottom: 14,
+        cursor: collapsible ? 'pointer' : 'default',
+        userSelect: collapsible ? 'none' : 'auto',
+      }}
+      onClick={collapsible ? onToggle : undefined}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {collapsible && (
+          <span style={{ fontSize: 10, color: C.muted, transition: 'transform 0.2s', display: 'inline-block', transform: open ? 'rotate(90deg)' : 'none' }}>▶</span>
+        )}
+        <h2 style={{ fontSize: 16, fontWeight: 600, color: '#3a4b56', margin: 0, letterSpacing: '-0.005em' }}>{title}</h2>
+        {badge && (
+          <span style={{ fontSize: 10, fontWeight: 600, color: S.inProgress.fg, background: S.inProgress.bg, border: `1px solid ${S.inProgress.border}`, borderRadius: 5, padding: '2px 7px', letterSpacing: '0.04em' }}>{badge}</span>
+        )}
+      </div>
+      {hint && <p style={{ fontSize: 12, color: C.muted, margin: '6px 0 0 0', lineHeight: 1.55, paddingLeft: collapsible ? 20 : 0 }}>{hint}</p>}
     </div>
   );
 }
@@ -944,12 +977,19 @@ function TrustGapCockpit({ model, mode }: { model: Humanization; mode: ViewMode 
   const flags = model.opportunities_and_risks || [];
   const ranked = model.ranked_actions || [];
   const trend = model.trend;
+  // Kund-läge: defaulta kollapsad (mindre brus); Ops-läge: öppen (man behöver dykningen).
+  const [open, setOpen] = useState(mode === 'ops');
   return (
-    <div style={{ ...cardStyle, marginBottom: 16 }}>
+    <div style={{ ...cardStyle, marginBottom: 18 }}>
       <SectionHead
         title="Förtroendegap — säger, belägger, AI uppfattar"
-        hint="Tre lager per dimension: vad ni SÄGER om er själva, vad ni BELÄGGER med oberoende underlag, och hur AI UPPFATTAR er. Gap där emellan är handlingen — perception vägs aldrig in i poängen."
+        hint={open ? "Tre lager per dimension: vad ni SÄGER om er själva, vad ni BELÄGGER med oberoende underlag, och hur AI UPPFATTAR er. Gap där emellan är handlingen — perception vägs aldrig in i poängen." : `${dims.length} dimensioner · ${ranked.length} öppna åtgärder`}
+        collapsible
+        open={open}
+        onToggle={() => setOpen((o) => !o)}
       />
+      {!open ? null : (
+      <>
       <p style={{ fontSize: 13, color: '#3a4b56', margin: '0 0 14px', lineHeight: 1.6 }}>{model.coverage_plain}</p>
 
       {trend?.previous_date && (
@@ -987,6 +1027,8 @@ function TrustGapCockpit({ model, mode }: { model: Humanization; mode: ViewMode 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {dims.map((d) => <DimensionRow key={d.dimension} dim={d} mode={mode} />)}
       </div>
+      </>
+      )}
     </div>
   );
 }
@@ -1377,10 +1419,10 @@ function LoopStat({ label, value, tone, hint }: { label: string; value: number |
 }
 
 const RISK_STATUS_SV: Record<RiskStatus, { label: string; color: string; bg: string }> = {
-  open: { label: 'Öppen', color: '#b91c1c', bg: 'rgba(239,68,68,0.12)' },
-  actioned: { label: 'Åtgärdad', color: '#9f51b6', bg: 'rgba(159,81,182,0.14)' },
-  resolved: { label: 'Löst', color: '#16a34a', bg: 'rgba(22,163,74,0.12)' },
-  dismissed: { label: 'Avfärdad', color: '#6a7e8a', bg: 'rgba(106,126,138,0.14)' },
+  open: { label: 'Öppen', color: S.open.fg, bg: S.open.bg },
+  actioned: { label: 'Åtgärdad', color: S.inProgress.fg, bg: S.inProgress.bg },
+  resolved: { label: 'Löst', color: S.resolved.fg, bg: S.resolved.bg },
+  dismissed: { label: 'Avfärdad', color: S.neutral.fg, bg: S.neutral.bg },
 };
 
 function RiskLifecycleTimeline({ data, approvedQuestions }: { data: RiskTimelineResp; approvedQuestions: number | null }) {
@@ -1388,12 +1430,19 @@ function RiskLifecycleTimeline({ data, approvedQuestions }: { data: RiskTimeline
   const rows = filter === 'all' ? data.findings : data.findings.filter((r) => r.status === filter);
   const total = data.findings.length;
   const counts = data.counts;
+  // Defaulta öppen om det finns något att visa, annars kollapsad.
+  const [open, setOpen] = useState(total > 0);
   return (
-    <div style={{ ...cardStyle, marginBottom: 16 }}>
+    <div style={{ ...cardStyle, marginBottom: 18 }}>
       <SectionHead
         title="Riskens livscykel — detektion → åtgärd → löst"
-        hint="Per risk: när AI:n först gav ett farligt svar, när mjukvaran publicerade en korrigering, och när motorn slutat upprepa problemet. Beviset att loopen sluter sig."
+        hint={open ? "Per risk: när AI:n först gav ett farligt svar, när mjukvaran publicerade en korrigering, och när motorn slutat upprepa problemet. Beviset att loopen sluter sig." : `${total} ${total === 1 ? 'risk' : 'risker'} totalt · ${counts.open} öppna · ${counts.resolved} lösta`}
+        collapsible
+        open={open}
+        onToggle={() => setOpen((o) => !o)}
+        badge={counts.open > 0 ? `${counts.open} öppna` : undefined}
       />
+      {open && (<>
 
       {total > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
@@ -1421,6 +1470,7 @@ function RiskLifecycleTimeline({ data, approvedQuestions }: { data: RiskTimeline
           {rows.map((r, i) => <RiskTimelineCard key={r.id} row={r} isLast={i === rows.length - 1} />)}
         </div>
       )}
+      </>)}
     </div>
   );
 }
@@ -1592,7 +1642,8 @@ const cardStyle: React.CSSProperties = {
   background: C.card,
   border: `1px solid ${C.border}`,
   borderRadius: 12,
-  padding: '18px 22px',
+  padding: '22px 26px',
+  boxShadow: '0 1px 2px rgba(58,75,86,0.03)',
 };
 
 const rowGrid: React.CSSProperties = {
