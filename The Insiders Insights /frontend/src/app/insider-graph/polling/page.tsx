@@ -194,6 +194,24 @@ type RiskQuestionsResp = {
   counts: { open: number; approved: number; rejected: number };
 };
 
+// --- Probe-motorer-status (speglar routers/polling.engine_health) ---
+
+type EngineHealth = {
+  id: string;
+  label: string;
+  vendor: string;
+  status: 'live' | 'planned';
+  note: string | null;
+  ok: boolean | null;
+  latency_ms: number | null;
+  error: string | null;
+};
+type EngineHealthResp = {
+  engines: EngineHealth[];
+  checked_at: string;
+  cache_ttl_sec: number;
+};
+
 // --- Förtroendegap-cockpit (speglar services/trust_gap_report.py — översättningslagret §10.1) ---
 // declared = ni säger det · demonstrated = ni belägger det · perceived = AI uppfattar det
 
@@ -271,6 +289,7 @@ export default function GraphRiskLoopPage() {
   const [humanization, setHumanization] = useState<Humanization | null>(null);
   const [riskTimeline, setRiskTimeline] = useState<RiskTimelineResp | null>(null);
   const [riskQuestions, setRiskQuestions] = useState<RiskQuestionsResp | null>(null);
+  const [engineHealth, setEngineHealth] = useState<EngineHealthResp | null>(null);
   const [mode, setMode] = useState<ViewMode>('ops');
   const [error, setError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
@@ -423,6 +442,32 @@ export default function GraphRiskLoopPage() {
     };
   }, [selected, refreshTick]);
 
+  // Probe-motorer-status — driver "Motor-status"-raden i sticky-baren. Auto-refresh
+  // var 2:e min (backend cachar 60s, så detta ger maximalt 2 LLM-probar per minut).
+  useEffect(() => {
+    let cancelled = false;
+    const fetchHealth = () => {
+      graphFetch<EngineHealthResp>('/api/polling/engine-health')
+        .then((d) => !cancelled && setEngineHealth(d))
+        .catch(() => !cancelled && setEngineHealth(null));
+    };
+    fetchHealth();
+    const id = setInterval(fetchHealth, 120000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [refreshTick]);
+
+  async function refreshEngineHealth() {
+    try {
+      const d = await graphFetch<EngineHealthResp>('/api/polling/engine-health?force=true');
+      setEngineHealth(d);
+    } catch {
+      // tyst — UI:t visar gammal data
+    }
+  }
+
   // Hämta vald månads rapport.
   useEffect(() => {
     if (!selected || !month) return;
@@ -457,6 +502,8 @@ export default function GraphRiskLoopPage() {
         onModeChange={setMode}
         hero={buildHero(report, riskQuestions, polling)}
         reportShareUrl={month && selected && report ? `/api/reports/${selected}/${month}/html` : null}
+        engineHealth={engineHealth}
+        onRefreshEngineHealth={refreshEngineHealth}
       />
 
       {/* Jobbkontroller + aktivitetsfeed (endast ops-läge) */}
@@ -1169,7 +1216,7 @@ function buildHero(report: Report | null, riskQuestions: RiskQuestionsResp | nul
   };
 }
 
-function StickyContextBar({ clients, selected, onSelectClient, months, month, onSelectMonth, onRefresh, isDraft, mode, onModeChange, hero, reportShareUrl }: {
+function StickyContextBar({ clients, selected, onSelectClient, months, month, onSelectMonth, onRefresh, isDraft, mode, onModeChange, hero, reportShareUrl, engineHealth, onRefreshEngineHealth }: {
   clients: Client[];
   selected: string | null;
   onSelectClient: (v: string) => void;
@@ -1182,6 +1229,8 @@ function StickyContextBar({ clients, selected, onSelectClient, months, month, on
   onModeChange: (m: ViewMode) => void;
   hero: Hero;
   reportShareUrl: string | null;
+  engineHealth: EngineHealthResp | null;
+  onRefreshEngineHealth: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const fullShareUrl = reportShareUrl ? `${GRAPH_API}${reportShareUrl}` : '';
@@ -1303,7 +1352,128 @@ function StickyContextBar({ clients, selected, onSelectClient, months, month, on
       </div>
 
       <p style={{ margin: '8px 0 0', fontSize: 11, color: C.muted, lineHeight: 1.5 }}>{hero.tagline}</p>
+
+      {/* Motor-status — synliggör om probarna faktiskt fungerar just nu */}
+      {engineHealth && <EngineHealthBar data={engineHealth} onRefresh={onRefreshEngineHealth} />}
     </div>
+  );
+}
+
+function EngineHealthBar({ data, onRefresh }: { data: EngineHealthResp; onRefresh: () => void }) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const liveOk = data.engines.filter((e) => e.status === 'live' && e.ok === true).length;
+  const liveTotal = data.engines.filter((e) => e.status === 'live').length;
+  const banner = liveOk === 0 && liveTotal > 0
+    ? { text: 'Ingen probe-motor svarar — mätningarna ger tom data tills detta är åtgärdat', tone: 'urgent' as const }
+    : liveOk < liveTotal
+      ? { text: `${liveOk}/${liveTotal} probe-motorer svarar — partiella mätningar`, tone: 'waiting' as const }
+      : null;
+  return (
+    <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginRight: 4 }}>
+          AI-motorer
+        </span>
+        {data.engines.map((e) => (
+          <EngineChip
+            key={e.id}
+            engine={e}
+            active={openId === e.id}
+            onClick={() => setOpenId((curr) => (curr === e.id ? null : e.id))}
+          />
+        ))}
+        <button
+          onClick={async () => { setRefreshing(true); await onRefresh(); setTimeout(() => setRefreshing(false), 600); }}
+          title={`Senast kollat ${new Date(data.checked_at).toLocaleTimeString('sv-SE')} — klick för att probe på nytt`}
+          style={{
+            padding: '3px 8px', fontSize: 10, fontWeight: 600,
+            color: refreshing ? C.accent : C.muted, background: 'transparent',
+            border: `1px solid ${C.border}`, borderRadius: 5, cursor: 'pointer',
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            opacity: refreshing ? 0.6 : 1, transition: 'opacity 0.2s',
+          }}
+        >
+          <RefreshCw size={10} style={refreshing ? { animation: 'spin 0.8s linear infinite' } : undefined} />
+          {refreshing ? 'Probar…' : 'Kolla'}
+        </button>
+        <span style={{ fontSize: 10, color: C.dim, marginLeft: 'auto' }}>
+          {new Date(data.checked_at).toLocaleTimeString('sv-SE')}
+        </span>
+      </div>
+
+      {banner && (
+        <div style={{
+          marginTop: 8, padding: '6px 10px', fontSize: 11, lineHeight: 1.5,
+          color: banner.tone === 'urgent' ? S.open.fg : S.waiting.fg,
+          background: banner.tone === 'urgent' ? S.open.bg : S.waiting.bg,
+          border: `1px solid ${banner.tone === 'urgent' ? S.open.border : S.waiting.border}`,
+          borderRadius: 6,
+        }}>
+          {banner.text}
+        </div>
+      )}
+
+      {openId && (() => {
+        const e = data.engines.find((x) => x.id === openId);
+        if (!e) return null;
+        return (
+          <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(106,126,138,0.05)', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11, lineHeight: 1.5 }}>
+            <strong style={{ color: '#3a4b56' }}>{e.label}</strong>
+            <span style={{ color: C.muted, marginLeft: 6 }}>· {e.vendor}</span>
+            {e.status === 'planned' ? (
+              <>
+                <span style={{ marginLeft: 8, color: S.neutral.fg, fontWeight: 600 }}>Planerad</span>
+                {e.note && <div style={{ color: C.muted, marginTop: 4 }}>{e.note}</div>}
+              </>
+            ) : e.ok ? (
+              <>
+                <span style={{ marginLeft: 8, color: S.resolved.fg, fontWeight: 600 }}>Svarar</span>
+                <div style={{ color: C.muted, marginTop: 4 }}>Latens: {e.latency_ms} ms</div>
+              </>
+            ) : (
+              <>
+                <span style={{ marginLeft: 8, color: S.open.fg, fontWeight: 600 }}>Fel</span>
+                <div style={{ color: C.muted, marginTop: 4 }}>
+                  {e.error || 'Okänt fel'}
+                  {e.latency_ms != null && ` · efter ${e.latency_ms} ms`}
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
+function EngineChip({ engine, active, onClick }: { engine: EngineHealth; active: boolean; onClick: () => void }) {
+  const tone =
+    engine.status === 'planned' ? S.neutral :
+    engine.ok === true ? S.resolved :
+    engine.ok === false ? S.open : S.neutral;
+  const dotChar = engine.status === 'planned' ? '◌' : '●';
+  const subtitle =
+    engine.status === 'planned' ? 'Planerad' :
+    engine.ok === true ? `${engine.latency_ms} ms` :
+    'Fel';
+  return (
+    <button
+      onClick={onClick}
+      title={engine.status === 'planned' ? engine.note || 'Planerad motor' : engine.error || 'OK'}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        padding: '4px 10px', fontSize: 11, fontWeight: 600,
+        color: tone.fg, background: active ? tone.bg : 'transparent',
+        border: `1px solid ${active ? tone.fg : tone.border}`,
+        borderRadius: 999, cursor: 'pointer', letterSpacing: '0.02em',
+        transition: 'background 0.15s, border-color 0.15s',
+      }}
+    >
+      <span style={{ fontSize: 10, lineHeight: 1 }}>{dotChar}</span>
+      {engine.label}
+      <span style={{ fontSize: 9, fontWeight: 500, opacity: 0.75, letterSpacing: '0.03em' }}>· {subtitle}</span>
+    </button>
   );
 }
 

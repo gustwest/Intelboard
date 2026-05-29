@@ -118,6 +118,25 @@ def make_probe_engines() -> dict[str, Any]:
     return engines
 
 
+# Auktoritativ lista över ALLA probe-motorer vi vill mäta — live ELLER planerade.
+# Driver health-statusraden i AI-synlighet-fliken: UI:t visar samma 6 motorer oavsett
+# vilka som faktiskt är inkopplade, så att roadmap-bredden är synlig. När en motor
+# kopplas in: flippa "status" till "live" och säkerställ att make_probe_engines()
+# returnerar en klient under samma `id`.
+PROBE_ENGINE_REGISTRY: list[dict[str, Any]] = [
+    {"id": "gpt-4o", "label": "ChatGPT", "vendor": "OpenAI", "status": "live", "note": None},
+    {"id": "gemini-1.5-pro", "label": "Gemini", "vendor": "Google", "status": "live", "note": None},
+    {"id": "perplexity", "label": "Perplexity", "vendor": "Perplexity AI", "status": "planned",
+     "note": "Ren AI-sökmotor — planerad nästa fas (REST-API)"},
+    {"id": "claude", "label": "Claude", "vendor": "Anthropic", "status": "planned",
+     "note": "Resonemang och analys — planerad nästa fas"},
+    {"id": "copilot", "label": "Copilot", "vendor": "Microsoft", "status": "planned",
+     "note": "Retrieval-augmenterad sök — planerad"},
+    {"id": "mistral", "label": "Mistral", "vendor": "Mistral AI", "status": "planned",
+     "note": "EU-baserad — planerad nästa fas"},
+]
+
+
 def _openai_probe():
     from langchain_openai import ChatOpenAI
 

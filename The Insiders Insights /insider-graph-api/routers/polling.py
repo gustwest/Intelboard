@@ -3,14 +3,26 @@
 Aggregat per motor härleds vid läsning från raw_responses (ej lagrat), så att UI:t
 kan visa per-motor-trend för befintlig historik utan schemamigration.
 """
+import threading
+import time
 from collections import defaultdict
+from datetime import datetime, timezone
 from typing import Any, Iterable
 
 from fastapi import APIRouter, HTTPException
+from langchain_core.messages import HumanMessage, SystemMessage
 
 import firestore_client as fs
+from services import llm as llm_factory
 
 router = APIRouter(prefix="/api/polling", tags=["polling"])
+
+# Engine-health-cache — undviker en LLM-probe per UI-render. 60s är tillräckligt för
+# att fånga "trasig sedan en stund" utan att kosta pengar varje pingbacknämarknad.
+_HEALTH_CACHE_SEC = 60.0
+_HEALTH_PROBE_TIMEOUT_SEC = 5.0
+_health_cache: dict[str, Any] = {"ts": 0.0, "data": None}
+_health_lock = threading.Lock()
 
 
 def _aggregate_per_engine(raw_responses: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -35,6 +47,79 @@ def _aggregate_per_engine(raw_responses: Iterable[dict[str, Any]]) -> dict[str, 
             "mention_count": mentions,
         }
     return out
+
+
+# OBS: deklarera engine-health FÖRE /{client_id} så att FastAPI inte tolkar
+# "engine-health" som ett client_id. Implementation ligger nedan.
+@router.get("/engine-health")
+def engine_health(force: bool = False) -> dict[str, Any]:
+    """Status för probe-motorerna (live + planerade). Driver "Motor-status"-raden i
+    sticky-baren på AI-synlighet. Cachas 60s så frontend kan polla ofta utan kostnad.
+
+    `force=true` kringgår cachen — användbart när användaren vill verifiera ett fix."""
+    now = time.time()
+    with _health_lock:
+        cached = _health_cache["data"]
+        if not force and cached is not None and now - _health_cache["ts"] < _HEALTH_CACHE_SEC:
+            return cached
+
+        engines = llm_factory.make_probe_engines()
+        results: list[dict[str, Any]] = []
+        for spec in llm_factory.PROBE_ENGINE_REGISTRY:
+            base = {
+                "id": spec["id"], "label": spec["label"], "vendor": spec["vendor"],
+                "status": spec["status"], "note": spec.get("note"),
+            }
+            if spec["status"] == "planned":
+                results.append({**base, "ok": None, "latency_ms": None, "error": None})
+                continue
+            llm = engines.get(spec["id"])
+            if llm is None:
+                results.append({**base, "ok": False, "latency_ms": None, "error": "API-nyckel saknas eller modul-init misslyckades"})
+                continue
+            probed = _probe_engine(llm)
+            results.append({**base, **probed})
+
+        payload = {
+            "engines": results,
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "cache_ttl_sec": int(_HEALTH_CACHE_SEC),
+        }
+        _health_cache["data"] = payload
+        _health_cache["ts"] = now
+        return payload
+
+
+def _probe_engine(llm: Any) -> dict[str, Any]:
+    """Snabb mini-prob mot en LLM. Returnerar {ok, latency_ms, error}.
+
+    Använder daemon-tråd-pattern (samma som polling) så att en hängd klient inte
+    blockerar health-endpointen."""
+    state: dict[str, Any] = {"ok": False, "error": None}
+
+    def target() -> None:
+        try:
+            msg = [
+                SystemMessage(content="Returnera bara ordet 'OK'."),
+                HumanMessage(content="hej"),
+            ]
+            resp = llm.invoke(msg)
+            text = (resp.content if hasattr(resp, "content") else str(resp)) or ""
+            if text.strip():
+                state["ok"] = True
+            else:
+                state["error"] = "Tom respons"
+        except BaseException as exc:
+            state["error"] = str(exc)[:240]
+
+    t0 = time.time()
+    t = threading.Thread(target=target, daemon=True, name="engine-probe")
+    t.start()
+    t.join(_HEALTH_PROBE_TIMEOUT_SEC)
+    latency_ms = int((time.time() - t0) * 1000)
+    if t.is_alive():
+        return {"ok": False, "latency_ms": latency_ms, "error": f"Timeout efter {_HEALTH_PROBE_TIMEOUT_SEC}s"}
+    return {"ok": state["ok"], "latency_ms": latency_ms, "error": state["error"]}
 
 
 @router.get("/{client_id}")
