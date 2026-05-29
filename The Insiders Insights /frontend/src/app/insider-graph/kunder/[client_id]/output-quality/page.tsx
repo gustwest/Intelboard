@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Gauge, ArrowLeft, Sparkles, ChevronRight, ChevronDown, Filter } from 'lucide-react';
+import { Gauge, ArrowLeft, Sparkles, ChevronRight, ChevronDown, Filter, Check, Loader2 } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../../../_components/GraphPageShell';
 import { graphFetch } from '../../../_lib/api';
 import {
@@ -54,6 +54,28 @@ export default function OutputQualityDetailPage() {
   const [connectorFilter, setConnectorFilter] = useState<string>('all');
   const [hintFilter, setHintFilter] = useState<string>('all');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  // Status per claim när användaren applicerar förslaget: idle | applying | applied | error
+  const [applyState, setApplyState] = useState<Record<string, 'idle' | 'applying' | 'applied' | 'error'>>({});
+  const [applyError, setApplyError] = useState<Record<string, string>>({});
+
+  async function applySuggestion(claimId: string, suggestion: string) {
+    setApplyState((p) => ({ ...p, [claimId]: 'applying' }));
+    setApplyError((p) => ({ ...p, [claimId]: '' }));
+    try {
+      const r = await graphFetch<{ status: string }>(
+        `/api/output-quality/apply-suggestion/${clientId}/${claimId}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ suggestion, source_log_id: selectedId }),
+        },
+      );
+      setApplyState((p) => ({ ...p, [claimId]: r.status === 'noop' ? 'applied' : 'applied' }));
+    } catch (e) {
+      setApplyState((p) => ({ ...p, [claimId]: 'error' }));
+      setApplyError((p) => ({ ...p, [claimId]: e instanceof Error ? e.message : String(e) }));
+    }
+  }
 
   const loadLogs = useCallback(async () => {
     setError(null);
@@ -103,6 +125,7 @@ export default function OutputQualityDetailPage() {
       icon={<Gauge size={22} />}
       subtitle={`Rubric-loggar för ${clientId}`}
     >
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       <Link
         href={`/insider-graph/kunder/${clientId}`}
         style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: C.muted, fontSize: 12, fontWeight: 600, textDecoration: 'none', marginBottom: 16 }}
@@ -322,10 +345,52 @@ export default function OutputQualityDetailPage() {
                                   )}
                                   {c.suggestion && (
                                     <div style={{ marginBottom: 8 }}>
-                                      <div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>Föreslagen omformulering</div>
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                                        <div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Föreslagen omformulering</div>
+                                        {c.claim_id && (() => {
+                                          const st = applyState[c.claim_id] || 'idle';
+                                          if (st === 'applied') {
+                                            return (
+                                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', background: 'rgba(34,197,94,0.12)', color: '#16a34a', borderRadius: 6, fontSize: 11, fontWeight: 600 }}>
+                                                <Check size={12} /> Applicerat
+                                              </span>
+                                            );
+                                          }
+                                          return (
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); applySuggestion(c.claim_id!, c.suggestion!); }}
+                                              disabled={st === 'applying'}
+                                              style={{
+                                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                                                padding: '4px 10px', background: st === 'error' ? 'rgba(239,68,68,0.12)' : 'rgba(159,81,182,0.16)',
+                                                color: st === 'error' ? '#b91c1c' : '#9f51b6',
+                                                border: `1px solid ${st === 'error' ? 'rgba(239,68,68,0.3)' : 'rgba(159,81,182,0.3)'}`,
+                                                borderRadius: 6, fontSize: 11, fontWeight: 600,
+                                                cursor: st === 'applying' ? 'wait' : 'pointer',
+                                              }}
+                                            >
+                                              {st === 'applying' ? (
+                                                <><Loader2 size={12} style={{ animation: 'spin 0.8s linear infinite' }} /> Applicerar…</>
+                                              ) : st === 'error' ? (
+                                                <>✕ Försök igen</>
+                                              ) : (
+                                                <><Check size={12} /> Applicera förslag</>
+                                              )}
+                                            </button>
+                                          );
+                                        })()}
+                                      </div>
                                       <div style={{ fontSize: 12, color: '#3a4b56', fontStyle: 'italic', padding: '8px 12px', background: 'rgba(159,81,182,0.08)', borderLeft: '3px solid #9f51b6', borderRadius: 4 }}>
                                         {c.suggestion}
                                       </div>
+                                      {c.claim_id && applyError[c.claim_id] && (
+                                        <div style={{ fontSize: 11, color: '#b91c1c', marginTop: 4 }}>{applyError[c.claim_id]}</div>
+                                      )}
+                                      {c.claim_id && applyState[c.claim_id] === 'applied' && (
+                                        <div style={{ fontSize: 11, color: '#16a34a', marginTop: 4 }}>
+                                          Sparat. Nästa publicering (compile_schema) hämtar texten — triggas i bakgrunden.
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                   {c.dimensions && (

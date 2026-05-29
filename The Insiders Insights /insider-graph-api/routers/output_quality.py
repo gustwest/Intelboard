@@ -14,9 +14,12 @@ separat så själva rubric:en kan testas isolerat.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from google.cloud import firestore
+from pydantic import BaseModel, Field
 
 import firestore_client as fs
 from services.output_quality import RubricRequest, RubricResponse, score_bundle
@@ -97,3 +100,99 @@ def get_log(client_id: str, log_id: str) -> dict[str, Any]:
         raise HTTPException(404, f"log not found: {log_id}")
     doc = snap.to_dict() or {}
     return {"log_id": log_id, **doc}
+
+
+# --- Applicera förslag: stänger loopen observation → optimerad output ---
+
+
+class ApplySuggestionRequest(BaseModel):
+    """Användaren accepterar rubric:ens föreslagna omformulering för ett claim.
+
+    Resultat: claim:ets statement byts ut, original sparas för audit (en gång),
+    claim markeras godkänt och nästa compile_schema plockar upp den nya texten.
+    Vi triggar en background-recompile direkt så användaren ser effekten snabbt."""
+
+    suggestion: str = Field(..., min_length=1, description="Den text rubric:en föreslog")
+    source_log_id: str | None = Field(
+        default=None, description="Vilken output_quality_log förslaget kom från (audit)"
+    )
+
+
+@router.post("/apply-suggestion/{client_id}/{claim_id}")
+def apply_suggestion(
+    client_id: str,
+    claim_id: str,
+    payload: ApplySuggestionRequest,
+    background: BackgroundTasks,
+) -> dict[str, Any]:
+    """Byt ut claim.statement mot rubric:ens suggestion och godkänn claimet.
+
+    - Original-statement bevaras i `original_statement` (sätts bara första gången,
+      så upprepade applies inte skriver över den verkliga ursprungstexten).
+    - claim flippas till `review_status=approved`, `needs_review=False`,
+      `included_in_output=True` — alltså opt-in i nästa render.
+    - `suggestion_applied_at` + `suggestion_applied_from_log` ger spårbarhet.
+    - log_event() skapar en post i job_runs så det syns i kund-tidslinjen.
+    - BackgroundTasks triggar `compile_schema` så outputen uppdateras snart.
+    """
+    if not fs.client_doc(client_id).get().exists:
+        raise HTTPException(404, f"client not found: {client_id}")
+
+    doc_ref = fs.claim_doc(client_id, claim_id)
+    snap = doc_ref.get()
+    if not snap.exists:
+        raise HTTPException(404, f"claim not found: {claim_id}")
+    existing = snap.to_dict() or {}
+
+    original = existing.get("original_statement") or existing.get("statement") or ""
+    new_statement = payload.suggestion.strip()
+    if not new_statement:
+        raise HTTPException(422, "suggestion får inte vara tom")
+    if new_statement == existing.get("statement"):
+        # Idempotens — om någon klickar två gånger på samma förslag
+        return {"status": "noop", "claim_id": claim_id, "reason": "already_applied"}
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    update: dict[str, Any] = {
+        "statement": new_statement,
+        # Bevara originalet bara om vi inte redan har det
+        "original_statement": existing.get("original_statement") or original,
+        "review_status": "approved",
+        "needs_review": False,
+        "included_in_output": True,
+        "reviewed_at": firestore.SERVER_TIMESTAMP,
+        "suggestion_applied_at": now_iso,
+        "suggestion_applied_from_log": payload.source_log_id,
+        # Markera den som validerad — det här är en mänsklig godkännande, ej maskin.
+        "validated_at": existing.get("validated_at") or firestore.SERVER_TIMESTAMP,
+        "validated_by": existing.get("validated_by") or "granskare (applicerat förslag)",
+    }
+    doc_ref.update(update)
+
+    # Affärshändelse → kund-tidslinjen
+    from jobs._run_tracker import log_event
+
+    log_event(
+        "suggestion_applied",
+        client_id,
+        {
+            "claim_id": claim_id,
+            "source_log_id": payload.source_log_id,
+            "original_statement": original[:200],
+            "new_statement": new_statement[:200],
+        },
+    )
+
+    # Trigga recompile i bakgrunden så outputen uppdateras snart
+    def _recompile() -> None:
+        from jobs import compile_schema
+        compile_schema.run(client_id)
+    background.add_task(_recompile)
+
+    return {
+        "status": "ok",
+        "claim_id": claim_id,
+        "original_statement": original,
+        "new_statement": new_statement,
+        "applied_at": now_iso,
+    }
