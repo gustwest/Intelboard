@@ -28,9 +28,11 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 from google.cloud import firestore
 
@@ -43,6 +45,39 @@ log = logging.getLogger(__name__)
 ALL_PERSONAS = ("buyer", "candidate", "investor")
 HARM_MODES = {"#1", "#2", "#3", "#4", "#5", "#6"}
 MAX_QUESTIONS_PER_PERSONA = 12  # skydd mot runaway-generering
+
+# Per-anrop-timeouter — risk-detect-jobbet får ALDRIG hänga, oavsett LLM-läge.
+# Samma mönster som polling: daemon-tråd + join(timeout), defaults justerbara via env.
+RISK_ASK_TIMEOUT_SEC = float(os.environ.get("RISK_ASK_TIMEOUT_SEC", "30"))
+RISK_JUDGE_TIMEOUT_SEC = float(os.environ.get("RISK_JUDGE_TIMEOUT_SEC", "20"))
+RISK_GENERATE_TIMEOUT_SEC = float(os.environ.get("RISK_GENERATE_TIMEOUT_SEC", "60"))
+
+T = TypeVar("T")
+
+
+def _call_with_timeout(fn: Callable[[], T], timeout: float, default: T, what: str) -> T:
+    """Daemon-tråd + join(timeout). Vi väntar max `timeout` på fn() och returnerar default
+    om den hänger. Tråden fortsätter köra i bakgrunden tills den dör naturligt eller
+    containern skalas ner — men risk_detect blockeras ALDRIG."""
+    result: list[T] = [default]
+    err: list[BaseException | None] = [None]
+
+    def target() -> None:
+        try:
+            result[0] = fn()
+        except BaseException as exc:
+            err[0] = exc
+
+    t = threading.Thread(target=target, daemon=True, name=f"risk-{what}")
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        log.warning("%s timed out after %ss — using default", what, timeout)
+        return default
+    if err[0] is not None:
+        log.warning("%s failed: %s", what, err[0])
+        return default
+    return result[0]
 # §13: en risk räknas som löst först efter N rena cykler i rad (mot flimmer). 2 = en
 # bekräftande cykel utöver den första rena. Resolved är beviset i skiva 4 (§8.4).
 RESOLVED_AFTER_CLEAN_RUNS = 2
@@ -207,15 +242,15 @@ def run_for_client(client_id: str) -> RiskRunResult | None:
     answers_by_persona: dict[str, int] = {p: 0 for p in ALL_PERSONAS}
     for q in questions:
         for engine_name, engine in engines.items():
-            answer = _ask(q.text, engine)
+            answer = _safe_ask(q.text, engine, engine_name)
             if not answer:
                 continue
-            cls = classify(validator, q, answer, context)
+            cls = _safe_classify(validator, q, answer, context)
             if cls is None:
                 continue
             answers_by_persona[q.persona] = answers_by_persona.get(q.persona, 0) + 1
             if _should_follow_up(cls):  # §B — bunden följdfråga vid gränsfall
-                cls = follow_up(validator, engine, q, answer, cls, context) or cls
+                cls = _safe_follow_up(validator, engine, q, answer, cls, context, engine_name) or cls
             if cls.harm == "ok":
                 # §8.4 — motorn svarar nu säkert: bygg ren-streak, lös efter N cykler.
                 _mark_clean(client_id, q.persona, q.text, engine_name)
@@ -329,7 +364,12 @@ def generate_questions(
     llm, persona: str, context: Context, competitors: list[str], homonyms: list[str]
 ) -> list[Question]:
     system = _generation_prompt(persona, context, competitors, homonyms)
-    data = llm_factory.invoke_json(llm, system, "Generera frågebatteriet nu.")
+    data = _call_with_timeout(
+        lambda: llm_factory.invoke_json(llm, system, "Generera frågebatteriet nu."),
+        timeout=RISK_GENERATE_TIMEOUT_SEC,
+        default=None,
+        what=f"generate[{persona}]",
+    )
     if not data:
         return []
     return _parse_questions(data, persona)[:MAX_QUESTIONS_PER_PERSONA]
@@ -642,3 +682,33 @@ def _ask(question: str, llm: Any) -> str:
         log.warning("motoranrop misslyckades: %s", exc)
         return ""
     return (resp.content or "").strip() if hasattr(resp, "content") else str(resp).strip()
+
+
+def _safe_ask(question: str, llm: Any, engine_name: str) -> str:
+    """Timeout-skyddat _ask. Returnerar "" om motorn hänger eller felar."""
+    return _call_with_timeout(
+        lambda: _ask(question, llm),
+        timeout=RISK_ASK_TIMEOUT_SEC,
+        default="",
+        what=f"ask[{engine_name}]",
+    )
+
+
+def _safe_classify(llm: Any, question: "Question", answer: str, context: "Context") -> "RiskFinding | None":
+    """Timeout-skyddat classify. None om validator-LLM:n hänger eller felar."""
+    return _call_with_timeout(
+        lambda: classify(llm, question, answer, context),
+        timeout=RISK_JUDGE_TIMEOUT_SEC,
+        default=None,
+        what="classify",
+    )
+
+
+def _safe_follow_up(llm: Any, engine: Any, question: "Question", answer: str, first: "RiskFinding", context: "Context", engine_name: str) -> "RiskFinding | None":
+    """Timeout-skyddad follow_up — wrappar både genereringen och uppföljningsanropen."""
+    return _call_with_timeout(
+        lambda: follow_up(llm, engine, question, answer, first, context),
+        timeout=RISK_ASK_TIMEOUT_SEC + RISK_JUDGE_TIMEOUT_SEC,
+        default=None,
+        what=f"follow_up[{engine_name}]",
+    )
