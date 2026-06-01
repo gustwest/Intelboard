@@ -148,6 +148,20 @@ def list_results(client_id: str, limit: int = 12) -> dict[str, Any]:
     return {"client_id": client_id, "weeks": weeks[:limit]}
 
 
+@router.get("/{client_id}/questions")
+def get_polling_questions(client_id: str) -> dict[str, Any]:
+    """De resolved polling-frågorna för en kund — custom (från client.polling_questions)
+    ELLER default-templates med industry/topic/service_area-substitutions ifyllda.
+    Driver Polling-frågor-panelen i AI-synlighet för transparens."""
+    snap = fs.client_doc(client_id).get()
+    if not snap.exists:
+        raise HTTPException(404, f"client not found: {client_id}")
+    client = snap.to_dict() or {}
+    from services.polling import resolve_polling_questions
+    resolved = resolve_polling_questions(client)
+    return {"client_id": client_id, **resolved}
+
+
 @router.get("/{client_id}/{week_id}/raw")
 def get_raw_responses(client_id: str, week_id: str) -> dict[str, Any]:
     snap = fs.polling_results_col(client_id).document(week_id).get()

@@ -190,7 +190,7 @@ type RiskTimelineResp = {
 
 type RiskQuestionsResp = {
   client_id: string;
-  questions: { id: string; persona: string | null; type: string | null; text: string | null; status: string }[];
+  questions: { id: string; persona: string | null; type: string | null; text: string | null; status: string; custom?: boolean }[];
   counts: { open: number; approved: number; rejected: number };
 };
 
@@ -210,6 +210,17 @@ type EngineHealthResp = {
   engines: EngineHealth[];
   checked_at: string;
   cache_ttl_sec: number;
+};
+
+// --- Polling-frågor (resolved per kund — speglar services/polling.resolve_polling_questions) ---
+
+type PollingQuestion = { text: string; source: 'custom' | 'default' };
+type PollingQuestionsResp = {
+  client_id: string;
+  is_custom: boolean;
+  substitutions: { industry: string; topic: string; service_area: string };
+  by_category: Record<string, PollingQuestion[]>;
+  total: number;
 };
 
 // --- Förtroendegap-cockpit (speglar services/trust_gap_report.py — översättningslagret §10.1) ---
@@ -290,6 +301,7 @@ export default function GraphRiskLoopPage() {
   const [riskTimeline, setRiskTimeline] = useState<RiskTimelineResp | null>(null);
   const [riskQuestions, setRiskQuestions] = useState<RiskQuestionsResp | null>(null);
   const [engineHealth, setEngineHealth] = useState<EngineHealthResp | null>(null);
+  const [pollingQuestions, setPollingQuestions] = useState<PollingQuestionsResp | null>(null);
   const [mode, setMode] = useState<ViewMode>('ops');
   const [error, setError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
@@ -442,6 +454,18 @@ export default function GraphRiskLoopPage() {
     };
   }, [selected, refreshTick]);
 
+  // Polling-frågor (resolved per kund) — driver transparens-panelen i AI-synlighet.
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
+    graphFetch<PollingQuestionsResp>(`/api/polling/${selected}/questions`)
+      .then((d) => !cancelled && setPollingQuestions(d))
+      .catch(() => !cancelled && setPollingQuestions(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [selected, refreshTick]);
+
   // Probe-motorer-status — driver "Motor-status"-raden i sticky-baren. Auto-refresh
   // var 2:e min (backend cachar 60s, så detta ger maximalt 2 LLM-probar per minut).
   useEffect(() => {
@@ -539,8 +563,23 @@ export default function GraphRiskLoopPage() {
         />
       )}
 
+      {/* Godkända risk-frågor — transparens kring vad som mäts (alla lägen, för kund-värde) */}
+      {riskQuestions && (riskQuestions.counts.approved > 0) && (
+        <ApprovedQuestionsPanel
+          questions={riskQuestions.questions.filter((q) => q.status === 'approved')}
+          clientId={selected}
+          mode={mode}
+          onChanged={() => setRefreshTick((t) => t + 1)}
+        />
+      )}
+
       {/* Veckovis synlighet — det löpande, automatiska måttet (visas oavsett månadsrapport) */}
       {polling && polling.length > 0 && <WeeklyVisibility weeks={polling} />}
+
+      {/* Polling-frågor — vad AI-motorerna fick frågan om i veckan (transparens) */}
+      {pollingQuestions && pollingQuestions.total > 0 && selected && (
+        <PollingQuestionsPanel data={pollingQuestions} clientId={selected} mode={mode} />
+      )}
 
       {/* Förtroendegap-cockpit — staplar i ops, bara plain-text i kund-läge */}
       {humanization?.available && <TrustGapCockpit model={humanization} mode={mode} />}
@@ -1000,6 +1039,94 @@ function CompetitorBar({ name, share, mentions, highlight }: { name: string; sha
       <span style={{ color: C.muted, fontFamily: 'ui-monospace, monospace', textAlign: 'right' }}>
         {Math.round(share * 100)}%{mentions != null ? ` · ${mentions}` : ''}
       </span>
+    </div>
+  );
+}
+
+function PollingQuestionsPanel({ data, clientId, mode }: { data: PollingQuestionsResp; clientId: string; mode: ViewMode }) {
+  const [open, setOpen] = useState(false);
+  const categories = Object.entries(data.by_category).sort((a, b) => a[0].localeCompare(b[0]));
+  const editorUrl = `/insider-graph/kunder/${encodeURIComponent(clientId)}#measurement-config`;
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: 18 }}>
+      <SectionHead
+        title={data.is_custom ? 'Polling-frågor — egna (skräddarsydda)' : 'Polling-frågor — default (genererade ur kundens kontext)'}
+        hint={open
+          ? "Veckovis polling kör dessa frågor mot AI-motorerna och mäter hur ofta kunden nämns. Default-frågorna fylls med kundens industry/topic/service_area — du kan ersätta dem med egna via Mätningskonfig på kunddetalj."
+          : `${data.total} ${data.total === 1 ? 'fråga' : 'frågor'} mäts varje vecka · ${categories.length} kategorier${data.is_custom ? ' · egna' : ' · default-templates'}`
+        }
+        collapsible
+        open={open}
+        onToggle={() => setOpen((o) => !o)}
+        badge={`${data.total}`}
+      />
+
+      {open && (
+        <>
+          {mode === 'ops' && !data.is_custom && (
+            <div style={{ marginBottom: 14, padding: '10px 14px', background: 'rgba(159,81,182,0.04)', border: `1px solid ${S.inProgress.border}`, borderRadius: 8, fontSize: 11, color: C.muted, lineHeight: 1.5 }}>
+              <strong style={{ color: '#3a4b56' }}>Default-frågor ifyllda med kundens kontext:</strong>{' '}
+              industry=<code style={{ color: C.accent }}>{data.substitutions.industry}</code> ·{' '}
+              topic=<code style={{ color: C.accent }}>{data.substitutions.topic}</code> ·{' '}
+              service_area=<code style={{ color: C.accent }}>{data.substitutions.service_area}</code>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {categories.map(([cat, qs]) => (
+              <div key={cat}>
+                <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+                  {CATEGORY_SV[cat] || cat} · {qs.length}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {qs.map((q, i) => (
+                    <div key={i} style={{
+                      padding: '8px 12px',
+                      background: q.source === 'custom' ? 'rgba(159,81,182,0.04)' : 'rgba(106,126,138,0.04)',
+                      border: `1px solid ${q.source === 'custom' ? S.inProgress.border : C.border}`,
+                      borderRadius: 6,
+                      fontSize: 12,
+                      color: '#3a4b56',
+                      lineHeight: 1.5,
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 10,
+                    }}>
+                      <span style={{ flex: 1 }}>{q.text}</span>
+                      {q.source === 'custom' && (
+                        <span style={{ fontSize: 9, fontWeight: 600, color: C.accent, background: 'rgba(159,81,182,0.1)', border: `1px solid ${S.inProgress.border}`, borderRadius: 4, padding: '1px 6px', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', alignSelf: 'flex-start' }}>
+                          Egen
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {mode === 'ops' && (
+            <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, color: C.muted }}>
+                {data.is_custom ? 'Du har skräddarsydda frågor. Default-templates används inte.' : 'Vill du ersätta default-frågorna med egna?'}
+              </span>
+              <a
+                href={editorUrl}
+                style={{
+                  padding: '6px 14px', fontSize: 11, fontWeight: 600,
+                  color: C.accent, background: 'rgba(159,81,182,0.08)',
+                  border: `1px solid ${S.inProgress.border}`, borderRadius: 6,
+                  textDecoration: 'none', letterSpacing: '0.02em',
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                }}
+              >
+                Redigera i Mätningskonfig →
+              </a>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -1830,6 +1957,332 @@ function singleBtn(tone: { fg: string; bg: string; border: string }, disabled: b
     padding: 0,
     opacity: disabled ? 0.5 : 1,
   };
+}
+
+function ApprovedQuestionsPanel({ questions, clientId, mode, onChanged }: {
+  questions: RiskQuestionsResp['questions'];
+  clientId: string | null;
+  mode: ViewMode;
+  onChanged: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [inFlight, setInFlight] = useState<Set<string>>(new Set());
+  const [adding, setAdding] = useState(false);
+
+  // Kund-läge: bara kategorisummering, ingen drill-down och inga avvisa-knappar.
+  const byPersona = new Map<string, number>();
+  for (const q of questions) {
+    const p = q.persona || 'okänd';
+    byPersona.set(p, (byPersona.get(p) || 0) + 1);
+  }
+
+  async function reject(qid: string) {
+    if (!clientId) return;
+    setInFlight((s) => new Set(s).add(qid));
+    try {
+      await graphFetch(`/api/review/${clientId}/risk-questions/${qid}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ decision: 'reject' }),
+      });
+      onChanged();
+    } catch {
+      // tyst — refresh återställer
+    } finally {
+      setInFlight((s) => {
+        const next = new Set(s);
+        next.delete(qid);
+        return next;
+      });
+    }
+  }
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: 18 }}>
+      <SectionHead
+        title={`Godkända frågor — vad AI-motorerna får frågan om`}
+        hint={open
+          ? "De aktiva frågorna som risk-detect kör mot motorerna varje vecka. Avvisa en fråga som visat sig vara dålig — den körs inte längre och kan ersättas med en ny via Generera frågor."
+          : `${questions.length} ${questions.length === 1 ? 'godkänd fråga' : 'godkända frågor'} mäts veckovis · ${Array.from(byPersona.entries()).map(([p, n]) => `${n} ${PERSONA_SV[p] || p}`).join(' · ')}`
+        }
+        collapsible
+        open={open}
+        onToggle={() => setOpen((o) => !o)}
+        badge={`${questions.length}`}
+      />
+
+      {open && (
+        mode === 'customer' ? (
+          // Kund-läge: bara kategori-summering, ingen rad-för-rad-text
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+            {(['buyer', 'candidate', 'investor'] as const).map((p) => {
+              const n = byPersona.get(p) || 0;
+              return (
+                <div key={p} style={{ padding: '12px 14px', background: 'rgba(159,81,182,0.04)', border: `1px solid ${S.inProgress.border}`, borderRadius: 8 }}>
+                  <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginBottom: 4 }}>
+                    {PERSONA_SV[p]}
+                  </div>
+                  <div style={{ fontSize: 24, fontWeight: 600, color: S.inProgress.fg, letterSpacing: '-0.02em' }}>{n}</div>
+                  <div style={{ fontSize: 10, color: C.dim, marginTop: 2 }}>{n === 1 ? 'fråga mäts' : 'frågor mäts'}</div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          // Ops-läge: full lista med avvisa-knapp per rad + "Lägg till egen"
+          <>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+            <button
+              onClick={() => setAdding(true)}
+              disabled={!clientId}
+              style={{
+                padding: '5px 12px', fontSize: 11, fontWeight: 600,
+                color: C.accent, background: 'rgba(159,81,182,0.08)',
+                border: `1px solid ${S.inProgress.border}`, borderRadius: 6,
+                cursor: clientId ? 'pointer' : 'not-allowed', letterSpacing: '0.02em',
+              }}
+            >
+              + Lägg till egen fråga
+            </button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {questions.map((q) => {
+              const busy = inFlight.has(q.id);
+              const personaLabel = q.persona ? PERSONA_SV[q.persona] || q.persona : '—';
+              const typeLabel = q.type === 'comparative' ? 'jämförelse' : q.type === 'open' ? 'öppen' : q.type || '';
+              return (
+                <div
+                  key={q.id}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '80px 70px 1fr auto',
+                    gap: 10,
+                    alignItems: 'center',
+                    padding: '8px 10px',
+                    background: 'rgba(22,163,74,0.04)',
+                    border: `1px solid ${S.resolved.border}`,
+                    borderRadius: 6,
+                    fontSize: 12,
+                    opacity: busy ? 0.5 : 1,
+                    transition: 'opacity 0.2s',
+                  }}
+                >
+                  <span style={{ fontSize: 10, fontWeight: 600, color: S.inProgress.fg, background: S.inProgress.bg, border: `1px solid ${S.inProgress.border}`, borderRadius: 5, padding: '2px 7px', letterSpacing: '0.04em', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                    {personaLabel}
+                  </span>
+                  <span style={{ fontSize: 10, color: C.muted, fontStyle: 'italic' }}>{typeLabel}</span>
+                  <span style={{ color: '#3a4b56', lineHeight: 1.5 }}>
+                    {q.text || <span style={{ color: C.dim, fontStyle: 'italic' }}>(saknar fråge-text)</span>}
+                    {q.custom && (
+                      <span style={{ marginLeft: 8, fontSize: 9, fontWeight: 600, color: C.accent, background: 'rgba(159,81,182,0.1)', border: `1px solid ${S.inProgress.border}`, borderRadius: 4, padding: '1px 6px', letterSpacing: '0.04em', textTransform: 'uppercase', verticalAlign: 'middle' }}>
+                        Egen
+                      </span>
+                    )}
+                  </span>
+                  <button
+                    onClick={() => reject(q.id)}
+                    disabled={busy || !clientId}
+                    title="Avvisa frågan — den körs inte längre"
+                    style={{
+                      padding: '4px 10px', fontSize: 11, fontWeight: 600,
+                      color: S.open.fg, background: 'white',
+                      border: `1px solid ${S.open.border}`, borderRadius: 5,
+                      cursor: busy ? 'wait' : 'pointer', letterSpacing: '0.02em',
+                    }}
+                  >
+                    ✗ Avvisa
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          </>
+        )
+      )}
+
+      {adding && clientId && (
+        <CustomQuestionModal
+          clientId={clientId}
+          onClose={() => setAdding(false)}
+          onCreated={() => { setAdding(false); onChanged(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function CustomQuestionModal({ clientId, onClose, onCreated }: {
+  clientId: string;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [persona, setPersona] = useState<'buyer' | 'candidate' | 'investor'>('buyer');
+  const [type, setType] = useState<'open' | 'comparative'>('open');
+  const [text, setText] = useState('');
+  const [language, setLanguage] = useState<'sv' | 'en'>('sv');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    if (!text.trim()) {
+      setError('Frågans text kan inte vara tom');
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await graphFetch(`/api/review/${clientId}/risk-questions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ persona, type, text: text.trim(), language }),
+      });
+      onCreated();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Misslyckades — försök igen');
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 100,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'white', borderRadius: 12, padding: '24px 26px',
+          width: 'min(560px, 92vw)', boxShadow: '0 20px 60px rgba(58,75,86,0.18)',
+          border: `1px solid ${C.border}`,
+        }}
+      >
+        <div style={{ fontSize: 16, fontWeight: 600, color: '#3a4b56', marginBottom: 4 }}>
+          Lägg till egen risk-fråga
+        </div>
+        <p style={{ fontSize: 12, color: C.muted, margin: '0 0 18px', lineHeight: 1.5 }}>
+          Frågan körs direkt av risk-detect varje vecka (skippar review-grinden eftersom du själv lade in den).
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <FormRow label="Persona — vem ställer frågan">
+            <div style={{ display: 'flex', gap: 6 }}>
+              {(['buyer', 'candidate', 'investor'] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPersona(p)}
+                  style={{
+                    flex: 1, padding: '8px 10px', fontSize: 12, fontWeight: 600,
+                    color: persona === p ? S.inProgress.fg : C.muted,
+                    background: persona === p ? S.inProgress.bg : 'transparent',
+                    border: `1px solid ${persona === p ? S.inProgress.border : C.border}`,
+                    borderRadius: 6, cursor: 'pointer', letterSpacing: '0.02em',
+                  }}
+                >
+                  {PERSONA_SV[p]}
+                </button>
+              ))}
+            </div>
+          </FormRow>
+
+          <FormRow label="Typ">
+            <div style={{ display: 'flex', gap: 6 }}>
+              {([['open', 'Öppen'], ['comparative', 'Jämförelse']] as const).map(([v, lbl]) => (
+                <button
+                  key={v}
+                  onClick={() => setType(v)}
+                  style={{
+                    padding: '6px 14px', fontSize: 11, fontWeight: 600,
+                    color: type === v ? '#3a4b56' : C.muted,
+                    background: type === v ? '#f4f5f6' : 'transparent',
+                    border: `1px solid ${type === v ? '#3a4b56' : C.border}`,
+                    borderRadius: 6, cursor: 'pointer', letterSpacing: '0.02em',
+                  }}
+                >
+                  {lbl}
+                </button>
+              ))}
+              <div style={{ flex: 1 }} />
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value as 'sv' | 'en')}
+                style={{ padding: '6px 10px', fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 6, color: '#3a4b56', background: 'white' }}
+              >
+                <option value="sv">Svenska</option>
+                <option value="en">Engelska</option>
+              </select>
+            </div>
+          </FormRow>
+
+          <FormRow label="Frågans text">
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="T.ex. 'Vilka företag i Sverige är ledande inom AI-säkerhet?'"
+              rows={4}
+              style={{
+                width: '100%', padding: '10px 12px', fontSize: 13,
+                color: '#3a4b56', border: `1px solid ${C.border}`,
+                borderRadius: 6, fontFamily: 'inherit', lineHeight: 1.5,
+                resize: 'vertical',
+              }}
+            />
+            <div style={{ fontSize: 10, color: C.dim, marginTop: 4 }}>
+              Skriv som om en {PERSONA_SV[persona].toLowerCase()} faktiskt skulle ställa den. Var konkret.
+            </div>
+          </FormRow>
+        </div>
+
+        {error && (
+          <div style={{ marginTop: 14, padding: '8px 12px', background: S.open.bg, border: `1px solid ${S.open.border}`, color: S.open.fg, borderRadius: 6, fontSize: 12 }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
+          <button
+            onClick={onClose}
+            disabled={submitting}
+            style={{
+              padding: '8px 16px', fontSize: 12, fontWeight: 600,
+              color: C.muted, background: 'transparent',
+              border: `1px solid ${C.border}`, borderRadius: 6,
+              cursor: submitting ? 'wait' : 'pointer',
+            }}
+          >
+            Avbryt
+          </button>
+          <button
+            onClick={submit}
+            disabled={submitting || !text.trim()}
+            style={{
+              padding: '8px 16px', fontSize: 12, fontWeight: 600,
+              color: 'white', background: S.resolved.fg,
+              border: `1px solid ${S.resolved.fg}`, borderRadius: 6,
+              cursor: submitting ? 'wait' : 'pointer',
+              opacity: (submitting || !text.trim()) ? 0.6 : 1,
+            }}
+          >
+            {submitting ? 'Lägger till…' : 'Lägg till + godkänn'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FormRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 6 }}>
+        {label}
+      </div>
+      {children}
+    </div>
+  );
 }
 
 function LoopStat({ label, value, tone, hint }: { label: string; value: number | string; tone: 'urgent' | 'good' | 'idle'; hint?: string }) {

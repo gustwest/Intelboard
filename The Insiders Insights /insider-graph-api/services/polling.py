@@ -190,6 +190,38 @@ def _build_questions(client: dict[str, Any]) -> list[tuple[str, str]]:
     return out
 
 
+def resolve_polling_questions(client: dict[str, Any]) -> dict[str, Any]:
+    """Det resolved frågesettet för en kund (custom från config OR default-templates
+    med substitutions ifyllda). Drivs av AI-synlighet-flikens "Polling-frågor"-panel
+    för transparens: kund/ops ska kunna se EXAKT vad som ställs varje vecka."""
+    custom_raw = client.get("polling_questions")
+    is_custom = isinstance(custom_raw, dict) and any(custom_raw.values()) if custom_raw else False
+
+    industry = client.get("industry") or "branschen"
+    topic = client.get("topic") or "deras områden"
+    service_area = client.get("service_area") or "deras tjänster"
+    substitutions = {"industry": industry, "topic": topic, "service_area": service_area}
+
+    by_category: dict[str, list[dict[str, Any]]] = {}
+    if is_custom:
+        for category, qs in custom_raw.items():
+            by_category.setdefault(category, [])
+            for q in (qs or []):
+                by_category[category].append({"text": q, "source": "custom"})
+    else:
+        for category, qs in DEFAULT_QUESTIONS.items():
+            by_category[category] = [
+                {"text": q.format(**substitutions), "source": "default"} for q in qs
+            ]
+
+    return {
+        "is_custom": is_custom,
+        "substitutions": substitutions,
+        "by_category": by_category,
+        "total": sum(len(v) for v in by_category.values()),
+    }
+
+
 def _build_models() -> dict[str, Any]:
     # Delad probe-factory: första-parts gpt-4o + gemini (de publika motorer vi mäter).
     # EU-skyddet ligger på resonemangsmodellerna (Vertex EU), inte här. Se make_probe_engines.

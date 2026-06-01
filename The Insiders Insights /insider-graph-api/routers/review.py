@@ -186,6 +186,7 @@ def list_pending_risk_questions(client_id: str, status: str = "open") -> dict[st
                 "harm_modes": q.get("harm_modes"),
                 "type": q.get("type"),
                 "status": s,
+                "custom": bool(q.get("custom")),
                 "generated_at": _iso(q.get("generated_at")),
             }
         )
@@ -197,6 +198,55 @@ class RiskQuestionAction(BaseModel):
     decision: Literal["approve", "reject"]
     text: str | None = None  # valfri redigering av frågan före godkännande
     note: str | None = None
+
+
+class CustomRiskQuestion(BaseModel):
+    """Ops-skapad fråga som inte kommer från LLM-generationen. Hamnar direkt som
+    `approved` (review-grinden är onödig — ops själv lade in den)."""
+    persona: Literal["buyer", "candidate", "investor"]
+    text: str
+    type: Literal["open", "comparative"] = "open"
+    track: Literal["A", "B"] = "A"
+    language: Literal["sv", "en"] = "sv"
+    decision_criterion: str | None = None
+    harm_modes: list[str] | None = None
+
+
+@router.post("/{client_id}/risk-questions")
+def create_custom_risk_question(client_id: str, q: CustomRiskQuestion) -> dict[str, Any]:
+    """Skapa en manuellt skriven risk-fråga som körs av risk-detect varje vecka.
+    Body: persona, text, ev. type/track/language/decision_criterion/harm_modes."""
+    import hashlib
+
+    if not fs.client_doc(client_id).get().exists:
+        raise HTTPException(404, f"client not found: {client_id}")
+    text = q.text.strip()
+    if not text:
+        raise HTTPException(422, "text krävs")
+
+    # Samma id-pattern som services/risk_detector._persist_question — stabilt över tid.
+    qid = "q-" + hashlib.sha1(f"{q.persona}|{q.track}|{text}".encode("utf-8")).hexdigest()[:16]
+    ref = fs.risk_question_doc(client_id, qid)
+    if ref.get().exists:
+        raise HTTPException(409, "frågan finns redan (identisk persona+track+text)")
+
+    ref.set(
+        {
+            "persona": q.persona,
+            "track": q.track,
+            "text": text,
+            "language": q.language,
+            "decision_criterion": q.decision_criterion or "",
+            "harm_modes": q.harm_modes or [],
+            "type": q.type,
+            "status": "approved",
+            "needs_review": False,
+            "custom": True,
+            "generated_at": firestore.SERVER_TIMESTAMP,
+            "reviewed_at": firestore.SERVER_TIMESTAMP,
+        }
+    )
+    return {"status": "ok", "id": qid, "persona": q.persona, "text": text}
 
 
 @router.post("/{client_id}/risk-questions/{question_id}")
