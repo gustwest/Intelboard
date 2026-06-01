@@ -534,6 +534,8 @@ export default function GraphRiskLoopPage() {
           findings={riskTimeline}
           latestDetect={latest('risk_detect')}
           latestGenerate={latest('risk_generate')}
+          clientId={selected}
+          onChanged={() => setRefreshTick((t) => t + 1)}
         />
       )}
 
@@ -1552,12 +1554,15 @@ function ActivityFeed({ runs }: { runs: import('../_lib/jobRuns').JobRun[] | nul
   );
 }
 
-function RiskLoopStatus({ questions, findings, latestDetect, latestGenerate }: {
+function RiskLoopStatus({ questions, findings, latestDetect, latestGenerate, clientId, onChanged }: {
   questions: RiskQuestionsResp | null;
   findings: RiskTimelineResp | null;
   latestDetect: { status: string; started_at: string | null } | null | undefined;
   latestGenerate: { status: string; started_at: string | null } | null | undefined;
+  clientId: string | null;
+  onChanged: () => void;
 }) {
+  const [showApprover, setShowApprover] = useState(false);
   const qc = questions?.counts || { open: 0, approved: 0, rejected: 0 };
   const fc = findings?.counts || { open: 0, actioned: 0, resolved: 0, dismissed: 0 };
   const totalApproved = qc.approved;
@@ -1571,7 +1576,7 @@ function RiskLoopStatus({ questions, findings, latestDetect, latestGenerate }: {
   if (!hasApproved && !hasPending) {
     nextStep = { label: 'Generera frågor — loopen är inte aktiverad än', tone: 'urgent' };
   } else if (hasPending) {
-    nextStep = { label: `Granska & godkänn ${qc.open} väntande fråga${qc.open === 1 ? '' : 'or'} i Granska-fliken`, tone: 'urgent' };
+    nextStep = { label: `Granska & godkänn ${qc.open} väntande fråga${qc.open === 1 ? '' : 'or'} — direkt här eller i Granska-fliken`, tone: 'urgent' };
   } else if (hasOpenRisks) {
     nextStep = { label: `Granska ${fc.open} öppna risk${fc.open === 1 ? '' : 'er'} — agera i Granska-fliken`, tone: 'urgent' };
   } else if (hasApproved) {
@@ -1604,12 +1609,227 @@ function RiskLoopStatus({ questions, findings, latestDetect, latestGenerate }: {
         display: 'flex',
         alignItems: 'center',
         gap: 8,
+        flexWrap: 'wrap',
       }}>
         <strong style={{ color: nextStep.tone === 'urgent' ? '#b45309' : nextStep.tone === 'good' ? '#16a34a' : C.muted, letterSpacing: '0.02em' }}>NÄSTA STEG:</strong>
         <span>{nextStep.label}</span>
+        {hasPending && clientId && (
+          <button
+            onClick={() => setShowApprover((s) => !s)}
+            style={{
+              marginLeft: 'auto',
+              padding: '4px 10px',
+              fontSize: 11,
+              fontWeight: 600,
+              color: showApprover ? '#3a4b56' : S.waiting.fg,
+              background: showApprover ? '#ffffff' : S.waiting.bg,
+              border: `1px solid ${showApprover ? C.border : S.waiting.border}`,
+              borderRadius: 6,
+              cursor: 'pointer',
+              letterSpacing: '0.02em',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            {showApprover ? 'Dölj inline-godkännande' : `Godkänn ${qc.open} fråga${qc.open === 1 ? '' : 'or'} inline →`}
+          </button>
+        )}
+      </div>
+
+      {showApprover && hasPending && clientId && questions && (
+        <RiskQuestionsInlineApprover
+          clientId={clientId}
+          questions={questions.questions.filter((q) => q.status === 'open')}
+          onChanged={onChanged}
+        />
+      )}
+    </div>
+  );
+}
+
+function RiskQuestionsInlineApprover({ clientId, questions, onChanged }: {
+  clientId: string;
+  questions: RiskQuestionsResp['questions'];
+  onChanged: () => void;
+}) {
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [inFlight, setInFlight] = useState<Set<string>>(new Set());
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+
+  const toggle = (id: string) =>
+    setChecked((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  async function decide(qid: string, decision: 'approve' | 'reject') {
+    setInFlight((s) => new Set(s).add(qid));
+    setErrors((e) => ({ ...e, [qid]: '' }));
+    try {
+      await graphFetch(`/api/review/${clientId}/risk-questions/${qid}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision }),
+      });
+    } catch (e) {
+      setErrors((es) => ({ ...es, [qid]: e instanceof Error ? e.message : 'Misslyckades' }));
+    } finally {
+      setInFlight((s) => {
+        const next = new Set(s);
+        next.delete(qid);
+        return next;
+      });
+    }
+  }
+
+  async function bulkDecide(decision: 'approve' | 'reject') {
+    const ids = decision === 'reject' && checked.size === 0
+      ? questions.map((q) => q.id) // "Avvisa alla" — ingen markering krävs
+      : Array.from(checked);
+    if (ids.length === 0) return;
+    setBusy(true);
+    try {
+      await Promise.all(ids.map((id) => decide(id, decision)));
+      setChecked(new Set());
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (questions.length === 0) {
+    return null;
+  }
+
+  return (
+    <div style={{ marginTop: 12, padding: '12px 14px', background: 'rgba(245,158,11,0.04)', border: `1px solid ${S.waiting.border}`, borderRadius: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11, color: S.waiting.fg, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+          Inline-godkännande
+        </span>
+        <span style={{ fontSize: 11, color: C.muted }}>
+          {checked.size > 0 ? `${checked.size} markerade · ` : ''}{questions.length} öppna frågor
+        </span>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button
+            disabled={busy || checked.size === 0}
+            onClick={() => bulkDecide('approve')}
+            style={inlineBtn(S.resolved, busy || checked.size === 0)}
+          >
+            {busy ? 'Sparar…' : `Godkänn ${checked.size || 'markerade'}`}
+          </button>
+          <button
+            disabled={busy || checked.size === 0}
+            onClick={() => bulkDecide('reject')}
+            style={inlineBtn(S.open, busy || checked.size === 0)}
+          >
+            Avvisa markerade
+          </button>
+          <a
+            href={`/insider-graph/review?client=${encodeURIComponent(clientId)}`}
+            style={{ ...inlineBtn(S.neutral, false), textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+            title="Öppna full Granska-flik"
+          >
+            Granska-fliken →
+          </a>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 360, overflowY: 'auto' }}>
+        {questions.map((q) => {
+          const pending = inFlight.has(q.id);
+          const err = errors[q.id];
+          return (
+            <div key={q.id} style={{
+              display: 'grid',
+              gridTemplateColumns: '20px 80px 70px 1fr auto',
+              gap: 10,
+              alignItems: 'center',
+              padding: '8px 6px',
+              borderRadius: 6,
+              background: checked.has(q.id) ? 'rgba(159,81,182,0.06)' : 'transparent',
+              fontSize: 12,
+              opacity: pending ? 0.5 : 1,
+            }}>
+              <input
+                type="checkbox"
+                checked={checked.has(q.id)}
+                onChange={() => toggle(q.id)}
+                disabled={pending || busy}
+                style={{ accentColor: C.accent }}
+              />
+              <span style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                {q.persona ? PERSONA_SV[q.persona] || q.persona : '—'}
+              </span>
+              <span style={{ fontSize: 10, color: C.dim, fontFamily: 'ui-monospace, monospace' }}>
+                {q.type || '—'}
+              </span>
+              <span style={{ color: '#3a4b56', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={q.text || ''}>
+                {q.text || '(ingen text)'}
+                {err && <span style={{ color: S.open.fg, marginLeft: 8 }}>· {err}</span>}
+              </span>
+              <span style={{ display: 'inline-flex', gap: 4 }}>
+                <button
+                  disabled={pending || busy}
+                  onClick={async () => { await decide(q.id, 'approve'); onChanged(); }}
+                  style={singleBtn(S.resolved, pending || busy)}
+                  title="Godkänn"
+                >
+                  ✓
+                </button>
+                <button
+                  disabled={pending || busy}
+                  onClick={async () => { await decide(q.id, 'reject'); onChanged(); }}
+                  style={singleBtn(S.open, pending || busy)}
+                  title="Avvisa"
+                >
+                  ✗
+                </button>
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
+}
+
+function inlineBtn(tone: { fg: string; bg: string; border: string }, disabled: boolean): React.CSSProperties {
+  return {
+    padding: '5px 12px',
+    fontSize: 11,
+    fontWeight: 600,
+    color: tone.fg,
+    background: disabled ? 'transparent' : tone.bg,
+    border: `1px solid ${disabled ? C.border : tone.border}`,
+    borderRadius: 6,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    letterSpacing: '0.02em',
+    opacity: disabled ? 0.5 : 1,
+  };
+}
+
+function singleBtn(tone: { fg: string; bg: string; border: string }, disabled: boolean): React.CSSProperties {
+  return {
+    width: 26,
+    height: 22,
+    fontSize: 12,
+    fontWeight: 600,
+    color: tone.fg,
+    background: disabled ? 'transparent' : tone.bg,
+    border: `1px solid ${disabled ? C.border : tone.border}`,
+    borderRadius: 5,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 0,
+    opacity: disabled ? 0.5 : 1,
+  };
 }
 
 function LoopStat({ label, value, tone, hint }: { label: string; value: number | string; tone: 'urgent' | 'good' | 'idle'; hint?: string }) {
