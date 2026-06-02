@@ -7,7 +7,7 @@
 #   - GCS-bucket för JSON-LD (CDN-origin)
 #   - Service-account för insider-graph-api
 #   - IAM-bindningar (Firestore, GCS, Secret Manager)
-#   - Cloud Run Jobs (scrape-active, scrape-episodic, scrape-website, extract-all-claims,
+#   - Cloud Run Jobs (scrape-active, scrape-website, extract-all-claims,
 #     compile-all-schemas, polling-weekly, xml-sync, sunset-skills, quarterly-linkedin-todo,
 #     compute-trust-gap, trust-gap-report, warmth-probes, risk-detect-all, monthly-report-all)
 #   - Cloud Scheduler-triggers för jobben
@@ -32,8 +32,18 @@ SERVICE="insider-graph-api"
 SA_NAME="insider-graph-sa"
 SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 BUCKET="${CDN_BUCKET:-insider-graph-cdn-${PROJECT_ID}}"
+# Backup-bucket för schemalagd Firestore-export. Privat (no allUsers), egen
+# multi-region för läs-säkerhet vid disaster. Lifecycle-policy nedan håller bara
+# de N senaste exporterna kvar (default 8 veckor).
+BACKUP_BUCKET="${BACKUP_BUCKET:-insider-graph-backups-${PROJECT_ID}}"
+BACKUP_LOCATION="${BACKUP_LOCATION:-EU}"
+BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-60}"
 REPO="insider-graph-repo"
 IMAGE="europe-north1-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}:latest"
+# Uptime-check + alert: kräver att Cloud Run-tjänsten kan nås publikt på /health
+# (allow-unauthenticated finns redan). NOTIFY_EMAIL får alert-mejl; lämna tom för
+# att hoppa över alert-policyn (uptime-checken kan ändå skapas).
+NOTIFY_EMAIL="${NOTIFY_EMAIL:-}"
 
 # Origin-URL som compile-schema sätter på profilsidan/schema.json. Default är den råa
 # GCS path-style-URL:en (fungerar direkt, ingen LB krävs). Vid clean-URL-cutover:
@@ -73,6 +83,8 @@ gcloud services enable \
   secretmanager.googleapis.com \
   storage.googleapis.com \
   aiplatform.googleapis.com \
+  monitoring.googleapis.com \
+  pubsub.googleapis.com \
   --project="$PROJECT_ID"
 
 # ---- 2. Artifact Registry --------------------------------------------------
@@ -96,6 +108,19 @@ cat <<'JSON' > cors.json
 JSON
 gsutil cors set cors.json "gs://$BUCKET"
 rm cors.json
+
+# ---- 3a. GCS-bucket för Firestore-backuper (privat, retention via lifecycle) ----
+if ! gsutil ls -b "gs://$BACKUP_BUCKET" >/dev/null 2>&1; then
+  echo "==> Skapar backup-bucket: gs://$BACKUP_BUCKET ($BACKUP_LOCATION)"
+  gsutil mb -l "$BACKUP_LOCATION" -p "$PROJECT_ID" "gs://$BACKUP_BUCKET"
+fi
+# Lifecycle: radera exportkataloger äldre än BACKUP_RETENTION_DAYS. Skyddar
+# disaster-recovery-fönstret men hindrar bucket från att växa obegränsat.
+cat > lifecycle.json <<JSON
+{"lifecycle":{"rule":[{"action":{"type":"Delete"},"condition":{"age":${BACKUP_RETENTION_DAYS}}}]}}
+JSON
+gsutil lifecycle set lifecycle.json "gs://$BACKUP_BUCKET"
+rm lifecycle.json
 
 # ---- 3b. Clean-URL: HTTPS-LB + Cloud CDN på egen domän --------------------
 # Provisioneras bara om PROFILE_DOMAIN är satt. Ger snygga, migrations-säkra
@@ -174,6 +199,7 @@ fi
 echo "==> Tilldelar IAM-roller till $SA_EMAIL"
 for ROLE in \
   roles/datastore.user \
+  roles/datastore.importExportAdmin \
   roles/storage.objectAdmin \
   roles/secretmanager.secretAccessor \
   roles/run.invoker \
@@ -187,52 +213,77 @@ done
 # Servicen är redan deployad första gången via cloudbuild. Här uppdaterar vi
 # bara env-variabler och secret-bindningar — kör det här om secrets ändras.
 echo "==> Uppdaterar service-env för $SERVICE"
+# OPS_WEBHOOK_TOKEN: verifieringen mot Pub/Sub ops-alerts-webhooken. Tom = webhook
+# avvisar alla anrop (säker default). Sätt env-varen innan körning och kör om.
+OPS_WEBHOOK_TOKEN_ENV="${OPS_WEBHOOK_TOKEN:-}"
 gcloud run services update "$SERVICE" --region="$REGION" --project="$PROJECT_ID" \
   --service-account="$SA_EMAIL" \
-  --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS}" \
+  --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS},OPS_WEBHOOK_TOKEN=${OPS_WEBHOOK_TOKEN_ENV}" \
   --update-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,BRIGHTDATA_API_KEY=insider-graph-brightdata-api-key:latest,BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID=insider-graph-brightdata-linkedin-profile-dataset-id:latest,BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID=insider-graph-brightdata-linkedin-company-dataset-id:latest" \
   || echo "==> Service finns ej ännu — kör cloudbuild först"
 
 # ---- 6. Cloud Run Jobs -----------------------------------------------------
+# create_or_update_job NAME CMD [TASKS] [PARALLELISM] [TASK_TIMEOUT]
+#   TASKS/PARALLELISM: sharded fan-out när >1. Varje task läser
+#     CLOUD_RUN_TASK_INDEX/COUNT och tar 1/N av kunderna (fs.iter_client_ids_shard).
+#     Förutsätter att jobbet är idempotent — alla fan-out-jobb är granskade
+#     (deterministiska doc-IDs / set över .add).
+#   TASK_TIMEOUT: per-task timeout. Default 600s (Cloud Runs default) räcker till
+#     korta jobb. LLM-tunga jobb höjs explicit nedan så de inte trunkeras.
 create_or_update_job() {
-  local NAME="$1"; shift
-  local CMD="$1"; shift
+  local NAME="$1"
+  local CMD="$2"
+  local TASKS="${3:-1}"
+  local PARALLELISM="${4:-1}"
+  local TASK_TIMEOUT="${5:-600s}"
   if gcloud run jobs describe "$NAME" --region="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1; then
-    echo "==> Uppdaterar job: $NAME"
+    echo "==> Uppdaterar job: $NAME (tasks=$TASKS parallelism=$PARALLELISM timeout=$TASK_TIMEOUT)"
     gcloud run jobs update "$NAME" \
       --image="$IMAGE" --region="$REGION" --project="$PROJECT_ID" \
       --service-account="$SA_EMAIL" \
       --command="python" --args="-m,$CMD" \
+      --tasks="$TASKS" --parallelism="$PARALLELISM" --task-timeout="$TASK_TIMEOUT" \
       --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS}" \
       --update-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,BRIGHTDATA_API_KEY=insider-graph-brightdata-api-key:latest,BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID=insider-graph-brightdata-linkedin-profile-dataset-id:latest,BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID=insider-graph-brightdata-linkedin-company-dataset-id:latest"
   else
-    echo "==> Skapar job: $NAME"
+    echo "==> Skapar job: $NAME (tasks=$TASKS parallelism=$PARALLELISM timeout=$TASK_TIMEOUT)"
     gcloud run jobs create "$NAME" \
       --image="$IMAGE" --region="$REGION" --project="$PROJECT_ID" \
       --service-account="$SA_EMAIL" \
       --command="python" --args="-m,$CMD" \
+      --tasks="$TASKS" --parallelism="$PARALLELISM" --task-timeout="$TASK_TIMEOUT" \
       --max-retries=1 \
       --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS}" \
       --set-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,BRIGHTDATA_API_KEY=insider-graph-brightdata-api-key:latest,BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID=insider-graph-brightdata-linkedin-profile-dataset-id:latest,BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID=insider-graph-brightdata-linkedin-company-dataset-id:latest"
   fi
 }
 
-create_or_update_job scrape-active           jobs.scrape_active
-create_or_update_job scrape-episodic         jobs.scrape_episodic
-create_or_update_job scrape-website          jobs.scrape_website
-create_or_update_job extract-all-claims      jobs.extract_all_claims
-create_or_update_job compile-all-schemas     jobs.compile_all_schemas
-create_or_update_job polling-weekly          jobs.polling_weekly
-create_or_update_job xml-sync                jobs.xml_sync
-create_or_update_job sunset-skills           jobs.sunset_skills
-create_or_update_job quarterly-linkedin-todo jobs.quarterly_todo
+# Lätta/snabba jobb — seriellt (1 task) räcker även vid 100 kunder. Höjd timeout
+# på extract-all-claims och polling-weekly för säkerhetsmarginal vid 50 kunder.
+create_or_update_job scrape-active           jobs.scrape_active            1 1 1800s
+create_or_update_job scrape-website          jobs.scrape_website           1 1 1800s
+create_or_update_job extract-all-claims      jobs.extract_all_claims       1 1 1800s
+create_or_update_job compile-all-schemas     jobs.compile_all_schemas      1 1 1800s
+create_or_update_job polling-weekly          jobs.polling_weekly           1 1 1800s
+create_or_update_job xml-sync                jobs.xml_sync                 1 1 1800s
+create_or_update_job sunset-skills           jobs.sunset_skills            1 1 600s
+create_or_update_job quarterly-linkedin-todo jobs.quarterly_todo           1 1 600s
 # Humaniseringslager & Förtroendegap (docs/humanization-trust-gap-spec.md):
-create_or_update_job compute-trust-gap        jobs.compute_trust_gap
-create_or_update_job trust-gap-report         jobs.trust_gap_report
-create_or_update_job warmth-probes            jobs.warmth_probes
-# GEO-riskloopen (fan-out över alla kunder): risk-detect veckovis, månadsrapport månadsvis.
-create_or_update_job risk-detect-all          jobs.risk_detect_all
-create_or_update_job monthly-report-all       jobs.monthly_report_all
+create_or_update_job compute-trust-gap        jobs.compute_trust_gap       1 1 1800s
+create_or_update_job trust-gap-report         jobs.trust_gap_report        1 1 600s
+# GEO-riskloopen (sharded fan-out): risk-detect och warmth-probes är de tyngsta
+# LLM-jobben. Vid 50 kunder × ~5 min/kund seriellt = ~4h → trunkeras. tasks=5
+# parallelism=5 → ~50 min/körning. Höj TASKS/PARALLELISM när kundantalet växer
+# (justera mot LLM rate limits — ej linjär skalning).
+create_or_update_job warmth-probes            jobs.warmth_probes           5 5 3600s
+create_or_update_job risk-detect-all          jobs.risk_detect_all         5 5 3600s
+create_or_update_job monthly-report-all       jobs.monthly_report_all      1 1 1800s
+# Modell-drift: greppar repot + jämför services/model_registry mot latest_known.
+# Lätt jobb (ren IO + ett par regex-pass) → seriellt + kort timeout.
+create_or_update_job model-drift-scan         jobs.model_drift_scan        1 1 600s
+# Modell-tillgänglighet: dagligt smoke-test mot varje LIVE modell (1 trivial
+# .invoke() per entry) — fångar regions-glapp, ToS-brist och kvotfel.
+create_or_update_job model-availability-check jobs.model_availability_check 1 1 600s
 
 # ---- 7. Cloud Scheduler-triggers ------------------------------------------
 schedule_job() {
@@ -257,12 +308,11 @@ schedule_job() {
 
 # Pipelinens dagliga ordning: inhämtning → claim-extraktion → compile.
 # scrape-website måndagar 03:45 (veckovis crawl, cadence-guard skyddar mot oftare),
-# scrape-active dagligen 04:00, scrape-episodic måndagar 04:30,
-# extract-all-claims dagligen 04:45 (efter inhämtning, FÖRE compile så dagens claims
-# kommer med), compile-all dagligen 05:00, polling tisdagar 06:00.
+# scrape-active dagligen 04:00, extract-all-claims dagligen 04:45 (efter inhämtning,
+# FÖRE compile så dagens claims kommer med), compile-all dagligen 05:00,
+# polling tisdagar 06:00.
 schedule_job scrape-website-weekly   "45 3 * * 1" scrape-website
 schedule_job scrape-active-daily     "0 4 * * *"  scrape-active
-schedule_job scrape-episodic-weekly  "30 4 * * 1" scrape-episodic
 schedule_job extract-all-claims-daily "45 4 * * *" extract-all-claims
 schedule_job compile-all-daily       "0 5 * * *"  compile-all-schemas
 schedule_job polling-weekly-tue      "0 6 * * 2"  polling-weekly
@@ -284,6 +334,143 @@ schedule_job trust-gap-report-monthly "0 8 1 * *"   trust-gap-report
 # (efter månadens sista veckovisa risk-detect, så snapshotet speglar färska findings).
 schedule_job risk-detect-weekly-tue   "0 7 * * 2"   risk-detect-all
 schedule_job monthly-report-monthly   "0 7 1 * *"   monthly-report-all
+# Modell-drift veckovis måndagar 02:30 — innan resten av pipen drar igång, så
+# inboxen är färsk när dagen börjar. Mild policy: bara flagga, aldrig blockera.
+schedule_job model-drift-weekly       "30 2 * * 1"  model-drift-scan
+# Tillgänglighet dagligen 02:00 — innan drift-scan så ev. unavailable + behind_latest
+# visas tillsammans i inboxen vid morgonkollen.
+schedule_job model-availability-daily "0 2 * * *"   model-availability-check
+
+# ---- 7b. Firestore TTL-policy på job_runs.expire_at -----------------------
+# Koden i jobs/_run_tracker.py skriver ett `expire_at`-fält ~90 dagar i framtiden.
+# TTL-policyn nedan låter Firestore radera dokumenten automatiskt — utan den
+# växer collection:en obegränsat (10k+ dokument/månad vid 50 kunder).
+echo "==> Aktiverar TTL-policy på job_runs.expire_at"
+gcloud firestore fields ttls update expire_at \
+  --collection-group=job_runs --enable-ttl \
+  --project="$PROJECT_ID" --async \
+  || echo "==> TTL kunde inte aktiveras (kan vara redan aktiv) — verifiera i konsolen"
+
+# ---- 7c. Point-in-time recovery (7-dagars rullande fönster) ---------------
+# Gratis upp till 7 dagar. Räcker för att kunna återställa enstaka kunds data
+# efter ett buggigt jobb eller en felaktig manuell radering.
+echo "==> Aktiverar PITR på Firestore-databasen"
+gcloud firestore databases update \
+  --database="(default)" --enable-pitr \
+  --project="$PROJECT_ID" \
+  || echo "==> PITR kunde inte aktiveras (redan på eller fel CLI-version) — verifiera"
+
+# ---- 7d. Schemalagd Firestore-export till backup-bucket -------------------
+# Cloud Scheduler → Firestore Admin API (exportDocuments). SA behöver
+# datastore.importExportAdmin (tilldelas i §4). Veckovis söndag 03:00.
+EXPORT_NAME="firestore-export-weekly"
+EXPORT_URI="https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default):exportDocuments"
+EXPORT_BODY='{"outputUriPrefix":"gs://'${BACKUP_BUCKET}'/firestore"}'
+if gcloud scheduler jobs describe "$EXPORT_NAME" --location="$SCHEDULER_LOCATION" --project="$PROJECT_ID" >/dev/null 2>&1; then
+  echo "==> Uppdaterar scheduler: $EXPORT_NAME"
+  gcloud scheduler jobs update http "$EXPORT_NAME" \
+    --location="$SCHEDULER_LOCATION" --project="$PROJECT_ID" \
+    --schedule="0 3 * * 0" --time-zone="Europe/Stockholm" \
+    --uri="$EXPORT_URI" --http-method=POST \
+    --headers="Content-Type=application/json" \
+    --message-body="$EXPORT_BODY" \
+    --oauth-service-account-email="$SA_EMAIL"
+else
+  echo "==> Skapar scheduler: $EXPORT_NAME"
+  gcloud scheduler jobs create http "$EXPORT_NAME" \
+    --location="$SCHEDULER_LOCATION" --project="$PROJECT_ID" \
+    --schedule="0 3 * * 0" --time-zone="Europe/Stockholm" \
+    --uri="$EXPORT_URI" --http-method=POST \
+    --headers="Content-Type=application/json" \
+    --message-body="$EXPORT_BODY" \
+    --oauth-service-account-email="$SA_EMAIL"
+fi
+
+# ---- 7e. Uptime check + alert policy --------------------------------------
+# /health (routers/health.py) returnerar 200 OK. Uptime-checken kör var 5:e minut
+# från 6 globala regioner; alert-policyn larmar efter två misslyckade checks.
+SERVICE_URL="$(gcloud run services describe "$SERVICE" \
+  --region="$REGION" --project="$PROJECT_ID" \
+  --format='value(status.url)' 2>/dev/null || true)"
+SERVICE_HOST="${SERVICE_URL#https://}"
+if [[ -n "$SERVICE_HOST" ]]; then
+  UPTIME_NAME="insider-graph-api-up"
+  echo "==> Skapar/uppdaterar uptime-check: $UPTIME_NAME mot https://${SERVICE_HOST}/health"
+  if ! gcloud monitoring uptime describe "$UPTIME_NAME" --project="$PROJECT_ID" >/dev/null 2>&1; then
+    gcloud monitoring uptime create "$UPTIME_NAME" \
+      --resource-type=uptime-url \
+      --resource-labels="host=${SERVICE_HOST},project_id=${PROJECT_ID}" \
+      --protocol=https \
+      --path=/health \
+      --period=5 \
+      --timeout=10 \
+      --project="$PROJECT_ID" \
+      || echo "==> Uptime-checken kunde inte skapas automatiskt — skapa manuellt mot https://${SERVICE_HOST}/health"
+  fi
+
+  if [[ -n "$NOTIFY_EMAIL" ]]; then
+    echo "==> Säkerställer email notification channel ($NOTIFY_EMAIL)"
+    CHANNEL_ID="$(gcloud beta monitoring channels list \
+      --filter="type=email AND labels.email_address=${NOTIFY_EMAIL}" \
+      --format='value(name)' --project="$PROJECT_ID" 2>/dev/null | head -n1 || true)"
+    if [[ -z "$CHANNEL_ID" ]]; then
+      CHANNEL_ID="$(gcloud beta monitoring channels create \
+        --display-name="Insider Graph ops" \
+        --type=email \
+        --channel-labels="email_address=${NOTIFY_EMAIL}" \
+        --format='value(name)' --project="$PROJECT_ID" 2>/dev/null || true)"
+    fi
+    if [[ -n "$CHANNEL_ID" ]]; then
+      echo "==> Alert-policy bör peka på $CHANNEL_ID — verifiera i konsolen (Monitoring > Alerting)"
+      echo "    Skapa policy: 'Uptime check failed' på resource=$UPTIME_NAME → notify $CHANNEL_ID"
+    fi
+  else
+    echo "==> NOTIFY_EMAIL ej satt — hoppar över alert-policy. Sätt NOTIFY_EMAIL=... och kör om."
+  fi
+else
+  echo "==> Kunde inte hämta service-URL — uptime-check skippas. Deploya servicen först."
+fi
+
+# ---- 7f. Pub/Sub-topic + push-subscription för ops-alerts -----------------
+# Cloud Billing budget-alerts publiceras till ett Pub/Sub-topic; push-subscriptionen
+# vidarebefordrar dem till /api/webhooks/ops-alerts som skapar en ops-alert.
+# Authentisering: query-param ?token=$OPS_WEBHOOK_TOKEN — SÄTT detta env-värde
+# innan du kör scriptet (eller efter; subscriptionen accepterar update).
+TOPIC_NAME="ops-budget-alerts"
+SUB_NAME="ops-budget-alerts-push"
+if ! gcloud pubsub topics describe "$TOPIC_NAME" --project="$PROJECT_ID" >/dev/null 2>&1; then
+  echo "==> Skapar Pub/Sub-topic: $TOPIC_NAME"
+  gcloud pubsub topics create "$TOPIC_NAME" --project="$PROJECT_ID"
+fi
+if [[ -n "${SERVICE_URL:-}" && -n "${OPS_WEBHOOK_TOKEN:-}" ]]; then
+  PUSH_URL="${SERVICE_URL}/api/webhooks/ops-alerts?token=${OPS_WEBHOOK_TOKEN}"
+  if gcloud pubsub subscriptions describe "$SUB_NAME" --project="$PROJECT_ID" >/dev/null 2>&1; then
+    echo "==> Uppdaterar Pub/Sub-subscription: $SUB_NAME"
+    gcloud pubsub subscriptions update "$SUB_NAME" \
+      --push-endpoint="$PUSH_URL" \
+      --project="$PROJECT_ID" || true
+  else
+    echo "==> Skapar Pub/Sub-subscription: $SUB_NAME → $PUSH_URL"
+    gcloud pubsub subscriptions create "$SUB_NAME" \
+      --topic="$TOPIC_NAME" \
+      --push-endpoint="$PUSH_URL" \
+      --project="$PROJECT_ID"
+  fi
+  echo
+  echo "==> NÄSTA: koppla topic till Billing budget."
+  echo "    Konsol → Billing → Budgets → välj budget → 'Manage notifications' → "
+  echo "    Connect a Pub/Sub topic → välj '$TOPIC_NAME'."
+  echo "    Trösklar 50/80/100 + forecasted 100 publicerar då här."
+else
+  echo "==> Hoppar över Pub/Sub-subscription (SERVICE_URL eller OPS_WEBHOOK_TOKEN saknas)."
+  echo "    Sätt OPS_WEBHOOK_TOKEN=<en lång slumpsträng> och kör om efter första deploy."
+fi
+
+# Service-account till Pub/Sub-systemet behöver inte Cloud Run invoker eftersom
+# webhook-endpointen är public (skyddas av token). När/om vi migrerar till OIDC:
+# gcloud run services add-iam-policy-binding $SERVICE \
+#   --member=serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-pubsub.iam.gserviceaccount.com \
+#   --role=roles/run.invoker --region=$REGION
 
 # ---- 8. Eventarc-trigger: compile vid Firestore-skrivningar ---------------
 # (frivilligt — skapas bara om det inte redan finns, kräver att firestore-db

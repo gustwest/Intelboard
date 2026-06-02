@@ -1,0 +1,134 @@
+"""Per-körnings token-räkning (per-kund kostnadsspårning).
+
+LLM-anrop sker på många ställen (risk_detector, polling, warmth_probes,
+claim_extraction, ESG-loopen, output-quality-rubric). I stället för att
+instrumentera varje call-site använder vi en ContextVar-baserad meter som
+binds en gång inom `record_run` (jobs/_run_tracker.py) och en proxy
+runt själva LLM-objekten som läser av usage-metadata vid varje `.invoke()`.
+
+Result: `job_runs.summary.tokens` får en per-modell-uppdelning av in/ut-tokens
++ samtalsantal — utan att någon befintlig kall-kod behöver känna till mätaren.
+Driver per-kund-kostnadsrapporten (#9 i drift-listan).
+
+Designprinciper:
+- **Får aldrig fälla LLM-anropet.** All token-extraktion sker i try/except.
+- **No-op när ingen meter är aktiv.** Anrop utanför `record_run` (t.ex. interaktiva
+  API-anrop) påverkas inte — `record()` är en tyst no-op då.
+- **Leverantörs-agnostisk.** Plockar usage från `usage_metadata` (LangChain ≥0.2),
+  `response_metadata.token_usage`/`usage` (äldre + leverantörspecifikt), eller
+  faller tillbaka till nollor om inget hittas.
+"""
+from __future__ import annotations
+
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass, field
+from typing import Any, Iterator
+
+
+@dataclass
+class _Usage:
+    input_tokens: int = 0
+    output_tokens: int = 0
+    calls: int = 0
+
+
+@dataclass
+class TokenMeter:
+    by_model: dict[str, _Usage] = field(default_factory=dict)
+
+    def record(self, model: str, input_tokens: int, output_tokens: int) -> None:
+        bucket = self.by_model.setdefault(model or "unknown", _Usage())
+        bucket.input_tokens += int(input_tokens or 0)
+        bucket.output_tokens += int(output_tokens or 0)
+        bucket.calls += 1
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "by_model": {
+                m: {"input": u.input_tokens, "output": u.output_tokens, "calls": u.calls}
+                for m, u in self.by_model.items()
+            },
+            "total_input": sum(u.input_tokens for u in self.by_model.values()),
+            "total_output": sum(u.output_tokens for u in self.by_model.values()),
+            "total_calls": sum(u.calls for u in self.by_model.values()),
+        }
+
+
+_current: ContextVar[TokenMeter | None] = ContextVar("_current_token_meter", default=None)
+
+
+@contextmanager
+def measure() -> Iterator[TokenMeter]:
+    """Bind en ny TokenMeter till denna context. Anropas av jobs/_run_tracker så
+    varje per-kund-körning får sin egen mätare."""
+    meter = TokenMeter()
+    token = _current.set(meter)
+    try:
+        yield meter
+    finally:
+        _current.reset(token)
+
+
+def record(model: str, input_tokens: int, output_tokens: int) -> None:
+    """Registrera ett LLM-anrops tokenförbrukning i den aktiva mätaren. No-op
+    utanför en `measure()`-context."""
+    m = _current.get()
+    if m is None:
+        return
+    if not (input_tokens or output_tokens):
+        return
+    m.record(model, input_tokens, output_tokens)
+
+
+def _extract_usage(response: Any) -> tuple[int, int]:
+    """Hitta (input, output) tokens i ett LangChain-svar. Letar i tur och ordning
+    efter usage_metadata → response_metadata.token_usage → response_metadata.usage.
+    Returnerar (0, 0) om inget hittas — då räknas anropet ej (calls bumpas inte)."""
+    if response is None:
+        return 0, 0
+    meta = getattr(response, "usage_metadata", None)
+    if isinstance(meta, dict):
+        return int(meta.get("input_tokens") or 0), int(meta.get("output_tokens") or 0)
+    rm = getattr(response, "response_metadata", None) or {}
+    if isinstance(rm, dict):
+        usage = rm.get("token_usage") or rm.get("usage") or {}
+        if isinstance(usage, dict):
+            return (
+                int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0),
+                int(usage.get("completion_tokens") or usage.get("output_tokens") or 0),
+            )
+    return 0, 0
+
+
+class _TrackedLLM:
+    """Proxy runt ett LangChain-LLM. .invoke() registrerar usage i den aktiva
+    mätaren; alla andra attribut delegeras transparent till underliggande objekt
+    (så .with_structured_output, .bind, etc. fortsätter fungera)."""
+
+    __slots__ = ("_inner", "_model")
+
+    def __init__(self, inner: Any, model: str):
+        self._inner = inner
+        self._model = model
+
+    def invoke(self, *args: Any, **kwargs: Any) -> Any:
+        resp = self._inner.invoke(*args, **kwargs)
+        try:
+            i, o = _extract_usage(resp)
+            record(self._model, i, o)
+        except Exception:  # noqa: BLE001 — mätning får aldrig fälla anropet
+            pass
+        return resp
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+
+def track(llm: Any, model: str) -> Any:
+    """Returnera en proxy som registrerar tokens vid varje .invoke().
+    None in → None ut (stub-vänlig: factories som returnerar None när nyckel saknas
+    fungerar oförändrat)."""
+    if llm is None:
+        return None
+    return _TrackedLLM(llm, model)

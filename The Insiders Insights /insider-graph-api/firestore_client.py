@@ -8,6 +8,8 @@ Collection-layout speglar spec.md sektion 02:
         polling_results/{week_id}
     connector_logs/{log_id}
 """
+import hashlib
+import os
 from functools import lru_cache
 from typing import Any, Iterator
 
@@ -273,6 +275,39 @@ def iter_clients() -> Iterator[tuple[str, dict[str, Any]]]:
         yield doc.id, doc.to_dict() or {}
 
 
+def iter_client_ids() -> Iterator[str]:
+    """Streamar bara dokument-IDs (tomt fält-projektion → billigare än full dokumentläsning).
+    Används av sharded fan-out där tasken ändå läser kunden på nytt per ID."""
+    for doc in clients_col().select([]).stream():
+        yield doc.id
+
+
+def iter_client_ids_shard(task_index: int, task_count: int) -> Iterator[str]:
+    """Returnerar de client-IDs som denna task ska köra i en sharded fan-out.
+
+    Stabil hash (sha1) säkrar att samma kund hamnar i samma shard mellan körningar,
+    vilket håller jobb-tidsserien per kund konsistent (job_runs.client_id) och låter
+    Firestore-cachning vara effektiv. Med task_count<=1 returneras alla IDs."""
+    if task_count <= 1:
+        yield from iter_client_ids()
+        return
+    if not (0 <= task_index < task_count):
+        raise ValueError(f"task_index {task_index} out of range for task_count {task_count}")
+    for client_id in iter_client_ids():
+        bucket = int(hashlib.sha1(client_id.encode("utf-8")).hexdigest(), 16) % task_count
+        if bucket == task_index:
+            yield client_id
+
+
+def shard_from_env() -> tuple[int, int]:
+    """(task_index, task_count) från Cloud Run Jobs env. Fallback till (0, 1) lokalt
+    så jobben kan köras enkelt utanför Cloud Run (manuell körning, pytest)."""
+    return (
+        int(os.environ.get("CLOUD_RUN_TASK_INDEX", "0")),
+        int(os.environ.get("CLOUD_RUN_TASK_COUNT", "1")),
+    )
+
+
 def iter_employees(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
     for doc in employees_col(client_id).stream():
         yield doc.id, doc.to_dict() or {}
@@ -295,3 +330,72 @@ def job_run_doc(run_id: str):
 def iter_job_runs() -> Iterator[tuple[str, dict[str, Any]]]:
     for doc in job_runs_col().stream():
         yield doc.id, doc.to_dict() or {}
+
+
+# --- Modelldrift-findings (services/model_registry + jobs/model_drift_scan) ---
+# Global toppnivå-collection (inte kund-scopad). Ett dokument per finding-id,
+# upskriks idempotent vid varje drift-scan-körning. Driver inboxens model-drift-
+# kategori och /api/model-drift. Stale findings raderas vid scan-passet om de
+# inte längre matchar koden.
+
+
+def model_drift_col():
+    return db().collection("model_drift_findings")
+
+
+def model_drift_doc(finding_id: str):
+    return model_drift_col().document(finding_id)
+
+
+def iter_model_drift() -> Iterator[tuple[str, dict[str, Any]]]:
+    for doc in model_drift_col().stream():
+        yield doc.id, doc.to_dict() or {}
+
+
+# --- Modell-registry-snapshots (för change-detection) -------------------------
+# Ett doc per ROLE — innehåller senast sedda (model_id, provider, effective_since).
+# jobs/model_drift_scan jämför aktuellt registry mot denna snapshot och loggar
+# event:model_changed i job_runs vid diff. Tidsserierna i AI-synlighet använder
+# eventen för att rita brytlinje vid modellbyte (kalibreringsskydd).
+
+
+def model_registry_snapshots_col():
+    return db().collection("model_registry_snapshots")
+
+
+def model_registry_snapshot_doc(role: str):
+    return model_registry_snapshots_col().document(role)
+
+
+def iter_model_registry_snapshots() -> Iterator[tuple[str, dict[str, Any]]]:
+    for doc in model_registry_snapshots_col().stream():
+        yield doc.id, doc.to_dict() or {}
+
+
+# --- Ops-alerts (services/ops_alerts + routers/ops) ---------------------------
+# Global toppnivå-collection. Deterministisk doc-id (sha1(kind|source)) ger dedup:
+# samma (kind, source) skriver alltid mot samma dokument, så återkommande failures
+# ackumuleras i en alert i stället för att spamma inboxen. Drift som auto-resolveras
+# (t.ex. lyckad körning efter failed) stänger samma doc.
+
+
+def ops_alerts_col():
+    return db().collection("ops_alerts")
+
+
+def ops_alert_doc(alert_id: str):
+    return ops_alerts_col().document(alert_id)
+
+
+def iter_ops_alerts() -> Iterator[tuple[str, dict[str, Any]]]:
+    for doc in ops_alerts_col().stream():
+        yield doc.id, doc.to_dict() or {}
+
+
+# --- Ops-konfiguration (manuella setup-kvitteringar) -------------------------
+# Singel doc med booleanska "har vi gjort detta?"-flaggor. Driver banner-statusen
+# på alerts-sidan så ops ser om Cloud Console-kopplingen för budgetar är klar.
+
+
+def ops_setup_doc():
+    return db().collection("ops_config").document("setup-status")

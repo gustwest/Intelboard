@@ -1,4 +1,33 @@
+import logging
+import re
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_cfg_log = logging.getLogger(__name__)
+
+# Osynliga tecken som smugit in via copy-paste från Slack/Notion/Google Docs/echo.
+# BOM, zero-width space/joiner/non-joiner, object replacement char m.fl.
+_INVISIBLE_JUNK = re.compile(r"[\ufeff\u200b\u200c\u200d\ufffc\r]")
+
+
+def _sanitize_api_key(raw: str, field_name: str) -> str:
+    """Strip whitespace, newlines, BOM och zero-width-tecken från en API-nyckel.
+
+    Loggar en WARNING om kontaminering hittades — synligt i prod-loggar utan att
+    tjänsten kraschar. Kallas av Pydantic-validatorn vid Settings-konstruktion,
+    dvs vid import — alla konsumenter (llm.py, polling.py) får ett rent värde.
+    """
+    if not raw:
+        return raw
+    clean = _INVISIBLE_JUNK.sub("", raw).strip()
+    if clean != raw:
+        _cfg_log.warning(
+            "%s var kontaminerad (raw %d bytes → clean %d bytes, diff: whitespace/newline/"
+            "BOM/zero-width). Auto-rensad vid laddning — men rotera nyckeln för säkerhets skull.",
+            field_name, len(raw), len(clean),
+        )
+    return clean
 
 
 class Settings(BaseSettings):
@@ -18,6 +47,15 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     # (Ingen anthropic_api_key: validatorn (Claude) går via Vertex AI EU, inte
     # förstaparts-API. EU-only-beslut 2026-05-26. Se services/llm.py.)
+
+    # Defensiv sanitering: API-nycklar rensas från whitespace, newlines, BOM och
+    # osynliga Unicode-tecken vid laddning. Förhindrar 'Illegal header value' (httpx)
+    # och gRPC UNAUTHENTICATED-fel som orsakas av kontaminerade env-värden.
+    # Se docs/api-key-rotation-runbook.md.
+    @field_validator("openai_api_key", "gemini_api_key", "sendgrid_api_key", "admin_api_key", mode="before")
+    @classmethod
+    def _strip_api_keys(cls, v: str, info) -> str:
+        return _sanitize_api_key(v, info.field_name) if isinstance(v, str) else v
 
     # EU-only där det betyder något: våra egna resonemangsmodeller (generator/validator)
     # behandlar full kunddata internt och körs via Vertex AI i EU-region — ingen
@@ -46,9 +84,11 @@ class Settings(BaseSettings):
     # lagras inte (endast filnamnet sparas, som tidigare).
     upload_bucket: str = ""
 
-    # MVP: hämta bara bolagets LinkedIn-sida, inte individuella personprofiler.
-    # Sätt SCRAPE_EMPLOYEE_LINKEDIN=true för att slå på per-medarbetare-scrape igen.
-    scrape_employee_linkedin: bool = False
+    # Shared secret för ops-alerts-webhooken (services/ops_alerts, routers/ops).
+    # Verifieras som ?token=... query-param eftersom Pub/Sub push inte enkelt kan
+    # sätta godtyckliga headers. OIDC-verifiering är en planerad förstärkning;
+    # tills dess: rotera token:n minst kvartalsvis och håll den utanför loggar.
+    ops_webhook_token: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

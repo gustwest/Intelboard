@@ -35,6 +35,13 @@ CATEGORY_KEYS = (
     "esg_findings",
 )
 
+# Globala (icke-kundscopade) kategorier. Räknas separat och adderas till
+# inbox-toppraden men dyker INTE upp under enskilda kunder.
+GLOBAL_CATEGORY_KEYS = (
+    "model_drift",  # services/model_registry + jobs/model_drift_scan
+    "ops_alerts",   # services/ops_alerts — job-failures, budget, drift-meddelanden
+)
+
 
 def _count_client(client_id: str, data: dict[str, Any]) -> dict[str, int]:
     counts = {k: 0 for k in CATEGORY_KEYS}
@@ -99,8 +106,29 @@ def _build_inbox() -> dict[str, Any]:
             )
 
     clients.sort(key=lambda c: c["total"], reverse=True)
+    global_counts = _count_global()
     return {
-        "total": sum(totals.values()),
+        "total": sum(totals.values()) + sum(global_counts.values()),
         "categories": totals,
+        "global_categories": global_counts,
         "clients": clients,
     }
+
+
+def _count_global() -> dict[str, int]:
+    """Globala kategorier (inte kundscopade). Best-effort — saknad Firestore-anslutning
+    eller en ny collection som inte hunnits provisioneras ska ge 0, inte krascha."""
+    counts = {k: 0 for k in GLOBAL_CATEGORY_KEYS}
+    try:
+        for _id, doc in fs.iter_model_drift():
+            if doc.get("status") in (None, "open"):
+                counts["model_drift"] += 1
+    except Exception:
+        pass
+    try:
+        for _id, doc in fs.iter_ops_alerts():
+            if doc.get("status") == "open":
+                counts["ops_alerts"] += 1
+    except Exception:
+        pass
+    return counts

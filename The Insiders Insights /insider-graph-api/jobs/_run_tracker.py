@@ -30,8 +30,15 @@ from typing import Any, Callable, Iterator
 from google.cloud import firestore
 
 import firestore_client as fs
+from services import ops_alerts, token_meter
 
 log = logging.getLogger("jobs.run_tracker")
+
+
+def _alert_source(job_type: str, client_id: str | None) -> str:
+    """Stabil dedup-nyckel per (jobb, kund). Samma kunds upprepade failures
+    samlas i en enda alert; globala jobb (client_id=None) får sin egen ström."""
+    return f"{job_type}:{client_id}" if client_id else job_type
 
 
 class RunHandle:
@@ -68,15 +75,44 @@ def record_run(job_type: str, client_id: str | None = None) -> Iterator[RunHandl
         log.exception("job_runs: kunde inte skriva start (%s/%s)", job_type, client_id)
         doc = None
 
-    try:
-        yield handle
-    except Exception as exc:  # jobbet kraschade
-        if doc is not None:
-            _finish(doc, started, "failed", handle.summary, str(exc)[:500])
-        raise
-    else:
-        if doc is not None:
-            _finish(doc, started, "success", handle.summary, None)
+    with token_meter.measure() as meter:
+        try:
+            yield handle
+        except Exception as exc:  # jobbet kraschade
+            handle.summary = {**(handle.summary or {}), "tokens": meter.to_dict()}
+            if doc is not None:
+                _finish(doc, started, "failed", handle.summary, str(exc)[:500])
+            # Öppna/uppdatera en ops-alert som syns i inboxen. Dedup på
+            # (job_type, client_id) → upprepade failures räknar upp samma alert
+            # i stället för att spamma. Best-effort: alertsystemet får aldrig
+            # fälla jobbets felhantering.
+            try:
+                ops_alerts.raise_alert(
+                    kind="job_failed",
+                    source=_alert_source(job_type, client_id),
+                    title=f"{job_type} failed" + (f" för {client_id}" if client_id else ""),
+                    detail=str(exc)[:500],
+                    severity=ops_alerts.SEVERITY_WARNING,
+                    client_id=client_id,
+                    last_message=str(exc)[:500],
+                )
+            except Exception:  # noqa: BLE001
+                log.exception("ops_alerts.raise_alert failed for %s/%s", job_type, client_id)
+            raise
+        else:
+            handle.summary = {**(handle.summary or {}), "tokens": meter.to_dict()}
+            if doc is not None:
+                _finish(doc, started, "success", handle.summary, None)
+            # Lyckad körning → auto-stäng ev. öppen job_failed-alert för samma
+            # (jobb, kund). Om ingen alert finns blir det en tyst no-op.
+            try:
+                ops_alerts.maybe_resolve(
+                    kind="job_failed",
+                    source=_alert_source(job_type, client_id),
+                    resolved_by="auto:success",
+                )
+            except Exception:  # noqa: BLE001
+                log.exception("ops_alerts.maybe_resolve failed for %s/%s", job_type, client_id)
 
 
 def _finish(

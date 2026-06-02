@@ -13,6 +13,7 @@ ConnectorConfig.params måste innehålla `rss_feeds` (lista enligt ovan).
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -110,6 +111,12 @@ def _entry_to_raw(entry: ET.Element, feed_url: str, schema_type: str) -> RawItem
     )
     published_at = _parse_date(published_raw) or datetime.now(timezone.utc)
 
+    # GUID > link > title som stabil seed. Samma entry → samma id mellan körningar,
+    # så scrape_active kan persistera idempotent (set istället för add) och tål
+    # task-retry utan dubbletter.
+    seed = _text(entry, "guid") or _text(entry, "{http://www.w3.org/2005/Atom}id") or link or title or ""
+    item_id = "rss-" + hashlib.sha1(f"{feed_url}\n{seed}".encode("utf-8")).hexdigest()[:16]
+
     return RawItem(
         source="rss",
         schema_type=schema_type,
@@ -120,6 +127,7 @@ def _entry_to_raw(entry: ET.Element, feed_url: str, schema_type: str) -> RawItem
             "name": title,
             "feed_url": feed_url,
         },
+        item_id=item_id,
     )
 
 

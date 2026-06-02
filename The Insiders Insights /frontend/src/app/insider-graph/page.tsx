@@ -4,14 +4,19 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users, Plug, Rocket, Activity, Globe2,
-  Quote, Inbox, Network, Radar, Leaf, Check, X, Loader2, HeartPulse, AlertTriangle,
+  Quote, Inbox, Network, Radar, Leaf, Check, X, Loader2, HeartPulse, AlertTriangle, Bell,
 } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from './_components/GraphPageShell';
 import { graphFetch } from './_lib/api';
 
 type Client = { client_id: string; active_connectors: string[]; cdn_url: string | null };
 type Counts = Record<string, number>;
-type InboxData = { total: number; categories: Counts; clients: { client_id: string; company_name: string | null; total: number }[] };
+type InboxData = {
+  total: number;
+  categories: Counts;
+  global_categories?: Counts;
+  clients: { client_id: string; company_name: string | null; total: number }[];
+};
 type JobRun = {
   id: string;
   job_type: string;
@@ -24,12 +29,24 @@ type JobRun = {
 };
 
 // Inbox-köer → vart åtgärden görs (samma logik som klockan i headern).
-const QUEUES: { label: string; keys: string[]; href: string; icon: typeof Quote; color: string }[] = [
+// `scope` styr vilken del av inbox-svaret count:en hämtas från: 'client'
+// (per-kund-kategorier, default) eller 'global' (icke-kund-scopade — t.ex.
+// drift-larm). En queue är synlig endast när dess summa > 0.
+type Queue = {
+  label: string;
+  keys: string[];
+  href: string;
+  icon: typeof Quote;
+  color: string;
+  scope?: 'client' | 'global';
+};
+const QUEUES: Queue[] = [
   { label: 'Claims att granska', keys: ['claims'], href: '/insider-graph/review', icon: Quote, color: '#9f51b6' },
   { label: 'Inkommande att granska', keys: ['items'], href: '/insider-graph/review', icon: Inbox, color: '#3b82f6' },
   { label: 'LinkedIn att verifiera', keys: ['linkedin'], href: '/insider-graph/review', icon: Network, color: '#0ea5e9' },
   { label: 'Risk att åtgärda', keys: ['risk_findings', 'risk_questions'], href: '/insider-graph/polling', icon: Radar, color: '#f59e0b' },
   { label: 'ESG att granska', keys: ['esg_questions', 'esg_findings'], href: '/insider-graph/kunder', icon: Leaf, color: '#22c55e' },
+  { label: 'Drift-larm', keys: ['ops_alerts'], href: '/insider-graph/alerts', icon: Bell, color: '#ef4444', scope: 'global' },
 ];
 
 // Affärshändelser (job_type "event:<kind>") → läsbar etikett för aktivitetsflödet.
@@ -41,8 +58,7 @@ const EVENT_LABEL: Record<string, string> = {
 
 // Jobbtyp → läsbar etikett för körningsloggen.
 const RUN_LABEL: Record<string, string> = {
-  scrape_active: 'Scrape (aktiv)',
-  scrape_episodic: 'Scrape (episodisk)',
+  scrape_active: 'Scrape (bolagsnivå)',
   scrape_website: 'Webbplats-crawl',
   xml_sync: 'Jobbannons-sync',
   polling: 'AI-synlighet (polling)',
@@ -132,10 +148,13 @@ export default function InsiderGraphHomePage() {
   const delivered = clients ? clients.filter((c) => c.cdn_url).length : null;
   const todo = inbox?.total ?? null;
 
-  const queues = QUEUES.map((q) => ({
-    ...q,
-    count: inbox ? q.keys.reduce((s, k) => s + (inbox.categories[k] || 0), 0) : 0,
-  })).filter((q) => q.count > 0);
+  const queues = QUEUES.map((q) => {
+    const src = q.scope === 'global' ? inbox?.global_categories : inbox?.categories;
+    return {
+      ...q,
+      count: src ? q.keys.reduce((s, k) => s + (src[k] || 0), 0) : 0,
+    };
+  }).filter((q) => q.count > 0);
 
   return (
     <GraphPageShell

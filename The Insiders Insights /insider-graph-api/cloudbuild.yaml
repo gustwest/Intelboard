@@ -33,10 +33,29 @@ steps:
       - '-c'
       - |
         IMAGE=europe-north1-docker.pkg.dev/$PROJECT_ID/insider-graph-repo/insider-graph-api:$COMMIT_SHA
-        for JOB in scrape-active scrape-episodic scrape-website extract-all-claims compile-all-schemas polling-weekly xml-sync sunset-skills quarterly-linkedin-todo compute-trust-gap trust-gap-report warmth-probes risk-detect-all monthly-report-all; do
+        for JOB in scrape-active scrape-website extract-all-claims compile-all-schemas polling-weekly xml-sync sunset-skills quarterly-linkedin-todo compute-trust-gap trust-gap-report warmth-probes risk-detect-all monthly-report-all model-drift-scan model-availability-check; do
           gcloud run jobs update $$JOB --image=$$IMAGE --region=europe-north1 || \
             echo "job $$JOB not yet created — run scripts/bootstrap.sh first"
         done
+
+  # 4. CI-grind: model-availability-check --dry-run. Stoppar deployen om någon
+  #    LIVE-modell i registret inte svarar (regions-glapp, ToS-brist, kvotfel).
+  #    Detta är ENDA stället där policyn faktiskt blockerar — drift-scannen är
+  #    mild, men "modellen finns inte i din region" får inte nå prod tyst. Body:
+  #    kör jobbet med args-override och exit non-zero → step failar → build failar.
+  #    Hoppas över om jobbet inte finns ännu (bootstrap inte körd).
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        if gcloud run jobs describe model-availability-check --region=europe-north1 >/dev/null 2>&1; then
+          echo "==> CI-grind: model-availability-check --dry-run"
+          gcloud run jobs execute model-availability-check --region=europe-north1 \
+            --args="-m,jobs.model_availability_check,--dry-run" --wait
+        else
+          echo "model-availability-check job not yet created — skip CI gate. Kör scripts/bootstrap.sh."
+        fi
 
 options:
   logging: CLOUD_LOGGING_ONLY

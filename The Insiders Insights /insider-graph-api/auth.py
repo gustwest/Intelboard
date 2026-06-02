@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 
 PUBLIC_PREFIXES = (
     "/health",
-    "/api/webhooks/",
+    "/api/webhooks/",            # webhooks (SendGrid + ops-alerts) auth:ar separat
     "/api/jobs/compile-via-eventarc",
     "/docs",
     "/openapi.json",
