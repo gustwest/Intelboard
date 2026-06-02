@@ -9,7 +9,18 @@
  *
  * Lärdom (handover §8, fallgrop #1): ingen dubblerad datafil. ALL innehållsdata
  * bor här och importeras av flikarna. Hex förekommer ENDAST i COLOR_TOKENS.
+ *
+ * Modell-ID:n hämtas från @/lib/aiModels (som speglar
+ * insider-graph-api/services/model_registry.py). Hårdkoda ALDRIG ett
+ * model-ID här — drift-scannen flaggar det och prosan riskerar bli
+ * faktiskt felaktig när registret uppdateras.
  */
+import {
+  GEO_GENERATOR_MODEL,
+  GEO_VALIDATOR_MODEL,
+  PROBE_CLAUDE_MODEL,
+  PROBE_GEMINI_MODEL,
+} from '@/lib/aiModels';
 
 /* ------------------------------------------------------------------ */
 /* Spår                                                                */
@@ -227,7 +238,7 @@ export const TECH_STACK: TechItem[] = [
     track: 'geogiraph',
     snippet: 'langchain-google-vertexai',
     description:
-      'Geogiraphs LLM-fabrik (services/llm.py) bygger generator (gemini-2.5-pro) och validator (claude-opus-4-7) via langchain-google-vertexai — allt mot Vertex AI EU. trafilatura extraherar text vid webbcrawl.',
+      `Geogiraphs LLM-fabrik (services/llm.py) bygger generator (${GEO_GENERATOR_MODEL}) och validator (${GEO_VALIDATOR_MODEL}) via langchain-google-vertexai — allt mot Vertex AI EU. trafilatura extraherar text vid webbcrawl.`,
     pros: ['Enhetligt LLM-gränssnitt', 'Vertex = EU-residens utan API-nycklar'],
     cons: ['Abstraktionslager att hålla koll på'],
     alternatives: [{ name: 'Direkta SDK-anrop', why: 'Mer limkod per modell' }],
@@ -283,9 +294,9 @@ export const TECH_STACK: TechItem[] = [
     layer: 'AI & Tjänster',
     layerClass: 'layerServices',
     track: 'geogiraph',
-    snippet: 'gemini-2.5-pro + claude-opus',
+    snippet: `${GEO_GENERATOR_MODEL} + ${GEO_VALIDATOR_MODEL}`,
     description:
-      'Resonemangsmodellerna som bearbetar kunddata körs ENBART via Vertex AI i europe-west1: generator gemini-2.5-pro, validator/reasoner claude-opus-4-7 (via Vertex, ej Anthropics förstapart). Hård EU-residens.',
+      `Resonemangsmodellerna som bearbetar kunddata körs ENBART via Vertex AI i europe-west1: generator ${GEO_GENERATOR_MODEL}, validator/reasoner ${GEO_VALIDATOR_MODEL}. Hård EU-residens — Claude körs inte här (ej EU-resident i regionen).`,
     pros: ['Data stannar i EU', 'Service account-auth, inga nycklar att rotera'],
     cons: ['Claude ej EU-resident via förstapart → Gemini för ESG-resonemang'],
     alternatives: [{ name: 'Förstaparts-US-API', why: 'Bryter EU-only-kravet' }],
@@ -297,12 +308,16 @@ export const TECH_STACK: TechItem[] = [
     layer: 'AI & Tjänster',
     layerClass: 'layerServices',
     track: 'geogiraph',
-    snippet: 'gpt-4o + gemini (förstapart)',
+    snippet: `${PROBE_CLAUDE_MODEL} + ${PROBE_GEMINI_MODEL} (Vertex EU)`,
     description:
-      'AI-synlighet och risk mäts mot de motorer riktiga användare möter: gpt-4o + Gemini som FÖRSTAPART. Avsiktligt utanför EU-grinden eftersom payloaden är publik (bolagsnamn + generisk fråga), inte kunddata.',
-    pros: ['Mäter verkliga, användarvända motorer', 'Publik payload → ingen residenskonflikt'],
-    cons: ['Två separata leverantörsnycklar'],
-    alternatives: [{ name: 'Bara EU-motorer', why: 'Mäter inte vad användarna faktiskt får' }],
+      `AI-synlighet och risk mäts mot de motorer riktiga användare möter: ${PROBE_CLAUDE_MODEL} (via Vertex Model Garden) + ${PROBE_GEMINI_MODEL} (via Vertex AI EU). Modellerna är identiska med vad publika API:erna serverar — Vertex är leveransvägen, inte ett annat modellbygge. Sedan 2026-06-02 gemensam auth via service account, ingen separat API-nyckel-hantering.`,
+    pros: [
+      'Mäter samma modeller som publika användare träffar',
+      'En auth-väg (ADC) — inga separata leverantörsnycklar',
+      'EU-residency även för probe-trafik',
+    ],
+    cons: ['Vertex Model Garden måste vara enabled för Claude i projektet'],
+    alternatives: [{ name: 'Förstaparts OpenAI/Gemini direkt', why: 'Sårbart för whitespace-förorenade nycklar (vi körde det till 2026-06-02)' }],
   },
   {
     id: 'gemini-summaries',
@@ -339,12 +354,12 @@ export const TECH_STACK: TechItem[] = [
     layer: 'AI & Tjänster',
     layerClass: 'layerServices',
     track: 'geogiraph',
-    snippet: 'Episodiska noder + notiser',
+    snippet: 'Notiser & påminnelser',
     description:
-      'Inkommande mail (webhook) parsas till Event/NewsArticle för episodiska noder; utgående notiser (t.ex. kvartalspåminnelse om LinkedIn-kapacitet) skickas via SendGrid.',
-    pros: ['Mail-in som datakälla', 'Enkla notiser'],
+      'Utgående notiser (t.ex. kvartalspåminnelse om LinkedIn-kapacitet och ops-aviseringar) skickas via SendGrid.',
+    pros: ['Enkla notiser', 'Spårbar leverans'],
     cons: ['Ännu en extern tjänst'],
-    alternatives: [{ name: 'Ingen mail-in', why: 'Missar episodiska händelser' }],
+    alternatives: [{ name: 'Ingen notisutsändning', why: 'Missar tidskritiska påminnelser' }],
   },
   {
     id: 'claude-agent',
@@ -542,7 +557,7 @@ export const DIAGRAM_GEOGRAPH: DiagramNodeData[] = [
   {
     id: 'vertex',
     label: 'Vertex AI EU',
-    sub: 'gemini-2.5-pro / claude-opus',
+    sub: `${GEO_GENERATOR_MODEL} / ${GEO_VALIDATOR_MODEL}`,
     color: 'nodePink',
     detail: {
       description: 'Resonemangsmodeller som bearbetar kunddata: generator + validator. Körs ENBART i EU.',
@@ -566,7 +581,7 @@ export const DIAGRAM_GEOGRAPH: DiagramNodeData[] = [
   {
     id: 'probe-engines',
     label: 'Probe-motorer',
-    sub: 'gpt-4o + gemini (förstapart)',
+    sub: `${PROBE_CLAUDE_MODEL} + ${PROBE_GEMINI_MODEL} (Vertex EU)`,
     color: 'nodeOrange',
     detail: {
       description: 'De AI-motorer riktiga användare möter. Mäter Share of Voice, sentiment och paritet.',
@@ -734,10 +749,10 @@ export const MODULES: ModuleNode[] = [
     emoji: '🕷️',
     name: 'Insamling',
     track: 'geogiraph',
-    description: 'Skrapar källor (aktiva/episodiska/webbsajt) till raw_items. Cadence-skydd + relevansfilter.',
+    description: 'Skrapar källor (bolagsnivå + webbsajt) till raw_items. Cadence-skydd + relevansfilter.',
     frontend: '—',
     backend: 'jobs/scrape_*.py, services/web_crawl.py, services/brightdata.py',
-    apiRoutes: ['POST /api/jobs/scrape-active', 'POST /api/jobs/scrape-episodic'],
+    apiRoutes: ['POST /api/jobs/scrape-active'],
     deps: ['Firestore', 'Bright Data'],
     moduleUses: [{ id: 'connectors', via: 'kör connector-scrapes' }],
   },
@@ -912,23 +927,23 @@ export const ADRS: Adr[] = [
     context:
       'Geogiraph bearbetar kunddata med LLM:er. Hårt EU-only-krav gäller. Claude är inte EU-resident via Anthropics förstapart.',
     decision:
-      'Resonemangsmodeller (generator gemini-2.5-pro, validator/reasoner claude-opus-4-7) körs ENBART via Vertex AI i europe-west1 med service account-auth. ESG-resonemang använder Gemini eftersom Claude saknar EU-residens. Ingen förstaparts-US-väg finns kvar i koden.',
+      `Resonemangsmodeller (generator ${GEO_GENERATOR_MODEL}, validator/reasoner ${GEO_VALIDATOR_MODEL}) körs ENBART via Vertex AI i europe-west1 med service account-auth. ESG-resonemang använder Gemini eftersom Claude saknar EU-residens. Ingen förstaparts-US-väg finns kvar i koden.`,
     consequences:
       'Kunddata stannar i EU utan API-nycklar att rotera. Men modellvalet begränsas till vad som faktiskt serveras i EU-regionen.',
     revisitWhen: 'När nyare modeller (t.ex. Gemini 3.x eller Claude) blir EU-resident-tillgängliga på Vertex.',
   },
   {
     id: 'adr-004',
-    title: 'Probe-motorer är förstapart — avsiktligt utanför EU-grinden',
-    date: '2026-05',
+    title: 'Probe-motorer via Vertex AI — samma modeller, en auth-väg (uppdaterad 2026-06)',
+    date: '2026-06',
     status: 'Aktiv',
     context:
-      'AI-synlighet och risk måste mätas mot de motorer riktiga användare faktiskt möter (gpt-4o, Gemini) — inte mot en EU-proxy som inte speglar verkligheten.',
+      `AI-synlighet och risk måste mätas mot de modeller riktiga användare faktiskt möter (${PROBE_CLAUDE_MODEL}, ${PROBE_GEMINI_MODEL}). Den första versionen körde direkt mot OpenAI/Gemini-API:erna med separata nycklar, vilket gav återkommande "Connection error" och "Illegal header value" på grund av whitespace-förorenade hemligheter.`,
     decision:
-      'Probe-motorerna anropas som förstapart. Det är tillåtet eftersom payloaden är publik (bolagsnamn + generisk fråga), inte kunddata. Resonemangsspåret (som ser kunddata) är fortsatt EU-only.',
+      `Probe-motorerna körs via Vertex AI sedan 2026-06-02: Gemini via ChatVertexAI, Claude via ChatAnthropicVertex (Model Garden). Modellerna är identiska med vad publika API:erna serverar — Vertex är leveransvägen, inte ett annat modellbygge. Vinster: gemensam service account-auth, EU-residency även för probe-trafik, ingen nyckel-rotation. OpenAI direkt-spåret är parkerat (kan återinföras som planerad motor).`,
     consequences:
-      'Mätningen speglar verkligheten. Men två LLM-spår med olika residensregler måste hållas isär disciplinerat i koden.',
-    revisitWhen: 'Om probe-frågor skulle behöva innehålla icke-publik kunddata.',
+      'En auth-väg för all LLM-trafik. Mätningen speglar fortfarande verkligheten eftersom modell-weights är desamma. Förutsätter att Claude är enabled i projektets Vertex Model Garden.',
+    revisitWhen: 'Om Vertex Model Garden tar bort Claude, om OpenAI öppnar en motsvarande Vertex-väg, eller om probe-frågor någonsin behöver innehålla icke-publik kunddata.',
   },
   {
     id: 'adr-005',
@@ -1140,8 +1155,8 @@ export const FIRESTORE_COLLECTIONS: FirestoreCollection[] = [
   },
   {
     path: 'clients/{id}/employees/{employee_id}',
-    description: 'Anställd som nod. node_type styr insamlingskadens.',
-    fields: ['name', 'linkedin_url', 'title', 'node_type', 'gender', 'opted_out'],
+    description: 'Anställd som nod (manuellt registrerade personer per kund).',
+    fields: ['name', 'linkedin_url', 'title', 'gender', 'opted_out'],
   },
   {
     path: '…/raw_items/{item_id}',
@@ -1185,13 +1200,13 @@ export const GLOSSARY: GlossaryItem[] = [
   { term: 'SourceField', def: 'Stabil datapunkt (t.ex. impressions) som KPI-moduler binder mot. Lever över rapportversioner.' },
   { term: 'Modul (KPI)', def: 'Ett mätetal definierat som en formel mot SourceField via ModuleFieldRef-alias.' },
   // Geogiraph
-  { term: 'Nod (node_type)', def: 'En anställd i grafen: aktiv / episodisk / passiv — styr hur ofta källor skrapas.' },
+  { term: 'Personprofil-uppladdning', def: 'Bolaget skickar PDF/text med biografier på de personer som ska synliggöras. Replace-mode i attested-uppladdningen — enkelt att rensa.' },
   { term: 'Claim', def: 'Ett påstående med provenience (källa, confidence). Narrativt eller egenskaps-baserat; grindas mot källan.' },
   { term: 'Källgrind', def: 'Deterministisk validering (citat + siffror måste finnas i källan) som stoppar hallucinerad data.' },
   { term: 'JSON-LD / schema.org', def: 'Det maskinläsbara format kunskapsgrafen kompileras till och publiceras via CDN/GTM.' },
   { term: 'Share of Voice', def: 'Andel AI-svar som nämner bolaget/medarbetarna i en kategori — kärnan i AI-synlighet.' },
   { term: 'Paritetsindex', def: 'Andel kvinnor bland personer som AI rekommenderar — jämställdhetsmått i polling.' },
-  { term: 'Probe-motor', def: 'De förstaparts-AI-motorer (gpt-4o, Gemini) som mätningarna körs mot — speglar vad användare möter.' },
+  { term: 'Probe-motor', def: `De AI-motorer (${PROBE_CLAUDE_MODEL} via Vertex Model Garden, ${PROBE_GEMINI_MODEL} via Vertex AI EU) som mätningarna körs mot — modellerna speglar vad användare möter, leveransvägen är Vertex.` },
   { term: 'ESRS', def: 'EU:s hållbarhetsrapporteringsstandard (E/S/G-pelare) som ESG-auditens frågor mappas mot.' },
   { term: 'Vertex AI EU', def: 'Google-plattform i europe-west1 där alla resonemangsmodeller (Gemini/Claude) körs — EU-residens.' },
   { term: 'Staging', def: 'insiders-frontend/-api/-graph-api på Cloud Run — miljön där vi verifierar allt som pushas till main.' },

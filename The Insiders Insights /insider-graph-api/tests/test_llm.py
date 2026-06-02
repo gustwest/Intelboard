@@ -6,7 +6,7 @@ någon första-parts US-fallback: utan GCP-projekt returneras None även om US-n
 """
 import unittest
 
-from services import llm
+from services import llm, model_registry
 
 
 class EuRoutingTest(unittest.TestCase):
@@ -40,10 +40,11 @@ class EuRoutingTest(unittest.TestCase):
 
     def test_routes_via_vertex_when_project_set(self):
         # Claude är inte EU-resident i projektets region → BÅDA rollerna går på Gemini i EU.
+        # Fabrikerna wrappar nu i en token-mätar-proxy (_TrackedLLM); _inner är raw-objektet.
         llm.settings.gcp_project = "proj-eu"
-        self.assertEqual(llm.make_generator(), ("gemini", llm.GEO_GENERATOR_MODEL))
-        self.assertEqual(llm.make_validator(), ("gemini", llm.GEO_VALIDATOR_MODEL))
-        self.assertEqual(llm.make_claim_validator(), ("gemini", llm.GEO_VALIDATOR_MODEL))
+        self.assertEqual(llm.make_generator()._inner, ("gemini", llm.GEO_GENERATOR_MODEL))
+        self.assertEqual(llm.make_validator()._inner, ("gemini", llm.GEO_VALIDATOR_MODEL))
+        self.assertEqual(llm.make_claim_validator()._inner, ("gemini", llm.GEO_VALIDATOR_MODEL))
 
     def test_claim_validator_uses_temperature_for_self_consistency(self):
         # make_claim_validator ska köra med temperatur > 0 (variation för självkonsistens).
@@ -55,33 +56,46 @@ class EuRoutingTest(unittest.TestCase):
 
 
 class ProbeEnginesTest(unittest.TestCase):
-    """Probe-motorerna är avsiktligt första-parts (vi mäter de publika motorerna)."""
+    """Probe-motorerna (Claude + Gemini) körs via Vertex AI sedan 2026-06-02.
+    Modellerna är identiska med publika API:erna; Vertex är leveransvägen, inte
+    ett annat modellbygge. Tidigare gick de mot OpenAI/Gemini direkt med separata
+    API-nycklar (källa till whitespace-/Illegal-header-fel)."""
 
     def setUp(self):
-        s = llm.settings
-        self._orig = (s.openai_api_key, s.gemini_api_key, llm._openai_probe, llm._gemini_probe)
-        llm._openai_probe = lambda: "gpt-4o"
-        llm._gemini_probe = lambda: "gemini"
+        self._orig = (
+            llm.settings.gcp_project,
+            llm._vertex_gemini, llm._vertex_anthropic,
+        )
+        llm._vertex_gemini = lambda model, temperature=0: ("gemini", model)
+        llm._vertex_anthropic = lambda model: ("claude", model)
 
     def tearDown(self):
-        s = llm.settings
-        (s.openai_api_key, s.gemini_api_key, llm._openai_probe, llm._gemini_probe) = self._orig
+        (llm.settings.gcp_project,
+         llm._vertex_gemini, llm._vertex_anthropic) = self._orig
 
-    def test_both_when_keys_present(self):
-        s = llm.settings
-        s.openai_api_key, s.gemini_api_key = "sk-xxx", "g-xxx"
+    def test_both_probes_when_project_set(self):
+        llm.settings.gcp_project = "proj-eu"
         engines = llm.make_probe_engines()
-        self.assertEqual(set(engines), {"gpt-4o", "gemini-1.5-pro"})
+        self.assertEqual(set(engines), {
+            model_registry.get_id("probe_claude"),
+            model_registry.get_id("probe_gemini"),
+        })
 
-    def test_only_configured_keys(self):
-        s = llm.settings
-        s.openai_api_key, s.gemini_api_key = "", "g-xxx"
-        self.assertEqual(set(llm.make_probe_engines()), {"gemini-1.5-pro"})
-
-    def test_empty_without_keys(self):
-        s = llm.settings
-        s.openai_api_key, s.gemini_api_key = "", ""
+    def test_empty_without_gcp_project(self):
+        """Ingen US-fallback — utan GCP-projekt blir polling/risk-detect no-op."""
+        llm.settings.gcp_project = ""
         self.assertEqual(llm.make_probe_engines(), {})
+
+    def test_resilient_to_individual_probe_init_failure(self):
+        """Om en enskild probe failar vid init ska den andra fortfarande returneras."""
+        llm.settings.gcp_project = "proj-eu"
+
+        def boom(*_a, **_kw):
+            raise RuntimeError("simulated init failure")
+
+        llm._vertex_anthropic = boom  # Claude failar att initieras
+        engines = llm.make_probe_engines()
+        self.assertEqual(set(engines), {model_registry.get_id("probe_gemini")})
 
 
 if __name__ == "__main__":

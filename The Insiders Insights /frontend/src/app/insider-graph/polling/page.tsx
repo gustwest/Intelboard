@@ -5,6 +5,7 @@ import { Radar, RefreshCw, Play, Loader2, Check, X, Pause, CalendarClock } from 
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import { graphFetch, GRAPH_API } from '../_lib/api';
 import { useJobRuns, fmtRelative } from '../_lib/jobRuns';
+import { PROBE_CLAUDE_MODEL, PROBE_GEMINI_MODEL } from '@/lib/aiModels';
 
 // --- Riskloopens render-modell (speglar services/monthly_report.py) ---
 
@@ -131,8 +132,19 @@ type PollingWeek = {
   models_used: string[] | null;
 };
 
+// Backend returnerar id:n från services/model_registry (PROBE_CLAUDE_MODEL,
+// PROBE_GEMINI_MODEL). När registret uppgraderas slipper denna mapping rivas — den
+// följer med via konstanten. Legacy-ID:n från tidigare polling-veckor mappas också
+// så historiska sparklines + risk-tidsserier inte tappar visningsnamn:
+//   - 'gpt-4o' / 'gpt-5.5' = tidigare OpenAI-direkt probe (före Vertex-flytten)
+//   - 'gemini-1.5-pro' / 'gemini-3.5-flash' = tidigare google_genai-probe
 const ENGINE_SV: Record<string, string> = {
-  'gpt-4o': 'ChatGPT',
+  [PROBE_CLAUDE_MODEL]: 'Claude',
+  [PROBE_GEMINI_MODEL]: 'Gemini',
+  'gpt-4o': 'ChatGPT (legacy)',
+  'gpt-5.5': 'ChatGPT (legacy)',
+  'gemini-1.5-pro': 'Gemini (legacy)',
+  'gemini-3.5-flash': 'Gemini (legacy)',
   chatgpt: 'ChatGPT',
   gemini: 'Gemini',
   perplexity: 'Perplexity',

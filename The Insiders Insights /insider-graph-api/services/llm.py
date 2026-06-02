@@ -14,7 +14,7 @@ service-account-auth (ADC) — INGEN första-parts US-väg och ingen US-fallback
 GCP-projekt returnerar fabriken None → pipelinen blir no-op men kraschar inte (och
 läcker inget till US). SDK:n importeras lazy. Se projektminnet om dataresidens.
 
-Probe-motorerna vi *mäter* (gpt-4o/gemini i polling.py + risk_detector._build_engines) är
+Probe-motorerna vi *mäter* (ChatGPT/Gemini i polling.py + risk_detector._build_engines) är
 en separat yta som avsiktligt är **första-parts**: payloaden är publik (bolagsnamn +
 generisk fråga) och poängen är att mäta de motorer användare faktiskt träffar. EU-skyddet
 ligger där den fulla kunddatan behandlas — våra resonemangsmodeller, inte probarna.
@@ -28,23 +28,15 @@ import re
 from typing import Any
 
 from config import settings
+from services import model_registry, token_meter
 
 log = logging.getLogger(__name__)
 
-# ESG-loopens egen resonemangsmodell (riskloopens ESG-spår). Avsiktligt SKILD från
-# make_validator: Claude opus serveras inte EU-resident i projektets region, och ESG-loopen
-# behöver ingen leverantörs-oberoende granskare (den bedömer EXTERNA probe-motorers svar,
-# inte sin egen output — så ingen självvalidering). Gemini 2.5 Pro körs EU-resident via
-# Vertex i `vertex_location`. Env-överstyrbart utan kodändring; rör ej config.py.
-ESG_MODEL = os.environ.get("ESG_MODEL", "gemini-2.5-pro")
-
-# GEO-claims-pipelinen (generator/validator). Claude serveras inte EU-resident i projektets
-# region (404), så BÅDA rollerna körs på Gemini i EU. Oberoendet upprätthålls inte längre av
-# en annan leverantör utan av (a) en deterministisk källgrind (services/claim_grounding) som
-# AVGÖR, och (b) ett vassare validator-steg (pro) + adversariell prompt + självkonsistens.
-# Vill man återinföra cross-vendor-oberoende EU-lagligt: Claude via AWS Bedrock EU.
-GEO_GENERATOR_MODEL = os.environ.get("GEO_GENERATOR_MODEL", "gemini-2.5-flash")
-GEO_VALIDATOR_MODEL = os.environ.get("GEO_VALIDATOR_MODEL", "gemini-2.5-pro")
+# Modell-ID kommer från services/model_registry (ett ställe att uppdatera). Env-
+# override kvarstår för ops-akut: läggs nya defaults i registret.
+ESG_MODEL = os.environ.get("ESG_MODEL", model_registry.get_id("esg_reasoner"))
+GEO_GENERATOR_MODEL = os.environ.get("GEO_GENERATOR_MODEL", model_registry.get_id("geo_generator"))
+GEO_VALIDATOR_MODEL = os.environ.get("GEO_VALIDATOR_MODEL", model_registry.get_id("geo_validator"))
 
 
 def make_generator():
@@ -52,7 +44,7 @@ def make_generator():
     if not settings.gcp_project:
         log.warning("EU-only: GCP-projekt ej satt — generator otillgänglig (ingen US-fallback)")
         return None
-    return _vertex_gemini(GEO_GENERATOR_MODEL)
+    return token_meter.track(_vertex_gemini(GEO_GENERATOR_MODEL), GEO_GENERATOR_MODEL)
 
 
 def make_validator():
@@ -62,7 +54,7 @@ def make_validator():
     if not settings.gcp_project:
         log.warning("EU-only: GCP-projekt ej satt — validator otillgänglig (ingen US-fallback)")
         return None
-    return _vertex_gemini(GEO_VALIDATOR_MODEL)
+    return token_meter.track(_vertex_gemini(GEO_VALIDATOR_MODEL), GEO_VALIDATOR_MODEL)
 
 
 def make_claim_validator():
@@ -71,7 +63,7 @@ def make_claim_validator():
     if not settings.gcp_project:
         log.warning("EU-only: GCP-projekt ej satt — claim-validator otillgänglig")
         return None
-    return _vertex_gemini(GEO_VALIDATOR_MODEL, temperature=0.4)
+    return token_meter.track(_vertex_gemini(GEO_VALIDATOR_MODEL, temperature=0.4), GEO_VALIDATOR_MODEL)
 
 
 def make_esg_reasoner():
@@ -80,7 +72,7 @@ def make_esg_reasoner():
     if not settings.gcp_project:
         log.warning("EU-only: GCP-projekt ej satt — ESG-reasoner otillgänglig (ingen US-fallback)")
         return None
-    return _vertex_gemini(ESG_MODEL)
+    return token_meter.track(_vertex_gemini(ESG_MODEL), ESG_MODEL)
 
 
 # Konstruktions-sömmar (lazy import → modulen kan importeras utan SDK; patchas i tester).
@@ -106,15 +98,34 @@ def _vertex_anthropic(model: str):
 
 
 def make_probe_engines() -> dict[str, Any]:
-    """De externa motorerna polling + risk_detector ställer frågor till. Avsiktligt
-    första-parts: vi mäter de motorer användare faktiskt träffar, och payloaden är
-    publik (bolagsnamn + generisk fråga). EU-skyddet ligger på våra resonemangsmodeller
-    (make_generator/make_validator via Vertex EU), inte här."""
+    """Probe-motorerna (Claude + Gemini) körs via Vertex AI sedan 2026-06-02 — samma
+    EU-projekt som validator. Modellerna är identiska med vad publika
+    API:erna serverar (Vertex Gemini = AI Studio Gemini, Vertex Claude = Claude.ai).
+
+    Vinster: en auth-väg (service account/ADC), EU-residency för all probe-trafik,
+    ingen separat API-nyckel-hantering, ingen risk för whitespace-förorenade headers
+    som tidigare gav "Connection error"/"Illegal header value".
+
+    Kräver GCP_PROJECT satt och Claude-modellen enabled i Vertex Model Garden för
+    projektet. No-op om GCP-projekt saknas → polling/risk_detector blir no-op men
+    kraschar inte."""
+    if not settings.gcp_project:
+        log.warning("EU-only: GCP-projekt ej satt — probe-motorer otillgängliga (ingen US-fallback)")
+        return {}
+
     engines: dict[str, Any] = {}
-    if settings.openai_api_key:
-        engines["gpt-4o"] = _openai_probe()
-    if settings.gemini_api_key:
-        engines["gemini-1.5-pro"] = _gemini_probe()
+    try:
+        gid = model_registry.get_id("probe_gemini")
+        engines[gid] = token_meter.track(_vertex_gemini(gid), gid)
+    except Exception as exc:
+        log.warning("Gemini probe (Vertex) init failed: %s", exc)
+
+    try:
+        cid = model_registry.get_id("probe_claude")
+        engines[cid] = token_meter.track(_vertex_anthropic(cid), cid)
+    except Exception as exc:
+        log.warning("Claude probe (Vertex) init failed: %s", exc)
+
     return engines
 
 
@@ -122,33 +133,22 @@ def make_probe_engines() -> dict[str, Any]:
 # Driver health-statusraden i AI-synlighet-fliken: UI:t visar samma 6 motorer oavsett
 # vilka som faktiskt är inkopplade, så att roadmap-bredden är synlig. När en motor
 # kopplas in: flippa "status" till "live" och säkerställ att make_probe_engines()
-# returnerar en klient under samma `id`.
+# returnerar en klient under samma `id`. Modell-id för live-motorer kommer från
+# services/model_registry — uppdatera DÄR, inte här.
 PROBE_ENGINE_REGISTRY: list[dict[str, Any]] = [
-    {"id": "gpt-4o", "label": "ChatGPT", "vendor": "OpenAI", "status": "live", "note": None},
-    {"id": "gemini-1.5-pro", "label": "Gemini", "vendor": "Google", "status": "live", "note": None},
+    {"id": model_registry.get_id("probe_claude"), "label": "Claude", "vendor": "Anthropic (Vertex)",
+     "status": "live", "note": None},
+    {"id": model_registry.get_id("probe_gemini"), "label": "Gemini", "vendor": "Google (Vertex)",
+     "status": "live", "note": None},
+    {"id": "gpt", "label": "ChatGPT", "vendor": "OpenAI", "status": "planned",
+     "note": "Direkt API parkerat 2026-06-02 (krediter/nyckelhantering). Kan återinföras när separat OpenAI-spår behövs."},
     {"id": "perplexity", "label": "Perplexity", "vendor": "Perplexity AI", "status": "planned",
      "note": "Ren AI-sökmotor — planerad nästa fas (REST-API)"},
-    {"id": "claude", "label": "Claude", "vendor": "Anthropic", "status": "planned",
-     "note": "Resonemang och analys — planerad nästa fas"},
     {"id": "copilot", "label": "Copilot", "vendor": "Microsoft", "status": "planned",
      "note": "Retrieval-augmenterad sök — planerad"},
     {"id": "mistral", "label": "Mistral", "vendor": "Mistral AI", "status": "planned",
      "note": "EU-baserad — planerad nästa fas"},
 ]
-
-
-def _openai_probe():
-    from langchain_openai import ChatOpenAI
-
-    return ChatOpenAI(api_key=settings.openai_api_key, model="gpt-4o", temperature=0, timeout=60)
-
-
-def _gemini_probe():
-    from langchain_google_genai import ChatGoogleGenerativeAI
-
-    return ChatGoogleGenerativeAI(
-        google_api_key=settings.gemini_api_key, model="gemini-1.5-pro", temperature=0, timeout=60
-    )
 
 
 def invoke_json(llm, system: str, user: str) -> dict[str, Any] | None:
