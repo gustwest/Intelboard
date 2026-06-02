@@ -42,6 +42,26 @@ def store(
     return object_path
 
 
+def purge_client(client_id: str) -> int:
+    """Radera allt privat underlag (linkedin/ + verifications/) för en kund.
+
+    Anropas av delete_client som städ-steg. No-op om upload_bucket inte är satt
+    (då lagras inget överhuvudtaget). Returnerar antal raderade objekt; fel
+    sväljs (best-effort — får inte fälla kundraderingen)."""
+    if not settings.upload_bucket:
+        return 0
+    deleted = 0
+    try:
+        bucket = _bucket()
+        for prefix in (f"linkedin/{client_id}/", f"verifications/{client_id}/"):
+            for blob in bucket.list_blobs(prefix=prefix):
+                blob.delete()
+                deleted += 1
+    except Exception as exc:
+        log.warning("blob purge failed for %s: %s", client_id, exc)
+    return deleted
+
+
 def fetch(object_path: str) -> tuple[bytes, str] | None:
     """Hämta (bytes, content_type) för ett lagrat underlag, eller None."""
     if not settings.upload_bucket or not object_path:

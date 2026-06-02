@@ -4,6 +4,7 @@ Läsning (lista/hämta) + skrivning: opt-out per medarbetare, GDPR-radering av
 en medarbetare (employee-doc + raw_items + claims som refererar hen) samt
 radering av en hel kund (alla subcollections via recursive_delete).
 """
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
@@ -12,11 +13,15 @@ from pydantic import BaseModel
 
 import firestore_client as fs
 import ttl_cache
+from config import settings
 from routers.inbox import _count_client  # samma "väntar på människa"-räkning som inkorgen
-from services import persona_derivation
+from schema_org import urls
+from services import blob_storage, persona_derivation
 from services.discovery import _normalize_org_number
 from services.identity_enrichment import apply_identity_metadata
 from services.output_quality import AudiencePriority
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/clients", tags=["clients"])
 
@@ -55,13 +60,7 @@ class ClientConfigUpdate(BaseModel):
 def list_clients() -> dict[str, Any]:
     clients = []
     for client_id, data in fs.iter_clients():
-        employee_count = 0
-        node_types = {"aktiv": 0, "episodisk": 0, "passiv": 0}
-        for _, emp in fs.iter_employees(client_id):
-            employee_count += 1
-            nt = emp.get("node_type") or "aktiv"
-            if nt in node_types:
-                node_types[nt] += 1
+        employee_count = sum(1 for _ in fs.iter_employees(client_id))
         clients.append(
             {
                 "client_id": client_id,
@@ -69,7 +68,6 @@ def list_clients() -> dict[str, Any]:
                 "company_linkedin_url": data.get("company_linkedin_url"),
                 "active_connectors": data.get("active_connectors", []),
                 "employee_count": employee_count,
-                "node_types": node_types,
                 "tier": data.get("tier", "default"),
                 "cdn_url": data.get("cdn_url"),
                 "profile_url": data.get("profile_url"),
@@ -96,10 +94,8 @@ def get_client(client_id: str) -> dict[str, Any]:
                 "name": emp.get("name"),
                 "title": emp.get("title"),
                 "linkedin_url": emp.get("linkedin_url"),
-                "node_type": emp.get("node_type"),
                 "gender": emp.get("gender"),
                 "opted_out": bool(emp.get("opted_out")),
-                "email_ingestion_addr": emp.get("email_ingestion_addr"),
             }
         )
     employees.sort(key=lambda e: e.get("name") or "")
@@ -275,7 +271,7 @@ def _build_pipeline(client_id: str) -> dict[str, Any]:
     run_at = _latest_run_times(client_id)
 
     # Data-steget: senaste av de datahämtande jobben.
-    data_at = _max_iso(run_at.get(j) for j in ("scrape_active", "scrape_website", "scrape_episodic", "xml_sync"))
+    data_at = _max_iso(run_at.get(j) for j in ("scrape_active", "scrape_website", "xml_sync"))
     has_data = raw_count is None and _has_any_raw(client_id) or bool(raw_count)
 
     steps = [
@@ -419,16 +415,70 @@ def delete_employee(client_id: str, employee_id: str) -> dict[str, Any]:
 
 @router.delete("/{client_id}")
 def delete_client(client_id: str) -> dict[str, Any]:
-    """Radera en hel kund: alla kopplingar, connectors och data.
+    """Radera en hel kund: Firestore, publicerade CDN-objekt, privat underlag, körningsspår.
 
-    recursive_delete tar client-dokumentet plus samtliga subcollections
-    (employees + raw_items, raw_items_company, claims, polling_results).
+    Fyra steg, i ordning:
+      1. recursive_delete på client-doc: tar samtliga subcollections (employees +
+         raw_items, raw_items_company, claims, polling_results, risk_*, esg_*,
+         monthly_reports, trust_gap*, verifications, todos m.fl.).
+      2. CDN-bucket: schema.json, index.html, llms.txt — annars sitter den
+         publika profilsidan kvar även efter att kunden tagits bort.
+      3. Upload-bucket: linkedin/ + verifications/ — privat underlag (no-op om
+         UPLOAD_BUCKET inte är konfigurerad).
+      4. job_runs (root): kundens körningsspår, så historiken inte ligger kvar
+         i 90 dagar tills TTL:n släpper den.
+
+    Stegen 2-4 är best-effort: fel loggas men fäller inte raderingen (Firestore-
+    datat är borta i steg 1, och vi vill inte att en transient GCS-strul ska
+    lämna 200 OK omöjlig att få).
     """
     ref = fs.client_doc(client_id)
     if not ref.get().exists:
         raise HTTPException(404, f"client not found: {client_id}")
+
     fs.db().recursive_delete(ref)
-    return {"status": "deleted", "client_id": client_id}
+
+    cleanup = {
+        "cdn_objects_deleted": _delete_cdn_objects(client_id),
+        "upload_objects_deleted": blob_storage.purge_client(client_id),
+        "job_runs_deleted": _delete_job_runs(client_id),
+    }
+    return {"status": "deleted", "client_id": client_id, "cleanup": cleanup}
+
+
+def _delete_cdn_objects(client_id: str) -> int:
+    """Radera de publicerade artefakterna (schema.json/index.html/llms.txt)."""
+    if not settings.cdn_bucket:
+        return 0
+    deleted = 0
+    try:
+        from google.cloud import storage
+
+        bucket = storage.Client().bucket(settings.cdn_bucket)
+        for object_name in (
+            urls.schema_object(client_id),
+            urls.page_object(client_id),
+            urls.llms_object(client_id),
+        ):
+            blob = bucket.blob(object_name)
+            if blob.exists():
+                blob.delete()
+                deleted += 1
+    except Exception as exc:  # noqa: BLE001
+        log.warning("CDN cleanup failed for %s: %s", client_id, exc)
+    return deleted
+
+
+def _delete_job_runs(client_id: str) -> int:
+    """Radera samtliga körningsspår för en kund ur root-collectionen job_runs."""
+    deleted = 0
+    try:
+        for snap in fs.job_runs_col().where("client_id", "==", client_id).stream():
+            snap.reference.delete()
+            deleted += 1
+    except Exception as exc:  # noqa: BLE001
+        log.warning("job_runs cleanup failed for %s: %s", client_id, exc)
+    return deleted
 
 
 def _purge_employee_from_claims(client_id: str, employee_id: str) -> tuple[int, int]:
