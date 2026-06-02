@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import ArchitectureClient from '@/app/arkitektur/ArchitectureClient';
 import { SCHEMA_MODELS_FALLBACK } from '@/app/arkitektur/data';
+import { AGENT_DROPDOWN_OPTIONS, AGENT_DEFAULT_MODEL_ID } from '@/lib/aiModels';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -716,8 +717,8 @@ function AgentTab({ product }: { product: string }) {
   const [activeSession, setActiveSession] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState(() => {
-    if (typeof window === 'undefined') return 'claude-opus-4-7';
-    return localStorage.getItem(modelKey) || localStorage.getItem('admin-agent-model') || 'claude-opus-4-7';
+    if (typeof window === 'undefined') return AGENT_DEFAULT_MODEL_ID;
+    return localStorage.getItem(modelKey) || localStorage.getItem('admin-agent-model') || AGENT_DEFAULT_MODEL_ID;
   });
   useEffect(() => {
     if (typeof window !== 'undefined') localStorage.setItem(modelKey, model);
@@ -1232,9 +1233,9 @@ function AgentTab({ product }: { product: string }) {
               cursor: 'pointer',
             }}
           >
-            <option value="claude-sonnet-4-6">Sonnet 4</option>
-            <option value="claude-opus-4-7">Opus 4</option>
-            <option value="claude-haiku-3-5">Haiku 3.5</option>
+            {AGENT_DROPDOWN_OPTIONS.map((opt) => (
+              <option key={opt.role} value={opt.value}>{opt.label}</option>
+            ))}
           </select>
           <button
             type="button"

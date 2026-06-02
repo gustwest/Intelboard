@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bell, Quote, Inbox, Network, Radar, Leaf, RefreshCw } from 'lucide-react';
+import { Bell, Quote, Inbox, Network, Radar, Leaf, AlertTriangle, RefreshCw } from 'lucide-react';
 import { graphFetch } from '@/app/insider-graph/_lib/api';
 
 type Counts = {
@@ -14,16 +14,37 @@ type Counts = {
   esg_questions: number;
   esg_findings: number;
 };
+type GlobalCounts = {
+  model_drift?: number;
+  ops_alerts?: number;
+};
 type InboxClient = { client_id: string; company_name: string | null; total: number; counts: Counts };
-type InboxData = { total: number; categories: Counts; clients: InboxClient[] };
+type InboxData = {
+  total: number;
+  categories: Counts;
+  global_categories?: GlobalCounts;
+  clients: InboxClient[];
+};
 
 // En kö per kategori: vart åtgärden görs + ikon. Risk och ESG slås ihop till varsin rad.
-const QUEUES: { label: string; keys: (keyof Counts)[]; href: string; icon: typeof Quote; color: string }[] = [
+// `globalKey` pekar på data.global_categories i stället för data.categories (drift-larm,
+// model-drift) — de är inte kundscopade utan globala för hela systemet.
+type Queue = {
+  label: string;
+  keys?: (keyof Counts)[];
+  globalKey?: keyof GlobalCounts;
+  href: string;
+  icon: typeof Quote;
+  color: string;
+};
+
+const QUEUES: Queue[] = [
   { label: 'Claims att granska', keys: ['claims'], href: '/insider-graph/review', icon: Quote, color: '#9f51b6' },
   { label: 'Inkommande att granska', keys: ['items'], href: '/insider-graph/review', icon: Inbox, color: '#3b82f6' },
   { label: 'LinkedIn att verifiera', keys: ['linkedin'], href: '/insider-graph/review', icon: Network, color: '#0ea5e9' },
   { label: 'Risk att åtgärda', keys: ['risk_findings', 'risk_questions'], href: '/insider-graph/polling', icon: Radar, color: '#f59e0b' },
   { label: 'ESG att granska', keys: ['esg_questions', 'esg_findings'], href: '/insider-graph/kunder', icon: Leaf, color: '#22c55e' },
+  { label: 'Drift-larm', globalKey: 'ops_alerts', href: '/insider-graph/ops-alerts', icon: AlertTriangle, color: '#ef4444' },
 ];
 
 /** Geogiraph "Att göra"-inkorg: aggregerar allt som väntar på en människa. */
@@ -63,10 +84,17 @@ export default function GraphInboxBell() {
   }, []);
 
   const total = data?.total ?? 0;
-  const queues = QUEUES.map((q) => ({
-    ...q,
-    count: data ? q.keys.reduce((s, k) => s + (data.categories[k] || 0), 0) : 0,
-  })).filter((q) => q.count > 0);
+  const queues = QUEUES.map((q) => {
+    let count = 0;
+    if (data) {
+      if (q.keys) {
+        count = q.keys.reduce((s, k) => s + (data.categories[k] || 0), 0);
+      } else if (q.globalKey) {
+        count = data.global_categories?.[q.globalKey] || 0;
+      }
+    }
+    return { ...q, count };
+  }).filter((q) => q.count > 0);
 
   function go(href: string) {
     setOpen(false);

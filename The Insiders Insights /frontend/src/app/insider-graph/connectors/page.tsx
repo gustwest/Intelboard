@@ -36,15 +36,14 @@ const STATIC_PLANNED: ConnectorMeta[] = [
 const NAME: Record<string, string> = {
   linkedin: 'LinkedIn', linkedin_capacity: 'LinkedIn-kapacitet (kvartal)', rss: 'RSS-feeds (kund)',
   jobfeed: 'Platsannonser (ATS)', website: 'Webbplats', gleif: 'GLEIF (org-data)',
-  pressrum: 'Pressrum', careers: 'Karriärsida', email: 'E-post (episodisk)', instagram: 'Instagram',
+  pressrum: 'Pressrum', careers: 'Karriärsida', instagram: 'Instagram',
   youtube: 'YouTube', facebook: 'Facebook', substack: 'Substack', podcast: 'Podcast', glassdoor: 'Glassdoor',
   github: 'GitHub', crunchbase: 'Crunchbase', scholar: 'Google Scholar', prv: 'PRV / Patent', vinnova: 'Vinnova',
 };
 
 // Globala/batch-jobb (körs för alla kunder) — hör hemma på den här globala sidan.
 const GLOBAL_JOBS: { label: string; key: string; path: string; type: string }[] = [
-  { label: 'Scrape (aktiv)', key: 'scrape', path: '/api/jobs/scrape-active', type: 'scrape_active' },
-  { label: 'Scrape (episodisk)', key: 'episodic', path: '/api/jobs/scrape-episodic', type: 'scrape_episodic' },
+  { label: 'Scrape (bolagsnivå)', key: 'scrape', path: '/api/jobs/scrape-active', type: 'scrape_active' },
   { label: 'Jobbannons-sync', key: 'xml', path: '/api/jobs/xml-sync', type: 'xml_sync' },
   { label: 'AI-synlighet (polling)', key: 'polling', path: '/api/jobs/polling', type: 'polling' },
   { label: 'Sunset (kompetenser)', key: 'sunset', path: '/api/jobs/sunset-skills', type: 'sunset_skills' },

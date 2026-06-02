@@ -39,58 +39,84 @@ GEO_GENERATOR_MODEL = os.environ.get("GEO_GENERATOR_MODEL", model_registry.get_i
 GEO_VALIDATOR_MODEL = os.environ.get("GEO_VALIDATOR_MODEL", model_registry.get_id("geo_validator"))
 
 
+def _location_for(role: str) -> str:
+    """Vertex-region för en roll. Registret bestämmer per entry; tom string i registret
+    fallar tillbaka till settings (EU). Probe-rollerna sätter "global"; resonemang
+    lämnas tomma så de följer EU-defaultet."""
+    return model_registry.location_for(role) or settings.vertex_location
+
+
 def make_generator():
     """Generering/relevans (Gemini Flash) — snabb och billig, via Vertex AI EU."""
     if not settings.gcp_project:
         log.warning("EU-only: GCP-projekt ej satt — generator otillgänglig (ingen US-fallback)")
         return None
-    return token_meter.track(_vertex_gemini(GEO_GENERATOR_MODEL), GEO_GENERATOR_MODEL)
+    return token_meter.track(
+        _vertex_gemini(GEO_GENERATOR_MODEL, location=_location_for("geo_generator")),
+        GEO_GENERATOR_MODEL,
+    )
 
 
 def make_validator():
-    """Vasst resonemang (Gemini Pro) för det precisionskritiska steget, via Vertex AI EU.
-    Claude är inte EU-resident i projektets region; oberoendet bärs nu av den deterministiska
-    källgrinden (claim_grounding) som avgör, inte av en annan leverantör."""
+    """Vasst resonemang (Gemini Pro), via Vertex AI EU."""
     if not settings.gcp_project:
         log.warning("EU-only: GCP-projekt ej satt — validator otillgänglig (ingen US-fallback)")
         return None
-    return token_meter.track(_vertex_gemini(GEO_VALIDATOR_MODEL), GEO_VALIDATOR_MODEL)
+    return token_meter.track(
+        _vertex_gemini(GEO_VALIDATOR_MODEL, location=_location_for("geo_validator")),
+        GEO_VALIDATOR_MODEL,
+    )
 
 
 def make_claim_validator():
-    """Validator för claims-extraktionen, med temperatur för SJÄLVKONSISTENS (flera pass där
-    samstämmighet krävs). Gemini Pro via Vertex AI EU."""
+    """Validator för claims-extraktionen, med temperatur för SJÄLVKONSISTENS."""
     if not settings.gcp_project:
         log.warning("EU-only: GCP-projekt ej satt — claim-validator otillgänglig")
         return None
-    return token_meter.track(_vertex_gemini(GEO_VALIDATOR_MODEL, temperature=0.4), GEO_VALIDATOR_MODEL)
+    return token_meter.track(
+        _vertex_gemini(GEO_VALIDATOR_MODEL, temperature=0.4, location=_location_for("geo_validator")),
+        GEO_VALIDATOR_MODEL,
+    )
 
 
 def make_esg_reasoner():
-    """ESG-loopens resonemangsmodell (Gemini), via Vertex AI EU. Genererar ESG-frågor och
-    klassar probe-motorernas svar. Skild från make_validator — se ESG_MODEL ovan."""
+    """ESG-loopens resonemangsmodell (Gemini), via Vertex AI EU."""
     if not settings.gcp_project:
         log.warning("EU-only: GCP-projekt ej satt — ESG-reasoner otillgänglig (ingen US-fallback)")
         return None
-    return token_meter.track(_vertex_gemini(ESG_MODEL), ESG_MODEL)
+    return token_meter.track(
+        _vertex_gemini(ESG_MODEL, location=_location_for("esg_reasoner")),
+        ESG_MODEL,
+    )
 
 
 # Konstruktions-sömmar (lazy import → modulen kan importeras utan SDK; patchas i tester).
-def _vertex_gemini(model: str, temperature: float = 0):
+def _vertex_gemini(model: str, temperature: float = 0, location: str | None = None):
     from langchain_google_vertexai import ChatVertexAI
 
     return ChatVertexAI(
-        model=model, project=settings.gcp_project, location=settings.vertex_location,
+        model=model, project=settings.gcp_project,
+        location=location or settings.vertex_location,
         temperature=temperature,
     )
 
 
-def _vertex_anthropic(model: str):
+def _vertex_anthropic(model: str, location: str | None = None):
     from langchain_google_vertexai.model_garden import ChatAnthropicVertex
 
     return ChatAnthropicVertex(
-        model_name=model, project=settings.gcp_project, location=settings.vertex_location,
+        model_name=model, project=settings.gcp_project,
+        location=location or settings.vertex_location,
         temperature=0,
+    )
+
+
+def _openai_chat(model: str):
+    """OpenAI direktanslutning — GPT-modeller finns inte i Vertex Model Garden."""
+    from langchain_openai import ChatOpenAI
+
+    return ChatOpenAI(
+        api_key=settings.openai_api_key, model=model, temperature=0, timeout=60,
     )
 
 
@@ -98,33 +124,43 @@ def _vertex_anthropic(model: str):
 
 
 def make_probe_engines() -> dict[str, Any]:
-    """Probe-motorerna (Claude + Gemini) körs via Vertex AI sedan 2026-06-02 — samma
-    EU-projekt som validator. Modellerna är identiska med vad publika
-    API:erna serverar (Vertex Gemini = AI Studio Gemini, Vertex Claude = Claude.ai).
+    """Probarna (Claude + Gemini + ChatGPT) mäter de publika AI-assistenter användare
+    träffar. Sedan 2026-06-02 kör Vertex-probarna `vertex_location="global"` — payloaden
+    är publik (bolagsnamn + generisk fråga), EU-residens behövs inte, och global endpoint
+    ger dynamisk routing + snabbast modelluppgradering. ChatGPT-proben går direkt mot
+    OpenAI eftersom GPT inte finns i Vertex Model Garden.
 
-    Vinster: en auth-väg (service account/ADC), EU-residency för all probe-trafik,
-    ingen separat API-nyckel-hantering, ingen risk för whitespace-förorenade headers
-    som tidigare gav "Connection error"/"Illegal header value".
-
-    Kräver GCP_PROJECT satt och Claude-modellen enabled i Vertex Model Garden för
-    projektet. No-op om GCP-projekt saknas → polling/risk_detector blir no-op men
-    kraschar inte."""
-    if not settings.gcp_project:
-        log.warning("EU-only: GCP-projekt ej satt — probe-motorer otillgängliga (ingen US-fallback)")
-        return {}
-
+    Per-probe-isolering: en motors init-fel ska inte slå ut de andra (polling kör hellre
+    med en motor mindre än ingen alls)."""
     engines: dict[str, Any] = {}
-    try:
-        gid = model_registry.get_id("probe_gemini")
-        engines[gid] = token_meter.track(_vertex_gemini(gid), gid)
-    except Exception as exc:
-        log.warning("Gemini probe (Vertex) init failed: %s", exc)
 
-    try:
-        cid = model_registry.get_id("probe_claude")
-        engines[cid] = token_meter.track(_vertex_anthropic(cid), cid)
-    except Exception as exc:
-        log.warning("Claude probe (Vertex) init failed: %s", exc)
+    if settings.gcp_project:
+        try:
+            gid = model_registry.get_id("probe_gemini")
+            engines[gid] = token_meter.track(
+                _vertex_gemini(gid, location=_location_for("probe_gemini")), gid,
+            )
+        except Exception as exc:
+            log.warning("Gemini probe (Vertex) init failed: %s", exc)
+
+        try:
+            cid = model_registry.get_id("probe_claude")
+            engines[cid] = token_meter.track(
+                _vertex_anthropic(cid, location=_location_for("probe_claude")), cid,
+            )
+        except Exception as exc:
+            log.warning("Claude probe (Vertex) init failed: %s", exc)
+    else:
+        log.warning("GCP-projekt ej satt — Vertex-probar otillgängliga (ChatGPT-proben kan ändå köra)")
+
+    if settings.openai_api_key:
+        try:
+            oid = model_registry.get_id("probe_openai")
+            engines[oid] = token_meter.track(_openai_chat(oid), oid)
+        except Exception as exc:
+            log.warning("OpenAI probe init failed: %s", exc)
+    else:
+        log.warning("OPENAI_API_KEY ej satt — ChatGPT-probe inte tillgänglig")
 
     return engines
 
@@ -136,18 +172,18 @@ def make_probe_engines() -> dict[str, Any]:
 # returnerar en klient under samma `id`. Modell-id för live-motorer kommer från
 # services/model_registry — uppdatera DÄR, inte här.
 PROBE_ENGINE_REGISTRY: list[dict[str, Any]] = [
-    {"id": model_registry.get_id("probe_claude"), "label": "Claude", "vendor": "Anthropic (Vertex)",
-     "status": "live", "note": None},
-    {"id": model_registry.get_id("probe_gemini"), "label": "Gemini", "vendor": "Google (Vertex)",
-     "status": "live", "note": None},
-    {"id": "gpt", "label": "ChatGPT", "vendor": "OpenAI", "status": "planned",
-     "note": "Direkt API parkerat 2026-06-02 (krediter/nyckelhantering). Kan återinföras när separat OpenAI-spår behövs."},
+    {"id": model_registry.get_id("probe_claude"), "label": "Claude",
+     "vendor": "Anthropic (Vertex global)", "status": "live", "note": None},
+    {"id": model_registry.get_id("probe_gemini"), "label": "Gemini",
+     "vendor": "Google (Vertex global)", "status": "live", "note": None},
+    {"id": model_registry.get_id("probe_openai"), "label": "ChatGPT",
+     "vendor": "OpenAI (direkt)", "status": "live", "note": None},
     {"id": "perplexity", "label": "Perplexity", "vendor": "Perplexity AI", "status": "planned",
      "note": "Ren AI-sökmotor — planerad nästa fas (REST-API)"},
     {"id": "copilot", "label": "Copilot", "vendor": "Microsoft", "status": "planned",
      "note": "Retrieval-augmenterad sök — planerad"},
-    {"id": "mistral", "label": "Mistral", "vendor": "Mistral AI", "status": "planned",
-     "note": "EU-baserad — planerad nästa fas"},
+    {"id": "mistral", "label": "Mistral", "vendor": "Mistral AI (Vertex Model Garden)",
+     "status": "planned", "note": "EU-baserad — planerad nästa fas"},
 ]
 
 

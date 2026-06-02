@@ -164,5 +164,68 @@ class NativeSheetsTest(unittest.TestCase):
         self.assertNotIn("Erik", str(p))  # författare tas aldrig med
 
 
+class PeopleBioTest(unittest.TestCase):
+    """Personprofil-dokument: paragraf-bitar → narrative-claims, replace-läge."""
+
+    CTX = ai.BuildCtx(company="Acme AB", attested_at="2026-06-01", url=None)
+
+    def test_paragraphs_become_separate_claims(self):
+        text = "Anna Andersson är VD sedan 2020.\n\nErik Bergqvist leder produktteamet."
+        writes = ai._people_bio_build(text, self.CTX)
+        statements = [p["statement"] for tgt, _id, p in writes if tgt == "claim"]
+        self.assertEqual(len(writes), 2)
+        self.assertIn("Anna Andersson är VD sedan 2020.", statements)
+        self.assertIn("Erik Bergqvist leder produktteamet.", statements)
+        # Källan ska bära det attesterade datumet + label.
+        src = writes[0][2]["source"][0]
+        self.assertEqual(src["kind"], "attested")
+        self.assertEqual(src["attested_at"], "2026-06-01")
+
+    def test_long_paragraph_splits_on_sentence_boundary(self):
+        # > 400 tecken (PEOPLE_BIO_MAX_CHARS) tvingar paragraf-splitten att gå
+        # på meningsnivå istället för att trunkera bort innehåll.
+        sentences = ["Anna Andersson har lett bolaget i många år."] * 15 + [
+            "Hon har en bakgrund från Spotify."
+        ]
+        text = " ".join(sentences)
+        self.assertGreater(len(text), ai.PEOPLE_BIO_MAX_CHARS)
+        writes = ai._people_bio_build(text, self.CTX)
+        self.assertGreater(len(writes), 1)
+        joined = " ".join(p["statement"] for _, _, p in writes)
+        self.assertIn("Anna Andersson", joined)
+        self.assertIn("Spotify", joined)
+        for _, _, p in writes:
+            self.assertLessEqual(len(p["statement"]), ai.PEOPLE_BIO_MAX_CHARS)
+
+    def test_replace_mode_reported_in_result(self):
+        fakefs.reset(client={"company_name": "Acme AB"})
+        res = ai.ingest_attested("acme", "people_bio", "bio.txt",
+                                 "Anna är VD.".encode("utf-8"), attested_at="2026-05-01")
+        self.assertEqual(res["mode"], "replace")
+        self.assertGreaterEqual(res["written"], 1)
+
+    def test_clear_source_removes_attested_claims(self):
+        # Priming: tidigare people_bio-claims i grafen. clear_source ska radera dem;
+        # claims med annan origin ska lämnas i fred.
+        fakefs.reset(
+            client={"company_name": "Acme AB"},
+            claims={
+                "att-bio-1": {"origin": "attested:people_bio", "statement": "Anna är VD."},
+                "att-bio-2": {"origin": "attested:people_bio", "statement": "Bo är CTO."},
+                "keep":      {"origin": "attested:linkedin_posts", "statement": "annat"},
+            },
+        )
+        removed = ai.clear_source("acme", "people_bio")
+        self.assertEqual(removed, 2)
+        self.assertNotIn("att-bio-1", fakefs.STATE["claims"])
+        self.assertNotIn("att-bio-2", fakefs.STATE["claims"])
+        self.assertIn("keep", fakefs.STATE["claims"])
+
+    def test_clear_source_unknown_type_raises(self):
+        fakefs.reset(client={"company_name": "Acme AB"})
+        with self.assertRaises(ValueError):
+            ai.clear_source("acme", "bogus")
+
+
 if __name__ == "__main__":
     unittest.main()

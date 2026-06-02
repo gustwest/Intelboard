@@ -24,10 +24,8 @@ type Employee = {
   name: string | null;
   title: string | null;
   linkedin_url: string | null;
-  node_type: string | null;
   gender: string | null;
   opted_out: boolean;
-  email_ingestion_addr: string | null;
 };
 
 type ClientDetail = {
@@ -42,8 +40,6 @@ type ClientDetail = {
   last_compiled: string | null;
   employees: Employee[];
 };
-
-const NODE_COLORS: Record<string, string> = { aktiv: '#22c55e', episodisk: '#f59e0b', passiv: '#6a7e8a' };
 
 export default function ClientDetailPage() {
   const params = useParams<{ client_id: string }>();
@@ -276,11 +272,6 @@ export default function ClientDetailPage() {
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56', display: 'flex', alignItems: 'center', gap: 8 }}>
                         {emp.name || emp.employee_id}
-                        {emp.node_type && (
-                          <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 3, background: `${NODE_COLORS[emp.node_type] || C.muted}22`, color: NODE_COLORS[emp.node_type] || C.muted, fontWeight: 600, textTransform: 'uppercase' }}>
-                            {emp.node_type}
-                          </span>
-                        )}
                         {emp.opted_out && (
                           <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 3, background: 'rgba(239,68,68,0.15)', color: '#ef4444', fontWeight: 600, textTransform: 'uppercase' }}>
                             opt-out

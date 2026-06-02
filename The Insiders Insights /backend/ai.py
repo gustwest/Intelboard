@@ -26,7 +26,7 @@ def _get_client():
             _client = genai.Client(
                 vertexai=True,
                 project=project,
-                location="global",  # gemini-3-flash-preview needs global endpoint
+                location="global",  # global endpoint för snabbast routing
             )
         elif os.environ.get("GEMINI_API_KEY"):
             _client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
@@ -36,7 +36,11 @@ def _get_client():
     return _client
 
 
-MODEL = "gemini-3-flash-preview"
+# Speglar services/model_registry.py:dataset_summarizer (insider-graph-api). Två
+# olika tjänster delar inte Python-importväg, så uppdatera båda i samma commit
+# när registret ändras. Drift-scannen flaggar om strängen här hamnar utanför
+# registrets authorized_model_ids().
+MODEL = "gemini-3.5-flash"
 
 SYSTEM_PROMPT = """Du är en dataanalytiker som arbetar för en LinkedIn-marknadsföringsbyrå.
 Du får en sammanfattning av ett nyuppladdat dataset. Skriv en kort, insiktsfull sammanfattning på SVENSKA (2-4 meningar).

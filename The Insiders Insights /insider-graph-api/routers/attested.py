@@ -14,7 +14,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, UploadFile
 
 import firestore_client as fs
-from services.attested_ingest import SOURCE_TYPES, attested_status, include_source, ingest_attested
+from services.attested_ingest import SOURCE_TYPES, attested_status, clear_source, include_source, ingest_attested
 
 router = APIRouter(prefix="/api/attested", tags=["attested"])
 
@@ -69,3 +69,21 @@ def include_in_delivery(client_id: str, source_type: str, background: Background
 
         background.add_task(compile_schema.run, client_id)
     return {"client_id": client_id, "source_type": source_type, "included": included}
+
+
+@router.delete("/{client_id}/{source_type}")
+def clear_attested(client_id: str, source_type: str, background: BackgroundTasks) -> dict[str, Any]:
+    """Radera all attesterad data för en källtyp (claims + raw_items). Avsedd för
+    "Rensa person-data"-knappen på kundkortet. Kompilerar om i bakgrunden så att
+    leveransen återspeglar borttagningen."""
+    try:
+        removed = clear_source(client_id, source_type)
+    except ValueError as exc:
+        status = 404 if "client not found" in str(exc) else 400
+        raise HTTPException(status, str(exc)) from exc
+
+    if removed:
+        from jobs import compile_schema
+
+        background.add_task(compile_schema.run, client_id)
+    return {"client_id": client_id, "source_type": source_type, "removed": removed}

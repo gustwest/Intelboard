@@ -10,10 +10,9 @@ class EmployeeInput(BaseModel):
     name: str
     linkedin_url: str
     title: str | None = None
-    node_type: str = "aktiv"
     gender: str | None = None
-    # opt-out: connectors slutar hämta ny data för personen (scrape-jobben hoppar
-    # över hen). Redan insamlad data ligger kvar tills den raderas explicit.
+    # opt-out: connectors slutar hämta ny data för personen. Redan insamlad data
+    # ligger kvar tills den raderas explicit.
     opted_out: bool = False
 
 
@@ -39,10 +38,9 @@ class OnboardRequest(BaseModel):
     active_connectors: list[str] | None = None
     employees: list[EmployeeInput] = Field(default_factory=list)
     # Connector-params som matar respektive connectors fetch(). Lagras under
-    # client.settings (website, rss_feeds, scrape_employee_profiles).
+    # client.settings (website, rss_feeds).
     website_start_url: str | None = None
     rss_feeds: list[RssFeed] = Field(default_factory=list)
-    scrape_employee_profiles: bool = False
     # Hosting-tier (se docs/claims-provenance-spec.md §7). "premium" → profilsidan
     # på kundens egen domän; profile_base_url sätter @id-basen för JSON-LD.
     tier: Literal["default", "premium"] = "default"

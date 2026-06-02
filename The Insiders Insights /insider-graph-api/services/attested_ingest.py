@@ -6,13 +6,16 @@ vägen → vi kan ärligt attestera att den är oförvanskad per ett datum.
 
 Läser LinkedIns **native multi-flik-export** (.xls/.xlsx) direkt — varje datatyp har sin
 egen fliklayout. CSV i kanoniskt format (`dimension,segment,value`) stöds också (bakåt-
-kompat + normaliserade uppladdningar).
+kompat + normaliserade uppladdningar). För fritext (personbiografier) läser vi .pdf/.txt/.md
+via egen parser — varje källtyp pekar på sin egen parser.
 
-Tre källtyper:
+Källtyper:
   * **linkedin_follower_demographics** → claims om följarbasens sammansättning (replace).
   * **linkedin_visitor_demographics**  → claims om vilka som besöker sidan (replace).
   * **linkedin_content**               → publika inlägg som SocialMediaPosting-RawItems
                                           (append; persondata/"Posted by" tas ALDRIG med).
+  * **people_bio**                     → personbiografier från bolaget (replace; bolagets
+                                          eget urval av personer som ska synliggöras).
 
 Claims/items byggs **deterministiskt** (ingen LLM). Demografi taggas
 `origin="attested:<typ>"`, inlägg `attested_source="linkedin_content"`, så replace hittar
@@ -24,6 +27,7 @@ import csv
 import hashlib
 import io
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -84,7 +88,11 @@ class SourceType:
     label: str
     description: str
     mode: str  # "replace" (ögonblicksbild) | "append" (logg)
-    build: Callable[[dict[str, list[list[str]]], BuildCtx], list[Write]]
+    # build får payloaden parser:n returnerade. Default-parser:n (read_sheets)
+    # returnerar {fliknamn: rader}; text-baserade källor (people_bio) använder
+    # read_text och får en str. Builderns första arg ges som Any för att rymma båda.
+    build: Callable[[Any, BuildCtx], list[Write]]
+    parser: Callable[[str | None, bytes], Any] | None = None  # None → read_sheets
 
 
 # --- Filinläsning: .xls / .xlsx / .csv → {fliknamn: rader} -----------------------
@@ -119,6 +127,20 @@ def _cell(v: Any) -> str:
     if isinstance(v, float):
         return str(int(v)) if v == int(v) else str(v)
     return str(v).strip()
+
+
+# --- Fritext-läsare: .pdf / .txt / .md → str ------------------------------------
+
+
+def read_text(filename: str | None, content: bytes) -> str:
+    """Läs .pdf/.txt/.md som en sammanhängande sträng (sidbrytningar → blanka rader)."""
+    name = (filename or "").lower()
+    if name.endswith(".pdf"):
+        from pypdf import PdfReader
+
+        reader = PdfReader(io.BytesIO(content))
+        return "\n\n".join((page.extract_text() or "").strip() for page in reader.pages).strip()
+    return content.decode("utf-8-sig", errors="ignore").strip()
 
 
 # --- Demografi (följare + besökare) → claims ------------------------------------
@@ -257,6 +279,75 @@ def _norm_date(s: str) -> datetime | None:
     return None
 
 
+# --- Personbiografier (people_bio) → narrative-claims ---------------------------
+#
+# Bolaget skickar ett dokument om de personer de vill synliggöra. Vi stycke-delar
+# texten och skriver ett narrative-claim per logisk bit — claimens `source` bär
+# attesterat datum + ev. publik ankare. Replace-läge → ny uppladdning rensar gammal.
+# (Inga raw_items behövs: kompilatorn läser narrative-claims direkt.)
+
+PEOPLE_BIO_LABEL = "Personprofil-dokument från bolaget"
+PEOPLE_BIO_MAX_CHARS = 400  # claim-bit (max). Längre stycken delas på meningsnivå.
+_PARAGRAPH_SPLIT = re.compile(r"\n\s*\n+")
+# Mening avslutas med . ! ? eller : följt av blanksteg + stor bokstav (incl. åäö).
+_SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?:])\s+(?=[A-ZÅÄÖ])")
+
+
+def _split_into_chunks(text: str, max_chars: int) -> list[str]:
+    """Stycke först, sen mening — så ingen text trunkeras bort. Slå ihop intilliggande
+    meningar så länge de ryms i `max_chars`; alltför långa meningar släpps igenom
+    som-är (vi vill hellre ha en lång mening än en hackad)."""
+    chunks: list[str] = []
+    for para in _PARAGRAPH_SPLIT.split(text or ""):
+        para = para.strip()
+        if not para:
+            continue
+        if len(para) <= max_chars:
+            chunks.append(para)
+            continue
+        buf = ""
+        for sent in _SENTENCE_BOUNDARY.split(para):
+            sent = sent.strip()
+            if not sent:
+                continue
+            if buf and len(buf) + 1 + len(sent) > max_chars:
+                chunks.append(buf)
+                buf = sent
+            else:
+                buf = f"{buf} {sent}".strip() if buf else sent
+        if buf:
+            chunks.append(buf)
+    return chunks
+
+
+def _people_bio_build(text: str, ctx: BuildCtx) -> list[Write]:
+    chunks = _split_into_chunks(text, PEOPLE_BIO_MAX_CHARS)
+    if not chunks:
+        return []
+
+    src = ClaimSource(kind="attested", label=PEOPLE_BIO_LABEL, attested_at=ctx.attested_at, url=ctx.url)
+    writes: list[Write] = []
+    seen: set[str] = set()
+    for chunk in chunks:
+        # Stabil identitet på innehållet → omkörning med samma text överskriver.
+        claim_id = "att-bio-" + hashlib.sha1(chunk.encode("utf-8")).hexdigest()[:14]
+        if claim_id in seen:
+            continue
+        seen.add(claim_id)
+        claim = Claim(
+            claim_kind="narrative",
+            subject_ref="org",
+            statement=chunk,
+            source=[src],
+            confidence=1.0,
+            # Staged tills "Inkludera i leverans" bekräftas — speglar demografi-flödet.
+            included_in_output=False,
+            needs_review=False,
+        )
+        writes.append(("claim", claim_id, claim.model_dump()))
+    return writes
+
+
 # --- Källtyps-register -----------------------------------------------------------
 
 
@@ -289,6 +380,15 @@ SOURCE_TYPES: dict[str, SourceType] = {
         mode="append",
         build=_content_build,
     ),
+    "people_bio": SourceType(
+        key="people_bio",
+        label="Personprofiler (från bolaget)",
+        description="Dokument (PDF eller text) med biografier om de personer bolaget vill "
+                    "synliggöra. Ersätter tidigare uppladdning — ny version skriver över.",
+        mode="replace",
+        build=_people_bio_build,
+        parser=read_text,
+    ),
 }
 
 
@@ -306,14 +406,15 @@ def ingest_attested(
     if st is None:
         raise ValueError(f"unknown source_type: {source_type}")
 
+    parser = st.parser or read_sheets
     try:
-        sheets = read_sheets(filename, content)
+        payload = parser(filename, content)
     except Exception as exc:  # noqa: BLE001
         raise ValueError(f"could not read file: {exc}") from exc
-    if not sheets:
+    if not payload:
         raise ValueError("could not read file")
 
-    writes = st.build(sheets, BuildCtx(company=company, attested_at=attested_at, url=url))
+    writes = st.build(payload, BuildCtx(company=company, attested_at=attested_at, url=url))
     if not writes:
         raise ValueError("no valid rows in file")
 
@@ -405,6 +506,16 @@ def include_source(client_id: str, source_type: str) -> int:
             fs.raw_items_company_col(client_id).document(snap.id).update({"included_in_output": True})
             n += 1
     return n
+
+
+def clear_source(client_id: str, source_type: str) -> int:
+    """Rensa all attesterad data för en källtyp (manuell radering från UI).
+    Returnerar antal raderade dokument. Höjer ValueError vid okänd källtyp/kund."""
+    if source_type not in SOURCE_TYPES:
+        raise ValueError(f"unknown source_type: {source_type}")
+    if not fs.client_doc(client_id).get().exists:
+        raise ValueError(f"client not found: {client_id}")
+    return _delete_existing(client_id, source_type)
 
 
 def _delete_existing(client_id: str, source_type: str) -> int:

@@ -39,8 +39,6 @@ def onboard_client(req: OnboardRequest) -> OnboardResponse:
         "fetch_life": True,
         "fetch_posts": True,
         "fetch_jobs": True,
-        # Per-connector-config (matar ConnectorConfig.params i scrape-jobben).
-        "scrape_employee_profiles": req.scrape_employee_profiles,
     }
     if req.website_start_url:
         settings["website"] = {"start_url": req.website_start_url}
@@ -97,19 +95,13 @@ def _write_employees(client_id: str, employees: Iterable[EmployeeInput]) -> list
                 "name": emp.name,
                 "linkedin_url": emp.linkedin_url,
                 "title": emp.title,
-                "node_type": emp.node_type,
                 "gender": emp.gender,
                 "opted_out": emp.opted_out,
-                "email_ingestion_addr": _episodic_email(client_id, unique) if emp.node_type == "episodisk" else None,
                 "created_at": firestore.SERVER_TIMESTAMP,
             }
         )
         created.append(unique)
     return created
-
-
-def _episodic_email(client_id: str, employee_id: str) -> str:
-    return f"{client_id}.{employee_id}@inbox.insidergraph.io"
 
 
 def _normalize_org_number(value: str | None) -> str | None:

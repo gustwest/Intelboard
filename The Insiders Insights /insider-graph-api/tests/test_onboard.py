@@ -41,12 +41,10 @@ class OnboardConnectorParamsTest(unittest.TestCase):
         onboard_client(_req(
             website_start_url="https://kund.se/",
             rss_feeds=[RssFeed(url="https://kund.se/feed", schema_type="NewsArticle", label="Press")],
-            scrape_employee_profiles=True,
         ))
         settings = fakefs.STATE["client"]["settings"]
         self.assertEqual(settings["website"], {"start_url": "https://kund.se/"})
         self.assertEqual(settings["rss_feeds"][0]["url"], "https://kund.se/feed")
-        self.assertTrue(settings["scrape_employee_profiles"])
 
     def test_no_connector_params_leaves_settings_clean(self):
         fakefs.reset(client=None)
@@ -54,7 +52,6 @@ class OnboardConnectorParamsTest(unittest.TestCase):
         settings = fakefs.STATE["client"]["settings"]
         self.assertNotIn("website", settings)
         self.assertNotIn("rss_feeds", settings)
-        self.assertFalse(settings["scrape_employee_profiles"])
 
 
 class OnboardIdentityMetadataTest(unittest.TestCase):

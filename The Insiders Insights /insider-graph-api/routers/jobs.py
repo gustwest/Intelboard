@@ -17,7 +17,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from google.cloud import firestore
 
 import firestore_client as fs
-from jobs import compile_schema, extract_claims, polling_weekly, quarterly_todo, scrape_active, scrape_episodic, sunset_skills, xml_sync
+from jobs import compile_schema, extract_claims, polling_weekly, quarterly_todo, scrape_active, sunset_skills, xml_sync
 from jobs._run_tracker import record_run, tracked
 
 log = logging.getLogger(__name__)
@@ -142,12 +142,6 @@ def build_health(runs: list[dict[str, Any]], clients: list[Any], now: Any) -> di
 def trigger_scrape_active(background: BackgroundTasks) -> dict[str, Any]:
     background.add_task(scrape_active.run)
     return {"status": "queued", "job": "scrape_active"}
-
-
-@router.post("/scrape-episodic")
-def trigger_scrape_episodic(background: BackgroundTasks) -> dict[str, Any]:
-    background.add_task(scrape_episodic.run)
-    return {"status": "queued", "job": "scrape_episodic"}
 
 
 @router.post("/polling")

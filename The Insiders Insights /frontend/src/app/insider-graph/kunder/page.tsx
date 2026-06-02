@@ -30,7 +30,6 @@ type EmployeeRow = {
   name: string;
   linkedin_url: string;
   title: string;
-  node_type: string;
   gender: string;
 };
 
@@ -41,17 +40,14 @@ type Client = {
   company_name: string | null;
   company_linkedin_url: string | null;
   employee_count: number;
-  node_types: { aktiv: number; episodisk: number; passiv: number };
   cdn_url: string | null;
   last_compiled: string | null;
   active_connectors: string[];
   tier?: string;
 };
 
-const NODE_TYPES = ['aktiv', 'episodisk', 'passiv'];
-
 function emptyEmployee(): EmployeeRow {
-  return { name: '', linkedin_url: '', title: '', node_type: 'aktiv', gender: '' };
+  return { name: '', linkedin_url: '', title: '', gender: '' };
 }
 
 // Inkorgens kategorier per kund. Vi delar upp dem på kortet så varje räknare
@@ -339,9 +335,7 @@ function ClientCard({ client, counts }: { client: Client; counts?: InboxCounts }
 
         <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
           {client.tier === 'premium' && <Badge color="#9f51b6" label="premium" />}
-          <Badge color="#22c55e" label={`${client.node_types.aktiv} aktiv`} />
-          <Badge color="#f59e0b" label={`${client.node_types.episodisk} episodisk`} />
-          <Badge color={C.muted} label={`${client.node_types.passiv} passiv`} />
+          <Badge color={C.muted} label={`${client.employee_count} medarbetare`} />
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 14, fontSize: 11, color: C.muted }}>
@@ -508,7 +502,6 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
         company_linkedin_url: active.has('linkedin') ? (fieldValues['company_linkedin_url'] as string) || null : null,
         lei: active.has('gleif') ? (fieldValues['lei'] as string) || null : null,
         website_start_url: active.has('website') ? (fieldValues['website_start_url'] as string) || null : null,
-        scrape_employee_profiles: active.has('linkedin') ? !!fieldValues['scrape_employee_profiles'] : false,
         rss_feeds: active.has('rss')
           ? rssFeeds.filter((r) => r.url.trim()).map((r) => ({ url: r.url.trim(), schema_type: r.schema_type, label: r.label.trim() || null }))
           : [],
@@ -518,7 +511,6 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
             name: e.name.trim(),
             linkedin_url: e.linkedin_url.trim(),
             title: e.title.trim() || null,
-            node_type: e.node_type,
             gender: e.gender.trim() || null,
           })),
         tier,
@@ -671,28 +663,18 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
         {/* Medarbetare */}
         <SectionLabel>Medarbetare</SectionLabel>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.8fr 1.2fr 1fr 0.9fr 28px', gap: 8, fontSize: 10, color: C.muted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0 2px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.8fr 1.4fr 0.9fr 28px', gap: 8, fontSize: 10, color: C.muted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0 2px' }}>
             <span>Namn</span>
             <span>LinkedIn-URL</span>
             <span>Titel</span>
-            <span>Nodtyp</span>
             <span>Kön</span>
             <span />
           </div>
           {employees.map((emp, i) => (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.8fr 1.2fr 1fr 0.9fr 28px', gap: 8, alignItems: 'center' }}>
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.8fr 1.4fr 0.9fr 28px', gap: 8, alignItems: 'center' }}>
               <RowInput value={emp.name} onChange={(v) => setEmployee(i, { name: v })} placeholder="Anna Andersson" />
               <RowInput value={emp.linkedin_url} onChange={(v) => setEmployee(i, { linkedin_url: v })} placeholder="https://linkedin.com/in/…" />
               <RowInput value={emp.title} onChange={(v) => setEmployee(i, { title: v })} placeholder="VD" />
-              <select
-                value={emp.node_type}
-                onChange={(e) => setEmployee(i, { node_type: e.target.value })}
-                style={selectStyle}
-              >
-                {NODE_TYPES.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
               <RowInput value={emp.gender} onChange={(v) => setEmployee(i, { gender: v })} placeholder="kvinna" />
               <button
                 onClick={() => setEmployees((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev))}

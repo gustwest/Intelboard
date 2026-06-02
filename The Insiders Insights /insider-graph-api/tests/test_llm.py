@@ -16,8 +16,8 @@ class EuRoutingTest(unittest.TestCase):
             llm.settings.openai_api_key, llm.settings.gemini_api_key,
             llm._vertex_gemini, llm._vertex_anthropic,
         )
-        llm._vertex_gemini = lambda model, temperature=0: ("gemini", model)
-        llm._vertex_anthropic = lambda model: ("anthropic", model)
+        llm._vertex_gemini = lambda model, temperature=0, location=None: ("gemini", model)
+        llm._vertex_anthropic = lambda model, location=None: ("anthropic", model)
 
     def tearDown(self):
         (llm.settings.gcp_project,
@@ -49,7 +49,7 @@ class EuRoutingTest(unittest.TestCase):
     def test_claim_validator_uses_temperature_for_self_consistency(self):
         # make_claim_validator ska köra med temperatur > 0 (variation för självkonsistens).
         captured = {}
-        llm._vertex_gemini = lambda model, temperature=0: captured.update(t=temperature)
+        llm._vertex_gemini = lambda model, temperature=0, location=None: captured.update(t=temperature)
         llm.settings.gcp_project = "proj-eu"
         llm.make_claim_validator()
         self.assertGreater(captured["t"], 0)
@@ -66,8 +66,8 @@ class ProbeEnginesTest(unittest.TestCase):
             llm.settings.gcp_project,
             llm._vertex_gemini, llm._vertex_anthropic,
         )
-        llm._vertex_gemini = lambda model, temperature=0: ("gemini", model)
-        llm._vertex_anthropic = lambda model: ("claude", model)
+        llm._vertex_gemini = lambda model, temperature=0, location=None: ("gemini", model)
+        llm._vertex_anthropic = lambda model, location=None: ("claude", model)
 
     def tearDown(self):
         (llm.settings.gcp_project,

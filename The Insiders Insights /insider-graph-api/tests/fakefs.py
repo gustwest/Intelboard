@@ -432,6 +432,36 @@ def writes() -> dict[str, dict]:
     return STATE.get("writes", {})
 
 
+# --- Modell-registry-helpers (matchar firestore_client.py) ------------------
+# Drift-scannens change-detection + drift-findings. Tester patchar typiskt
+# dessa direkt; stubbarna här finns för att `mock.patch("…fs.model_registry_*")`
+# ska kunna binda attributet utan AttributeError.
+
+
+def model_drift_col() -> _Col:
+    return _Col(STATE.setdefault("model_drift", {}), deletable=True, writable=True)
+
+
+def model_drift_doc(finding_id: str) -> _DocRef:
+    return _DocRef(finding_id, STATE.setdefault("model_drift", {}).get(finding_id))
+
+
+def iter_model_drift():
+    return list(STATE.get("model_drift", {}).items())
+
+
+def model_registry_snapshots_col() -> _Col:
+    return _Col(STATE.setdefault("model_registry_snapshots", {}), deletable=True, writable=True)
+
+
+def model_registry_snapshot_doc(role: str) -> _DocRef:
+    return _DocRef(role, STATE.setdefault("model_registry_snapshots", {}).get(role))
+
+
+def iter_model_registry_snapshots():
+    return list(STATE.get("model_registry_snapshots", {}).items())
+
+
 # Installera som firestore_client (vinner eftersom fakefs importeras först).
 reset()
 sys.modules["firestore_client"] = sys.modules[__name__]

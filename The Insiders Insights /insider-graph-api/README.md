@@ -38,7 +38,6 @@ insider-graph-api/
 │   └── polling.py          AI-synlighet (SoV / Sentiment / Parity)
 ├── jobs/                   Cloud Run Jobs (cron-styrda)
 │   ├── scrape_active.py
-│   ├── scrape_episodic.py
 │   ├── scrape_website.py    veckovis domän-crawl per kund
 │   ├── extract_claims.py    narrativ claims-extraktion per kund (--client-id)
 │   ├── extract_all_claims.py  fan-out över alla kunder (cron-bar)
@@ -56,7 +55,6 @@ insider-graph-api/
 | `insider-graph-api` | webhooks + admin-API | service (always-on) |
 | `scrape-website` | Cloud Scheduler måndagar 03:45 | job |
 | `scrape-active` | Cloud Scheduler dagligen 04:00 | job |
-| `scrape-episodic` | Cloud Scheduler måndagar 04:30 | job |
 | `extract-all-claims` | Cloud Scheduler dagligen 04:45 | job |
 | `compile-all-schemas` | Cloud Scheduler dagligen 05:00 + Eventarc | job |
 | `polling-weekly` | Cloud Scheduler tisdagar 06:00 | job |

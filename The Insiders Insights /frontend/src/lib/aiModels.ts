@@ -30,9 +30,12 @@ export interface ModelEntry {
   purpose: string;
   latestKnown: string;
   checkedAt: string; // ISO YYYY-MM-DD
+  effectiveSince: string; // ISO YYYY-MM-DD — brytlinje i tidsserier vid modellbyte
+  vertexLocation?: string; // "global" / "europe-west1" / etc — endast Vertex-providers
 }
 
 const _CHECKED = "2026-06-02";
+const _EFFECTIVE = "2026-06-02";
 
 export const MODEL_REGISTRY: readonly ModelEntry[] = [
   {
@@ -42,6 +45,7 @@ export const MODEL_REGISTRY: readonly ModelEntry[] = [
     purpose: "Generering + relevansgrindning för claims-pipelinen",
     latestKnown: "gemini-3.5-flash",
     checkedAt: _CHECKED,
+    effectiveSince: _EFFECTIVE,
   },
   {
     role: "geo_validator",
@@ -51,6 +55,7 @@ export const MODEL_REGISTRY: readonly ModelEntry[] = [
       "Precisionskritisk validator i claims-pipelinen (senaste stabla pro; 3.x-pro är fortfarande preview)",
     latestKnown: "gemini-2.5-pro",
     checkedAt: _CHECKED,
+    effectiveSince: _EFFECTIVE,
   },
   {
     role: "esg_reasoner",
@@ -59,22 +64,36 @@ export const MODEL_REGISTRY: readonly ModelEntry[] = [
     purpose: "ESG-frågegenerering + svarsklassning",
     latestKnown: "gemini-2.5-pro",
     checkedAt: _CHECKED,
+    effectiveSince: _EFFECTIVE,
   },
   {
     role: "probe_claude",
-    modelId: "claude-sonnet-4-5",
+    modelId: "claude-sonnet-4-6",
     provider: "vertex_anthropic",
-    purpose: "Claude-probe i polling + risk_detector (Vertex Model Garden, EU)",
-    latestKnown: "claude-sonnet-4-5",
+    purpose: "Claude-probe i polling + risk_detector (Vertex Model Garden, global)",
+    latestKnown: "claude-sonnet-4-6",
     checkedAt: _CHECKED,
+    effectiveSince: _EFFECTIVE,
+    vertexLocation: "global",
   },
   {
     role: "probe_gemini",
     modelId: "gemini-2.5-pro",
     provider: "vertex_gemini",
-    purpose: "Gemini-probe i polling + risk_detector (Vertex AI EU)",
+    purpose: "Gemini-probe i polling + risk_detector (Vertex AI global)",
     latestKnown: "gemini-2.5-pro",
     checkedAt: _CHECKED,
+    effectiveSince: _EFFECTIVE,
+    vertexLocation: "global",
+  },
+  {
+    role: "probe_openai",
+    modelId: "gpt-5.5",
+    provider: "openai",
+    purpose: "ChatGPT-probe i polling + risk_detector (OpenAI direkt — finns inte i Vertex)",
+    latestKnown: "gpt-5.5",
+    checkedAt: _CHECKED,
+    effectiveSince: _EFFECTIVE,
   },
   {
     role: "email_extractor_openai",
@@ -83,6 +102,7 @@ export const MODEL_REGISTRY: readonly ModelEntry[] = [
     purpose: "Strukturera fritext-mail till Schema.org Event (primär)",
     latestKnown: "gpt-5.5",
     checkedAt: _CHECKED,
+    effectiveSince: _EFFECTIVE,
   },
   {
     role: "email_extractor_gemini",
@@ -91,6 +111,7 @@ export const MODEL_REGISTRY: readonly ModelEntry[] = [
     purpose: "Strukturera fritext-mail till Schema.org Event (fallback)",
     latestKnown: "gemini-3.5-flash",
     checkedAt: _CHECKED,
+    effectiveSince: _EFFECTIVE,
   },
   {
     role: "agent_default",
@@ -99,6 +120,7 @@ export const MODEL_REGISTRY: readonly ModelEntry[] = [
     purpose: "Default-modell för admin-agenten",
     latestKnown: "claude-opus-4-8",
     checkedAt: _CHECKED,
+    effectiveSince: _EFFECTIVE,
   },
   {
     role: "agent_sonnet",
@@ -107,6 +129,7 @@ export const MODEL_REGISTRY: readonly ModelEntry[] = [
     purpose: "Sonnet-alternativ i admin-dropdown (snabbare/billigare)",
     latestKnown: "claude-sonnet-4-6",
     checkedAt: _CHECKED,
+    effectiveSince: _EFFECTIVE,
   },
   {
     role: "agent_haiku",
@@ -115,6 +138,7 @@ export const MODEL_REGISTRY: readonly ModelEntry[] = [
     purpose: "Haiku-alternativ i admin-dropdown (lägst latens)",
     latestKnown: "claude-haiku-4-5-20251001",
     checkedAt: _CHECKED,
+    effectiveSince: _EFFECTIVE,
   },
   {
     role: "dataset_summarizer",
@@ -123,6 +147,7 @@ export const MODEL_REGISTRY: readonly ModelEntry[] = [
     purpose: "Skriver kort sammanfattning vid nytt dataset",
     latestKnown: "gemini-3.5-flash",
     checkedAt: _CHECKED,
+    effectiveSince: _EFFECTIVE,
   },
 ] as const;
 
@@ -147,6 +172,7 @@ export const GEO_VALIDATOR_MODEL = modelId("geo_validator");
 export const ESG_REASONER_MODEL = modelId("esg_reasoner");
 export const PROBE_CLAUDE_MODEL = modelId("probe_claude");
 export const PROBE_GEMINI_MODEL = modelId("probe_gemini");
+export const PROBE_OPENAI_MODEL = modelId("probe_openai");
 
 // --- Admin-agentens dropdown ---------------------------------------------
 

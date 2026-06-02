@@ -12,9 +12,22 @@
  * onboarding-flödet (vid uppsättning). Talar med /api/attested/* (routers/attested.py).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { UploadCloud, FileCheck2, RefreshCw, PlusCircle, CheckCircle2, AlertCircle } from 'lucide-react';
+import { UploadCloud, FileCheck2, RefreshCw, PlusCircle, CheckCircle2, AlertCircle, Trash2 } from 'lucide-react';
 import { graphColors as C } from './GraphPageShell';
 import { graphFetch } from '../_lib/api';
+
+// Filtyper + label-text per källtyp — text-baserade källor (people_bio) tar PDF/text,
+// LinkedIn-export-källor tar XLS/CSV.
+const FILE_HINTS: Record<string, { accept: string; label: string }> = {
+  people_bio: {
+    accept: '.pdf,.txt,.md',
+    label: 'Dra PDF eller textfil med personbiografier hit, eller klicka',
+  },
+};
+const DEFAULT_FILE_HINT = {
+  accept: '.csv,.tsv,.txt,.xls,.xlsx',
+  label: 'Dra fil hit (LinkedIn-export .xls/.xlsx eller CSV) eller klicka',
+};
 
 type SourceType = {
   key: string;
@@ -95,9 +108,12 @@ function SourceUploader({ clientId, source, onDone }: { clientId: string; source
   const [err, setErr] = useState<string | null>(null);
   const [including, setIncluding] = useState(false);
   const [showSamples, setShowSamples] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const replace = source.mode === 'replace';
+  const fileHint = FILE_HINTS[source.key] || DEFAULT_FILE_HINT;
+  const hasData = source.staged > 0 || source.included > 0;
 
   async function includeInDelivery() {
     setIncluding(true);
@@ -109,6 +125,21 @@ function SourceUploader({ clientId, source, onDone }: { clientId: string; source
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
       setIncluding(false);
+    }
+  }
+
+  async function clearAll() {
+    if (!window.confirm(`Radera all data för "${source.label}"? Det tas bort från leveransen vid nästa kompilering.`)) return;
+    setClearing(true);
+    setErr(null);
+    setResult(null);
+    try {
+      await graphFetch(`/api/attested/${clientId}/${source.key}`, { method: 'DELETE' });
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setClearing(false);
     }
   }
 
@@ -141,7 +172,19 @@ function SourceUploader({ clientId, source, onDone }: { clientId: string; source
         <div style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56', display: 'flex', alignItems: 'center', gap: 8 }}>
           <FileCheck2 size={15} color={C.accent} /> {source.label}
         </div>
-        <ModeBadge replace={replace} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {hasData && (
+            <button
+              onClick={clearAll}
+              disabled={clearing}
+              title="Radera all data för källan"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', background: 'transparent', color: '#b91c1c', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: clearing ? 'wait' : 'pointer' }}
+            >
+              <Trash2 size={11} /> {clearing ? 'Raderar…' : 'Rensa'}
+            </button>
+          )}
+          <ModeBadge replace={replace} />
+        </div>
       </div>
 
       <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>{source.description}</div>
@@ -227,12 +270,12 @@ function SourceUploader({ clientId, source, onDone }: { clientId: string; source
       >
         <UploadCloud size={22} color={C.muted} />
         <div style={{ fontSize: 12, fontWeight: 600, color: '#3a4b56', marginTop: 4 }}>
-          {busy ? 'Laddar upp…' : 'Dra fil hit (LinkedIn-export .xls/.xlsx eller CSV) eller klicka'}
+          {busy ? 'Laddar upp…' : fileHint.label}
         </div>
         <input
           ref={fileInput}
           type="file"
-          accept=".csv,.tsv,.txt,.xls,.xlsx"
+          accept={fileHint.accept}
           style={{ display: 'none' }}
           onChange={(e) => {
             const f = e.target.files?.[0];

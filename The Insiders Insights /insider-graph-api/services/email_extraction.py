@@ -20,6 +20,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 
 from config import settings
+from services import model_registry
 
 log = logging.getLogger(__name__)
 
@@ -97,14 +98,14 @@ def _pick_llm():
     if settings.openai_api_key:
         return ChatOpenAI(
             api_key=settings.openai_api_key,
-            model="gpt-4o",
+            model=model_registry.get_id("email_extractor_openai"),
             temperature=0,
             timeout=30,
         )
     if settings.gemini_api_key:
         return ChatGoogleGenerativeAI(
             google_api_key=settings.gemini_api_key,
-            model="gemini-1.5-pro",
+            model=model_registry.get_id("email_extractor_gemini"),
             temperature=0,
             timeout=30,
         )

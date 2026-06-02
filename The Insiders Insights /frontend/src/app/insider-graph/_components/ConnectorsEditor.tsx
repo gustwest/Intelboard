@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plug, Plus, Trash2, Save, Check, AlertCircle, Users } from 'lucide-react';
+import { Plug, Plus, Trash2, Save, Check, AlertCircle } from 'lucide-react';
 import { graphColors as C } from './GraphPageShell';
 import { graphFetch } from '../_lib/api';
 
@@ -11,7 +11,6 @@ type State = {
   available: ConnectorMeta[];
   active_connectors: string[];
   rss_feeds: RssFeed[];
-  scrape_employee_profiles: boolean;
 };
 
 const NAME: Record<string, string> = {
@@ -20,12 +19,11 @@ const NAME: Record<string, string> = {
 };
 const SCHEMA_OPTIONS = ['NewsArticle', 'JobPosting', 'PodcastEpisode', 'Event'];
 
-/** Per-kund connector-konfiguration (välj connectors + RSS + scrapa-medarbetare). */
+/** Per-kund connector-konfiguration (välj connectors + RSS-feeds). */
 export default function ConnectorsEditor({ clientId }: { clientId: string }) {
   const [state, setState] = useState<State | null>(null);
   const [active, setActive] = useState<string[]>([]);
   const [feeds, setFeeds] = useState<RssFeed[]>([]);
-  const [scrapeEmployees, setScrapeEmployees] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
@@ -38,7 +36,6 @@ export default function ConnectorsEditor({ clientId }: { clientId: string }) {
         setState(d);
         setActive(d.active_connectors || []);
         setFeeds(d.rss_feeds || []);
-        setScrapeEmployees(!!d.scrape_employee_profiles);
         setDirty(false);
       })
       .catch((e) => { if (!cancelled) setMsg({ tone: 'error', text: e instanceof Error ? e.message : String(e) }); });
@@ -64,7 +61,6 @@ export default function ConnectorsEditor({ clientId }: { clientId: string }) {
         body: JSON.stringify({
           active_connectors: active,
           rss_feeds: feeds.filter((f) => f.url.trim()),
-          scrape_employee_profiles: scrapeEmployees,
         }),
       });
       setDirty(false);
@@ -118,12 +114,6 @@ export default function ConnectorsEditor({ clientId }: { clientId: string }) {
               );
             })}
           </div>
-
-          {/* Scrapa medarbetares LinkedIn-profiler */}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: C.muted, marginTop: 12, cursor: 'pointer' }}>
-            <input type="checkbox" checked={scrapeEmployees} onChange={(e) => { setScrapeEmployees(e.target.checked); setDirty(true); }} />
-            <Users size={13} /> Hämta medarbetares LinkedIn-profiler (bara node_type=aktiv)
-          </label>
 
           {active.includes('rss') && (
             <div style={{ marginTop: 14 }}>

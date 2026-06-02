@@ -1,22 +1,18 @@
 """Modellregister — auktoritativ källa för vilka AI-modeller systemet använder.
 
-POLICY: **alltid senaste stabla modellen i varje provider/roll.** Inga "medvetna
-pinningar" finns. När `latest_known` uppdateras → uppdatera samtidigt `model_id`
-och `checked_at` i samma commit. Drift-scannen flaggar varje avvikelse.
+POLICY: **alltid senaste stabla modellen i varje provider/roll.** När `latest_known`
+uppdateras → uppdatera samtidigt `model_id`, `checked_at` och (vid faktiskt byte)
+`effective_since` i samma commit. Drift-scannen flaggar varje avvikelse.
 
-Driver:
-  * services/llm.py (resonemang + probe-motorer)
-  * services/email_extraction.py (event-extraktion)
-  * /api/model-registry (frontend speglar)
-  * jobs/model_drift_scan (veckovis: model_id != latest_known → warning,
-    checked_at >90 dagar → påminnelse, hårdkodning utanför registret → warning)
+EU-residens hanteras PER ENTRY via `vertex_location`:
+  * Resonemangsroller (geo_*, esg_*) ligger kvar i EU (settings.vertex_location).
+  * Probe-roller använder "global" — payloaden är publik (bolagsnamn + generisk
+    fråga), ingen kunddata, och global endpoint ger bästa modelltillgänglighet +
+    minst latens (dynamisk routing).
 
-Verifiering: `latest_known` sätts genom att läsa providerns modell-doc-sida.
-`checked_at` markerar när det senast verifierades. När 90 dagar gått flaggar
-scannen i inboxen så ops kör om verifieringen.
-
-Lägg ALDRIG till nya hårdkodade model-ID utanför detta register — scannen
-flaggar det automatiskt.
+`effective_since` (ISO-datum) markerar när nuvarande `model_id` började användas.
+Polling/AI-synlighet ritar en brytlinje där så jämförelser över bytet inte tolkas
+som äkta trend (kalibreringsskydd).
 """
 from __future__ import annotations
 
@@ -26,22 +22,24 @@ from typing import Iterable
 
 @dataclass(frozen=True)
 class ModelEntry:
-    role: str                # stabil nyckel, t.ex. "geo_validator"
-    model_id: str            # det vi faktiskt skickar till leverantören (= latest_known)
-    provider: str            # "vertex_gemini" | "openai" | "google_genai" | "vertex_anthropic" | "claude_code_cli"
-    purpose: str             # kort beskrivning på svenska
-    latest_known: str        # senaste stabla modell-ID hos providern (verifierat)
-    checked_at: str          # ISO-datum då latest_known senast verifierades
+    role: str
+    model_id: str
+    provider: str
+    purpose: str
+    latest_known: str
+    checked_at: str
+    effective_since: str
+    # Vertex-region per roll. Tomt = använd settings.vertex_location (default EU).
+    # Sätt "global" för dynamisk routing (probe-roller), "europe-west1" / etc för
+    # explicit pinning. Endast meningsfullt för Vertex-providers.
+    vertex_location: str = ""
 
 
-# CHECKED_AT delas av alla entries vid en samlad verifiering — varje rad får dock
-# sätta sitt eget värde om endast en provider verifierats vid ett tillfälle.
 _CHECKED = "2026-06-02"
+_EFFECTIVE = "2026-06-02"
 
 _REGISTRY: tuple[ModelEntry, ...] = (
-    # --- GEO-claims-pipelinen (Vertex EU) ---------------------------------
-    # 2026-06-02: gemini-3.5-flash är senaste stabla flash (Gemini 3.1-pro
-    # är fortfarande preview, så validatorn håller 2.5-pro tills 3.x-pro stabiliseras).
+    # --- GEO-claims-pipelinen (Vertex EU — kunddata) ----------------------
     ModelEntry(
         role="geo_generator",
         model_id="gemini-3.5-flash",
@@ -49,14 +47,16 @@ _REGISTRY: tuple[ModelEntry, ...] = (
         purpose="Generering + relevansgrindning för claims-pipelinen (services/llm.make_generator)",
         latest_known="gemini-3.5-flash",
         checked_at=_CHECKED,
+        effective_since=_EFFECTIVE,
     ),
     ModelEntry(
         role="geo_validator",
         model_id="gemini-2.5-pro",
         provider="vertex_gemini",
-        purpose="Precisionskritisk validator i claims-pipelinen (services/llm.make_validator)",
+        purpose="Precisionskritisk validator i claims-pipelinen (senaste stabla pro; 3.x-pro är preview)",
         latest_known="gemini-2.5-pro",
         checked_at=_CHECKED,
+        effective_since=_EFFECTIVE,
     ),
     # --- ESG-loopens resonemangsmodell (Vertex EU) ------------------------
     ModelEntry(
@@ -66,31 +66,42 @@ _REGISTRY: tuple[ModelEntry, ...] = (
         purpose="ESG-frågegenerering + svarsklassning (services/llm.make_esg_reasoner)",
         latest_known="gemini-2.5-pro",
         checked_at=_CHECKED,
+        effective_since=_EFFECTIVE,
     ),
-    # --- Probe-motorer (de AI-assistenter VI MÄTER) ----------------------
-    # Sedan 2026-06-02 körs båda probes via Vertex AI (samma EU-projekt som
-    # validator). Vertex Gemini = identiska modell-weights som AI Studio och
-    # publika Gemini-API:t (Google: "same models, different platforms").
-    # Claude på Vertex Model Garden = samma Claude-modell som Claude.ai (Anthropic).
-    # Vinster: en auth-väg (service account/ADC), EU-residency för all probe-trafik,
-    # ingen separat API-nyckel-hantering, ingen risk för whitespace-förorenade headers.
-    # Mätsignal-not: byte från OpenAI-direkt → Claude-Vertex skiftar serien — logga
-    # datumet 2026-06-02 och tolka pre/post separat tills nya baseline är låst.
+    # --- Probe-motorer (publika AI-assistenter VI MÄTER) -------------------
+    # Payloaden är publik (bolagsnamn + generisk fråga). EU-låsningen är inaktuell
+    # här — vi vill istället ha bästa möjliga mätvaliditet och tillgänglighet:
+    #   * Vertex-probarna kör global endpoint → dynamisk routing, ny modell-release
+    #     når oss direkt utan region-glapp.
+    #   * OpenAI-proben är direktanslutning eftersom GPT inte finns i Vertex.
     ModelEntry(
         role="probe_claude",
-        model_id="claude-sonnet-4-5",
+        model_id="claude-sonnet-4-6",
         provider="vertex_anthropic",
-        purpose="Claude-probe i polling + risk_detector (services/llm._vertex_anthropic)",
-        latest_known="claude-sonnet-4-5",
+        purpose="Claude-probe i polling + risk_detector (Vertex Model Garden, global)",
+        latest_known="claude-sonnet-4-6",
         checked_at=_CHECKED,
+        effective_since=_EFFECTIVE,
+        vertex_location="global",
     ),
     ModelEntry(
         role="probe_gemini",
         model_id="gemini-2.5-pro",
         provider="vertex_gemini",
-        purpose="Gemini-probe i polling + risk_detector (via Vertex AI EU)",
+        purpose="Gemini-probe i polling + risk_detector (Vertex AI global)",
         latest_known="gemini-2.5-pro",
         checked_at=_CHECKED,
+        effective_since=_EFFECTIVE,
+        vertex_location="global",
+    ),
+    ModelEntry(
+        role="probe_openai",
+        model_id="gpt-5.5",
+        provider="openai",
+        purpose="ChatGPT-probe i polling + risk_detector (OpenAI direkt — finns inte i Vertex)",
+        latest_known="gpt-5.5",
+        checked_at=_CHECKED,
+        effective_since=_EFFECTIVE,
     ),
     # --- E-postextraktion (services/email_extraction._pick_llm) -----------
     ModelEntry(
@@ -100,6 +111,7 @@ _REGISTRY: tuple[ModelEntry, ...] = (
         purpose="Strukturera fritext-mail till Schema.org Event (primär)",
         latest_known="gpt-5.5",
         checked_at=_CHECKED,
+        effective_since=_EFFECTIVE,
     ),
     ModelEntry(
         role="email_extractor_gemini",
@@ -108,15 +120,17 @@ _REGISTRY: tuple[ModelEntry, ...] = (
         purpose="Strukturera fritext-mail till Schema.org Event (fallback)",
         latest_known="gemini-3.5-flash",
         checked_at=_CHECKED,
+        effective_since=_EFFECTIVE,
     ),
     # --- Claude Code admin-agent (backend/) -------------------------------
     ModelEntry(
         role="agent_default",
         model_id="claude-opus-4-8",
         provider="claude_code_cli",
-        purpose="Default-modell för admin-agenten (backend/routers/agent.py, frontend dropdown)",
+        purpose="Default-modell för admin-agenten",
         latest_known="claude-opus-4-8",
         checked_at=_CHECKED,
+        effective_since=_EFFECTIVE,
     ),
     ModelEntry(
         role="agent_sonnet",
@@ -125,6 +139,7 @@ _REGISTRY: tuple[ModelEntry, ...] = (
         purpose="Sonnet-alternativ i admin-dropdown (snabbare/billigare)",
         latest_known="claude-sonnet-4-6",
         checked_at=_CHECKED,
+        effective_since=_EFFECTIVE,
     ),
     ModelEntry(
         role="agent_haiku",
@@ -133,6 +148,7 @@ _REGISTRY: tuple[ModelEntry, ...] = (
         purpose="Haiku-alternativ i admin-dropdown (lägst latens)",
         latest_known="claude-haiku-4-5-20251001",
         checked_at=_CHECKED,
+        effective_since=_EFFECTIVE,
     ),
     # --- backend/ai.py dataset-summarizer ---------------------------------
     ModelEntry(
@@ -142,8 +158,19 @@ _REGISTRY: tuple[ModelEntry, ...] = (
         purpose="Skriver kort sammanfattning vid nytt dataset (backend/ai.py)",
         latest_known="gemini-3.5-flash",
         checked_at=_CHECKED,
+        effective_since=_EFFECTIVE,
     ),
 )
+
+
+# Historiska model-ID som fortfarande får dyka upp i koden — typiskt lookup-
+# nycklar i historiska Firestore-payloads (trust_gap_report.ENGINE_SV mappar
+# t.ex. legacy "gpt-4o"-engine-strängar till visningsnamnet "ChatGPT").
+LEGACY_ALIASES: frozenset[str] = frozenset({
+    "gpt-4o",            # tidigare probe_openai (ersatt av gpt-5.5)
+    "gemini-1.5-pro",    # tidigare probe_gemini & email_extractor_gemini
+    "claude-sonnet-4-5", # tidigare probe_claude EU-pinnad (ersatt av sonnet-4-6 via global)
+})
 
 
 def get(role: str) -> ModelEntry:
@@ -162,18 +189,10 @@ def all_entries() -> tuple[ModelEntry, ...]:
     return _REGISTRY
 
 
-# Historiska model-ID som fortfarande får dyka upp i koden — typiskt som lookup-
-# nycklar för historiska Firestore-payloads (trust_gap_report.ENGINE_SV mappar
-# t.ex. legacy "gpt-4o"-engine-strängar till visningsnamnet "ChatGPT"). De är
-# inte aktiv runtime-konfig — men drift-scannen får inte flagga dem som
-# "unauthorized_hardcode". Rensa bort raden när den sista historiska posten
-# i Firestore har sin TTL passerat.
-LEGACY_ALIASES: frozenset[str] = frozenset({
-    "gpt-4o",          # tidigare probe_openai (direkt OpenAI), ersatt 2026-06-02 av Claude-Vertex
-    "gpt-5.5",         # kort interimsversion som probe_openai före Vertex-flytten
-    "gemini-1.5-pro",  # tidigare probe_gemini (direkt google_genai)
-    "gemini-3.5-flash", # tidigare probe_gemini-version före vertex-flytten
-})
+def location_for(role: str) -> str:
+    """Returnera Vertex-region för en roll. Tom string → använd settings.vertex_location.
+    Anropare ska normalt göra: ``entry.vertex_location or settings.vertex_location``."""
+    return get(role).vertex_location
 
 
 def authorized_model_ids() -> set[str]:
