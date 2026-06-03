@@ -147,23 +147,30 @@ _REGISTRY: tuple[ModelEntry, ...] = (
     ModelEntry(
         role="email_extractor_openai",
         # Samma rollback som probe_openai (gpt-5.5 → gpt-4.1) — se den entryns kommentar.
+        # 2026-06-03 (samma datum): bytte roll från primär → fallback när email_extractor_gemini
+        # flyttades till Vertex EU. Behålls för dual-provider-resiliens.
         model_id="gpt-4.1",
         provider="openai",
-        purpose="Strukturera fritext-mail till Schema.org Event (primär)",
+        purpose="Strukturera fritext-mail till Schema.org Event (fallback)",
         latest_known="gpt-4.1",
         checked_at="2026-06-03",
         effective_since="2026-06-03",
     ),
     ModelEntry(
         role="email_extractor_gemini",
-        # 2026-06-03: rollback från 3.5-flash (404 överallt) → 2.5-flash som
-        # är deployad i EU. Se geo_generator-kommentaren.
+        # 2026-06-03: Två ändringar på samma dag —
+        #   (1) rollback 3.5-flash → 2.5-flash (3.5 finns inte i Vertex)
+        #   (2) flyttade från google_genai-direkt (USA) till Vertex EU — mailinnehåll
+        #       räknas som kunddata enligt EU-policyn och måste stanna i Europa.
+        # Samtidigt befordrad till PRIMÄR (OpenAI är nu fallback). Kostnadsfördelen
+        # är ~6× billigare per token + bättre rate-limits + multi-modal-stöd för bilagor.
         model_id="gemini-2.5-flash",
-        provider="google_genai",
-        purpose="Strukturera fritext-mail till Schema.org Event (fallback)",
+        provider="vertex_gemini",
+        purpose="Strukturera fritext-mail till Schema.org Event (primär, Vertex EU)",
         latest_known="gemini-2.5-flash",
         checked_at="2026-06-03",
         effective_since="2026-06-03",
+        vertex_location="europe-west1",
     ),
     # --- Claude Code admin-agent (backend/) -------------------------------
     ModelEntry(

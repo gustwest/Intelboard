@@ -90,6 +90,41 @@ def make_esg_reasoner():
     )
 
 
+def make_email_extractor_gemini():
+    """Email-fritext → Schema.org Event. PRIMÄR sedan 2026-06-03 (flippat från OpenAI).
+
+    Via Vertex AI EU så mail-innehållet (kunddata: personnamn, kontakter, kalender-
+    detaljer) stannar i europe-west1. None om Vertex inte är konfigurerat — då
+    faller email_extraction tillbaka till OpenAI-versionen.
+    """
+    if not settings.gcp_project:
+        log.warning("EU-only: GCP-projekt ej satt — email_extractor_gemini otillgänglig")
+        return None
+    mid = model_registry.get_id("email_extractor_gemini")
+    return token_meter.track(
+        _vertex_gemini(mid, location=_location_for("email_extractor_gemini")),
+        mid,
+    )
+
+
+def make_email_extractor_openai():
+    """Email-fritext → Schema.org Event. FALLBACK sedan 2026-06-03.
+
+    Används när Gemini-primären faller (Vertex-fel, kvot, etc). Direkt mot OpenAI
+    — bryter mot EU-residenskravet men acceptabelt som tillfällig fallback medan
+    den primära Vertex-vägen är nere; alternativet vore att tappa email-event-
+    flödet helt. None om OPENAI_API_KEY saknas.
+    """
+    if not settings.openai_api_key:
+        return None
+    from langchain_openai import ChatOpenAI
+    mid = model_registry.get_id("email_extractor_openai")
+    return token_meter.track(
+        ChatOpenAI(api_key=settings.openai_api_key, model=mid, temperature=0, timeout=30),
+        mid,
+    )
+
+
 # Konstruktions-sömmar (lazy import → modulen kan importeras utan SDK; patchas i tester).
 def _vertex_gemini(model: str, temperature: float = 0, location: str | None = None):
     from langchain_google_vertexai import ChatVertexAI

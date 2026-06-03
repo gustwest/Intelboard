@@ -125,23 +125,27 @@ export const MODEL_REGISTRY: readonly ModelEntry[] = [
   },
   {
     role: "email_extractor_openai",
-    // 2026-06-03: rollback gpt-5.5 → gpt-4.1 (samma skäl som probe_openai).
+    // 2026-06-03: rollback gpt-5.5 → gpt-4.1 + nedgradering primär → fallback
+    // (Gemini-Vertex-EU tog över primary för EU-residens på mailinnehåll).
     modelId: "gpt-4.1",
     provider: "openai",
-    purpose: "Strukturera fritext-mail till Schema.org Event (primär)",
+    purpose: "Strukturera fritext-mail till Schema.org Event (fallback)",
     latestKnown: "gpt-4.1",
     checkedAt: "2026-06-03",
     effectiveSince: "2026-06-03",
   },
   {
     role: "email_extractor_gemini",
-    // 2026-06-03: rollback från 3.5-flash → 2.5-flash. Speglar backend.
+    // 2026-06-03: två ändringar samma dag — rollback 3.5-flash → 2.5-flash, och
+    // flytt från google_genai (USA) → vertex_gemini europe-west1 (EU-residens på
+    // mailinnehåll). Samtidigt befordrad fallback → primär. Speglar backend.
     modelId: "gemini-2.5-flash",
-    provider: "google_genai",
-    purpose: "Strukturera fritext-mail till Schema.org Event (fallback)",
+    provider: "vertex_gemini",
+    purpose: "Strukturera fritext-mail till Schema.org Event (primär, Vertex EU)",
     latestKnown: "gemini-2.5-flash",
     checkedAt: "2026-06-03",
     effectiveSince: "2026-06-03",
+    vertexLocation: "europe-west1",
   },
   {
     role: "agent_default",

@@ -34,9 +34,11 @@ from services import llm as llm_factory
 # i prod — fältet category_competitors blir tomt men polling-jobbet fortsätter.
 POLLING_EXTRACT_ORGS = os.environ.get("POLLING_EXTRACT_ORGS", "1") not in ("0", "false", "False", "")
 # Per-anrop-timeouter — polling-jobbet får ALDRIG hänga, oavsett LLM-läge. Justera via env.
+# 2026-06-03: ORG-timeout höjd 8→20 (Gemini Vertex EU svarar typiskt på 3-4s men 6-8s vid
+# cold start, vilket gav timeout-storm i prod), JUDGE-timeout 12→20 av samma skäl.
 POLLING_ASK_TIMEOUT_SEC = float(os.environ.get("POLLING_ASK_TIMEOUT_SEC", "30"))
-POLLING_JUDGE_TIMEOUT_SEC = float(os.environ.get("POLLING_JUDGE_TIMEOUT_SEC", "12"))
-POLLING_ORG_TIMEOUT_SEC = float(os.environ.get("POLLING_ORG_TIMEOUT_SEC", "8"))
+POLLING_JUDGE_TIMEOUT_SEC = float(os.environ.get("POLLING_JUDGE_TIMEOUT_SEC", "20"))
+POLLING_ORG_TIMEOUT_SEC = float(os.environ.get("POLLING_ORG_TIMEOUT_SEC", "20"))
 
 T = TypeVar("T")
 
