@@ -20,7 +20,10 @@ router = APIRouter(prefix="/api/polling", tags=["polling"])
 # Engine-health-cache — undviker en LLM-probe per UI-render. 60s är tillräckligt för
 # att fånga "trasig sedan en stund" utan att kosta pengar varje pingbacknämarknad.
 _HEALTH_CACHE_SEC = 60.0
-_HEALTH_PROBE_TIMEOUT_SEC = 5.0
+# 5s var för snålt — Gemini via Vertex svarar ofta på 3-4s vid cold start och
+# Anthropic global routing kan svara på 6-7s. 12s ger en ordentlig marginal utan
+# att fördröja UI:t orimligt mycket (engine-health är inte i kritisk väg).
+_HEALTH_PROBE_TIMEOUT_SEC = 12.0
 _health_cache: dict[str, Any] = {"ts": 0.0, "data": None}
 _health_lock = threading.Lock()
 
