@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from db import init_db
 from logging_config import log
-from routers import agent, ai_chat, chat, customers, dashboard, datasets, issues, misc, modules, notes, reports, sources
+from routers import agent, ai_chat, chat, cost, customers, dashboard, datasets, issues, misc, modules, notes, reports, sources
 
 # ------------------------------------------------------------------
 # App setup
@@ -69,4 +69,5 @@ app.include_router(issues.router)
 app.include_router(chat.router)
 app.include_router(agent.router)
 app.include_router(ai_chat.router)
+app.include_router(cost.router)
 app.include_router(misc.router)
