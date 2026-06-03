@@ -212,63 +212,75 @@ def _vertex_mistral(model: str, location: str | None = None):
 # --- Probe-motorer (de publika AI-assistenterna vi MÄTER) ---------------------
 
 
-def make_probe_engines() -> dict[str, Any]:
-    """Probarna (Claude + Gemini + ChatGPT) mäter de publika AI-assistenter användare
-    träffar. Sedan 2026-06-02 kör Vertex-probarna `vertex_location="global"` — payloaden
-    är publik (bolagsnamn + generisk fråga), EU-residens behövs inte, och global endpoint
-    ger dynamisk routing + snabbast modelluppgradering. ChatGPT-proben går direkt mot
-    OpenAI eftersom GPT inte finns i Vertex Model Garden.
+def _planned_probe_ids() -> set[str]:
+    """Probarna som är markerade "planned" i PROBE_ENGINE_REGISTRY — dessa ska INTE
+    returneras av make_probe_engines() (polling/risk_detector skulle annars retry:a
+    404/timeout dem för varje fråga och hänga). Single source of truth: status-fältet
+    i PROBE_ENGINE_REGISTRY längre ner."""
+    return {row["id"] for row in PROBE_ENGINE_REGISTRY if row.get("status") == "planned"}
 
-    Per-probe-isolering: en motors init-fel ska inte slå ut de andra (polling kör hellre
-    med en motor mindre än ingen alls)."""
+
+def make_probe_engines() -> dict[str, Any]:
+    """Probarna (Claude + Gemini + ChatGPT + ev. Mistral + Perplexity) mäter de publika
+    AI-assistenter användare träffar. Vertex-probarna kör typiskt `vertex_location="global"`
+    eller en EU-region — payloaden är publik (bolagsnamn + generisk fråga), EU-residens
+    behövs inte. ChatGPT-proben går direkt mot OpenAI eftersom GPT inte finns i Vertex
+    Model Garden. Perplexity-proben går direkt mot api.perplexity.ai (web-RAG-signal).
+
+    Per-probe-isolering: en motors init-fel ska inte slå ut de andra.
+
+    Filtrering: motorer som är markerade "planned" i PROBE_ENGINE_REGISTRY SKIPPAS HELT.
+    De skulle annars förbruka polling-jobbets retries och timeouts utan att ge data."""
     engines: dict[str, Any] = {}
+    planned = _planned_probe_ids()
 
     if settings.gcp_project:
-        try:
-            gid = model_registry.get_id("probe_gemini")
-            engines[gid] = token_meter.track(
-                _vertex_gemini(gid, location=_location_for("probe_gemini")), gid,
-            )
-        except Exception as exc:
-            log.warning("Gemini probe (Vertex) init failed: %s", exc)
+        gid = model_registry.get_id("probe_gemini")
+        if gid not in planned:
+            try:
+                engines[gid] = token_meter.track(
+                    _vertex_gemini(gid, location=_location_for("probe_gemini")), gid,
+                )
+            except Exception as exc:
+                log.warning("Gemini probe (Vertex) init failed: %s", exc)
 
-        try:
-            cid = model_registry.get_id("probe_claude")
-            engines[cid] = token_meter.track(
-                _vertex_anthropic(cid, location=_location_for("probe_claude")), cid,
-            )
-        except Exception as exc:
-            log.warning("Claude probe (Vertex) init failed: %s", exc)
+        cid = model_registry.get_id("probe_claude")
+        if cid not in planned:
+            try:
+                engines[cid] = token_meter.track(
+                    _vertex_anthropic(cid, location=_location_for("probe_claude")), cid,
+                )
+            except Exception as exc:
+                log.warning("Claude probe (Vertex) init failed: %s", exc)
 
-        # Mistral är markerad "planned" i PROBE_ENGINE_REGISTRY just nu — modellen
-        # returnerar 404 i alla regioner trots EULA. Vi initialiserar ändå klienten
-        # så polling-loopen är redo att aktivera sig så fort modellen blir nåbar
-        # (då räcker det att flippa "planned" → "live" i PROBE_ENGINE_REGISTRY).
-        try:
-            mid = model_registry.get_id("probe_mistral")
-            engines[mid] = token_meter.track(
-                _vertex_mistral(mid, location=_location_for("probe_mistral")), mid,
-            )
-        except Exception as exc:
-            log.warning("Mistral probe (Vertex) init failed: %s", exc)
+        mid = model_registry.get_id("probe_mistral")
+        if mid not in planned:
+            try:
+                engines[mid] = token_meter.track(
+                    _vertex_mistral(mid, location=_location_for("probe_mistral")), mid,
+                )
+            except Exception as exc:
+                log.warning("Mistral probe (Vertex) init failed: %s", exc)
     else:
         log.warning("GCP-projekt ej satt — Vertex-probar otillgängliga (ChatGPT-proben kan ändå köra)")
 
     if settings.openai_api_key:
-        try:
-            oid = model_registry.get_id("probe_openai")
-            engines[oid] = token_meter.track(_openai_chat(oid), oid)
-        except Exception as exc:
-            log.warning("OpenAI probe init failed: %s", exc)
+        oid = model_registry.get_id("probe_openai")
+        if oid not in planned:
+            try:
+                engines[oid] = token_meter.track(_openai_chat(oid), oid)
+            except Exception as exc:
+                log.warning("OpenAI probe init failed: %s", exc)
     else:
         log.warning("OPENAI_API_KEY ej satt — ChatGPT-probe inte tillgänglig")
 
     if settings.perplexity_api_key:
-        try:
-            pid = model_registry.get_id("probe_perplexity")
-            engines[pid] = token_meter.track(_perplexity_chat(pid), pid)
-        except Exception as exc:
-            log.warning("Perplexity probe init failed: %s", exc)
+        pid = model_registry.get_id("probe_perplexity")
+        if pid not in planned:
+            try:
+                engines[pid] = token_meter.track(_perplexity_chat(pid), pid)
+            except Exception as exc:
+                log.warning("Perplexity probe init failed: %s", exc)
     else:
         log.warning("PERPLEXITY_API_KEY ej satt — Perplexity-probe (web-RAG-signal) inte tillgänglig")
 

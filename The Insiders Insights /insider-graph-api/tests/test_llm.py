@@ -75,6 +75,12 @@ class ProbeEnginesTest(unittest.TestCase):
     Garden. Mistral kommer via Vertex MaaS (OpenAI-kompatibel endpoint)."""
 
     def setUp(self):
+        # Patcha PROBE_ENGINE_REGISTRY så alla probarna är "live" under test —
+        # produktionsstatus (planned) skulle annars filtrera bort dem och
+        # få testerna att förvänta sig fel uppsättning.
+        self._orig_registry = [dict(r) for r in llm.PROBE_ENGINE_REGISTRY]
+        for row in llm.PROBE_ENGINE_REGISTRY:
+            row["status"] = "live"
         self._orig = (
             llm.settings.gcp_project, llm.settings.openai_api_key,
             llm.settings.vertex_location,
@@ -86,6 +92,9 @@ class ProbeEnginesTest(unittest.TestCase):
         llm._openai_chat = lambda model: ("openai", model)
 
     def tearDown(self):
+        # Återställ status-flaggorna
+        for i, row in enumerate(llm.PROBE_ENGINE_REGISTRY):
+            row["status"] = self._orig_registry[i]["status"]
         (llm.settings.gcp_project, llm.settings.openai_api_key,
          llm.settings.vertex_location,
          llm._vertex_gemini, llm._vertex_anthropic, llm._vertex_mistral, llm._openai_chat) = self._orig
