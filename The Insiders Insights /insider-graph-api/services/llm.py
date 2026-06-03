@@ -114,16 +114,16 @@ def _vertex_anthropic(model: str, location: str | None = None):
 def _openai_chat(model: str):
     """OpenAI direktanslutning — GPT-modeller finns inte i Vertex Model Garden.
 
-    GPT-5-modeller stöder INTE temperature=0 (returnerar 400 "Only the default is
-    supported"). Vi sätter därför ingen temperature alls för gpt-5* — låter API:t
-    använda sitt default. Tidigare modeller (gpt-4*) får fortsatt 0 för
-    polling-konsistens."""
+    GPT-5-modeller stöder ENDAST temperature=1 (default). Värden < 1 returnerar
+    400 "Only the default is supported". ChatOpenAI:s internt default är 0.7 →
+    måste sättas explicit till 1 för gpt-5*. Tidigare modeller (gpt-4*) får
+    fortsatt 0 för polling-konsistens."""
     from langchain_openai import ChatOpenAI
 
-    kwargs: dict[str, Any] = {"api_key": settings.openai_api_key, "model": model, "timeout": 60}
-    if not model.startswith("gpt-5"):
-        kwargs["temperature"] = 0
-    return ChatOpenAI(**kwargs)
+    temperature = 1 if model.startswith("gpt-5") else 0
+    return ChatOpenAI(
+        api_key=settings.openai_api_key, model=model, temperature=temperature, timeout=60,
+    )
 
 
 def _perplexity_chat(model: str):
