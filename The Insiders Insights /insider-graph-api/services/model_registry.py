@@ -97,11 +97,13 @@ _REGISTRY: tuple[ModelEntry, ...] = (
         role="probe_gemini",
         model_id="gemini-2.5-pro",
         provider="vertex_gemini",
-        purpose="Gemini-probe i polling + risk_detector (Vertex AI global)",
+        purpose="Gemini-probe i polling + risk_detector (Vertex AI EU)",
         latest_known="gemini-2.5-pro",
         checked_at=_CHECKED,
-        effective_since=_EFFECTIVE,
-        vertex_location="global",
+        effective_since="2026-06-03",
+        # gemini-2.5-pro finns inte på global endpoint (501→404). europe-west1 fungerar
+        # och stannar i EU för konsistens med resonemangs-modellerna.
+        vertex_location="europe-west1",
     ),
     ModelEntry(
         role="probe_openai",
@@ -116,11 +118,13 @@ _REGISTRY: tuple[ModelEntry, ...] = (
         role="probe_mistral",
         model_id="mistral-medium-3",
         provider="vertex_mistral",
-        purpose="Mistral Le Chat-probe (Vertex MaaS, OpenAI-kompatibel endpoint, global)",
+        purpose="Mistral Le Chat-probe (Vertex MaaS, OpenAI-kompatibel endpoint, EU)",
         latest_known="mistral-medium-3",
         checked_at=_CHECKED,
-        effective_since=_EFFECTIVE,
-        vertex_location="global",
+        effective_since="2026-06-03",
+        # Mistral MaaS finns inte på global endpoint (HTML 404). europe-west4 fungerar
+        # (us-central1 är fallback). Wrappern lägger till "mistralai/"-publisher-prefix.
+        vertex_location="europe-west4",
     ),
     ModelEntry(
         role="probe_perplexity",

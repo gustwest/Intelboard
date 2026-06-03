@@ -139,7 +139,13 @@ def _vertex_mistral(model: str, location: str | None = None):
     """Mistral via Vertex Model Garden MaaS — OpenAI-kompatibel chat-completions-endpoint.
     Auth görs med en kortlivad gcloud-access-token (service account), inte med en separat
     Mistral-API-nyckel. Vertex förnyar tokenen, men vi får inte cache:a klienten över längre
-    tid eftersom tokenen löper ut (~60 min) — byggs nytt per make_probe_engines()-anrop."""
+    tid eftersom tokenen löper ut (~60 min) — byggs nytt per make_probe_engines()-anrop.
+
+    Två format-krav som inte är uppenbara:
+      1. Vertex MaaS för Mistral kräver `<publisher>/<model>` i model-strängen (annars 400
+         "Malformed publisher model"). Vi prefixar `mistralai/` här om det saknas.
+      2. global endpoint stöder INTE Mistral (HTML 404) — använd regional location
+         (europe-west4 / us-central1)."""
     from google.auth import default as _gauth_default
     from google.auth.transport.requests import Request as _GAuthRequest
     from langchain_openai import ChatOpenAI
@@ -152,8 +158,9 @@ def _vertex_mistral(model: str, location: str | None = None):
         f"https://{loc}-aiplatform.googleapis.com/v1beta1/projects/{settings.gcp_project}/"
         f"locations/{loc}/endpoints/openapi"
     )
+    model_id = model if "/" in model else f"mistralai/{model}"
     return ChatOpenAI(
-        model=model,
+        model=model_id,
         base_url=base_url,
         api_key=credentials.token,
         temperature=0,
@@ -192,6 +199,10 @@ def make_probe_engines() -> dict[str, Any]:
         except Exception as exc:
             log.warning("Claude probe (Vertex) init failed: %s", exc)
 
+        # Mistral är markerad "planned" i PROBE_ENGINE_REGISTRY just nu — modellen
+        # returnerar 404 i alla regioner trots EULA. Vi initialiserar ändå klienten
+        # så polling-loopen är redo att aktivera sig så fort modellen blir nåbar
+        # (då räcker det att flippa "planned" → "live" i PROBE_ENGINE_REGISTRY).
         try:
             mid = model_registry.get_id("probe_mistral")
             engines[mid] = token_meter.track(
@@ -233,12 +244,14 @@ PROBE_ENGINE_REGISTRY: list[dict[str, Any]] = [
     {"id": model_registry.get_id("probe_claude"), "label": "Claude",
      "vendor": "Anthropic (Vertex global)", "status": "live", "note": None},
     {"id": model_registry.get_id("probe_gemini"), "label": "Gemini",
-     "vendor": "Google (Vertex global)", "status": "live", "note": None},
+     "vendor": "Google (Vertex europe-west1)", "status": "live", "note": None},
     {"id": model_registry.get_id("probe_openai"), "label": "ChatGPT",
      "vendor": "OpenAI (direkt)", "status": "live", "note": None},
     {"id": model_registry.get_id("probe_mistral"), "label": "Mistral Le Chat",
-     "vendor": "Mistral AI (Vertex MaaS)", "status": "live",
-     "note": "EU-baserad probe-motor — kräver MaaS-EULA i Model Garden"},
+     "vendor": "Mistral AI (Vertex MaaS)", "status": "planned",
+     "note": "EULA är accepterad men modellen returnerar 404 i alla regioner — "
+             "kräver troligen Console-prenumeration utöver EULA. Se "
+             "docs/model-activation-todo.md."},
     {"id": model_registry.get_id("probe_perplexity"), "label": "Perplexity",
      "vendor": "Perplexity AI (web-RAG)", "status": "live", "note": None},
     {"id": "copilot", "label": "Copilot", "vendor": "Microsoft", "status": "planned",

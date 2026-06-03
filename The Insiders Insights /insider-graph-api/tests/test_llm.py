@@ -137,18 +137,20 @@ class ProbeEnginesTest(unittest.TestCase):
             model_registry.get_id("probe_openai"),
         })
 
-    def test_probes_use_global_vertex_location(self):
-        """vertex_location='global' i registret ska överstyra settings."""
+    def test_probes_use_registry_location_override(self):
+        """vertex_location i registret ska överstyra settings per roll. Verifierar att
+        Claude (global), Gemini (europe-west1) och Mistral (europe-west4) följer registret
+        oavsett att settings.vertex_location pekar på något annat."""
         llm.settings.gcp_project = "proj-eu"
         llm.settings.openai_api_key = ""
-        llm.settings.vertex_location = "europe-west1"
+        llm.settings.vertex_location = "europe-north1"  # avsiktligt fel — registret ska vinna
         engines = llm.make_probe_engines()
         claude_inner = engines[model_registry.get_id("probe_claude")]._inner
         gemini_inner = engines[model_registry.get_id("probe_gemini")]._inner
         mistral_inner = engines[model_registry.get_id("probe_mistral")]._inner
-        self.assertEqual(claude_inner[-1], "global")
-        self.assertEqual(gemini_inner[-1], "global")
-        self.assertEqual(mistral_inner[-1], "global")
+        self.assertEqual(claude_inner[-1], model_registry.get("probe_claude").vertex_location)
+        self.assertEqual(gemini_inner[-1], model_registry.get("probe_gemini").vertex_location)
+        self.assertEqual(mistral_inner[-1], model_registry.get("probe_mistral").vertex_location)
 
 
 if __name__ == "__main__":

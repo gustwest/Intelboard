@@ -23,7 +23,12 @@ För varje av nedan: sök på namnet → klicka kortet → **ENABLE** → accept
 - [ ] **Claude Sonnet 4.6** (Anthropic Commercial ToS)
 - [ ] **Claude Opus 4.8** (Anthropic Commercial ToS)
 - [ ] **Claude Haiku 4.5** (Anthropic Commercial ToS)
-- [ ] **Mistral Medium 3** (Mistral Commercial ToS)
+- [ ] **Mistral Medium 3** (Mistral Commercial ToS) — **OBS**: efter EULA-klicket kräver
+      Mistral troligen även en explicit "Subscribe" eller "Request access"-knapp på samma
+      sida. EULA ensam räcker INTE — i prod-test fick vi 404 på `mistral-medium-3` i alla
+      regioner trots accepterad EULA. Probe_mistral är därför markerad som `planned` i
+      `PROBE_ENGINE_REGISTRY` tills aktiveringen är komplett. När du löst det:
+      flippa `"status": "planned"` → `"live"` i `services/llm.py` och pusha.
 
 ### Steg 2: Skapa Perplexity API-nyckel (~3 min)
 
