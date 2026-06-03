@@ -11,12 +11,24 @@ _cfg_log = logging.getLogger(__name__)
 _INVISIBLE_JUNK = re.compile(r"[\ufeff\u200b\u200c\u200d\ufffc\r]")
 
 
+# Sentinels som vi medvetet använder för "secret skapad men nyckel inte ifylld
+# ännu" (t.ex. Perplexity-secreten skapas av bootstrap med en placeholder så
+# Cloud Run kan binda den; riktig nyckel sätts som ny version senare). Sanitering
+# nedan returnerar tom string för dessa → make_probe_engines skippar proben tyst
+# istället för att försöka anropa providern med ett ogiltigt värde.
+_PLACEHOLDER_PREFIXES = ("placeholder", "REPLACE_ME", "your-", "TODO")
+
+
 def _sanitize_api_key(raw: str, field_name: str) -> str:
     """Strip whitespace, newlines, BOM och zero-width-tecken från en API-nyckel.
+    Tystar även placeholder-värden (se _PLACEHOLDER_PREFIXES) genom att returnera
+    tom string — då hoppar konsumenten tyst över proben tills en riktig nyckel
+    läggs in.
 
-    Loggar en WARNING om kontaminering hittades — synligt i prod-loggar utan att
-    tjänsten kraschar. Kallas av Pydantic-validatorn vid Settings-konstruktion,
-    dvs vid import — alla konsumenter (llm.py, polling.py) får ett rent värde.
+    Loggar en WARNING om kontaminering eller placeholder hittades — synligt i prod-
+    loggar utan att tjänsten kraschar. Kallas av Pydantic-validatorn vid Settings-
+    konstruktion, dvs vid import — alla konsumenter (llm.py, polling.py) får ett
+    rent värde.
     """
     if not raw:
         return raw
@@ -27,6 +39,13 @@ def _sanitize_api_key(raw: str, field_name: str) -> str:
             "BOM/zero-width). Auto-rensad vid laddning — men rotera nyckeln för säkerhets skull.",
             field_name, len(raw), len(clean),
         )
+    if any(clean.startswith(p) for p in _PLACEHOLDER_PREFIXES):
+        _cfg_log.warning(
+            "%s är en placeholder (börjar med %r) — returneras som tom så proben skippas "
+            "tyst tills en riktig nyckel läggs in i Secret Manager.",
+            field_name, clean[:24],
+        )
+        return ""
     return clean
 
 
@@ -45,6 +64,10 @@ class Settings(BaseSettings):
     # är att mäta de motorer användare faktiskt träffar. Se services/llm.py + projektminne.
     openai_api_key: str = ""
     gemini_api_key: str = ""
+    # Perplexity-probe: separat direkt-API (Perplexity finns inte i Vertex Model
+    # Garden). Mäter AI-discoverability (web-RAG-signal) — distinkt från training-
+    # data-baserade probarna. Saknas nyckeln → proben skippas tyst i make_probe_engines.
+    perplexity_api_key: str = ""
     # (Ingen anthropic_api_key: validatorn (Claude) går via Vertex AI EU, inte
     # förstaparts-API. EU-only-beslut 2026-05-26. Se services/llm.py.)
 
@@ -52,7 +75,7 @@ class Settings(BaseSettings):
     # osynliga Unicode-tecken vid laddning. Förhindrar 'Illegal header value' (httpx)
     # och gRPC UNAUTHENTICATED-fel som orsakas av kontaminerade env-värden.
     # Se docs/api-key-rotation-runbook.md.
-    @field_validator("openai_api_key", "gemini_api_key", "sendgrid_api_key", "admin_api_key", mode="before")
+    @field_validator("openai_api_key", "gemini_api_key", "perplexity_api_key", "sendgrid_api_key", "admin_api_key", mode="before")
     @classmethod
     def _strip_api_keys(cls, v: str, info) -> str:
         return _sanitize_api_key(v, info.field_name) if isinstance(v, str) else v
