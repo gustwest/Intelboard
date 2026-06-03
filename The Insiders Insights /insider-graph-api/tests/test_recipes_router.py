@@ -67,6 +67,64 @@ class ListRecipesTest(unittest.TestCase):
         self.assertEqual(out["recipes"][0]["recipe_id"], "over_claim-ethics")
 
 
+class InterventionAttachmentTest(unittest.TestCase):
+    """Listan ska bifoga intervention per recept (Fas 1.4 → Fas 1.5)."""
+
+    def test_intervention_attached_when_present(self):
+        rid = "missing_evidence-ethics"
+        fakefs.reset(
+            client={"company_name": "Acme AB"},
+            recipes={rid: _recipe(rid, "acted")},
+            interventions={
+                "int-1": {
+                    "intervention_id": "int-1",
+                    "recipe_id": rid,
+                    "status": "open",
+                    "updated_at": "2026-06-03T10:00:00+00:00",
+                    "baseline": {"demonstrated": 0.0},
+                }
+            },
+        )
+        out = router.list_recipes("acme")
+        recipe = out["recipes"][0]
+        self.assertIsNotNone(recipe.get("intervention"))
+        self.assertEqual(recipe["intervention"]["intervention_id"], "int-1")
+
+    def test_no_intervention_field_is_none(self):
+        # Recept utan tillhörande intervention → fältet ska finnas men vara None,
+        # så frontend kan särskilja "inte mätt än" från "data saknas".
+        fakefs.reset(
+            client={"company_name": "Acme AB"},
+            recipes={"missing_evidence-ethics": _recipe("missing_evidence-ethics", "pending")},
+        )
+        out = router.list_recipes("acme")
+        self.assertIn("intervention", out["recipes"][0])
+        self.assertIsNone(out["recipes"][0]["intervention"])
+
+    def test_open_intervention_trumps_resolved(self):
+        # Om båda finns för samma recept (osannolikt men möjligt vid debug) ska
+        # öppen visas — operatören vill se aktiv mätning.
+        rid = "missing_evidence-ethics"
+        fakefs.reset(
+            client={"company_name": "Acme AB"},
+            recipes={rid: _recipe(rid, "acted")},
+            interventions={
+                "int-resolved": {
+                    "intervention_id": "int-resolved", "recipe_id": rid,
+                    "status": "resolved_full",
+                    "updated_at": "2026-06-10T10:00:00+00:00",
+                },
+                "int-open": {
+                    "intervention_id": "int-open", "recipe_id": rid,
+                    "status": "open",
+                    "updated_at": "2026-06-05T10:00:00+00:00",  # tidigare timestamp
+                },
+            },
+        )
+        out = router.list_recipes("acme")
+        self.assertEqual(out["recipes"][0]["intervention"]["intervention_id"], "int-open")
+
+
 class TransitionStatusTest(unittest.TestCase):
     def test_happy_path_pending_to_agreed(self):
         _setup({"missing_evidence-ethics": _recipe("missing_evidence-ethics", "pending")})

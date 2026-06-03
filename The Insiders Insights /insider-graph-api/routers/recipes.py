@@ -41,9 +41,25 @@ class StatusUpdate(BaseModel):
 def list_recipes(
     client_id: str, status: str | None = None, gap_type: str | None = None,
 ) -> dict[str, Any]:
-    """Lista alla recept för en kund. Filter på status/gap_type (queryparametrar)."""
+    """Lista alla recept för en kund. Filter på status/gap_type (queryparametrar).
+
+    Varje recept inkluderar dess senaste intervention (Fas 1.4) inline så
+    frontend bara behöver ett anrop för att rendera hela kommandocentralen.
+    """
     if not fs.client_doc(client_id).get().exists:
         raise HTTPException(404, f"client not found: {client_id}")
+
+    # Indexera interventioner per recipe_id — välj senaste (öppen trumpar resolved
+    # vid samma updated_at; annars senaste updated_at vinner). Operatörens UI är
+    # alltid intresserad av den nyligaste statusen.
+    intervention_by_recipe: dict[str, dict[str, Any]] = {}
+    for _iid, idata in fs.iter_interventions(client_id):
+        rid_link = idata.get("recipe_id")
+        if not rid_link:
+            continue
+        existing = intervention_by_recipe.get(rid_link)
+        if existing is None or _newer_intervention(idata, existing):
+            intervention_by_recipe[rid_link] = idata
 
     items: list[dict[str, Any]] = []
     for rid, data in fs.iter_recipes(client_id):
@@ -51,7 +67,11 @@ def list_recipes(
             continue
         if gap_type and (data.get("skeleton") or {}).get("gap_type") != gap_type:
             continue
-        items.append({"recipe_id": rid, **data})
+        items.append({
+            "recipe_id": rid,
+            **data,
+            "intervention": intervention_by_recipe.get(rid),
+        })
 
     # Sortera: pending först (operatörens kö), sen agreed/acted, sen avslutade.
     status_order = {"pending": 0, "agreed": 1, "acted": 2, "verified": 3, "dismissed": 4}
@@ -66,6 +86,16 @@ def list_recipes(
         counts[s] = counts.get(s, 0) + 1
 
     return {"client_id": client_id, "recipes": items, "counts": counts}
+
+
+def _newer_intervention(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    """True om a är "senare" än b. Öppen status trumpar terminal vid lika-stora
+    timestamps — operatören vill se den aktiva mätningen, inte den avslutade."""
+    a_open = a.get("status") == "open"
+    b_open = b.get("status") == "open"
+    if a_open != b_open:
+        return a_open
+    return (a.get("updated_at") or "") > (b.get("updated_at") or "")
 
 
 @router.post("/{client_id}/generate")

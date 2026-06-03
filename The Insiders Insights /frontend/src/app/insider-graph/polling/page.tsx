@@ -335,6 +335,90 @@ type Humanization = {
   raw?: { overall_score?: number | null; coverage?: { declared?: number; demonstrated?: number; of?: number } };
 };
 
+// --- Receptmotorn (speglar services/recipes.py + services/interventions.py — Fas 1.5) ---
+
+type RecipeSkeleton = {
+  gap_type: string;
+  dimension: string;
+  dimension_label: string;
+  knowledge_source_target: 'training' | 'web_rag' | 'both';
+  action_type: string;
+  target_channels: string[];
+  why_template: string;
+  skeleton_text: string;
+  expected_impact_metric: string;
+  confidence: number;
+};
+type RecipeDetailsType = {
+  detailed_action: string;
+  specific_proof_points: string[];
+  prioritized_channel: string;
+  prioritized_channel_reason: string;
+  success_criteria: string;
+  refined_why: string;
+  risks: string[];
+};
+type InterventionStatus =
+  | 'open' | 'resolved_full' | 'resolved_partial'
+  | 'no_change_yet' | 'regressed' | 'abandoned';
+type Intervention = {
+  intervention_id: string;
+  recipe_id: string;
+  dimension: string;
+  gap_type: string;
+  knowledge_source_target?: string | null;
+  prioritized_channel?: string | null;
+  baseline: {
+    declared?: number | null;
+    demonstrated?: number | null;
+    valence?: number | null;
+    salience?: number | null;
+    flag_kinds?: string[];
+    captured_at?: string;
+  };
+  current: {
+    declared?: number | null;
+    demonstrated?: number | null;
+    valence?: number | null;
+    salience?: number | null;
+    flag_kinds?: string[];
+    measured_at?: string;
+  };
+  status: InterventionStatus;
+  closure: {
+    valence_delta: number | null;
+    demonstrated_delta: number | null;
+    flag_kinds_removed: string[];
+    flag_kinds_added: string[];
+    closed_at: string | null;
+    days_to_close: number | null;
+  } | null;
+  acted_at: string;
+};
+type RecipeStatus = 'pending' | 'agreed' | 'acted' | 'verified' | 'dismissed';
+type Recipe = {
+  recipe_id: string;
+  client_id: string;
+  skeleton: RecipeSkeleton;
+  details: RecipeDetailsType | null;
+  detailifier_model: string;
+  detailified_at: string | null;
+  status: RecipeStatus;
+  created_at: string;
+  updated_at: string;
+  agreed_at: string | null;
+  acted_at: string | null;
+  verified_at: string | null;
+  dismissed_at: string | null;
+  notes: { at: string; status: string; text: string }[];
+  intervention: Intervention | null;
+};
+type RecipesResp = {
+  client_id: string;
+  recipes: Recipe[];
+  counts: Record<RecipeStatus, number>;
+};
+
 const PERSONAS: Persona[] = ['buyer', 'candidate', 'investor'];
 
 // Konsekvent status-palett: röd = öppen/risk, gul = väntar handling, grön = löst, lila = pågående,
@@ -368,6 +452,9 @@ export default function GraphRiskLoopPage() {
   const [polling, setPolling] = useState<PollingWeek[] | null>(null);
   const [schedules, setSchedules] = useState<SchedulesResp | null>(null);
   const [humanization, setHumanization] = useState<Humanization | null>(null);
+  const [recipes, setRecipes] = useState<RecipesResp | null>(null);
+  const [recipeBusyId, setRecipeBusyId] = useState<string | null>(null);
+  const [generatingRecipes, setGeneratingRecipes] = useState(false);
   const [riskTimeline, setRiskTimeline] = useState<RiskTimelineResp | null>(null);
   const [riskQuestions, setRiskQuestions] = useState<RiskQuestionsResp | null>(null);
   const [engineHealth, setEngineHealth] = useState<EngineHealthResp | null>(null);
@@ -499,6 +586,47 @@ export default function GraphRiskLoopPage() {
       cancelled = true;
     };
   }, [selected, refreshTick]);
+
+  // Recept-listan (Fas 1.5) — speglar /api/recipes med intervention attached.
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
+    graphFetch<RecipesResp>(`/api/recipes/${selected}`)
+      .then((d) => !cancelled && setRecipes(d))
+      .catch(() => !cancelled && setRecipes(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [selected, refreshTick]);
+
+  async function transitionRecipe(recipeId: string, status: 'agreed' | 'acted' | 'dismissed', note?: string) {
+    if (!selected) return;
+    setRecipeBusyId(recipeId);
+    try {
+      await graphFetch(`/api/recipes/${selected}/${recipeId}/status`, {
+        method: 'POST', body: JSON.stringify({ status, note: note || null }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+      setRefreshTick((t) => t + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRecipeBusyId(null);
+    }
+  }
+
+  async function regenerateRecipes() {
+    if (!selected) return;
+    setGeneratingRecipes(true);
+    try {
+      await graphFetch(`/api/recipes/${selected}/generate`, { method: 'POST' });
+      setRefreshTick((t) => t + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setGeneratingRecipes(false);
+    }
+  }
 
   // Closed-loop tidslinje per risk — alla statusar, inte bara öppna.
   useEffect(() => {
@@ -652,7 +780,17 @@ export default function GraphRiskLoopPage() {
       )}
 
       {/* Förtroendegap-cockpit — staplar i ops, bara plain-text i kund-läge */}
-      {humanization?.available && <TrustGapCockpit model={humanization} mode={mode} />}
+      {humanization?.available && (
+        <TrustGapCockpit
+          model={humanization}
+          mode={mode}
+          recipes={recipes}
+          recipeBusyId={recipeBusyId}
+          generatingRecipes={generatingRecipes}
+          onTransition={transitionRecipe}
+          onRegenerate={regenerateRecipes}
+        />
+      )}
 
       {/* Closed-loop tidslinje per risk — detektion → åtgärd → resolved, oberoende av månadsrapport */}
       {riskTimeline && <RiskLifecycleTimeline data={riskTimeline} approvedQuestions={riskQuestions?.counts.approved ?? null} />}
@@ -1274,13 +1412,37 @@ function Sparkline({ series, width = 88, height = 22 }: { series: (number | null
   );
 }
 
-function TrustGapCockpit({ model, mode }: { model: Humanization; mode: ViewMode }) {
+function TrustGapCockpit({
+  model, mode, recipes, recipeBusyId, generatingRecipes, onTransition, onRegenerate,
+}: {
+  model: Humanization;
+  mode: ViewMode;
+  recipes: RecipesResp | null;
+  recipeBusyId: string | null;
+  generatingRecipes: boolean;
+  onTransition: (recipeId: string, status: 'agreed' | 'acted' | 'dismissed', note?: string) => void;
+  onRegenerate: () => void;
+}) {
   const dims = model.dimensions || [];
   const flags = model.opportunities_and_risks || [];
   const ranked = model.ranked_actions || [];
   const trend = model.trend;
   // Kund-läge: defaulta kollapsad (mindre brus); Ops-läge: öppen (man behöver dykningen).
   const [open, setOpen] = useState(mode === 'ops');
+  // Recept per dimension för per-rad-badge i DimensionRow.
+  const recipeByDimension = new Map<string, Recipe>();
+  (recipes?.recipes || []).forEach((r) => {
+    const existing = recipeByDimension.get(r.skeleton.dimension);
+    // Aktivast först: pending > agreed > acted > verified > dismissed.
+    const score = (rec: Recipe) =>
+      ['pending', 'agreed', 'acted', 'verified', 'dismissed'].indexOf(rec.status);
+    if (!existing || score(r) < score(existing)) {
+      recipeByDimension.set(r.skeleton.dimension, r);
+    }
+  });
+  const activeRecipes = (recipes?.recipes || []).filter(
+    (r) => r.status !== 'verified' && r.status !== 'dismissed',
+  );
   return (
     <div style={{ ...cardStyle, marginBottom: 18 }}>
       <SectionHead
@@ -1303,6 +1465,17 @@ function TrustGapCockpit({ model, mode }: { model: Humanization; mode: ViewMode 
       {trend?.note && !trend.previous_date && (
         <div style={{ fontSize: 12, color: C.dim, margin: '0 0 14px', fontStyle: 'italic' }}>{trend.note}</div>
       )}
+
+      {/* Aktiva recept — sammanställning + expanderbar detalj per recept (Fas 1.5). */}
+      <RecipesPanel
+        recipes={recipes}
+        activeRecipes={activeRecipes}
+        mode={mode}
+        busyId={recipeBusyId}
+        generating={generatingRecipes}
+        onTransition={onTransition}
+        onRegenerate={onRegenerate}
+      />
 
       {ranked.length > 0 && (
         <div style={{ marginBottom: 16, padding: '12px 14px', background: 'rgba(159,81,182,0.06)', border: '1px solid rgba(159,81,182,0.18)', borderRadius: 8 }}>
@@ -1327,7 +1500,14 @@ function TrustGapCockpit({ model, mode }: { model: Humanization; mode: ViewMode 
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {dims.map((d) => <DimensionRow key={d.dimension} dim={d} mode={mode} />)}
+        {dims.map((d) => (
+          <DimensionRow
+            key={d.dimension}
+            dim={d}
+            mode={mode}
+            recipe={recipeByDimension.get(d.dimension) || null}
+          />
+        ))}
       </div>
       </>
       )}
@@ -1335,7 +1515,7 @@ function TrustGapCockpit({ model, mode }: { model: Humanization; mode: ViewMode 
   );
 }
 
-function DimensionRow({ dim, mode }: { dim: HumanizationDim; mode: ViewMode }) {
+function DimensionRow({ dim, mode, recipe }: { dim: HumanizationDim; mode: ViewMode; recipe?: Recipe | null }) {
   const raw = dim.raw || {};
   const declared = typeof raw.declared === 'number' ? raw.declared : null;
   const demonstrated = typeof raw.demonstrated === 'number' ? raw.demonstrated : null;
@@ -1351,8 +1531,15 @@ function DimensionRow({ dim, mode }: { dim: HumanizationDim; mode: ViewMode }) {
     <div style={{ padding: '14px 0', borderBottom: `1px solid ${C.border}` }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56' }}>{dim.label}</div>
-        {overClaim && <span style={trustGapBadge('#b45309', 'rgba(245,158,11,0.14)')}>Risk: över-claim</span>}
-        {opportunity && <span style={trustGapBadge('#0e7490', 'rgba(14,116,144,0.12)')}>Möjlighet: berätta mer</span>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {overClaim && <span style={trustGapBadge('#b45309', 'rgba(245,158,11,0.14)')}>Risk: över-claim</span>}
+          {opportunity && <span style={trustGapBadge('#0e7490', 'rgba(14,116,144,0.12)')}>Möjlighet: berätta mer</span>}
+          {recipe && mode === 'ops' && (
+            <span style={trustGapBadge(...recipeStatusColor(recipe.status))} title={`Recept: ${RECIPE_STATUS_LABEL[recipe.status]}`}>
+              {RECIPE_STATUS_LABEL[recipe.status]}
+            </span>
+          )}
+        </div>
       </div>
       {mode === 'ops' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 10 }}>
@@ -1400,6 +1587,299 @@ function DimensionRow({ dim, mode }: { dim: HumanizationDim; mode: ViewMode }) {
       {dim.confidence_note && <div style={{ fontSize: 11, color: C.dim, marginTop: 4, fontStyle: 'italic' }}>{dim.confidence_note}</div>}
     </div>
   );
+}
+
+// --- Recept-UI (Fas 1.5) ------------------------------------------------------
+
+const RECIPE_STATUS_LABEL: Record<RecipeStatus, string> = {
+  pending:   'Förslag',
+  agreed:    'Godkänt',
+  acted:     'Publicerat',
+  verified:  'Verifierat',
+  dismissed: 'Avfärdat',
+};
+
+function recipeStatusColor(status: RecipeStatus): [string, string] {
+  switch (status) {
+    case 'pending':   return ['#9f51b6', 'rgba(159,81,182,0.12)'];  // lila — väntar handling
+    case 'agreed':    return ['#0e7490', 'rgba(14,116,144,0.12)'];  // blå — i loopen
+    case 'acted':     return ['#b45309', 'rgba(245,158,11,0.14)'];  // gul — mäts nu
+    case 'verified':  return ['#16a34a', 'rgba(22,163,74,0.12)'];   // grön — loopen stängd
+    case 'dismissed': return ['#6a7e8a', 'rgba(106,126,138,0.12)']; // grå — terminal
+  }
+}
+
+const KNOWLEDGE_SOURCE_LABEL_SHORT: Record<string, string> = {
+  training: 'Bas-kunskap',
+  web_rag:  'Live-signal',
+  both:     'Bas + Live',
+  hybrid:   'Hybrid',
+};
+
+const CHANNEL_LABEL_SV: Record<string, string> = {
+  attested_upload: 'Attesterad upload',
+  linkedin:        'LinkedIn',
+  rss:             'RSS-flöde',
+  press:           'Pressmeddelande',
+  wikipedia:       'Wikipedia',
+  glassdoor:       'Glassdoor',
+  website:         'Hemsida',
+  github:          'GitHub',
+  diagnosis:       'Diagnos först',
+};
+
+function RecipesPanel({
+  recipes, activeRecipes, mode, busyId, generating, onTransition, onRegenerate,
+}: {
+  recipes: RecipesResp | null;
+  activeRecipes: Recipe[];
+  mode: ViewMode;
+  busyId: string | null;
+  generating: boolean;
+  onTransition: (recipeId: string, status: 'agreed' | 'acted' | 'dismissed', note?: string) => void;
+  onRegenerate: () => void;
+}) {
+  const counts = recipes?.counts || { pending: 0, agreed: 0, acted: 0, verified: 0, dismissed: 0 };
+  const isEmpty = !recipes || recipes.recipes.length === 0;
+  // Kund-läge: bara en sammanställning. Ops-läge: hela detaljen.
+  if (mode === 'customer') {
+    if (isEmpty) return null;
+    const openCount = counts.pending + counts.agreed + counts.acted;
+    return (
+      <div style={{ marginBottom: 14, padding: '10px 14px', background: 'rgba(14,116,144,0.06)', border: '1px solid rgba(14,116,144,0.18)', borderRadius: 8 }}>
+        <div style={{ fontSize: 12, color: '#3a4b56' }}>
+          <strong>{openCount}</strong> öppna recept under intern review · <strong>{counts.verified}</strong> verifierade i tidigare cykler
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ marginBottom: 16, padding: '12px 14px', background: 'rgba(14,116,144,0.04)', border: '1px solid rgba(14,116,144,0.18)', borderRadius: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+        <div style={{ fontSize: 11, color: '#0e7490', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Aktiva recept</div>
+        <div style={{ display: 'flex', gap: 10, fontSize: 11, color: C.muted }}>
+          <span><strong style={{ color: '#9f51b6' }}>{counts.pending}</strong> förslag</span>
+          <span><strong style={{ color: '#0e7490' }}>{counts.agreed}</strong> godkända</span>
+          <span><strong style={{ color: '#b45309' }}>{counts.acted}</strong> mäts nu</span>
+          <span><strong style={{ color: '#16a34a' }}>{counts.verified}</strong> verifierade</span>
+          <button
+            onClick={onRegenerate}
+            disabled={generating}
+            title="Kör receptmotorn mot aktuell trust_gap"
+            style={{
+              padding: '3px 10px', fontSize: 11, fontWeight: 600,
+              background: 'transparent', color: '#0e7490',
+              border: '1px solid rgba(14,116,144,0.4)', borderRadius: 6,
+              cursor: generating ? 'wait' : 'pointer',
+            }}
+          >
+            {generating ? 'Genererar…' : 'Generera om'}
+          </button>
+        </div>
+      </div>
+      {isEmpty ? (
+        <p style={{ fontSize: 12, color: C.dim, margin: '6px 0 0', fontStyle: 'italic' }}>
+          Inga recept genererade än. Klicka &quot;Generera om&quot; för att köra receptmotorn mot aktuell trust_gap.
+        </p>
+      ) : activeRecipes.length === 0 ? (
+        <p style={{ fontSize: 12, color: C.dim, margin: '6px 0 0', fontStyle: 'italic' }}>
+          Alla recept är avslutade — antingen verifierade eller avfärdade. Kör &quot;Generera om&quot; när nya gap upptäcks.
+        </p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {activeRecipes.map((r) => (
+            <RecipeRow key={r.recipe_id} recipe={r} busy={busyId === r.recipe_id} onTransition={onTransition} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RecipeRow({
+  recipe, busy, onTransition,
+}: {
+  recipe: Recipe;
+  busy: boolean;
+  onTransition: (recipeId: string, status: 'agreed' | 'acted' | 'dismissed', note?: string) => void;
+}) {
+  const [open, setOpen] = useState(recipe.status === 'pending');  // pending defaultar öppen — kö-kö-kö
+  const [color, bg] = recipeStatusColor(recipe.status);
+  const skel = recipe.skeleton;
+  const det = recipe.details;
+  return (
+    <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 12px' }}>
+      <div
+        onClick={() => setOpen((o) => !o)}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, cursor: 'pointer' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <span style={{ ...trustGapBadge(color, bg), flexShrink: 0 }}>{RECIPE_STATUS_LABEL[recipe.status]}</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56' }}>{skel.dimension_label}</span>
+          <span style={{ fontSize: 11, color: C.muted }}>·</span>
+          <span style={{ fontSize: 11, color: C.muted, fontStyle: 'italic' }}>{gapTypeLabel(skel.gap_type)}</span>
+          <span style={{ fontSize: 11, color: C.muted }}>·</span>
+          <span style={{ fontSize: 11, color: C.dim }}>{KNOWLEDGE_SOURCE_LABEL_SHORT[skel.knowledge_source_target] || skel.knowledge_source_target}</span>
+        </div>
+        <span style={{ fontSize: 11, color: C.dim }}>{open ? '▾' : '▸'}</span>
+      </div>
+      {open && (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${C.border}` }}>
+          {det ? (
+            <>
+              <p style={{ fontSize: 12, color: '#3a4b56', margin: '0 0 8px', lineHeight: 1.55 }}>
+                <strong>Varför:</strong> {det.refined_why}
+              </p>
+              <p style={{ fontSize: 12, color: '#3a4b56', margin: '0 0 8px', lineHeight: 1.55 }}>
+                <strong>Att göra:</strong> {det.detailed_action}
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, margin: '0 0 8px' }}>
+                <div>
+                  <div style={{ fontSize: 10, color: C.muted, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 3 }}>Kanal först</div>
+                  <div style={{ fontSize: 12, color: '#3a4b56' }}>
+                    {CHANNEL_LABEL_SV[det.prioritized_channel] || det.prioritized_channel}
+                  </div>
+                  <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>{det.prioritized_channel_reason}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: C.muted, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 3 }}>Klart när</div>
+                  <div style={{ fontSize: 12, color: '#3a4b56' }}>{det.success_criteria}</div>
+                </div>
+              </div>
+              {det.specific_proof_points.length > 0 && (
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 10, color: C.muted, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 3 }}>Befintliga proof points att aktivera</div>
+                  <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: '#3a4b56', lineHeight: 1.5 }}>
+                    {det.specific_proof_points.map((p, i) => <li key={i}>{p}</li>)}
+                  </ul>
+                </div>
+              )}
+              {det.risks.length > 0 && (
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 10, color: '#b45309', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 3 }}>Se upp för</div>
+                  <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: '#3a4b56', lineHeight: 1.5 }}>
+                    {det.risks.map((r, i) => <li key={i}>{r}</li>)}
+                  </ul>
+                </div>
+              )}
+              <div style={{ fontSize: 10, color: C.dim, marginTop: 4 }}>
+                Detaljifierat av {recipe.detailifier_model}
+                {recipe.detailified_at ? ` · ${fmtRelative(recipe.detailified_at)}` : ''}
+              </div>
+            </>
+          ) : (
+            <div style={{ padding: '8px 0', fontSize: 12, color: C.dim, fontStyle: 'italic' }}>
+              Skelett finns men detaljifiering pågår eller misslyckades. Skäl: {skel.why_template}
+            </div>
+          )}
+          {recipe.intervention && <InterventionStatusView intervention={recipe.intervention} />}
+          <RecipeActions recipe={recipe} busy={busy} onTransition={onTransition} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RecipeActions({
+  recipe, busy, onTransition,
+}: {
+  recipe: Recipe;
+  busy: boolean;
+  onTransition: (recipeId: string, status: 'agreed' | 'acted' | 'dismissed', note?: string) => void;
+}) {
+  const btn = (label: string, color: string, onClick: () => void) => (
+    <button
+      onClick={onClick}
+      disabled={busy}
+      style={{
+        padding: '5px 12px', fontSize: 11, fontWeight: 600,
+        background: 'transparent', color, border: `1px solid ${color}55`,
+        borderRadius: 6, cursor: busy ? 'wait' : 'pointer',
+      }}
+    >
+      {busy ? '…' : label}
+    </button>
+  );
+  return (
+    <div style={{ display: 'flex', gap: 8, marginTop: 10, paddingTop: 8, borderTop: `1px dashed ${C.border}` }}>
+      {recipe.status === 'pending' && (
+        <>
+          {btn('Godkänn', '#0e7490', () => onTransition(recipe.recipe_id, 'agreed'))}
+          {btn('Avfärda', '#6a7e8a', () => onTransition(recipe.recipe_id, 'dismissed'))}
+        </>
+      )}
+      {recipe.status === 'agreed' && (
+        <>
+          {btn('Markera publicerat', '#b45309', () => onTransition(recipe.recipe_id, 'acted'))}
+          {btn('Avfärda', '#6a7e8a', () => onTransition(recipe.recipe_id, 'dismissed'))}
+        </>
+      )}
+      {recipe.status === 'acted' && (
+        <>
+          <span style={{ fontSize: 11, color: C.dim, fontStyle: 'italic', alignSelf: 'center' }}>
+            Mäts nu — verifieras automatiskt när gapet stängs
+          </span>
+          {btn('Avfärda', '#6a7e8a', () => onTransition(recipe.recipe_id, 'dismissed'))}
+        </>
+      )}
+    </div>
+  );
+}
+
+const INTERVENTION_STATUS_LABEL: Record<InterventionStatus, string> = {
+  open:             'Mäter',
+  no_change_yet:    'Ingen rörelse än',
+  regressed:        'Försämring',
+  resolved_partial: 'Delvis stängt',
+  resolved_full:    'Stängt',
+  abandoned:        'Avbruten',
+};
+
+function InterventionStatusView({ intervention }: { intervention: Intervention }) {
+  const i = intervention;
+  const showClosure = i.status === 'resolved_full' || i.status === 'resolved_partial';
+  return (
+    <div style={{ marginTop: 10, padding: '8px 10px', background: 'rgba(106,126,138,0.06)', borderRadius: 6 }}>
+      <div style={{ fontSize: 10, color: C.muted, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
+        Sluten-loop-mätning · {INTERVENTION_STATUS_LABEL[i.status]}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, fontSize: 11, color: '#3a4b56' }}>
+        <div>
+          <span style={{ color: C.muted }}>Belägger:</span>{' '}
+          {fmtBar(i.baseline.demonstrated)} → <strong>{fmtBar(i.current.demonstrated)}</strong>
+        </div>
+        <div>
+          <span style={{ color: C.muted }}>AI-valens:</span>{' '}
+          {fmtBar(i.baseline.valence)} → <strong>{fmtBar(i.current.valence)}</strong>
+        </div>
+      </div>
+      {showClosure && i.closure && (
+        <div style={{ marginTop: 6, fontSize: 11, color: '#16a34a' }}>
+          ✓ Stängde på {i.closure.days_to_close ?? '?'} dagar
+          {(i.closure.flag_kinds_removed?.length || 0) > 0 && (
+            <> · borttagna flaggor: {i.closure.flag_kinds_removed.join(', ')}</>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function fmtBar(v: number | null | undefined): string {
+  if (v == null) return '—';
+  return v.toFixed(2);
+}
+
+function gapTypeLabel(t: string): string {
+  return {
+    over_claim: 'Anseenderisk',
+    opportunity: 'Möjlighet',
+    missing_evidence: 'Saknat bevis',
+    contradiction: 'Motorerna oense',
+    factual_drift: 'Bilden svalnar',
+    persona_mismatch: 'Persona-mismatch',
+    competitive_displacement: 'Konkurrent dominerar',
+  }[t] || t;
 }
 
 function TrustBar({ label, value, hint, tone }: { label: string; value: number | null; hint?: string; tone: 'declared' | 'demonstrated' | 'perceived' }) {
