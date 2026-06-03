@@ -45,9 +45,11 @@ log = logging.getLogger("jobs.model_availability_check")
 _TESTABLE_PROVIDERS = frozenset({
     "vertex_gemini",
     "vertex_anthropic",
+    "vertex_mistral",
     "google_genai",
     "google_genai_vertex",
     "openai",
+    "perplexity",
 })
 
 # Kort prompt — räcker för att tvinga ett genuint anrop utan att slösa tokens.
@@ -125,10 +127,7 @@ def _build_client(entry: model_registry.ModelEntry):
         return llm.make_validator()
     if role == "esg_reasoner":
         return llm.make_esg_reasoner()
-    if role == "probe_claude":
-        engines = llm.make_probe_engines()
-        return engines.get(entry.model_id)
-    if role == "probe_gemini":
+    if role in ("probe_claude", "probe_gemini", "probe_mistral", "probe_openai", "probe_perplexity"):
         engines = llm.make_probe_engines()
         return engines.get(entry.model_id)
 
@@ -161,8 +160,21 @@ def _build_by_provider(entry: model_registry.ModelEntry):
         if not settings.gcp_project:
             return None
         from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+        location = entry.vertex_location or settings.vertex_location
         return ChatAnthropicVertex(model_name=entry.model_id, project=settings.gcp_project,
-                                   location=settings.vertex_location, temperature=0)
+                                   location=location, temperature=0)
+    if entry.provider == "vertex_mistral":
+        if not settings.gcp_project:
+            return None
+        # Återanvänd llm._vertex_mistral så availability-checken testar EXAKT samma kodväg
+        # som prod (samma auth-flöde, samma base_url-konstruktion).
+        from services import llm
+        return llm._vertex_mistral(entry.model_id, location=entry.vertex_location or None)
+    if entry.provider == "perplexity":
+        if not settings.perplexity_api_key:
+            return None
+        from services import llm
+        return llm._perplexity_chat(entry.model_id)
     return None
 
 

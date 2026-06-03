@@ -120,6 +120,47 @@ def _openai_chat(model: str):
     )
 
 
+def _perplexity_chat(model: str):
+    """Perplexity-probe via deras direkta API (OpenAI-kompatibel). Mäter web-RAG-
+    signal — vad AI hittar om bolaget LIVE på webben, distinkt från training-data-
+    baserade probarna. Finns inte i Vertex Model Garden, så separat auth-väg."""
+    from langchain_openai import ChatOpenAI
+
+    return ChatOpenAI(
+        api_key=settings.perplexity_api_key,
+        base_url="https://api.perplexity.ai",
+        model=model,
+        temperature=0,
+        timeout=60,
+    )
+
+
+def _vertex_mistral(model: str, location: str | None = None):
+    """Mistral via Vertex Model Garden MaaS — OpenAI-kompatibel chat-completions-endpoint.
+    Auth görs med en kortlivad gcloud-access-token (service account), inte med en separat
+    Mistral-API-nyckel. Vertex förnyar tokenen, men vi får inte cache:a klienten över längre
+    tid eftersom tokenen löper ut (~60 min) — byggs nytt per make_probe_engines()-anrop."""
+    from google.auth import default as _gauth_default
+    from google.auth.transport.requests import Request as _GAuthRequest
+    from langchain_openai import ChatOpenAI
+
+    loc = location or settings.vertex_location
+    credentials, _ = _gauth_default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+    credentials.refresh(_GAuthRequest())
+
+    base_url = (
+        f"https://{loc}-aiplatform.googleapis.com/v1beta1/projects/{settings.gcp_project}/"
+        f"locations/{loc}/endpoints/openapi"
+    )
+    return ChatOpenAI(
+        model=model,
+        base_url=base_url,
+        api_key=credentials.token,
+        temperature=0,
+        timeout=60,
+    )
+
+
 # --- Probe-motorer (de publika AI-assistenterna vi MÄTER) ---------------------
 
 
@@ -150,6 +191,14 @@ def make_probe_engines() -> dict[str, Any]:
             )
         except Exception as exc:
             log.warning("Claude probe (Vertex) init failed: %s", exc)
+
+        try:
+            mid = model_registry.get_id("probe_mistral")
+            engines[mid] = token_meter.track(
+                _vertex_mistral(mid, location=_location_for("probe_mistral")), mid,
+            )
+        except Exception as exc:
+            log.warning("Mistral probe (Vertex) init failed: %s", exc)
     else:
         log.warning("GCP-projekt ej satt — Vertex-probar otillgängliga (ChatGPT-proben kan ändå köra)")
 
@@ -161,6 +210,15 @@ def make_probe_engines() -> dict[str, Any]:
             log.warning("OpenAI probe init failed: %s", exc)
     else:
         log.warning("OPENAI_API_KEY ej satt — ChatGPT-probe inte tillgänglig")
+
+    if settings.perplexity_api_key:
+        try:
+            pid = model_registry.get_id("probe_perplexity")
+            engines[pid] = token_meter.track(_perplexity_chat(pid), pid)
+        except Exception as exc:
+            log.warning("Perplexity probe init failed: %s", exc)
+    else:
+        log.warning("PERPLEXITY_API_KEY ej satt — Perplexity-probe (web-RAG-signal) inte tillgänglig")
 
     return engines
 
@@ -178,12 +236,13 @@ PROBE_ENGINE_REGISTRY: list[dict[str, Any]] = [
      "vendor": "Google (Vertex global)", "status": "live", "note": None},
     {"id": model_registry.get_id("probe_openai"), "label": "ChatGPT",
      "vendor": "OpenAI (direkt)", "status": "live", "note": None},
-    {"id": "perplexity", "label": "Perplexity", "vendor": "Perplexity AI", "status": "planned",
-     "note": "Ren AI-sökmotor — planerad nästa fas (REST-API)"},
+    {"id": model_registry.get_id("probe_mistral"), "label": "Mistral Le Chat",
+     "vendor": "Mistral AI (Vertex MaaS)", "status": "live",
+     "note": "EU-baserad probe-motor — kräver MaaS-EULA i Model Garden"},
+    {"id": model_registry.get_id("probe_perplexity"), "label": "Perplexity",
+     "vendor": "Perplexity AI (web-RAG)", "status": "live", "note": None},
     {"id": "copilot", "label": "Copilot", "vendor": "Microsoft", "status": "planned",
      "note": "Retrieval-augmenterad sök — planerad"},
-    {"id": "mistral", "label": "Mistral", "vendor": "Mistral AI (Vertex Model Garden)",
-     "status": "planned", "note": "EU-baserad — planerad nästa fas"},
 ]
 
 
