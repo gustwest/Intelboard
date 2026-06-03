@@ -30,6 +30,8 @@ def main() -> int:
     ap.add_argument("--admin-key", default=os.environ.get("ADMIN_API_KEY", ""))
     ap.add_argument("--auto-approve", action="store_true", help="godkänn alla genererade frågor (endast test)")
     ap.add_argument("--action-statement", default="", help="om satt: åtgärda första findingen med detta källförsedda claim")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="hoppa över action-statement-steget — för critical-chain-smoke som ej vill mutera testkundens claims")
     ap.add_argument("--month", default=datetime.now(timezone.utc).strftime("%Y-%m"))
     ap.add_argument("--timeout", type=int, default=180, help="max sekunder att vänta per pollsteg")
     ap.add_argument("--save-html", default="", help="filväg att spara rapportens HTML till")
@@ -73,7 +75,9 @@ def main() -> int:
         print(f"  [{f.get('severity')}] {f.get('harm')} {f.get('persona')} — {f.get('question')}")
 
     # 4. Åtgärda första findingen (valfritt)
-    if args.action_statement and findings:
+    if args.dry_run:
+        step("4. åtgärda första findingen — HOPPAS ÖVER (--dry-run)")
+    elif args.action_statement and findings:
         step("4. åtgärda första findingen")
         fid = findings[0]["id"]
         r = _post(c, f"/api/review/{cid}/risks/{fid}",

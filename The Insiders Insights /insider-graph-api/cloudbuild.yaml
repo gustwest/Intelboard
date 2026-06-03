@@ -12,7 +12,8 @@ steps:
       - '--snapshot-mode=redo'
       - '--use-new-run'
 
-  # 2. Deploy service (FastAPI, always-on).
+  # 2. Deploy service (FastAPI, always-on). COMMIT_SHA exponeras som env-var så
+  #    post-deploy-checken kan verifiera att rätt revision faktiskt serveras.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -23,6 +24,7 @@ steps:
       - '--region=europe-north1'
       - '--allow-unauthenticated'
       - '--platform=managed'
+      - '--update-env-vars=COMMIT_SHA=$COMMIT_SHA'
 
   # 3. Uppdatera Cloud Run Jobs så de pekar på samma SHA som servicen.
   #    Jobben skapas första gången av scripts/bootstrap.sh — denna step
@@ -56,6 +58,22 @@ steps:
         else
           echo "model-availability-check job not yet created — skip CI gate. Kör scripts/bootstrap.sh."
         fi
+
+  # 5. Post-deploy-check: pinga /health, jämför commit_sha, verifiera scheduler-
+  #    status, model-registry, ops_alerts, och att inga jobb failat senaste 24h.
+  #    Failar exit ≠ 0 → bygget rött. Soft-fail bara för saknad frontend-URL.
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        set -e
+        pip3 install --quiet --break-system-packages httpx
+        API_URL=$(gcloud run services describe insider-graph-api --region=europe-north1 --format='value(status.url)')
+        FE_URL=$(gcloud run services describe insiders-frontend --region=europe-north1 --format='value(status.url)' 2>/dev/null || true)
+        echo "==> post-deploy-check (api=$$API_URL fe=$$FE_URL)"
+        python3 'The Insiders Insights /insider-graph-api/scripts/post_deploy_check.py' \
+          --api-url "$$API_URL" --frontend-url "$$FE_URL" --expected-sha "$COMMIT_SHA"
 
 options:
   logging: CLOUD_LOGGING_ONLY

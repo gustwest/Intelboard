@@ -29,6 +29,21 @@ steps:
       - '--allow-unauthenticated'
       - '--platform=managed'
 
+  # 3. Post-deploy-check: pinga både frontend och API. Skickar INTE expected-sha
+  #    (denna build deployar frontend — API:t har en tidigare SHA, som är OK).
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        set -e
+        pip3 install --quiet --break-system-packages httpx
+        API_URL=$(gcloud run services describe insider-graph-api --region=europe-north1 --format='value(status.url)' 2>/dev/null || true)
+        FE_URL=$(gcloud run services describe insiders-frontend --region=europe-north1 --format='value(status.url)')
+        echo "==> post-deploy-check (api=$$API_URL fe=$$FE_URL)"
+        python3 'The Insiders Insights /insider-graph-api/scripts/post_deploy_check.py' \
+          --api-url "$$API_URL" --frontend-url "$$FE_URL"
+
 options:
   logging: CLOUD_LOGGING_ONLY
   machineType: 'E2_HIGHCPU_8'
