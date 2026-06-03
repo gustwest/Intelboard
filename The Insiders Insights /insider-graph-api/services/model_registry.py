@@ -51,12 +51,15 @@ _REGISTRY: tuple[ModelEntry, ...] = (
     # --- GEO-claims-pipelinen (Vertex EU — kunddata) ----------------------
     ModelEntry(
         role="geo_generator",
-        model_id="gemini-3.5-flash",
+        # 2026-06-03: gemini-3.5-flash returnerar 404 i alla regioner — listad i
+        # Model Garden men inte deployable för vårt projekt (kräver aktivering
+        # eller är preview-only). Rollback till 2.5-flash som svarar i EU.
+        model_id="gemini-2.5-flash",
         provider="vertex_gemini",
         purpose="Generering + relevansgrindning för claims-pipelinen (services/llm.make_generator)",
-        latest_known="gemini-3.5-flash",
-        checked_at=_CHECKED,
-        effective_since=_EFFECTIVE,
+        latest_known="gemini-2.5-flash",
+        checked_at="2026-06-03",
+        effective_since="2026-06-03",
     ),
     ModelEntry(
         role="geo_validator",
@@ -107,12 +110,16 @@ _REGISTRY: tuple[ModelEntry, ...] = (
     ),
     ModelEntry(
         role="probe_openai",
-        model_id="gpt-5.5",
+        # 2026-06-03: gpt-5.5 finns men kräver max_completion_tokens-param + är
+        # rate-limited på Standard-tier (429 i CI). Rollback till gpt-4.1 — senaste
+        # stabla generation som svarar konsekvent. När 5.5 (eller efterföljare) blir
+        # stable + opt-out av reasoning-tax: höj här och i email_extractor_openai.
+        model_id="gpt-4.1",
         provider="openai",
         purpose="ChatGPT-probe i polling + risk_detector (OpenAI direkt — finns inte i Vertex)",
-        latest_known="gpt-5.5",
-        checked_at=_CHECKED,
-        effective_since=_EFFECTIVE,
+        latest_known="gpt-4.1",
+        checked_at="2026-06-03",
+        effective_since="2026-06-03",
     ),
     ModelEntry(
         role="probe_mistral",
@@ -139,21 +146,24 @@ _REGISTRY: tuple[ModelEntry, ...] = (
     # --- E-postextraktion (services/email_extraction._pick_llm) -----------
     ModelEntry(
         role="email_extractor_openai",
-        model_id="gpt-5.5",
+        # Samma rollback som probe_openai (gpt-5.5 → gpt-4.1) — se den entryns kommentar.
+        model_id="gpt-4.1",
         provider="openai",
         purpose="Strukturera fritext-mail till Schema.org Event (primär)",
-        latest_known="gpt-5.5",
-        checked_at=_CHECKED,
-        effective_since=_EFFECTIVE,
+        latest_known="gpt-4.1",
+        checked_at="2026-06-03",
+        effective_since="2026-06-03",
     ),
     ModelEntry(
         role="email_extractor_gemini",
-        model_id="gemini-3.5-flash",
+        # 2026-06-03: rollback från 3.5-flash (404 överallt) → 2.5-flash som
+        # är deployad i EU. Se geo_generator-kommentaren.
+        model_id="gemini-2.5-flash",
         provider="google_genai",
         purpose="Strukturera fritext-mail till Schema.org Event (fallback)",
-        latest_known="gemini-3.5-flash",
-        checked_at=_CHECKED,
-        effective_since=_EFFECTIVE,
+        latest_known="gemini-2.5-flash",
+        checked_at="2026-06-03",
+        effective_since="2026-06-03",
     ),
     # --- Claude Code admin-agent (backend/) -------------------------------
     ModelEntry(
@@ -186,12 +196,13 @@ _REGISTRY: tuple[ModelEntry, ...] = (
     # --- backend/ai.py dataset-summarizer ---------------------------------
     ModelEntry(
         role="dataset_summarizer",
-        model_id="gemini-3.5-flash",
+        # 2026-06-03: rollback från 3.5-flash (404 överallt) → 2.5-flash.
+        model_id="gemini-2.5-flash",
         provider="google_genai_vertex",
         purpose="Skriver kort sammanfattning vid nytt dataset (backend/ai.py)",
-        latest_known="gemini-3.5-flash",
-        checked_at=_CHECKED,
-        effective_since=_EFFECTIVE,
+        latest_known="gemini-2.5-flash",
+        checked_at="2026-06-03",
+        effective_since="2026-06-03",
     ),
 )
 
@@ -200,14 +211,15 @@ _REGISTRY: tuple[ModelEntry, ...] = (
 # nycklar i historiska Firestore-payloads (trust_gap_report.ENGINE_SV mappar
 # t.ex. legacy "gpt-4o"-engine-strängar till visningsnamnet "ChatGPT").
 LEGACY_ALIASES: frozenset[str] = frozenset({
-    "gpt-4o",            # tidigare probe_openai (ersatt av gpt-5.5)
+    "gpt-4o",            # tidigare probe_openai (innan gpt-5.5-experimentet)
+    "gpt-5.5",           # kortlivad probe_openai 2026-06-02 — krävde max_completion_tokens + rate-limited (429), rollback till gpt-4.1 dag 2
     "gemini-1.5-pro",    # tidigare probe_gemini & email_extractor_gemini
     "claude-sonnet-4-5", # tidigare probe_claude EU-pinnad (ersatt av sonnet-4-6 via global)
     # Pricing-katalog (services/cost_estimator) listar BÅDE aktiva och historiska
     # modeller för att kunna prissätta gamla job_runs.summary.tokens-poster. Dessa
     # är inte runtime-konfig men dyker upp i grep-passet.
     "claude-opus-4-7",   # legacy agent_default + historiska prissatta anrop
-    "gemini-2.5-flash",  # legacy geo_generator (ersatt av 3.5-flash)
+    "gemini-3.5-flash",  # listad i Model Garden men 404 för vårt projekt 2026-06-03 — rollback till 2.5-flash
     "gemini-3.5-pro",    # spekulativ pricing-entry (modellen finns inte stable ännu)
 })
 

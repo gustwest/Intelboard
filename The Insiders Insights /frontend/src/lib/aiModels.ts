@@ -46,12 +46,13 @@ const _EFFECTIVE = "2026-06-02";
 export const MODEL_REGISTRY: readonly ModelEntry[] = [
   {
     role: "geo_generator",
-    modelId: "gemini-3.5-flash",
+    // 2026-06-03: rollback från 3.5-flash (404 överallt) → 2.5-flash. Speglar backend.
+    modelId: "gemini-2.5-flash",
     provider: "vertex_gemini",
     purpose: "Generering + relevansgrindning för claims-pipelinen",
-    latestKnown: "gemini-3.5-flash",
-    checkedAt: _CHECKED,
-    effectiveSince: _EFFECTIVE,
+    latestKnown: "gemini-2.5-flash",
+    checkedAt: "2026-06-03",
+    effectiveSince: "2026-06-03",
   },
   {
     role: "geo_validator",
@@ -94,12 +95,13 @@ export const MODEL_REGISTRY: readonly ModelEntry[] = [
   },
   {
     role: "probe_openai",
-    modelId: "gpt-5.5",
+    // 2026-06-03: rollback gpt-5.5 → gpt-4.1 (5.5 krävde max_completion_tokens + rate-limited).
+    modelId: "gpt-4.1",
     provider: "openai",
     purpose: "ChatGPT-probe i polling + risk_detector (OpenAI direkt — finns inte i Vertex)",
-    latestKnown: "gpt-5.5",
-    checkedAt: _CHECKED,
-    effectiveSince: _EFFECTIVE,
+    latestKnown: "gpt-4.1",
+    checkedAt: "2026-06-03",
+    effectiveSince: "2026-06-03",
   },
   {
     role: "probe_mistral",
@@ -132,12 +134,13 @@ export const MODEL_REGISTRY: readonly ModelEntry[] = [
   },
   {
     role: "email_extractor_gemini",
-    modelId: "gemini-3.5-flash",
+    // 2026-06-03: rollback från 3.5-flash → 2.5-flash. Speglar backend.
+    modelId: "gemini-2.5-flash",
     provider: "google_genai",
     purpose: "Strukturera fritext-mail till Schema.org Event (fallback)",
-    latestKnown: "gemini-3.5-flash",
-    checkedAt: _CHECKED,
-    effectiveSince: _EFFECTIVE,
+    latestKnown: "gemini-2.5-flash",
+    checkedAt: "2026-06-03",
+    effectiveSince: "2026-06-03",
   },
   {
     role: "agent_default",
@@ -168,12 +171,13 @@ export const MODEL_REGISTRY: readonly ModelEntry[] = [
   },
   {
     role: "dataset_summarizer",
-    modelId: "gemini-3.5-flash",
+    // 2026-06-03: rollback från 3.5-flash → 2.5-flash. Speglar backend.
+    modelId: "gemini-2.5-flash",
     provider: "google_genai_vertex",
     purpose: "Skriver kort sammanfattning vid nytt dataset",
-    latestKnown: "gemini-3.5-flash",
-    checkedAt: _CHECKED,
-    effectiveSince: _EFFECTIVE,
+    latestKnown: "gemini-2.5-flash",
+    checkedAt: "2026-06-03",
+    effectiveSince: "2026-06-03",
   },
 ] as const;
 
