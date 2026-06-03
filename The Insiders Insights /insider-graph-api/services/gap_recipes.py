@@ -265,3 +265,77 @@ def build_recipe_skeletons(flags: list[dict[str, Any]]) -> list[RecipeSkeleton]:
         if s is not None:
             out.append(s)
     return out
+
+
+# --- Lager B / C typer --------------------------------------------------------
+# Här ligger bara *typerna*. LLM-detaljifieringen själv (Lager B) bor i
+# services/gap_recipes_llm.py så vi håller den här filen LLM-fri och
+# determinist-bevisbar. Persistens (Lager C) tillkommer i Fas 1.3c.
+
+
+@dataclass(frozen=True)
+class RecipeContext:
+    """Kund- och gap-kontext som Lager B behöver för att detaljifiera.
+
+    Hålls medvetet smalt — inkludera bara det LLM:n FAKTISKT behöver för att
+    fylla ut detaljer. Mer fält = större prompt = långsammare + dyrare.
+    """
+    client_id: str
+    company_name: str
+    declared: float                       # 0/1 — säger ni det?
+    demonstrated: float                   # 0–1 — kan ni belägga det?
+    perceived_valence: float | None       # 0–1 — hur varmt AI beskriver er
+    perceived_salience: float | None      # 0–1 — hur synliga ni är hos AI
+    # Topp-N befintliga proof points operatören kan välja att aktivera. Strängar
+    # för att hålla LLM-promptens kontext-budget rimlig — full claim-data är
+    # inte nödvändig för Lager B:s syfte (LLM:n föreslår VAD som ska aktiveras,
+    # operatören i UI:t verifierar mot fullständiga claims).
+    available_proof_points: tuple[str, ...] = ()
+    # Övriga flagg-specifika data (warmest_engine, since_date, valence_drop, etc).
+    # Renderas in i promptens "kontext"-block men förändrar aldrig validering.
+    extra: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class RecipeDetails:
+    """Det LLM:n får producera. Strikt format — fält som saknas → graceful default.
+
+    Strategin (action_type, knowledge_source_target, expected_impact_metric,
+    target_channels-mängden) är LÅST av skelettet. LLM:n får bara fylla i
+    nedanstående detaljer.
+    """
+    detailed_action: str                  # 1–3 meningar konkret nästa steg
+    specific_proof_points: tuple[str, ...]  # förslag på vilka existerande claims/data
+    prioritized_channel: str              # MÅSTE vara med i skeleton.target_channels
+    prioritized_channel_reason: str       # varför just den kanalen först
+    success_criteria: str                 # "Du vet att det funkat när …"
+    refined_why: str                      # kundanpassad förklaring (1–2 meningar)
+    risks: tuple[str, ...] = ()           # 0–3 saker att se upp för
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "detailed_action": self.detailed_action,
+            "specific_proof_points": list(self.specific_proof_points),
+            "prioritized_channel": self.prioritized_channel,
+            "prioritized_channel_reason": self.prioritized_channel_reason,
+            "success_criteria": self.success_criteria,
+            "refined_why": self.refined_why,
+            "risks": list(self.risks),
+        }
+
+
+@dataclass(frozen=True)
+class DetailedRecipe:
+    """Skeleton + Details — det som persisteras och visas i operatörens UI."""
+    skeleton: RecipeSkeleton
+    details: RecipeDetails | None         # None om LLM tajmade/föll → frontend visar "väntar"
+    detailifier_model: str                # vilken modell genererade detaljerna
+    detailified_at: str | None            # ISO timestamp; None om details är None
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "skeleton": self.skeleton.as_dict(),
+            "details": self.details.as_dict() if self.details else None,
+            "detailifier_model": self.detailifier_model,
+            "detailified_at": self.detailified_at,
+        }
