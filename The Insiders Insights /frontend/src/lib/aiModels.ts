@@ -125,12 +125,13 @@ export const MODEL_REGISTRY: readonly ModelEntry[] = [
   },
   {
     role: "email_extractor_openai",
-    modelId: "gpt-5.5",
+    // 2026-06-03: rollback gpt-5.5 → gpt-4.1 (samma skäl som probe_openai).
+    modelId: "gpt-4.1",
     provider: "openai",
     purpose: "Strukturera fritext-mail till Schema.org Event (primär)",
-    latestKnown: "gpt-5.5",
-    checkedAt: _CHECKED,
-    effectiveSince: _EFFECTIVE,
+    latestKnown: "gpt-4.1",
+    checkedAt: "2026-06-03",
+    effectiveSince: "2026-06-03",
   },
   {
     role: "email_extractor_gemini",

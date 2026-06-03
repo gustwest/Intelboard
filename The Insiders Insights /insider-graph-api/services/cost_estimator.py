@@ -52,6 +52,7 @@ PRICE_TABLE: dict[str, ModelPrice] = {
     "claude-haiku-4-5-20251001": ModelPrice(0.80, 4.00, "Claude Haiku 4.5", "anthropic"),
     # --- OpenAI (legacy / planned-spår) ----------------------------------
     "gpt-4o": ModelPrice(2.50, 10.00, "GPT-4o", "openai"),
+    "gpt-4.1": ModelPrice(2.00, 8.00, "GPT-4.1", "openai"),
     "gpt-5.5": ModelPrice(2.50, 10.00, "GPT-5.5", "openai"),
     # --- Övriga --------------------------------------------------------
     "mistral-medium-3": ModelPrice(0.40, 2.00, "Mistral Medium 3", "mistral"),
