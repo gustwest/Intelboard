@@ -33,6 +33,15 @@ class ModelEntry:
     # Sätt "global" för dynamisk routing (probe-roller), "europe-west1" / etc för
     # explicit pinning. Endast meningsfullt för Vertex-providers.
     vertex_location: str = ""
+    # Var modellens svar kommer ifrån. Driver UI-grupperingen i AI-synlighet och
+    # håller statistiken sane (man medeltalar inte över olika fördelningar).
+    #   * "training" — RLHF, svar från träningsdata + safety-tuning. Default för
+    #     bas-LLM:er (Claude, GPT, Gemini, Mistral).
+    #   * "web_rag"  — Live web-RAG, svaret bygger på vad som hittas på webben NU
+    #     (Perplexity Sonar, Google AI Overviews, Bing Chat).
+    #   * "hybrid"   — Modeller som blandar (t.ex. ChatGPT med browsing aktiverat —
+    #     vi mäter ändå "vanliga" ChatGPT som "training").
+    knowledge_source: str = "training"
 
 
 _CHECKED = "2026-06-02"
@@ -103,6 +112,26 @@ _REGISTRY: tuple[ModelEntry, ...] = (
         checked_at=_CHECKED,
         effective_since=_EFFECTIVE,
     ),
+    ModelEntry(
+        role="probe_mistral",
+        model_id="mistral-medium-3",
+        provider="vertex_mistral",
+        purpose="Mistral Le Chat-probe (Vertex MaaS, OpenAI-kompatibel endpoint, global)",
+        latest_known="mistral-medium-3",
+        checked_at=_CHECKED,
+        effective_since=_EFFECTIVE,
+        vertex_location="global",
+    ),
+    ModelEntry(
+        role="probe_perplexity",
+        model_id="sonar",
+        provider="perplexity",
+        purpose="Perplexity-probe (Sonar, web-RAG) — mäter AI-discoverability live på webben",
+        latest_known="sonar",
+        checked_at=_CHECKED,
+        effective_since=_EFFECTIVE,
+        knowledge_source="web_rag",
+    ),
     # --- E-postextraktion (services/email_extraction._pick_llm) -----------
     ModelEntry(
         role="email_extractor_openai",
@@ -170,6 +199,12 @@ LEGACY_ALIASES: frozenset[str] = frozenset({
     "gpt-4o",            # tidigare probe_openai (ersatt av gpt-5.5)
     "gemini-1.5-pro",    # tidigare probe_gemini & email_extractor_gemini
     "claude-sonnet-4-5", # tidigare probe_claude EU-pinnad (ersatt av sonnet-4-6 via global)
+    # Pricing-katalog (services/cost_estimator) listar BÅDE aktiva och historiska
+    # modeller för att kunna prissätta gamla job_runs.summary.tokens-poster. Dessa
+    # är inte runtime-konfig men dyker upp i grep-passet.
+    "claude-opus-4-7",   # legacy agent_default + historiska prissatta anrop
+    "gemini-2.5-flash",  # legacy geo_generator (ersatt av 3.5-flash)
+    "gemini-3.5-pro",    # spekulativ pricing-entry (modellen finns inte stable ännu)
 })
 
 
@@ -193,6 +228,32 @@ def location_for(role: str) -> str:
     """Returnera Vertex-region för en roll. Tom string → använd settings.vertex_location.
     Anropare ska normalt göra: ``entry.vertex_location or settings.vertex_location``."""
     return get(role).vertex_location
+
+
+# --- Knowledge-source-mappning (probe-engines → "training" / "web_rag") -------
+# Anropas av trust_gap_report._perception_by_engine för att gruppera AI-motorerna
+# i AI Base Knowledge vs AI Live Signal — UI:t medeltalar aldrig över dessa.
+# Legacy kort-namn ("perplexity", "sonar") tas med eftersom historiska polling-
+# veckor sparades med dem före model_registry-flytten.
+_LEGACY_KNOWLEDGE_SOURCE: dict[str, str] = {
+    "perplexity": "web_rag",
+    "sonar": "web_rag",
+    "gpt-4o": "training",
+    "gemini-1.5-pro": "training",
+    "claude-sonnet-4-5": "training",
+}
+
+
+def knowledge_source_for(engine_id: str) -> str:
+    """Slå upp knowledge_source ("training" / "web_rag" / "hybrid") för ett engine-id.
+
+    Default är "training" om id:t inte finns i registret eller bland legacy-aliaserna —
+    det är den säkraste defaulten för bas-LLM:er och har varit Antagandet historiskt.
+    """
+    for entry in _REGISTRY:
+        if entry.role.startswith("probe_") and entry.model_id == engine_id:
+            return entry.knowledge_source
+    return _LEGACY_KNOWLEDGE_SOURCE.get(engine_id, "training")
 
 
 def authorized_model_ids() -> set[str]:

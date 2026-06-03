@@ -39,6 +39,8 @@ class TrustGapReportTest(unittest.TestCase):
         self.assertNotIn("0.3", eth["evidence_plain"])
 
     def test_perception_per_engine_kept_separate(self):
+        # Returneras som lista av {engine, text} så frontend kan gruppera per knowledge-source
+        # (training vs web_rag) — aldrig medelvärda över olika source-typer.
         fakefs.reset(
             client={"company_name": "Acme AB"},
             trust_gap=_tg({"wellbeing": {
@@ -53,10 +55,49 @@ class TrustGapReportTest(unittest.TestCase):
             }}),
         )
         wb = next(d for d in tgr.build_report_model("acme")["dimensions"] if d["dimension"] == "wellbeing")
-        lines = " ".join(wb["perception_by_engine"])
-        self.assertIn("Perplexity", lines)
-        self.assertIn("svalt", lines)              # perplexity: hög salience, låg valens
-        self.assertIn("Gemini vet ännu nästan inget", lines)  # gemini: under salience-golvet
+        entries = wb["perception_by_engine"]
+        # Engine-ID bevaras i varje rad så frontend kan slå upp knowledge-source.
+        engines = {row["engine"] for row in entries}
+        self.assertEqual(engines, {"perplexity", "gemini"})
+        # Klartexten håller motorerna åtskilda — ingen kollaps eller medelvärde.
+        by_engine = {row["engine"]: row["text"] for row in entries}
+        self.assertIn("Perplexity", by_engine["perplexity"])
+        self.assertIn("svalt", by_engine["perplexity"])              # hög salience, låg valens
+        self.assertIn("Gemini vet ännu nästan inget", by_engine["gemini"])  # under salience-golvet
+        # Knowledge-source-fältet är inställt så frontend kan gruppera utan att slå upp
+        # själv — Perplexity är web_rag (live-signal), Gemini är training (bas-kunskap).
+        source_by_engine = {row["engine"]: row["knowledge_source"] for row in entries}
+        self.assertEqual(source_by_engine["perplexity"], "web_rag")
+        self.assertEqual(source_by_engine["gemini"], "training")
+
+    def test_fragment_groups_engines_by_knowledge_source(self):
+        # HTML-fragmentet ska visa AI Base Knowledge och AI Live Signal som separata
+        # rubriker när motorer av båda typerna finns — aldrig blanda dem i en lista.
+        fakefs.reset(
+            client={"company_name": "Acme AB"},
+            trust_gap=_tg({"wellbeing": {
+                "declared": 1.0, "demonstrated": 0.0, "score": 0.3,
+                "perceived": {
+                    "salience": 0.6, "valence": 0.5,
+                    "by_engine": {
+                        "perplexity": {"salience": 0.8, "valence": 0.3},
+                        "gemini": {"salience": 0.7, "valence": 0.65},
+                    },
+                },
+            }}),
+        )
+        frag = tgr.render_fragment(tgr.build_report_model("acme"))
+        self.assertIn("AI Base Knowledge", frag)
+        self.assertIn("AI Live Signal", frag)
+        # Gemini-raden ska komma i Base Knowledge-blocket (training),
+        # Perplexity i Live Signal-blocket (web_rag). Verifiera ordningen.
+        base_idx = frag.index("AI Base Knowledge")
+        live_idx = frag.index("AI Live Signal")
+        gem_idx = frag.index("Gemini")
+        per_idx = frag.index("Perplexity")
+        self.assertLess(base_idx, gem_idx)
+        self.assertLess(gem_idx, live_idx)
+        self.assertLess(live_idx, per_idx)
 
     def test_ranked_actions_risk_first(self):
         fakefs.reset(

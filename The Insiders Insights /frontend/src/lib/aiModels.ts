@@ -17,11 +17,16 @@
 
 export type ModelProvider =
   | "vertex_gemini"
+  | "vertex_anthropic"
+  | "vertex_mistral"
   | "openai"
+  | "perplexity"
   | "google_genai"
   | "google_genai_vertex"
-  | "vertex_anthropic"
   | "claude_code_cli";
+
+/** Driver UI-grupperingen i AI-synlighet. Aldrig medeltala över olika source-typer. */
+export type KnowledgeSource = "training" | "web_rag" | "hybrid";
 
 export interface ModelEntry {
   role: string;
@@ -32,6 +37,7 @@ export interface ModelEntry {
   checkedAt: string; // ISO YYYY-MM-DD
   effectiveSince: string; // ISO YYYY-MM-DD — brytlinje i tidsserier vid modellbyte
   vertexLocation?: string; // "global" / "europe-west1" / etc — endast Vertex-providers
+  knowledgeSource?: KnowledgeSource; // default "training"
 }
 
 const _CHECKED = "2026-06-02";
@@ -94,6 +100,26 @@ export const MODEL_REGISTRY: readonly ModelEntry[] = [
     latestKnown: "gpt-5.5",
     checkedAt: _CHECKED,
     effectiveSince: _EFFECTIVE,
+  },
+  {
+    role: "probe_mistral",
+    modelId: "mistral-medium-3",
+    provider: "vertex_mistral",
+    purpose: "Mistral Le Chat-probe (Vertex MaaS, OpenAI-kompatibel endpoint, global)",
+    latestKnown: "mistral-medium-3",
+    checkedAt: _CHECKED,
+    effectiveSince: _EFFECTIVE,
+    vertexLocation: "global",
+  },
+  {
+    role: "probe_perplexity",
+    modelId: "sonar",
+    provider: "perplexity",
+    purpose: "Perplexity-probe (Sonar, web-RAG) — mäter AI-discoverability live på webben",
+    latestKnown: "sonar",
+    checkedAt: _CHECKED,
+    effectiveSince: _EFFECTIVE,
+    knowledgeSource: "web_rag",
   },
   {
     role: "email_extractor_openai",
@@ -173,6 +199,20 @@ export const ESG_REASONER_MODEL = modelId("esg_reasoner");
 export const PROBE_CLAUDE_MODEL = modelId("probe_claude");
 export const PROBE_GEMINI_MODEL = modelId("probe_gemini");
 export const PROBE_OPENAI_MODEL = modelId("probe_openai");
+export const PROBE_MISTRAL_MODEL = modelId("probe_mistral");
+export const PROBE_PERPLEXITY_MODEL = modelId("probe_perplexity");
+
+// --- UI-gruppering (RLHF vs RAG) -----------------------------------------
+// Hjälpare för AI-synlighet-fliken att rendera probarna i två separata sektioner:
+// "Bas-kunskap" (training) vs "Live-signal" (web_rag). Aldrig medeltala över dessa.
+
+export const TRAINING_PROBE_ROLES = MODEL_REGISTRY
+  .filter((e) => e.role.startsWith("probe_") && (e.knowledgeSource ?? "training") === "training")
+  .map((e) => e.role);
+
+export const WEB_RAG_PROBE_ROLES = MODEL_REGISTRY
+  .filter((e) => e.role.startsWith("probe_") && e.knowledgeSource === "web_rag")
+  .map((e) => e.role);
 
 // --- Admin-agentens dropdown ---------------------------------------------
 

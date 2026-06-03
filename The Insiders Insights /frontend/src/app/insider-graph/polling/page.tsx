@@ -5,7 +5,63 @@ import { Radar, RefreshCw, Play, Loader2, Check, X, Pause, CalendarClock } from 
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import { graphFetch, GRAPH_API } from '../_lib/api';
 import { useJobRuns, fmtRelative } from '../_lib/jobRuns';
-import { PROBE_CLAUDE_MODEL, PROBE_GEMINI_MODEL } from '@/lib/aiModels';
+import {
+  PROBE_CLAUDE_MODEL,
+  PROBE_GEMINI_MODEL,
+  PROBE_OPENAI_MODEL,
+  PROBE_MISTRAL_MODEL,
+  PROBE_PERPLEXITY_MODEL,
+  MODEL_REGISTRY,
+  type KnowledgeSource,
+} from '@/lib/aiModels';
+
+// Mappar varje probe model_id → "training" (bas-kunskap, RLHF) eller "web_rag"
+// (live-signal, Perplexity etc). Driver UI-grupperingen i AI-synlighet så vi
+// aldrig medeltala över olika fördelningar. Default "training" om id saknas.
+// Legacy kort-namn ('perplexity', 'sonar') ingår explicit eftersom historiska
+// polling-veckor sparades med dem före model_registry-flytten.
+const ENGINE_KNOWLEDGE_SOURCE: Record<string, KnowledgeSource> = {
+  ...Object.fromEntries(
+    MODEL_REGISTRY.filter((e) => e.role.startsWith('probe_'))
+      .map((e) => [e.modelId, e.knowledgeSource ?? 'training']),
+  ),
+  perplexity: 'web_rag',
+  sonar: 'web_rag',
+};
+
+function knowledgeSourceFor(engineId: string): KnowledgeSource {
+  return ENGINE_KNOWLEDGE_SOURCE[engineId] ?? 'training';
+}
+
+// Beräknar per-source-type-aggregat över ett urval engine-rader. Säkrar att vi
+// rapporterar SoV och sentiment per source-typ utan att medeltala över olika
+// fördelningar (training kontra web_rag). Vi summerar mention/answer-räknarna
+// och re-deriverar, snarare än att medeltala redan-normaliserade SoV-värden.
+function aggregateEnginesBySource(
+  engineEntries: [string, EngineResult][],
+  source: KnowledgeSource,
+) {
+  const engines = engineEntries.filter(([eng]) => knowledgeSourceFor(eng) === source);
+  let mentions = 0;
+  let answers = 0;
+  let sentSum = 0;
+  let sentWeight = 0;
+  for (const [, r] of engines) {
+    mentions += r.mention_count;
+    answers += r.answer_count;
+    if (r.sentiment_score != null && r.answer_count > 0) {
+      sentSum += r.sentiment_score * r.answer_count;
+      sentWeight += r.answer_count;
+    }
+  }
+  return {
+    engines,
+    mentions,
+    answers,
+    sov: answers > 0 ? mentions / answers : null,
+    sentiment: sentWeight > 0 ? sentSum / sentWeight : null,
+  };
+}
 
 // --- Riskloopens render-modell (speglar services/monthly_report.py) ---
 
@@ -141,10 +197,11 @@ type PollingWeek = {
 const ENGINE_SV: Record<string, string> = {
   [PROBE_CLAUDE_MODEL]: 'Claude',
   [PROBE_GEMINI_MODEL]: 'Gemini',
+  [PROBE_OPENAI_MODEL]: 'ChatGPT',
+  [PROBE_MISTRAL_MODEL]: 'Mistral',
+  [PROBE_PERPLEXITY_MODEL]: 'Perplexity',
   'gpt-4o': 'ChatGPT (legacy)',
-  'gpt-5.5': 'ChatGPT (legacy)',
   'gemini-1.5-pro': 'Gemini (legacy)',
-  'gemini-3.5-flash': 'Gemini (legacy)',
   chatgpt: 'ChatGPT',
   gemini: 'Gemini',
   perplexity: 'Perplexity',
@@ -251,12 +308,13 @@ type DimensionRaw = {
   credibility_gap?: number | null;
   perceived?: PerceivedRaw | null;
 };
+type EnginePerceptionLine = { engine: string; text: string; knowledge_source?: KnowledgeSource };
 type HumanizationDim = {
   dimension: string;
   label: string;
   evidence_plain: string;
   perception_plain: string;
-  perception_by_engine: string[];
+  perception_by_engine: EnginePerceptionLine[];
   action: string;
   confidence_note: string | null;
   raw?: DimensionRaw;
@@ -956,30 +1014,85 @@ function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
         </div>
       )}
 
-      {engineEntries.length > 0 && (
-        <div>
-          <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 8 }}>Per AI-motor — senaste veckan + trend</div>
-          <div style={{ ...engineGrid, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 8, marginBottom: 6 }}>
-            <span>Motor</span>
-            <span>SoV</span>
-            <span>Sentiment</span>
-            <span>Nämner</span>
-            <span>Trend (12v)</span>
+      {engineEntries.length > 0 && (() => {
+        const training = aggregateEnginesBySource(engineEntries, 'training');
+        const webRag = aggregateEnginesBySource(engineEntries, 'web_rag');
+        return (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8, gap: 12 }}>
+              <div style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>Per AI-motor — senaste veckan + trend</div>
+              <span
+                title="Bas-kunskap (RLHF-tränade modeller) och Live-signal (web-RAG som Perplexity) har fundamentalt olika fördelningar och frågedjup. De medeltalas aldrig — endast jämförs sida vid sida."
+                style={{ fontSize: 10, color: C.dim, fontStyle: 'italic' }}
+              >
+                Bas-kunskap vs Live-signal — aldrig medeltala
+              </span>
+            </div>
+            {training.engines.length > 0 && (
+              <EnginesBySourceSection
+                title="AI Base Knowledge"
+                subtitle="RLHF-tränade modeller — det AI:n redan kan från sin träning (ChatGPT, Gemini, Claude, Mistral)"
+                agg={training}
+                trend={engineTrend}
+              />
+            )}
+            {webRag.engines.length > 0 && (
+              <EnginesBySourceSection
+                title="AI Live Signal"
+                subtitle="Web-RAG — vad AI:n hittar live på webben just nu (Perplexity Sonar)"
+                agg={webRag}
+                trend={engineTrend}
+              />
+            )}
           </div>
-          {engineEntries.map(([eng, r]) => {
-            const es = sentimentLabel(r.sentiment_score);
-            return (
-              <div key={eng} style={{ ...engineGrid, padding: '8px 0', borderBottom: `1px solid ${C.border}`, fontSize: 12, alignItems: 'center' }}>
-                <span style={{ color: '#3a4b56', fontWeight: 600 }}>{ENGINE_SV[eng] || eng}</span>
-                <span style={{ color: '#3a4b56' }}>{Math.round(r.share_of_voice * 100)}%</span>
-                <span style={{ color: es.color }}>{es.text}</span>
-                <span style={{ color: C.dim }}>{r.mention_count}/{r.answer_count}</span>
-                <Sparkline series={engineTrend[eng]} />
-              </div>
-            );
-          })}
+        );
+      })()}
+    </div>
+  );
+}
+
+function EnginesBySourceSection({
+  title,
+  subtitle,
+  agg,
+  trend,
+}: {
+  title: string;
+  subtitle: string;
+  agg: ReturnType<typeof aggregateEnginesBySource>;
+  trend: Record<string, (number | null)[]>;
+}) {
+  const sent = sentimentLabel(agg.sentiment);
+  return (
+    <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px dashed ${C.border}` }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#3a4b56' }}>{title}</div>
+        <div style={{ fontSize: 11, color: C.muted, display: 'flex', gap: 12 }}>
+          <span>SoV: <span style={{ fontWeight: 600, color: '#3a4b56' }}>{agg.sov != null ? `${Math.round(agg.sov * 100)}%` : '—'}</span></span>
+          <span>Sentiment: <span style={{ fontWeight: 600, color: sent.color }}>{sent.text}</span></span>
+          <span style={{ color: C.dim }}>{agg.mentions}/{agg.answers} svar</span>
         </div>
-      )}
+      </div>
+      <div style={{ fontSize: 11, color: C.dim, marginBottom: 8 }}>{subtitle}</div>
+      <div style={{ ...engineGrid, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 8, marginBottom: 6 }}>
+        <span>Motor</span>
+        <span>SoV</span>
+        <span>Sentiment</span>
+        <span>Nämner</span>
+        <span>Trend (12v)</span>
+      </div>
+      {agg.engines.map(([eng, r]) => {
+        const es = sentimentLabel(r.sentiment_score);
+        return (
+          <div key={eng} style={{ ...engineGrid, padding: '8px 0', borderBottom: `1px solid ${C.border}`, fontSize: 12, alignItems: 'center' }}>
+            <span style={{ color: '#3a4b56', fontWeight: 600 }}>{ENGINE_SV[eng] || eng}</span>
+            <span style={{ color: '#3a4b56' }}>{Math.round(r.share_of_voice * 100)}%</span>
+            <span style={{ color: es.color }}>{es.text}</span>
+            <span style={{ color: C.dim }}>{r.mention_count}/{r.answer_count}</span>
+            <Sparkline series={trend[eng]} />
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1255,11 +1368,32 @@ function DimensionRow({ dim, mode }: { dim: HumanizationDim; mode: ViewMode }) {
       )}
       <div style={{ fontSize: 12, color: '#3a4b56', marginTop: 4, lineHeight: 1.5 }}>{dim.evidence_plain}</div>
       <div style={{ fontSize: 12, color: C.muted, marginTop: 4, lineHeight: 1.5 }}>{dim.perception_plain}</div>
-      {dim.perception_by_engine.length > 0 && (
-        <ul style={{ margin: '6px 0 0', paddingLeft: 16, color: C.dim, fontSize: 11, lineHeight: 1.5 }}>
-          {dim.perception_by_engine.map((line, i) => <li key={i}>{line}</li>)}
-        </ul>
-      )}
+      {dim.perception_by_engine.length > 0 && (() => {
+        // Splitta per knowledge-source så bas-kunskap (RLHF) och live-signal (web-RAG)
+        // hålls visuellt åtskilda. Aldrig medeltala över source-typer.
+        // Backend levererar knowledge_source per rad; fallback till lokal lookup om
+        // fältet saknas (under deploy-skew kan en gammal payload nå en ny frontend).
+        const sourceOf = (l: EnginePerceptionLine): KnowledgeSource =>
+          l.knowledge_source ?? knowledgeSourceFor(l.engine);
+        const training = dim.perception_by_engine.filter((l) => sourceOf(l) === 'training');
+        const webRag = dim.perception_by_engine.filter((l) => sourceOf(l) === 'web_rag');
+        const renderGroup = (entries: EnginePerceptionLine[], title: string) => (
+          entries.length > 0 && (
+            <div style={{ marginTop: 6 }}>
+              <div style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>{title}</div>
+              <ul style={{ margin: '2px 0 0', paddingLeft: 16, color: C.dim, fontSize: 11, lineHeight: 1.5 }}>
+                {entries.map((l) => <li key={l.engine}>{l.text}</li>)}
+              </ul>
+            </div>
+          )
+        );
+        return (
+          <>
+            {renderGroup(training, 'AI Base Knowledge')}
+            {renderGroup(webRag, 'AI Live Signal')}
+          </>
+        );
+      })()}
       <div style={{ fontSize: 12, color: '#16a34a', marginTop: 6, lineHeight: 1.5 }}>
         <strong>Att göra:</strong> {dim.action}
       </div>
@@ -1510,20 +1644,51 @@ function EngineHealthBar({ data, onRefresh }: { data: EngineHealthResp; onRefres
     : liveOk < liveTotal
       ? { text: `${liveOk}/${liveTotal} probe-motorer svarar — partiella mätningar`, tone: 'waiting' as const }
       : null;
+
+  // Gruppera probarna efter kunskapskälla — bas-kunskap (RLHF, training-data)
+  // vs live-signal (web-RAG). Olika fördelningar → ALDRIG medeltala över dem.
+  // Planerade motorer (perplexity-stub, copilot etc) hamnar i "training" som default.
+  const trainingEngines = data.engines.filter((e) => knowledgeSourceFor(e.id) === 'training');
+  const webRagEngines = data.engines.filter((e) => knowledgeSourceFor(e.id) === 'web_rag');
+
+  const renderChips = (engines: typeof data.engines) => engines.map((e) => (
+    <EngineChip
+      key={e.id}
+      engine={e}
+      active={openId === e.id}
+      onClick={() => setOpenId((curr) => (curr === e.id ? null : e.id))}
+    />
+  ));
+
   return (
     <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}` }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginRight: 4 }}>
-          AI-motorer
-        </span>
-        {data.engines.map((e) => (
-          <EngineChip
-            key={e.id}
-            engine={e}
-            active={openId === e.id}
-            onClick={() => setOpenId((curr) => (curr === e.id ? null : e.id))}
-          />
-        ))}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {/* Sektion 1: Bas-kunskap (training-data baserade modeller) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span
+            title="Modeller som svarar utifrån sin träningsdata (RLHF). Påverkas av long-form innehåll, Wikipedia, autoritativa källor som hamnar i nästa träningsrunda."
+            style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginRight: 4, cursor: 'help' }}
+          >
+            Bas-kunskap
+          </span>
+          {renderChips(trainingEngines)}
+        </div>
+
+        {/* Sektion 2: Live-signal (web-RAG) — bara om vi har sådana motorer */}
+        {webRagEngines.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span
+              title="Modeller som söker live på webben (web-RAG) innan de svarar. Påverkas av fresh press, SEO, structured data, nyhetscykel."
+              style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginRight: 4, cursor: 'help' }}
+            >
+              Live-signal
+            </span>
+            {renderChips(webRagEngines)}
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
         <button
           onClick={async () => { setRefreshing(true); await onRefresh(); setTimeout(() => setRefreshing(false), 600); }}
           title={`Senast kollat ${new Date(data.checked_at).toLocaleTimeString('sv-SE')} — klick för att probe på nytt`}

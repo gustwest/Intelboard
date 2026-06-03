@@ -16,6 +16,7 @@ from typing import Any
 
 import firestore_client as fs
 from schema_org import humanization_config as hc
+from services import model_registry
 
 log = logging.getLogger(__name__)
 
@@ -70,25 +71,37 @@ def _action_plain(label: str, e: dict[str, Any]) -> str:
     return f"Fortsätt belägga {label} med färska, oberoende underlag."
 
 
-def _perception_by_engine(e: dict[str, Any]) -> list[str]:
+def _perception_by_engine(e: dict[str, Any]) -> list[dict[str, str]]:
     """Perception PER motor i klartext (§10.3 punkt 3) — behåll motorerna isär, kollapsa ej.
-    Tom lista om probe-data saknas. Synlighet (salience) och omdöme (valens) hålls åtskilda."""
+
+    Returnerar lista av {engine, text, knowledge_source}. Frontend grupperar per
+    knowledge_source — AI Base Knowledge (training, RLHF) vs AI Live Signal (web_rag,
+    Perplexity Sonar). Vi medeltalar ALDRIG över source-typer; de har fundamentalt
+    olika fördelningar och frågedjup.
+
+    Tom lista om probe-data saknas. Synlighet (salience) och omdöme (valens) hålls åtskilda.
+    """
     by_engine = ((e.get("perceived") or {}).get("by_engine")) or {}
-    lines: list[str] = []
+    lines: list[dict[str, str]] = []
     for engine, stats in by_engine.items():
         name = ENGINE_SV.get(engine, engine)
         salience = (stats or {}).get("salience")
         valence = (stats or {}).get("valence")
         if salience is None or salience < hc.SALIENCE_FLOOR:
-            lines.append(f"{name} vet ännu nästan inget om er här (en synlighetsfråga, inte ett dåligt omdöme).")
+            text = f"{name} vet ännu nästan inget om er här (en synlighetsfråga, inte ett dåligt omdöme)."
         elif valence is None:
-            lines.append(f"{name} känner till er, men ger inget tydligt omdöme att tolka än.")
+            text = f"{name} känner till er, men ger inget tydligt omdöme att tolka än."
         elif valence >= 0.6:
-            lines.append(f"{name} känner till er och beskriver er positivt här.")
+            text = f"{name} känner till er och beskriver er positivt här."
         elif valence <= 0.4:
-            lines.append(f"{name} känner till er men beskriver er svalt här.")
+            text = f"{name} känner till er men beskriver er svalt här."
         else:
-            lines.append(f"{name} känner till er och beskriver er neutralt här.")
+            text = f"{name} känner till er och beskriver er neutralt här."
+        lines.append({
+            "engine": engine,
+            "text": text,
+            "knowledge_source": model_registry.knowledge_source_for(engine),
+        })
     return lines
 
 
@@ -277,8 +290,19 @@ def render_fragment(model: dict[str, Any]) -> str:
     rows = ""
     for d in model.get("dimensions") or []:
         note = f"<p class='note'>{html.escape(d['confidence_note'])}</p>" if d.get("confidence_note") else ""
-        engines = "".join(f"<li class='note'>{html.escape(line)}</li>" for line in d.get("perception_by_engine") or [])
-        engines_html = f"<ul>{engines}</ul>" if engines else ""
+        # Gruppera per knowledge_source — aldrig medelvärda mellan dem (spec §10.3 punkt 3).
+        # Training-motorer först (bas-kunskap), web_rag andra (live-signal).
+        engine_lines = d.get("perception_by_engine") or []
+        training_lines = [ln for ln in engine_lines if ln.get("knowledge_source", "training") == "training"]
+        web_rag_lines = [ln for ln in engine_lines if ln.get("knowledge_source") == "web_rag"]
+
+        def _group_html(label: str, items: list[dict[str, str]]) -> str:
+            if not items:
+                return ""
+            li = "".join(f"<li class='note'>{html.escape(it.get('text', ''))}</li>" for it in items)
+            return f"<p class='note' style='margin:.4rem 0 .2rem'><em>{html.escape(label)}</em></p><ul>{li}</ul>"
+
+        engines_html = _group_html("AI Base Knowledge", training_lines) + _group_html("AI Live Signal", web_rag_lines)
         rows += (
             f"<div class='dim'><h3>{html.escape(d['label'])}</h3>"
             f"<p>{html.escape(d['evidence_plain'])}</p>"
