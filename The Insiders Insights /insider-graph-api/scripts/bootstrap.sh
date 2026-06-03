@@ -219,7 +219,7 @@ OPS_WEBHOOK_TOKEN_ENV="${OPS_WEBHOOK_TOKEN:-}"
 gcloud run services update "$SERVICE" --region="$REGION" --project="$PROJECT_ID" \
   --service-account="$SA_EMAIL" \
   --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS},OPS_WEBHOOK_TOKEN=${OPS_WEBHOOK_TOKEN_ENV}" \
-  --update-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest" \
+  --update-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,PERPLEXITY_API_KEY=insider-graph-perplexity-api-key:latest" \
   || echo "==> Service finns ej ännu — kör cloudbuild först"
 
 # ---- 6. Cloud Run Jobs -----------------------------------------------------
@@ -244,7 +244,7 @@ create_or_update_job() {
       --command="python" --args="-m,$CMD" \
       --tasks="$TASKS" --parallelism="$PARALLELISM" --task-timeout="$TASK_TIMEOUT" \
       --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS}" \
-      --update-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest"
+      --update-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,PERPLEXITY_API_KEY=insider-graph-perplexity-api-key:latest"
   else
     echo "==> Skapar job: $NAME (tasks=$TASKS parallelism=$PARALLELISM timeout=$TASK_TIMEOUT)"
     gcloud run jobs create "$NAME" \
@@ -254,7 +254,7 @@ create_or_update_job() {
       --tasks="$TASKS" --parallelism="$PARALLELISM" --task-timeout="$TASK_TIMEOUT" \
       --max-retries=1 \
       --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS}" \
-      --set-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest"
+      --set-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,PERPLEXITY_API_KEY=insider-graph-perplexity-api-key:latest"
   fi
 }
 
@@ -284,6 +284,9 @@ create_or_update_job model-drift-scan         jobs.model_drift_scan        1 1 6
 # Modell-tillgänglighet: dagligt smoke-test mot varje LIVE modell (1 trivial
 # .invoke() per entry) — fångar regions-glapp, ToS-brist och kvotfel.
 create_or_update_job model-availability-check jobs.model_availability_check 1 1 600s
+# Kostnads-roll-up: läser föregående dygns job_runs.summary.tokens, summerar
+# USD per modell/kund/jobb-typ, kollar trösklar. Lätt jobb — Firestore-läsning + lite mattematik.
+create_or_update_job cost-rollup              jobs.cost_rollup              1 1 600s
 
 # ---- 7. Cloud Scheduler-triggers ------------------------------------------
 schedule_job() {
@@ -340,6 +343,10 @@ schedule_job model-drift-weekly       "30 2 * * 1"  model-drift-scan
 # Tillgänglighet dagligen 02:00 — innan drift-scan så ev. unavailable + behind_latest
 # visas tillsammans i inboxen vid morgonkollen.
 schedule_job model-availability-daily "0 2 * * *"   model-availability-check
+# Kostnads-rollup dagligen 02:15 — efter availability men före risk-detect/scrape så
+# gårdagens job_runs är klara att summera. Skapar cost_summary/{YYYY-MM-DD} +
+# triggar tröskel-alerts som hamnar i drift-larmen.
+schedule_job cost-rollup-daily        "15 2 * * *"  cost-rollup
 
 # ---- 7b. Firestore TTL-policy på job_runs.expire_at -----------------------
 # Koden i jobs/_run_tracker.py skriver ett `expire_at`-fält ~90 dagar i framtiden.

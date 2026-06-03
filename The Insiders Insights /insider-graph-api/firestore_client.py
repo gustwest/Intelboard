@@ -399,3 +399,22 @@ def iter_ops_alerts() -> Iterator[tuple[str, dict[str, Any]]]:
 
 def ops_setup_doc():
     return db().collection("ops_config").document("setup-status")
+
+
+# --- Kostnads-roll-up (jobs/cost_rollup → routers/ops) -----------------------
+# En doc per dag (id = YYYY-MM-DD). Skapas/överskrivs idempotent av
+# cost_rollup. Tröskel-alerts läser senaste docs för att beräkna prognos
+# och per-kund-spend.
+
+
+def cost_summary_col():
+    return db().collection("cost_summary")
+
+
+def cost_summary_doc(date_iso: str):
+    return cost_summary_col().document(date_iso)
+
+
+def iter_cost_summary() -> Iterator[tuple[str, dict[str, Any]]]:
+    for doc in cost_summary_col().stream():
+        yield doc.id, doc.to_dict() or {}

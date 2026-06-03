@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users, Plug, Rocket, Activity, Globe2,
-  Quote, Inbox, Network, Radar, Leaf, Check, X, Loader2, HeartPulse, AlertTriangle, Bell,
+  Quote, Inbox, Network, Radar, Leaf, Check, X, Loader2, HeartPulse, AlertTriangle, Bell, DollarSign,
 } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from './_components/GraphPageShell';
 import { graphFetch } from './_lib/api';

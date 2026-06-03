@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 
 import firestore_client as fs
 from config import settings
-from services import ops_alerts
+from services import cost_estimator, ops_alerts
 
 log = logging.getLogger(__name__)
 
@@ -146,6 +146,128 @@ def ack_budget_source(body: dict[str, Any] | None = None) -> dict[str, Any]:
         log.warning("ops setup-status write failed: %s", exc)
         raise HTTPException(500, "kunde inte spara setup-status")
     return {"status": "acked", "by": by}
+
+
+# --- Kostnadsbild (services/cost_estimator + jobs/cost_rollup) ---------------
+# Aggregerar cost_summary-rollupen över olika perioder + topp-listor + dagstrend
+# + tröskelvärden. Drivs av /insider-graph/costs i UI:t. All data är intern
+# uppskattning baserad på token-mätaren — Cloud Billing är fortfarande sanningen.
+
+
+@router.get("/cost-summary")
+def cost_summary(period: str = Query("mtd", description="today|7d|30d|mtd")) -> dict[str, Any]:
+    """Aggregat över perioden. period:
+    - today: bara idag (kan vara tom om rollupen inte körts än idag)
+    - 7d: senaste 7 dagarna
+    - 30d: senaste 30 dagarna
+    - mtd: month-to-date (innevarande månad, dag 1 till idag)
+    """
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc).date()
+    if period == "today":
+        start = now
+    elif period == "7d":
+        start = now - timedelta(days=6)
+    elif period == "30d":
+        start = now - timedelta(days=29)
+    elif period == "mtd":
+        start = now.replace(day=1)
+    else:
+        raise HTTPException(400, f"okänd period: {period}")
+
+    total_usd = 0.0
+    by_model_acc: dict[str, dict[str, float]] = {}
+    by_client_acc: dict[str, dict[str, float]] = {}
+    daily: list[dict[str, Any]] = []
+    unknown_models: set[str] = set()
+    n_days_with_data = 0
+
+    d = start
+    while d <= now:
+        date_iso = d.strftime("%Y-%m-%d")
+        try:
+            snap = fs.cost_summary_doc(date_iso).get()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("cost_summary read failed for %s: %s", date_iso, exc)
+            snap = None
+        if snap and snap.exists:
+            data = snap.to_dict() or {}
+            day_usd = float(data.get("total_usd") or 0)
+            total_usd += day_usd
+            daily.append({"date": date_iso, "usd": round(day_usd, 4)})
+            if day_usd > 0 or data.get("n_runs"):
+                n_days_with_data += 1
+            for mid, u in (data.get("by_model") or {}).items():
+                bucket = by_model_acc.setdefault(mid, {"input": 0, "output": 0, "calls": 0, "usd": 0.0})
+                bucket["input"] += int(u.get("input") or 0)
+                bucket["output"] += int(u.get("output") or 0)
+                bucket["calls"] += int(u.get("calls") or 0)
+                bucket["usd"] += float(u.get("usd") or 0)
+            for cid, bc in (data.get("by_client") or {}).items():
+                bucket = by_client_acc.setdefault(cid, {"input": 0, "output": 0, "calls": 0, "usd": 0.0})
+                bucket["input"] += int(bc.get("input") or 0)
+                bucket["output"] += int(bc.get("output") or 0)
+                bucket["calls"] += int(bc.get("calls") or 0)
+                bucket["usd"] += float(bc.get("usd") or 0)
+            for mid in data.get("unknown_models") or []:
+                unknown_models.add(mid)
+        else:
+            daily.append({"date": date_iso, "usd": 0.0})
+        d += timedelta(days=1)
+
+    top_models = sorted(
+        ({"model_id": m, **u, "usd": round(u["usd"], 4)} for m, u in by_model_acc.items()),
+        key=lambda x: x["usd"],
+        reverse=True,
+    )
+    top_clients = sorted(
+        ({"client_id": c, **u, "usd": round(u["usd"], 4)} for c, u in by_client_acc.items()),
+        key=lambda x: x["usd"],
+        reverse=True,
+    )
+
+    # Månadsprognos: bara meningsfull för "mtd". Pro rata på dagar.
+    forecast_usd: float | None = None
+    if period == "mtd" and n_days_with_data >= 1:
+        from calendar import monthrange
+
+        days_in_month = monthrange(now.year, now.month)[1]
+        forecast_usd = round(total_usd / max(1, n_days_with_data) * days_in_month, 2)
+
+    # Trösklar från cost_rollup-modulen (env-överstyrbara).
+    import os
+
+    thresholds = {
+        "daily_warning_usd": float(os.environ.get("COST_DAILY_USD", "25")),
+        "per_client_daily_usd": float(os.environ.get("COST_PER_CLIENT_DAILY_USD", "5")),
+        "monthly_forecast_usd": float(os.environ.get("COST_MONTHLY_FORECAST_USD", "1500")),
+    }
+
+    return {
+        "period": period,
+        "start": start.strftime("%Y-%m-%d"),
+        "end": now.strftime("%Y-%m-%d"),
+        "total_usd": round(total_usd, 4),
+        "n_days_with_data": n_days_with_data,
+        "forecast_usd": forecast_usd,
+        "daily": daily,
+        "top_models": top_models[:10],
+        "top_clients": top_clients[:10],
+        "unknown_models": sorted(unknown_models),
+        "thresholds": thresholds,
+        "prices": cost_estimator.prices_for_ui(),
+    }
+
+
+@router.post("/cost-summary/rollup-now")
+def trigger_rollup(date: str | None = None) -> dict[str, Any]:
+    """Trigga rollupen manuellt — för testning eller backfill av en specifik dag.
+    Utan datum: föregående UTC-dygn. Datum-format: YYYY-MM-DD."""
+    from jobs.cost_rollup import run as run_rollup
+
+    rollup = run_rollup(date)
+    return {"status": "ok", "date": rollup.get("date"), "total_usd": rollup.get("total_usd")}
 
 
 @router.post("/setup-status/unack-budget-source")

@@ -59,6 +59,10 @@ EXPECTED_ROOT_COLLECTIONS = {
     # Manuella setup-kvitteringar (routers/ops.setup-status). Single doc per
     # installation — system-konfig, ingen kunddata.
     "ops_config",
+    # Daglig kostnads-roll-up (jobs/cost_rollup). En doc per YYYY-MM-DD med
+    # totaler + topplistor. by_client innehåller client_id men det är
+    # operationell-mätdata (samma som job_runs) — ingår ej i delete_client.
+    "cost_summary",
 }
 
 
