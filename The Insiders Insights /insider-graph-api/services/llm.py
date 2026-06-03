@@ -242,7 +242,13 @@ def make_probe_engines() -> dict[str, Any]:
 # services/model_registry — uppdatera DÄR, inte här.
 PROBE_ENGINE_REGISTRY: list[dict[str, Any]] = [
     {"id": model_registry.get_id("probe_claude"), "label": "Claude",
-     "vendor": "Anthropic (Vertex global)", "status": "live", "note": None},
+     "vendor": "Anthropic (Vertex global)", "status": "planned",
+     "note": "anthropic-SDK installerad och ChatAnthropicVertex initialiseras OK, "
+             "men service-account-kallet mot Anthropic global endpoint returnerar 404 "
+             "(quota-/scope-issue per SA). Med användar-ADC svarar samma endpoint med "
+             "429 quota — så modellen finns. Kräver troligen quota-höjning eller "
+             "Anthropic-aktivering per service-account i Console. Se "
+             "docs/model-activation-todo.md."},
     {"id": model_registry.get_id("probe_gemini"), "label": "Gemini",
      "vendor": "Google (Vertex europe-west1)", "status": "live", "note": None},
     {"id": model_registry.get_id("probe_openai"), "label": "ChatGPT",

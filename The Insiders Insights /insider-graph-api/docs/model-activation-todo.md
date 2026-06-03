@@ -30,6 +30,18 @@ För varje av nedan: sök på namnet → klicka kortet → **ENABLE** → accept
       `PROBE_ENGINE_REGISTRY` tills aktiveringen är komplett. När du löst det:
       flippa `"status": "planned"` → `"live"` i `services/llm.py` och pusha.
 
+- [ ] **Claude Sonnet 4.6 — quota/scope per service-account**: Med användar-ADC (din
+      gcloud-login) svarar Anthropic global endpoint med 429 ("quota exceeded"), så
+      modellen finns och EULA är OK. Men vid anrop FRÅN Cloud Run-jobben (service-account
+      `insider-graph-sa`) får vi 404 på samma endpoint. Behöver troligen:
+      - **Either**: höja quota för Anthropic global på service-accounten via
+        IAM & Admin → Quotas → "Anthropic API requests per minute (per project)"
+      - **Or**: aktivera Claude-modellen explicit per service-account via Console
+        (Vertex AI → Model Garden → Claude Sonnet 4.6 → "Bind to service account")
+      - Probe_claude är markerad som `planned` tills det löses. Flippa till `"live"`
+        i `services/llm.py` PROBE_ENGINE_REGISTRY när Cloud Run-loggen visar att
+        anropet returnerar 2xx/429 istället för 404.
+
 ### Steg 2: Skapa Perplexity API-nyckel (~3 min)
 
 1. Logga in på https://www.perplexity.ai/settings/api → **Generate New API Key**
