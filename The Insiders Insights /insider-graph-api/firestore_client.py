@@ -252,6 +252,21 @@ def iter_trust_gap_snapshots(client_id: str) -> Iterator[tuple[str, dict[str, An
         yield doc.id, doc.to_dict() or {}
 
 
+def recipes_col(client_id: str):
+    """Receptmotorns persisterade DetailedRecipe-dokument (Fas 1.3c, spec §10 punkt 5).
+    Ett doc per gap-typ+dimension; deterministisk id för idempotens vid re-generering."""
+    return client_doc(client_id).collection("recipes")
+
+
+def recipe_doc(client_id: str, recipe_id: str):
+    return recipes_col(client_id).document(recipe_id)
+
+
+def iter_recipes(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
+    for doc in recipes_col(client_id).stream():
+        yield doc.id, doc.to_dict() or {}
+
+
 def verifications_col(client_id: str):
     """Manuella Geogiraph-verifieringar (docs/humanization-trust-gap-spec.md §5.4)."""
     return client_doc(client_id).collection("verifications")
