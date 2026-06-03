@@ -101,7 +101,8 @@ class TrustGapPerceptionTest(unittest.TestCase):
         self.assertIn("credibility_gap", dim)
 
     def test_low_salience_is_not_visible_no_flag(self):
-        # Under salience-golvet: ingen valens/gap, ingen flagga, märkt "not_visible".
+        # Under salience-golvet: ingen valens/gap, inga perception-flaggor, märkt "not_visible".
+        # (missing_evidence kan fortfarande resas — det är perception-oberoende.)
         _setup(
             {"c1": _claim("ethics", "declared")},
             perceived={"ethics": {"salience": hc.SALIENCE_FLOOR - 0.05, "valence": 0.9, "confidence": 0.9}},
@@ -110,7 +111,9 @@ class TrustGapPerceptionTest(unittest.TestCase):
         dim = doc["dimensions"]["ethics"]
         self.assertEqual(dim["perceived"].get("status"), "not_visible")
         self.assertNotIn("credibility_gap", dim)
-        self.assertEqual(doc["flags"], [])
+        kinds = {f["kind"] for f in doc["flags"]}
+        self.assertNotIn("over_claim", kinds)
+        self.assertNotIn("opportunity", kinds)
 
     def test_opportunity_flag_when_underperceived(self):
         # valens << evidens, tillräcklig konfidens → möjlighet (lägre ribba).
@@ -122,13 +125,15 @@ class TrustGapPerceptionTest(unittest.TestCase):
         self.assertTrue(any(f["kind"] == "opportunity" and f["dimension"] == "community" for f in flags))
 
     def test_over_claim_requires_high_confidence(self):
-        # valens >> evidens = anseenderisk. Konfidens 0.6 < ribban → INGEN flagga.
+        # valens >> evidens = anseenderisk. Konfidens 0.6 < ribban → INGEN over_claim-flagga
+        # (missing_evidence kan fortfarande resas eftersom declared utan demonstrated).
         _setup(
             {"c1": _claim("community", "declared")},
             perceived={"community": {"salience": 0.7, "valence": 0.8, "confidence": 0.6}},
         )
-        self.assertEqual(ctg.compute("acme")["flags"], [])
-        # Höj konfidensen över ribban → flaggan reses som over_claim.
+        kinds = {f["kind"] for f in ctg.compute("acme")["flags"]}
+        self.assertNotIn("over_claim", kinds)
+        # Höj konfidensen över ribban → over_claim reses.
         _setup(
             {"c1": _claim("community", "declared")},
             perceived={"community": {"salience": 0.7, "valence": 0.8, "confidence": 0.8}},
@@ -137,12 +142,14 @@ class TrustGapPerceptionTest(unittest.TestCase):
         self.assertTrue(any(f["kind"] == "over_claim" and f["dimension"] == "community" for f in flags))
 
     def test_small_gap_never_flags(self):
-        # |gap| under magnitudgolvet → ingen flagga oavsett konfidens.
+        # |gap| under magnitudgolvet → inga perception-flaggor (over_claim/opportunity).
         _setup(
             {"c1": _claim("community", "declared")},  # evidens 0.3
             perceived={"community": {"salience": 0.7, "valence": 0.35, "confidence": 0.95}},
         )
-        self.assertEqual(ctg.compute("acme")["flags"], [])
+        kinds = {f["kind"] for f in ctg.compute("acme")["flags"]}
+        self.assertNotIn("over_claim", kinds)
+        self.assertNotIn("opportunity", kinds)
 
 
 class TrustGapIdempotencyTest(unittest.TestCase):
@@ -152,6 +159,182 @@ class TrustGapIdempotencyTest(unittest.TestCase):
         self.assertTrue(first["written"])
         second = ctg.run("acme")
         self.assertTrue(second.get("skipped"))
+
+
+# --- Utökad gap-taxonomi (Fas 1.1) --------------------------------------------
+
+def _setup_with_snapshots(claims=None, perceived=None, snapshots=None):
+    polling = {hc.WARMTH_PROBE_DOC: {"dimensions": perceived}} if perceived else {}
+    fakefs.reset(
+        client={"company_name": "Acme AB"},
+        claims=claims or {},
+        polling_results=polling,
+        trust_gap_snapshots=snapshots or {},
+    )
+
+
+class GapTaxonomyMissingEvidenceTest(unittest.TestCase):
+    def test_declared_without_evidence_raises_missing_evidence(self):
+        # Deklarerat men ej belagt → missing_evidence (perception-oberoende).
+        _setup({"c1": _claim("ethics", "declared")})
+        flags = ctg.compute("acme")["flags"]
+        me = [f for f in flags if f["kind"] == "missing_evidence" and f["dimension"] == "ethics"]
+        self.assertEqual(len(me), 1)
+        # Utan AI-synlighet är severity "medium" — risken är låg när ingen ser oss.
+        self.assertEqual(me[0]["severity"], "medium")
+
+    def test_missing_evidence_high_severity_when_ai_visible(self):
+        # Deklarerat + AI ser oss → severity "high" (risken är mer exponerad).
+        _setup(
+            {"c1": _claim("ethics", "declared")},
+            perceived={"ethics": {"salience": 0.6, "valence": 0.5, "confidence": 0.6}},
+        )
+        flags = ctg.compute("acme")["flags"]
+        me = [f for f in flags if f["kind"] == "missing_evidence"]
+        self.assertEqual(me[0]["severity"], "high")
+
+    def test_no_missing_evidence_when_demonstrated(self):
+        # Demonstrated → ingen missing_evidence oavsett declared.
+        _setup({
+            "c1": _claim("ethics", "declared"),
+            "c2": _claim("ethics", "demonstrated", kind="item"),
+        })
+        flags = ctg.compute("acme")["flags"]
+        self.assertFalse(any(f["kind"] == "missing_evidence" for f in flags))
+
+
+class GapTaxonomyContradictionTest(unittest.TestCase):
+    def test_engines_disagree_raises_contradiction(self):
+        # Två motorer över salience-golvet med spread ≥ CONTRADICTION_SPREAD_MIN.
+        _setup(
+            {"c1": _claim("community", "demonstrated", kind="item")},
+            perceived={
+                "community": {
+                    "salience": 0.6, "valence": 0.5, "confidence": 0.6,
+                    "by_engine": {
+                        "gemini": {"salience": 0.7, "valence": 0.85},
+                        "chatgpt": {"salience": 0.6, "valence": 0.2},
+                    },
+                },
+            },
+        )
+        flags = ctg.compute("acme")["flags"]
+        c = [f for f in flags if f["kind"] == "contradiction"]
+        self.assertEqual(len(c), 1)
+        self.assertEqual(c[0]["warmest_engine"], "gemini")
+        self.assertEqual(c[0]["coolest_engine"], "chatgpt")
+        self.assertGreaterEqual(c[0]["spread"], hc.CONTRADICTION_SPREAD_MIN)
+
+    def test_engines_below_salience_floor_ignored(self):
+        # Motorer under salience-golvet räknas inte (de "vet ingenting" — då ej oense).
+        _setup(
+            {"c1": _claim("community", "demonstrated", kind="item")},
+            perceived={
+                "community": {
+                    "salience": 0.6, "valence": 0.5, "confidence": 0.6,
+                    "by_engine": {
+                        "gemini": {"salience": 0.7, "valence": 0.85},
+                        "chatgpt": {"salience": 0.1, "valence": 0.2},  # under floor
+                    },
+                },
+            },
+        )
+        flags = ctg.compute("acme")["flags"]
+        self.assertFalse(any(f["kind"] == "contradiction" for f in flags))
+
+    def test_small_spread_no_contradiction(self):
+        # Spread under tröskeln → ingen flagga (motorerna är "ungefär överens").
+        _setup(
+            {"c1": _claim("community", "demonstrated", kind="item")},
+            perceived={
+                "community": {
+                    "salience": 0.6, "valence": 0.5, "confidence": 0.6,
+                    "by_engine": {
+                        "gemini": {"salience": 0.7, "valence": 0.55},
+                        "chatgpt": {"salience": 0.6, "valence": 0.45},
+                    },
+                },
+            },
+        )
+        flags = ctg.compute("acme")["flags"]
+        self.assertFalse(any(f["kind"] == "contradiction" for f in flags))
+
+
+class GapTaxonomyFactualDriftTest(unittest.TestCase):
+    def test_valence_drop_without_evidence_drop_raises_drift(self):
+        # Föregående snapshot: hög valens, lågt demonstrated (0.2). Nu: lägre valens, men
+        # demonstrated har stigit (ny item-claim → 0.25). Underlaget har INTE rasat → drift.
+        prior = {
+            "2026-05-01": {
+                "date": "2026-05-01",
+                "trust_gap": {
+                    "dimensions": {
+                        "ethics": {
+                            "declared": 1.0,
+                            "demonstrated": 0.2,
+                            "perceived": {"salience": 0.7, "valence": 0.8, "confidence": 0.8},
+                        }
+                    }
+                },
+            },
+        }
+        _setup_with_snapshots(
+            claims={"c1": _claim("ethics", "demonstrated", kind="item")},
+            perceived={"ethics": {"salience": 0.7, "valence": 0.55, "confidence": 0.8}},
+            snapshots=prior,
+        )
+        flags = ctg.compute("acme")["flags"]
+        drift = [f for f in flags if f["kind"] == "factual_drift"]
+        self.assertEqual(len(drift), 1)
+        self.assertEqual(drift[0]["since_date"], "2026-05-01")
+        self.assertAlmostEqual(drift[0]["valence_drop"], 0.25)
+
+    def test_no_drift_if_evidence_also_dropped(self):
+        # Om underlaget rasat → det är inte drift, det är verklighetsförändring.
+        prior = {
+            "2026-05-01": {
+                "date": "2026-05-01",
+                "trust_gap": {
+                    "dimensions": {
+                        "ethics": {
+                            "declared": 1.0,
+                            "demonstrated": 1.0,  # Tidigare högt belagt
+                            "perceived": {"salience": 0.7, "valence": 0.8, "confidence": 0.8},
+                        }
+                    }
+                },
+            },
+        }
+        _setup_with_snapshots(
+            claims={"c1": _claim("ethics", "declared")},  # nu bara declared, inget demonstrated
+            perceived={"ethics": {"salience": 0.7, "valence": 0.55, "confidence": 0.8}},
+            snapshots=prior,
+        )
+        flags = ctg.compute("acme")["flags"]
+        self.assertFalse(any(f["kind"] == "factual_drift" for f in flags))
+
+    def test_no_drift_without_prior_snapshot(self):
+        # Ingen tidigare snapshot → ingen drift-detektion möjlig.
+        _setup_with_snapshots(
+            claims={"c1": _claim("ethics", "demonstrated", kind="item")},
+            perceived={"ethics": {"salience": 0.7, "valence": 0.55, "confidence": 0.8}},
+            snapshots={},
+        )
+        flags = ctg.compute("acme")["flags"]
+        self.assertFalse(any(f["kind"] == "factual_drift" for f in flags))
+
+
+class GapTaxonomyMultipleFlagsTest(unittest.TestCase):
+    def test_same_dimension_can_raise_multiple_flags(self):
+        # Declared utan demonstrated + AI ser oss varmt = missing_evidence + over_claim.
+        _setup(
+            {"c1": _claim("community", "declared")},  # evidens = DECLARED_CAP = 0.3
+            perceived={"community": {"salience": 0.7, "valence": 0.8, "confidence": 0.8}},
+        )
+        flags = ctg.compute("acme")["flags"]
+        kinds = {f["kind"] for f in flags if f["dimension"] == "community"}
+        self.assertIn("missing_evidence", kinds)
+        self.assertIn("over_claim", kinds)
 
 
 if __name__ == "__main__":

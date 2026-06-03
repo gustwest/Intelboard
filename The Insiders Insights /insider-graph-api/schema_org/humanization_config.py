@@ -86,3 +86,27 @@ GAP_MAGNITUDE_MIN: float = 0.2     # minsta |gap| för att en flagga ska vara me
 # credibility_gap > 0 = anseenderisk → högre ribba + helst korroboration:
 OVER_CLAIM_CONFIDENCE_MIN: float = 0.7
 OVER_CLAIM_REQUIRES_CORROBORATION: bool = True
+
+# --- Utökad gap-taxonomi (Fas 1.1) --------------------------------------------
+# Sju typer; fem aktiva nu, två stubbade tills förutsättningarna finns. Recept-motorn
+# (Fas 1.3) känner till hela taxonomin så Fas 2/4 kan aktivera utan refactor.
+GAP_TAXONOMY: tuple[str, ...] = (
+    "over_claim",                # AI varmare än underlaget (anseenderisk) — perception > evidens
+    "opportunity",               # underlaget varmare än AI — perception < evidens
+    "missing_evidence",          # deklarerat men ej belagt; perception-oberoende
+    "contradiction",             # motorerna är oense; spread mellan engines över tröskel
+    "factual_drift",             # AI:s bild har svalnat sedan förra mätningen utan att underlaget gjort det
+    "persona_mismatch",          # STUBB — kräver per-persona-scoring (Fas 2.1)
+    "competitive_displacement",  # STUBB — kräver konkurrent-probe-data (Fas 4)
+)
+
+# Contradiction: minsta valens-spread mellan probe-motorer för att resa flagga.
+# 0.3 = en motor varm (≥0.6) och en sval (≤0.3) — tydlig oenighet, inte brus.
+CONTRADICTION_SPREAD_MIN: float = 0.3
+
+# Factual drift: minsta valens-fall sedan förra snapshot (på samma dimension) som
+# inte förklaras av att underlaget rasat. 0.15 = märkbart utan att vara hyperkänsligt.
+DRIFT_DROP_MIN: float = 0.15
+# Demonstrated får ha sjunkit max så här mycket innan vi avstår från drift-flaggan
+# (då är det inte drift utan reflekterar verkligheten).
+DRIFT_DEMONSTRATED_TOLERANCE: float = 0.05

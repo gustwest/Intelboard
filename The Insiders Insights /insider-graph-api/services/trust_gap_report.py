@@ -102,28 +102,50 @@ def _confidence_note(e: dict[str, Any]) -> str | None:
     return None
 
 
-def _action_priority(e: dict[str, Any], flag_kind: str | None) -> tuple[int, str] | None:
+def _action_priority(e: dict[str, Any], flag_kinds: set[str]) -> tuple[int, str] | None:
     """Prioritet (lägre = mer akut) + skäl, för den gap-rankade handlingslistan (§10 punkt 5).
-    None = inget att göra (redan belagt, ingen flagga) → räknas som styrka, ej åtgärd."""
+    None = inget att göra (redan belagt, ingen flagga) → räknas som styrka, ej åtgärd.
+
+    En dimension kan ha flera flaggor; vi väljer den mest akuta (anseenderisk > drift > resten).
+    """
     declared, demo = e.get("declared", 0), e.get("demonstrated", 0)
-    if flag_kind == "over_claim":
+    if "over_claim" in flag_kinds:
         return 1, "Trovärdighetsrisk: AI beskriver er varmare än ni kan belägga."
-    if flag_kind == "opportunity":
-        return 2, "Möjlighet: ni gör mer än vad som syns utåt."
+    if "factual_drift" in flag_kinds:
+        return 2, "AI:s bild av er har svalnat sedan förra mätningen — något har förändrats utåt."
+    if "contradiction" in flag_kinds:
+        return 3, "Motorerna är oense — vissa AI:er beskriver er varmt, andra svalt."
+    if "opportunity" in flag_kinds:
+        return 4, "Möjlighet: ni gör mer än vad som syns utåt."
+    if "missing_evidence" in flag_kinds:
+        return 5, "Ni säger det, men kan inte belägga det ännu."
     if declared and not demo:
-        return 3, "Ni säger det, men kan inte belägga det ännu."
+        return 5, "Ni säger det, men kan inte belägga det ännu."
     if not declared and not demo:
-        return 4, "Vitt fält — varken utsaga eller underlag."
+        return 6, "Vitt fält — varken utsaga eller underlag."
     if 0 < demo < 0.5:
-        return 5, "Delvis belagt — stärk underlaget för full tyngd."
+        return 7, "Delvis belagt — stärk underlaget för full tyngd."
     return None  # demo >= 0.5 utan flagga → en styrka, inte en åtgärd
 
 
 def _flag_plain(flag: dict[str, Any]) -> str:
     label = hc.DIMENSIONS.get(flag.get("dimension"), flag.get("dimension"))
-    if flag.get("kind") == "over_claim":
+    kind = flag.get("kind")
+    if kind == "over_claim":
         return f"{label}: AI beskriver er varmare än ni kan belägga — en trovärdighetsrisk att täppa."
-    return f"{label}: ni gör mer än som syns utåt — en möjlighet att berätta."
+    if kind == "opportunity":
+        return f"{label}: ni gör mer än som syns utåt — en möjlighet att berätta."
+    if kind == "missing_evidence":
+        return f"{label}: ni säger det, men det är ännu inte belagt — en saknad bevisbit."
+    if kind == "contradiction":
+        warm = ENGINE_SV.get(flag.get("warmest_engine"), flag.get("warmest_engine") or "vissa")
+        cool = ENGINE_SV.get(flag.get("coolest_engine"), flag.get("coolest_engine") or "andra")
+        return f"{label}: {warm} beskriver er varmt, {cool} svalt — motorerna ger olika bild."
+    if kind == "factual_drift":
+        since = flag.get("since_date")
+        suffix = f" sedan {since}" if since else ""
+        return f"{label}: AI:s bild av er har svalnat{suffix} utan att underlaget gjort det."
+    return f"{label}: flagga av typ {kind} — se rådata."
 
 
 # --- Modell -------------------------------------------------------------------
@@ -138,7 +160,14 @@ def build_report_model(client_id: str) -> dict[str, Any] | None:
     client = fs.client_doc(client_id).get().to_dict() or {}
 
     flags = data.get("flags") or []
-    flag_by_dim = {f.get("dimension"): f.get("kind") for f in flags if f.get("dimension")}
+    # En dimension kan nu producera flera flagga-typer (t.ex. missing_evidence + over_claim);
+    # ackumulera till mängd per dimension.
+    flag_kinds_by_dim: dict[str, set[str]] = {}
+    for f in flags:
+        d = f.get("dimension")
+        kind = f.get("kind")
+        if d and kind:
+            flag_kinds_by_dim.setdefault(d, set()).add(kind)
 
     dimensions = []
     ranked_actions = []
@@ -159,7 +188,7 @@ def build_report_model(client_id: str) -> dict[str, Any] | None:
                 "perceived": e.get("perceived"),
             },
         })
-        prio = _action_priority(e, flag_by_dim.get(d))
+        prio = _action_priority(e, flag_kinds_by_dim.get(d, set()))
         if prio is not None:
             ranked_actions.append({"label": label, "why": prio[1], "action": action, "_priority": prio[0]})
 
