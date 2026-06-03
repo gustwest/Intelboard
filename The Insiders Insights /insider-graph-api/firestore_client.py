@@ -267,6 +267,21 @@ def iter_recipes(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
         yield doc.id, doc.to_dict() or {}
 
 
+def interventions_col(client_id: str):
+    """Sluten-loop-interventioner (Fas 1.4): baseline + uppföljning av acted recept.
+    Ett doc per intervention; deterministisk id på (recipe_id, acted_at)."""
+    return client_doc(client_id).collection("interventions")
+
+
+def intervention_doc(client_id: str, intervention_id: str):
+    return interventions_col(client_id).document(intervention_id)
+
+
+def iter_interventions(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
+    for doc in interventions_col(client_id).stream():
+        yield doc.id, doc.to_dict() or {}
+
+
 def verifications_col(client_id: str):
     """Manuella Geogiraph-verifieringar (docs/humanization-trust-gap-spec.md §5.4)."""
     return client_doc(client_id).collection("verifications")

@@ -248,4 +248,15 @@ def update_status(
 
     doc_ref.set(data)
     log.info("recept %s/%s: %s → %s", client_id, rid, current, new_status)
+
+    # Sluten-loop-mätning (Fas 1.4) — sen-import för att undvika cirkulär import
+    # mellan recipes ↔ interventions. interventions triggar tillbaka oss vid
+    # auto-verifiering, så modulnivå-import skulle skapa cirkel.
+    if new_status == "acted":
+        from services import interventions
+        interventions.create_for_acted_recipe(client_id, rid, now=iso_now)
+    elif new_status == "dismissed":
+        from services import interventions
+        interventions.mark_abandoned(client_id, rid, now=iso_now)
+
     return data

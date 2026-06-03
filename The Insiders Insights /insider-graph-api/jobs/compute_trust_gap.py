@@ -278,10 +278,25 @@ def run(client_id: str) -> dict[str, Any]:
             return {"client_id": client_id, "skipped": True}
         fs.trust_gap_doc(client_id).set(doc)
         log.info("trust_gap skriven för %s: overall=%.3f", client_id, doc["overall_score"])
-        r.summary = {"overall_score": doc["overall_score"]}
+
+        # Sluten-loop-mätning (Fas 1.4): verifiera öppna interventioner mot ny
+        # trust_gap. Sen-import — interventions importerar tillbaka recipes och
+        # vi vill inte ha trust_gap-jobbet i den cirkeln på modulnivå.
+        intervention_summary: dict[str, Any] = {}
+        try:
+            from services import interventions
+            intervention_summary = interventions.verify_open(client_id)
+        except Exception as exc:  # noqa: BLE001 — verifiering får aldrig stoppa skriv-pathen
+            log.warning("intervention-verifiering misslyckades för %s: %s", client_id, exc)
+
+        r.summary = {
+            "overall_score": doc["overall_score"],
+            "interventions": intervention_summary,
+        }
         return {
             "client_id": client_id, "written": True,
             "overall_score": doc["overall_score"], "coverage": doc["coverage"],
+            "interventions": intervention_summary,
         }
 
 

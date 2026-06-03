@@ -90,6 +90,7 @@ def reset(
     trust_gap_snapshots: dict[str, dict] | None = None,
     output_quality_logs: dict[str, dict] | None = None,
     recipes: dict[str, dict] | None = None,
+    interventions: dict[str, dict] | None = None,
 ) -> None:
     STATE.clear()
     STATE.update(
@@ -116,6 +117,7 @@ def reset(
         trust_gap_snapshots=trust_gap_snapshots or {},
         output_quality_logs=output_quality_logs or {},
         recipes=recipes or {},
+        interventions=interventions or {},
         writes={},
     )
 
@@ -396,6 +398,22 @@ def recipe_doc(client_id: str, recipe_id: str) -> _DocRef:
 
 def iter_recipes(client_id: str):
     return list(STATE.get("recipes", {}).items())
+
+
+def interventions_col(client_id: str) -> _Col:
+    return _Col(STATE.get("interventions"), writable=True)
+
+
+def intervention_doc(client_id: str, intervention_id: str) -> _DocRef:
+    return _DocRef(
+        intervention_id,
+        STATE.get("interventions", {}).get(intervention_id),
+        on_set=lambda i, p: STATE.setdefault("interventions", {}).__setitem__(i, p),
+    )
+
+
+def iter_interventions(client_id: str):
+    return list(STATE.get("interventions", {}).items())
 
 
 def _oq_logs_bucket(client_id: str) -> dict:
