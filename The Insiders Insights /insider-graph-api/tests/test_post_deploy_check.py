@@ -100,19 +100,42 @@ class ScheduleTests(unittest.TestCase):
         ]}
         self.assertEqual(pdc.evaluate_schedules(payload).status, "ok")
 
-    def test_fail_on_paused(self) -> None:
+    def test_warn_on_paused(self) -> None:
+        # Pausning sker via schema-paus-UI:t i AI-synlighet — ett medvetet ops-val,
+        # inte en konfigurationsdrift. Ska inte blockera deploys (warn, inte fail).
         payload = {"available": True, "schedules": [
             {"name": "polling-weekly-tue", "exists": True, "state": "PAUSED"},
         ]}
         r = pdc.evaluate_schedules(payload)
-        self.assertEqual(r.status, "fail")
+        self.assertEqual(r.status, "warn")
         self.assertIn("PAUSED", r.detail)
+        self.assertIn("polling-weekly-tue", r.detail)
 
     def test_fail_on_missing(self) -> None:
         payload = {"available": True, "schedules": [
             {"name": "polling-weekly-tue", "exists": False, "state": "MISSING"},
         ]}
         self.assertEqual(pdc.evaluate_schedules(payload).status, "fail")
+
+    def test_fail_on_other_non_enabled_states(self) -> None:
+        # DISABLED / FAILED / okänt = fortfarande fail. Det är bara PAUSED som är
+        # första-klass-handling — andra icke-ENABLED-tillstånd indikerar drift.
+        payload = {"available": True, "schedules": [
+            {"name": "x", "exists": True, "state": "DISABLED"},
+        ]}
+        r = pdc.evaluate_schedules(payload)
+        self.assertEqual(r.status, "fail")
+        self.assertIn("DISABLED", r.detail)
+
+    def test_missing_trumps_paused(self) -> None:
+        # Om EN är saknad och EN är pausad → fail (saknad är värre).
+        payload = {"available": True, "schedules": [
+            {"name": "a", "exists": True, "state": "PAUSED"},
+            {"name": "b", "exists": False, "state": "MISSING"},
+        ]}
+        r = pdc.evaluate_schedules(payload)
+        self.assertEqual(r.status, "fail")
+        self.assertIn("b=MISSING", r.detail)
 
 
 class ModelRegistryTests(unittest.TestCase):

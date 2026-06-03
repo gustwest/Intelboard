@@ -87,19 +87,34 @@ def evaluate_job_runs(
 
 
 def evaluate_schedules(payload: dict[str, Any]) -> CheckResult:
+    """Schedulers-check. MISSING = fail (jobbet finns inte alls). PAUSED = warn
+    (operatören har medvetet pausat — schema-paus-UI:t i AI-synlighet stödjer
+    detta som första-klass-handling, ska inte blockera deploys). Andra
+    icke-ENABLED-tillstånd räknas också som fail eftersom de typiskt indikerar
+    konfig-drift (DISABLED, FAILED, etc)."""
     if not payload.get("available"):
         return CheckResult("schedules", "warn", f"scheduler-API otillgängligt: {payload.get('reason')}")
     schedules = payload.get("schedules") or []
     if not schedules:
         return CheckResult("schedules", "fail", "inga scheman returnerade")
-    bad: list[str] = []
+    missing: list[str] = []
+    bad_state: list[str] = []
+    paused: list[str] = []
     for s in schedules:
         if not s.get("exists"):
-            bad.append(f"{s.get('name')}=MISSING")
-        elif s.get("state") != "ENABLED":
-            bad.append(f"{s.get('name')}={s.get('state')}")
-    if bad:
-        return CheckResult("schedules", "fail", "; ".join(bad))
+            missing.append(f"{s.get('name')}=MISSING")
+            continue
+        state = s.get("state")
+        if state == "ENABLED":
+            continue
+        if state == "PAUSED":
+            paused.append(s.get("name") or "?")
+        else:
+            bad_state.append(f"{s.get('name')}={state}")
+    if missing or bad_state:
+        return CheckResult("schedules", "fail", "; ".join(missing + bad_state))
+    if paused:
+        return CheckResult("schedules", "warn", f"{len(paused)} PAUSED (medveten): {', '.join(paused)}")
     return CheckResult("schedules", "ok", f"{len(schedules)} ENABLED")
 
 

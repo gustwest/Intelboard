@@ -57,6 +57,22 @@ _PROBE_SYSTEM = "Answer with the single word 'OK'."
 _PROBE_USER = "ping"
 
 
+def _planned_model_ids() -> set[str]:
+    """Model-ID:n vars probe-status är "planned" i services.llm.PROBE_ENGINE_REGISTRY.
+
+    Planned-status sätts av ops när en motor är inkonfigurerad / inväntar EULA /
+    har quota-problem — CI-grinden ska INTE räkna sådana som unavailable.
+    Lazy-importerad så test-stubbar (utan SDK) inte kraschar vid modulladdning."""
+    try:
+        from services.llm import PROBE_ENGINE_REGISTRY
+    except Exception:  # noqa: BLE001
+        return set()
+    return {
+        entry.get("id") for entry in (PROBE_ENGINE_REGISTRY or [])
+        if entry.get("status") == "planned" and entry.get("id")
+    }
+
+
 def run(dry_run: bool = False) -> int:
     """Returnerar antal otillgängliga modeller. dry_run=True → exit non-zero om >0
     (CI-grind). dry_run=False → skriver findings, returnerar antal men exitar 0."""
@@ -78,12 +94,23 @@ def run(dry_run: bool = False) -> int:
 def _probe_all() -> Iterable[dict]:
     """Yield ett resultat-dict per testbar entry. Saknad SDK / saknad GCP-config
     → skipped=True (informativt, inte ett fel)."""
+    planned_ids = _planned_model_ids()
     for entry in model_registry.all_entries():
         if entry.provider not in _TESTABLE_PROVIDERS:
             yield {
                 "role": entry.role, "model_id": entry.model_id,
                 "provider": entry.provider, "available": True, "skipped": True,
                 "reason": "provider testas inte i denna tjänst (t.ex. claude_code_cli)",
+            }
+            continue
+
+        # Planned-probes hoppas över: ops vet att modellen är inkonfigurerad än
+        # (EULA, quota, scope) — vi vill inte fastna i CI-grinden över medvetna val.
+        if entry.model_id in planned_ids:
+            yield {
+                "role": entry.role, "model_id": entry.model_id,
+                "provider": entry.provider, "available": True, "skipped": True,
+                "reason": "planned i PROBE_ENGINE_REGISTRY — avvaktar ops-aktivering",
             }
             continue
 
