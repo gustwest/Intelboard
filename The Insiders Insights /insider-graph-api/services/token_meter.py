@@ -120,9 +120,13 @@ def _extract_usage(response: Any) -> tuple[int, int]:
 
 
 class _TrackedLLM:
-    """Proxy runt ett LangChain-LLM. .invoke() registrerar usage i den aktiva
-    mätaren; alla andra attribut delegeras transparent till underliggande objekt
-    (så .with_structured_output, .bind, etc. fortsätter fungera)."""
+    """Proxy runt ett LangChain-LLM. .invoke/.ainvoke/.batch/.abatch/.stream/.astream
+    registrerar usage i den aktiva mätaren; alla andra attribut delegeras transparent
+    till underliggande objekt (så .with_structured_output, .bind, etc. fortsätter fungera).
+
+    OBS: .with_structured_output() och liknande returnerar nya kedje-objekt vars
+    .invoke() går direkt på inner — de proxas INTE av denna klass. Använd inte den
+    typen av kedjor utan att också wrapa kedjeobjektet, eller mäter du tyst noll."""
 
     __slots__ = ("_inner", "_model")
 
@@ -130,27 +134,71 @@ class _TrackedLLM:
         self._inner = inner
         self._model = model
 
-    def invoke(self, *args: Any, **kwargs: Any) -> Any:
+    def _enforce_budget(self) -> None:
         # Fas 1.6: spärra anropet om kundens månadsbudget är överskriden i hard
         # mode. cost_budget.enforce kastar BudgetExceededError — den propagerar
         # uppåt så anroparen ser att det INTE handlade om en LLM-tajmout utan
         # en avsiktlig spärr. Soft mode + saknad client_id = no-op.
         client_id = _current_client_id.get()
-        if client_id:
-            try:
-                from services import cost_budget
-                cost_budget.enforce(client_id)
-            except ImportError:
-                pass  # cost_budget kanske inte är installerad i alla deploys än
-            # BudgetExceededError propagerar avsiktligt — fångas EJ av detta try.
+        if not client_id:
+            return
+        try:
+            from services import cost_budget
+            cost_budget.enforce(client_id)
+        except ImportError:
+            pass  # cost_budget kanske inte är installerad i alla deploys än
+        # BudgetExceededError propagerar avsiktligt — fångas EJ av detta try.
 
-        resp = self._inner.invoke(*args, **kwargs)
+    def _record(self, resp: Any) -> None:
         try:
             i, o = _extract_usage(resp)
             record(self._model, i, o)
         except Exception:  # noqa: BLE001 — mätning får aldrig fälla anropet
             pass
+
+    def invoke(self, *args: Any, **kwargs: Any) -> Any:
+        self._enforce_budget()
+        resp = self._inner.invoke(*args, **kwargs)
+        self._record(resp)
         return resp
+
+    async def ainvoke(self, *args: Any, **kwargs: Any) -> Any:
+        self._enforce_budget()
+        resp = await self._inner.ainvoke(*args, **kwargs)
+        self._record(resp)
+        return resp
+
+    def batch(self, *args: Any, **kwargs: Any) -> Any:
+        self._enforce_budget()
+        responses = self._inner.batch(*args, **kwargs)
+        for r in responses or ():
+            self._record(r)
+        return responses
+
+    async def abatch(self, *args: Any, **kwargs: Any) -> Any:
+        self._enforce_budget()
+        responses = await self._inner.abatch(*args, **kwargs)
+        for r in responses or ():
+            self._record(r)
+        return responses
+
+    def stream(self, *args: Any, **kwargs: Any):
+        # Streaming: chunkar saknar token-usage; aggregera och leta usage_metadata
+        # i sista chunken (LangChain-konvention). Enforce före, mätning efter.
+        self._enforce_budget()
+        last = None
+        for chunk in self._inner.stream(*args, **kwargs):
+            last = chunk
+            yield chunk
+        self._record(last)
+
+    async def astream(self, *args: Any, **kwargs: Any):
+        self._enforce_budget()
+        last = None
+        async for chunk in self._inner.astream(*args, **kwargs):
+            last = chunk
+            yield chunk
+        self._record(last)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._inner, name)

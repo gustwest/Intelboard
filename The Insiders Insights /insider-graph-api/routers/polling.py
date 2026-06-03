@@ -3,6 +3,7 @@
 Aggregat per motor härleds vid läsning från raw_responses (ej lagrat), så att UI:t
 kan visa per-motor-trend för befintlig historik utan schemamigration.
 """
+import contextvars
 import threading
 import time
 from collections import defaultdict
@@ -116,7 +117,12 @@ def _probe_engine(llm: Any) -> dict[str, Any]:
             state["error"] = str(exc)[:240]
 
     t0 = time.time()
-    t = threading.Thread(target=target, daemon=True, name="engine-probe")
+    # Propagera anropande context (ContextVars) in i probe-tråden — håller
+    # token_meter/cost_budget-bindningen levande om endpointen någonsin körs inom
+    # en measure()-kontext. Health-checken körs idag utanför record_run så detta
+    # är en no-op-bindning, men billigt och konsekvent med polling/risk_detector.
+    ctx = contextvars.copy_context()
+    t = threading.Thread(target=ctx.run, args=(target,), daemon=True, name="engine-probe")
     t.start()
     t.join(_HEALTH_PROBE_TIMEOUT_SEC)
     latency_ms = int((time.time() - t0) * 1000)

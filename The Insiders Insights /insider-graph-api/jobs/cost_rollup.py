@@ -77,7 +77,7 @@ def _build_rollup(target_date) -> dict[str, Any]:
 
     by_model: dict[str, dict[str, int]] = defaultdict(lambda: {"input": 0, "output": 0, "calls": 0})
     by_client: dict[str, dict[str, Any]] = defaultdict(lambda: {"input": 0, "output": 0, "calls": 0, "by_model": defaultdict(lambda: {"input": 0, "output": 0, "calls": 0})})
-    by_job_type: dict[str, dict[str, Any]] = defaultdict(lambda: {"input": 0, "output": 0, "calls": 0, "runs": 0})
+    by_job_type: dict[str, dict[str, Any]] = defaultdict(lambda: {"input": 0, "output": 0, "calls": 0, "runs": 0, "by_model": defaultdict(lambda: {"input": 0, "output": 0, "calls": 0})})
     unknown: set[str] = set()
     n_runs = 0
 
@@ -107,6 +107,9 @@ def _build_rollup(target_date) -> dict[str, Any]:
             by_job_type[job_type]["input"] += i
             by_job_type[job_type]["output"] += o
             by_job_type[job_type]["calls"] += c
+            by_job_type[job_type]["by_model"][mid]["input"] += i
+            by_job_type[job_type]["by_model"][mid]["output"] += o
+            by_job_type[job_type]["by_model"][mid]["calls"] += c
             if client_id:
                 bc = by_client[client_id]
                 bc["input"] += i
@@ -140,25 +143,22 @@ def _build_rollup(target_date) -> dict[str, Any]:
             "usd": round(sum(m["usd"] for m in cm.values()), 6),
         }
 
-    by_job_type_out = {
-        jt: {**u, "usd": round(sum(
-            cost_estimator.usd_for(mid, by_model[mid]["input"], by_model[mid]["output"])
-            for mid in by_model
-            if jt in by_job_type  # platsmarkör; per-jobb-typ-modellnedbrytning finns inte än
-        ) if jt == jt else 0, 6)}
-        for jt, u in by_job_type.items()
-    }
-    # Per-job-type-USD räknas korrekt direkt från jobbtypens tokens:
+    # Per-job-type-USD från jobbtypens egen modellnedbrytning. Korrekt även när
+    # samma modell delas av flera jobb-typer (polling och risk_detect kör båda
+    # Gemini probarna): varje jobb-typ får sin proportionella andel.
+    by_job_type_out: dict[str, dict[str, Any]] = {}
     for jt, u in by_job_type.items():
-        # Approximera per-job-type-USD: vi har inte per-job-type-per-model-uppdelning,
-        # så vi gissar genom att fördela modelltokens proportionellt. För enkelhet
-        # i v1: räkna jobbtypens kostnad som total input/output × snittpriset.
-        # Mer exakt v2: spara per-job-type-by-model i loopen ovan.
+        jm = {
+            mid: {**mu, "usd": round(cost_estimator.usd_for(mid, mu["input"], mu["output"]), 6)}
+            for mid, mu in u["by_model"].items()
+        }
         by_job_type_out[jt] = {
             "input": u["input"],
             "output": u["output"],
             "calls": u["calls"],
             "runs": u["runs"],
+            "by_model": jm,
+            "usd": round(sum(m["usd"] for m in jm.values()), 6),
         }
 
     total_usd = round(sum(u["usd"] for u in by_model_usd.values()), 4)

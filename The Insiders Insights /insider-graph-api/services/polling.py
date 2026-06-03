@@ -13,6 +13,7 @@ slutförs men markeras `skipped`.
 """
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import os
@@ -50,9 +51,14 @@ def _call_with_timeout(fn: Callable[[], T], timeout: float, default: T, what: st
 
     Detta är det enda pålitliga mönstret för att skydda mot blockerande IO i Python
     (signal-baserad timeout funkar bara på huvudtråden; futures.result(timeout) friar
-    inte upp den underliggande tråden)."""
+    inte upp den underliggande tråden).
+
+    Kopierar anropande trådens context (ContextVars) in i daemon-tråden så att
+    services/token_meter:s `_current` + `_current_client_id` följer med — annars
+    skulle LLM-anrop som routas hit tappa både token-mätning och budget-enforce."""
     result: list[T] = [default]
     err: list[BaseException | None] = [None]
+    ctx = contextvars.copy_context()
 
     def target() -> None:
         try:
@@ -60,7 +66,7 @@ def _call_with_timeout(fn: Callable[[], T], timeout: float, default: T, what: st
         except BaseException as exc:  # log + svälj — försök ska aldrig fälla jobbet
             err[0] = exc
 
-    t = threading.Thread(target=target, daemon=True, name=f"polling-{what}")
+    t = threading.Thread(target=ctx.run, args=(target,), daemon=True, name=f"polling-{what}")
     t.start()
     t.join(timeout)
     if t.is_alive():
@@ -243,8 +249,17 @@ def _collect_answers(
             tasks.append((category, question, model_name, llm))
 
     results: list[QuestionAnswer] = []
+    # Snappa huvudtrådens context EN gång per task (token_meter+cost_budget bunden
+    # av record_run) och kör worker:n inom den kopian. Måste snappa i huvudtråden:
+    # `copy_context()` i workern skulle kopiera workerns egen TOMMA context, inte
+    # huvudtrådens. Och varje task behöver ett EGET snapshot eftersom ett Context-
+    # objekt inte kan .run():as parallellt från flera trådar.
     with ThreadPoolExecutor(max_workers=min(8, len(tasks))) as pool:
-        futures = {pool.submit(_safe_ask, q, llm, model): (category, q, model) for category, q, model, llm in tasks}
+        futures = {}
+        for category, q, model_name, llm in tasks:
+            task_ctx = contextvars.copy_context()
+            fut = pool.submit(task_ctx.run, _safe_ask, q, llm, model_name)
+            futures[fut] = (category, q, model_name)
         for fut in as_completed(futures):
             category, question, model_name = futures[fut]
             try:

@@ -93,6 +93,8 @@ def reset(
     interventions: dict[str, dict] | None = None,
     cost_budget: dict | None = None,
     cost_usage: dict[str, dict] | None = None,
+    job_runs: dict[str, dict] | None = None,
+    cost_summary: dict[str, dict] | None = None,
 ) -> None:
     STATE.clear()
     STATE.update(
@@ -122,6 +124,8 @@ def reset(
         interventions=interventions or {},
         cost_budget=cost_budget,
         cost_usage=cost_usage or {},
+        job_runs=job_runs or {},
+        cost_summary=cost_summary or {},
         writes={},
     )
 
@@ -461,6 +465,36 @@ def _apply_increment(existing: dict, payload: dict) -> dict:
 
 def iter_cost_usage(client_id: str):
     return list(STATE.get("cost_usage", {}).items())
+
+
+def job_run_doc(run_id: str) -> _DocRef:
+    return _DocRef(
+        run_id,
+        STATE.setdefault("job_runs", {}).get(run_id),
+        on_set=lambda i, p: STATE.setdefault("job_runs", {}).__setitem__(
+            i, {**(STATE.get("job_runs", {}).get(i) or {}), **p},
+        ),
+    )
+
+
+def iter_job_runs():
+    return list(STATE.get("job_runs", {}).items())
+
+
+def cost_summary_doc(date_iso: str) -> _DocRef:
+    return _DocRef(
+        date_iso,
+        STATE.setdefault("cost_summary", {}).get(date_iso),
+        on_set=lambda i, p: STATE.setdefault("cost_summary", {}).__setitem__(i, p),
+    )
+
+
+def cost_summary_col() -> _Col:
+    return _Col(STATE.setdefault("cost_summary", {}), writable=True)
+
+
+def iter_cost_summary():
+    return list(STATE.get("cost_summary", {}).items())
 
 
 def _oq_logs_bucket(client_id: str) -> dict:

@@ -254,5 +254,140 @@ class TokenMeterIntegrationTest(unittest.TestCase):
         self.assertEqual(inner.invoked, 1)
 
 
+class TrackedLLMSurfaceCoverageTest(unittest.TestCase):
+    """LangChain-LLM:er har fler entrypoints än .invoke(). Vi proxar dem alla
+    så att en framtida ändring som routar via .batch eller .stream inte tappar
+    mätning + budget tyst."""
+
+    class _MultiSurfaceLLM:
+        """Fake LLM som svarar via valfri surface, alltid med samma usage-metadata."""
+        def __init__(self):
+            self.usage = {"input_tokens": 7, "output_tokens": 3}
+            self.invoked = 0
+            self.batched = 0
+
+        def invoke(self, _msgs):
+            self.invoked += 1
+            return SimpleNamespace(usage_metadata=self.usage, content="ok")
+
+        def batch(self, inputs):
+            self.batched += 1
+            return [SimpleNamespace(usage_metadata=self.usage, content="ok") for _ in inputs]
+
+        def stream(self, _msgs):
+            for piece in ("o", "k"):
+                yield SimpleNamespace(content=piece, usage_metadata=None)
+            yield SimpleNamespace(content="", usage_metadata=self.usage)
+
+    def test_batch_records_per_response(self):
+        _setup(budget={"monthly_token_limit": 10_000, "warning_threshold_pct": 80, "mode": "hard"})
+        inner = self._MultiSurfaceLLM()
+        tracked = token_meter.track(inner, "test-model")
+        with token_meter.measure(client_id="acme") as meter:
+            tracked.batch([[], [], []])
+        # 3 inputs → 3 svar → 3 × 7/3 tokens
+        self.assertEqual(meter.by_model["test-model"].input_tokens, 21)
+        self.assertEqual(meter.by_model["test-model"].output_tokens, 9)
+        self.assertEqual(meter.by_model["test-model"].calls, 3)
+
+    def test_stream_records_last_chunk_usage(self):
+        _setup(budget={"monthly_token_limit": 10_000, "warning_threshold_pct": 80, "mode": "hard"})
+        inner = self._MultiSurfaceLLM()
+        tracked = token_meter.track(inner, "test-model")
+        chunks = []
+        with token_meter.measure(client_id="acme") as meter:
+            for c in tracked.stream([]):
+                chunks.append(c.content)
+        # Konsumenten såg alla chunks i ordning
+        self.assertEqual(chunks, ["o", "k", ""])
+        # Och tokens räknades exakt en gång (från sista chunken)
+        self.assertEqual(meter.by_model["test-model"].input_tokens, 7)
+        self.assertEqual(meter.by_model["test-model"].output_tokens, 3)
+
+    def test_batch_enforces_budget_before_call(self):
+        _setup(
+            budget={"monthly_token_limit": 50, "warning_threshold_pct": 80, "mode": "hard"},
+            usage={_this_month(): {"input_tokens": 40, "output_tokens": 20, "calls": 1}},
+        )
+        inner = self._MultiSurfaceLLM()
+        tracked = token_meter.track(inner, "test-model")
+        with token_meter.measure(client_id="acme"):
+            with self.assertRaises(cost_budget.BudgetExceededError):
+                tracked.batch([[], []])
+        self.assertEqual(inner.batched, 0, "Batch-anropet ska INTE ha gått igenom")
+
+
+class ThreadPropagationTest(unittest.TestCase):
+    """token_meter:s ContextVar måste följa med när llm.invoke() kallas från en
+    worker-tråd (polling._call_with_timeout, risk_detector._call_with_timeout,
+    polling._collect_answers ThreadPoolExecutor). Annars dör mätning + budget tyst."""
+
+    class _FakeLLM:
+        def __init__(self, usage=None):
+            self.usage = usage or {"input_tokens": 50, "output_tokens": 20}
+            self.invoked = 0
+
+        def invoke(self, _msgs):
+            self.invoked += 1
+            return SimpleNamespace(usage_metadata=self.usage, content="ok")
+
+    def test_polling_call_with_timeout_propagates_context(self):
+        from services import polling
+        _setup(budget={"monthly_token_limit": 10_000, "warning_threshold_pct": 80, "mode": "hard"})
+        inner = self._FakeLLM()
+        tracked = token_meter.track(inner, "test-model")
+        with token_meter.measure(client_id="acme"):
+            polling._call_with_timeout(lambda: tracked.invoke([]), timeout=5, default=None, what="t")
+        usage = fakefs.STATE["cost_usage"][_this_month()]
+        self.assertEqual(usage["input_tokens"], 50)
+        self.assertEqual(usage["output_tokens"], 20)
+
+    def test_polling_call_with_timeout_enforces_budget_in_worker_thread(self):
+        from services import polling
+        _setup(
+            budget={"monthly_token_limit": 100, "warning_threshold_pct": 80, "mode": "hard"},
+            usage={_this_month(): {"input_tokens": 80, "output_tokens": 30, "calls": 1}},
+        )
+        inner = self._FakeLLM()
+        tracked = token_meter.track(inner, "acme")
+        with token_meter.measure(client_id="acme"):
+            # _call_with_timeout sväljer ej egna undantag — fn() får kasta;
+            # vi vill verifiera att enforce nådde worker-tråden alls. Fångar
+            # via default-returnvärdet: _call_with_timeout returnerar `default`
+            # om fn kastar.
+            sentinel = object()
+            result = polling._call_with_timeout(
+                lambda: tracked.invoke([]), timeout=5, default=sentinel, what="t",
+            )
+        self.assertIs(result, sentinel, "BudgetExceededError ska ha kastats i worker-tråden")
+        self.assertEqual(inner.invoked, 0, "LLM-anropet ska INTE ha gått igenom")
+
+    def test_risk_detector_call_with_timeout_propagates_context(self):
+        from services import risk_detector
+        _setup(budget={"monthly_token_limit": 10_000, "warning_threshold_pct": 80, "mode": "hard"})
+        inner = self._FakeLLM()
+        tracked = token_meter.track(inner, "test-model")
+        with token_meter.measure(client_id="acme"):
+            risk_detector._call_with_timeout(lambda: tracked.invoke([]), timeout=5, default=None, what="t")
+        usage = fakefs.STATE["cost_usage"][_this_month()]
+        self.assertEqual(usage["input_tokens"], 50)
+        self.assertEqual(usage["output_tokens"], 20)
+
+    def test_polling_collect_answers_thread_pool_propagates_context(self):
+        from services import polling
+        _setup(budget={"monthly_token_limit": 10_000, "warning_threshold_pct": 80, "mode": "hard"})
+        inner = self._FakeLLM()
+        tracked = token_meter.track(inner, "test-model")
+        questions = [("cat", "q1"), ("cat", "q2")]
+        models_map = {"test-model": tracked}
+        with token_meter.measure(client_id="acme"):
+            polling._collect_answers(questions, models_map)
+        # 2 frågor × 1 modell = 2 invokes × 50/20 tokens
+        usage = fakefs.STATE["cost_usage"][_this_month()]
+        self.assertEqual(usage["input_tokens"], 100)
+        self.assertEqual(usage["output_tokens"], 40)
+        self.assertEqual(inner.invoked, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

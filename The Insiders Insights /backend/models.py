@@ -376,7 +376,12 @@ class AdminFile(Base):
 # AI ASSISTANT CHAT
 # ======================================================================
 class AIChatMessage(Base):
-    """Persisted AI assistant conversation messages."""
+    """Persisted AI assistant conversation messages.
+
+    Kostnads-fält (`model`, `input_tokens`, `output_tokens`, `cost_usd`) sätts
+    bara på assistant-meddelanden — user-meddelanden kostar inga tokens. Saknas
+    värden räknas raden som okänd kostnad i rapporten (vi blockerar inte chat
+    om Gemini råkar skicka tom usage_metadata)."""
     __tablename__ = "ai_chat_messages"
 
     id = Column(String, primary_key=True, default=_uuid)
@@ -386,3 +391,27 @@ class AIChatMessage(Base):
     customer_id = Column(String, nullable=True)  # optional context
     page_context = Column(String, nullable=True)  # which page the user was on
     created_at = Column(DateTime, default=datetime.utcnow)
+    # Kostnadsspårning per assistant-tur (per-kund-roll-up byggs på dessa).
+    model = Column(String, nullable=True)
+    input_tokens = Column(Integer, nullable=True)
+    output_tokens = Column(Integer, nullable=True)
+    cost_usd = Column(Float, nullable=True)
+
+
+class AIUsageLog(Base):
+    """Logg för AI-anrop som inte hör till en chat-tur (dataset-summarizer m.fl.).
+
+    AIChatMessage rymmer tokens för chat-svar — den här tabellen plockar upp
+    allt annat (dataset-summary, framtida bakgrunds-AI) så att hela insiders-api:s
+    LLM-konsumtion blir mätbar per kund."""
+    __tablename__ = "ai_usage_log"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    surface = Column(String, nullable=False, index=True)  # t.ex. "dataset_summarizer"
+    customer_id = Column(String, nullable=True, index=True)
+    model = Column(String, nullable=False)
+    input_tokens = Column(Integer, nullable=False, default=0)
+    output_tokens = Column(Integer, nullable=False, default=0)
+    cost_usd = Column(Float, nullable=False, default=0.0)
+    detail_json = Column(JSON, default=dict)  # filnamn, dataset-id etc — för felsökning
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)

@@ -26,6 +26,7 @@ klassning kräver högsta kvalitet → validator-modellen (claude-opus).
 """
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import logging
 import os
@@ -58,9 +59,14 @@ T = TypeVar("T")
 def _call_with_timeout(fn: Callable[[], T], timeout: float, default: T, what: str) -> T:
     """Daemon-tråd + join(timeout). Vi väntar max `timeout` på fn() och returnerar default
     om den hänger. Tråden fortsätter köra i bakgrunden tills den dör naturligt eller
-    containern skalas ner — men risk_detect blockeras ALDRIG."""
+    containern skalas ner — men risk_detect blockeras ALDRIG.
+
+    Anropande trådens context (ContextVars) kopieras in i daemon-tråden så att
+    token_meter/cost_budget-bindningen från record_run följer med — utan det
+    skulle LLM-anrop som routas hit tappa både token-mätning och budget-enforce."""
     result: list[T] = [default]
     err: list[BaseException | None] = [None]
+    ctx = contextvars.copy_context()
 
     def target() -> None:
         try:
@@ -68,7 +74,7 @@ def _call_with_timeout(fn: Callable[[], T], timeout: float, default: T, what: st
         except BaseException as exc:
             err[0] = exc
 
-    t = threading.Thread(target=target, daemon=True, name=f"risk-{what}")
+    t = threading.Thread(target=ctx.run, args=(target,), daemon=True, name=f"risk-{what}")
     t.start()
     t.join(timeout)
     if t.is_alive():

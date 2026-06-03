@@ -17,12 +17,17 @@ router = APIRouter(tags=["datasets"])
 
 def _generate_and_save_summary(db: Session, dataset: models.Dataset, df, filename: str, source_name: str):
     """Generate AI summary synchronously and save to dataset.
-    
+
     Runs inline (not async) because Cloud Run kills daemon threads
     after the HTTP response is sent. Gemini Flash is fast (~1-2s).
-    """
+
+    Skickar in db+kund-id så summarize_dataset loggar token-/USD-kostnad i
+    AIUsageLog mot rätt kund (rapport per kund bygger på det)."""
     try:
-        summary = ai_engine.summarize_dataset(df.head(500), filename, source_name)
+        summary = ai_engine.summarize_dataset(
+            df.head(500), filename, source_name,
+            db=db, customer_id=dataset.customer_id, dataset_id=dataset.id,
+        )
         if summary:
             dataset.ai_summary = summary
             db.commit()
@@ -190,7 +195,10 @@ def regenerate_summaries(db: Session = Depends(get_db)):
                 continue
 
             df = pd.DataFrame(out_rows)
-            summary = ai_engine.summarize_dataset(df, d.original_filename, d.source.name)
+            summary = ai_engine.summarize_dataset(
+                df, d.original_filename, d.source.name,
+                db=db, customer_id=d.customer_id, dataset_id=d.id,
+            )
             if summary:
                 d.ai_summary = summary
                 db.commit()

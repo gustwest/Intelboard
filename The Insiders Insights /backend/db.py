@@ -67,6 +67,11 @@ def _pg_auto_migrate():
         "ALTER TABLE issues ADD COLUMN IF NOT EXISTS product VARCHAR NOT NULL DEFAULT 'the-insiders'",
         "ALTER TABLE admin_files ADD COLUMN IF NOT EXISTS product VARCHAR NOT NULL DEFAULT 'the-insiders'",
         "ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS product VARCHAR NOT NULL DEFAULT 'the-insiders'",
+        # Token/kostnadsspårning på chat-meddelanden (per-kund-rapport bygger på dessa).
+        "ALTER TABLE ai_chat_messages ADD COLUMN IF NOT EXISTS model VARCHAR",
+        "ALTER TABLE ai_chat_messages ADD COLUMN IF NOT EXISTS input_tokens INTEGER",
+        "ALTER TABLE ai_chat_messages ADD COLUMN IF NOT EXISTS output_tokens INTEGER",
+        "ALTER TABLE ai_chat_messages ADD COLUMN IF NOT EXISTS cost_usd DOUBLE PRECISION",
     ]
     for sql in migrations:
         try:
@@ -93,6 +98,11 @@ def _sqlite_auto_migrate():
         "ALTER TABLE issues ADD COLUMN product VARCHAR NOT NULL DEFAULT 'the-insiders'",
         "ALTER TABLE admin_files ADD COLUMN product VARCHAR NOT NULL DEFAULT 'the-insiders'",
         "ALTER TABLE agent_sessions ADD COLUMN product VARCHAR NOT NULL DEFAULT 'the-insiders'",
+        # Token/kostnadsspårning på chat-meddelanden (per-kund-rapport bygger på dessa).
+        "ALTER TABLE ai_chat_messages ADD COLUMN model VARCHAR",
+        "ALTER TABLE ai_chat_messages ADD COLUMN input_tokens INTEGER",
+        "ALTER TABLE ai_chat_messages ADD COLUMN output_tokens INTEGER",
+        "ALTER TABLE ai_chat_messages ADD COLUMN cost_usd REAL",
     ]
     for sql in migrations:
         try:

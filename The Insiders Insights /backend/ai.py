@@ -96,8 +96,15 @@ def summarize_dataset(
     df: pd.DataFrame,
     filename: str,
     source_name: str,
+    db=None,
+    customer_id: Optional[str] = None,
+    dataset_id: Optional[str] = None,
 ) -> Optional[str]:
-    """Generate an AI summary for an uploaded dataset. Returns None on failure."""
+    """Generate an AI summary for an uploaded dataset. Returns None on failure.
+
+    Om en SQLAlchemy-session skickas in loggas LLM-kostnaden via
+    cost_tracking.log_surface_usage(surface="dataset_summarizer", ...).
+    Utan session blir det tyst no-op (bakåtkompatibelt med manuella anrop)."""
     client = _get_client()
     if client is None:
         return None
@@ -118,6 +125,17 @@ def summarize_dataset(
                 thinking_config=types.ThinkingConfig(thinking_level="minimal"),
             ),
         )
+
+        if db is not None:
+            try:
+                import cost_tracking
+                cost_tracking.log_surface_usage(
+                    db, surface="dataset_summarizer", model=MODEL,
+                    response=response, customer_id=customer_id,
+                    detail={"filename": filename, "dataset_id": dataset_id, "source": source_name},
+                )
+            except Exception as ce:  # noqa: BLE001 — mätning får aldrig fälla summary-flödet
+                log.warn("ai.cost_log_failed", filename=filename, error=str(ce))
 
         summary = response.text.strip() if response.text else None
         log.info("ai.summary_generated", filename=filename, length=len(summary) if summary else 0)

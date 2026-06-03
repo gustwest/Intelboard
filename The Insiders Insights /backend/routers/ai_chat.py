@@ -724,11 +724,13 @@ Om användaren vill skapa ett nytt mål för kunden, använd:
 
     # Call Gemini
     client = _get_client()
+    usage = None  # sätts av cost_tracking efter ett lyckat genai-anrop
     if client is None:
         reply = "⚠️ AI-tjänsten är inte tillgänglig just nu. Kontrollera att Gemini-konfigurationen är korrekt."
     else:
         try:
             from google.genai import types
+            import cost_tracking
 
             # Build conversation contents for multi-turn
             contents = []
@@ -754,6 +756,7 @@ Om användaren vill skapa ett nytt mål för kunden, använd:
                 ),
             )
             reply = response.text.strip() if response.text else "Jag kunde tyvärr inte generera ett svar. Försök igen!"
+            usage = cost_tracking.usage_from_response(MODEL, response)
             
             # --- AGENT INTERCEPTION FOR EXECUTE_SAVE ---
             if "[EXECUTE_SAVE:" in reply:
@@ -872,13 +875,17 @@ Om användaren vill skapa ett nytt mål för kunden, använd:
             log.warn("ai_chat.error", session_id=session_id, error=str(e))
             reply = f"⚠️ Ett fel uppstod: {str(e)[:200]}"
 
-    # Save assistant reply
+    # Save assistant reply (med kostnadsspårning om vi fick usage från Gemini)
     ai_msg = models.AIChatMessage(
         session_id=session_id,
         role="assistant",
         content=reply,
         customer_id=req.customer_id,
         page_context=req.page_context,
+        model=MODEL if usage is not None else None,
+        input_tokens=usage.input_tokens if usage else None,
+        output_tokens=usage.output_tokens if usage else None,
+        cost_usd=usage.cost_usd if usage else None,
     )
     db.add(ai_msg)
     db.commit()
