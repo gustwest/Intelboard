@@ -282,6 +282,23 @@ def iter_interventions(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
         yield doc.id, doc.to_dict() or {}
 
 
+def cost_budget_doc(client_id: str):
+    """Per-kund-konfig för LLM-token-budgeten (Fas 1.6). Ett doc per kund;
+    månadens räknare ligger i cost_usage_doc per YYYY-MM."""
+    return client_doc(client_id).collection("cost_budget").document("current")
+
+
+def cost_usage_doc(client_id: str, month: str):
+    """Månadsräknare (YYYY-MM) — input_tokens, output_tokens, calls. Skrivs
+    atomiskt med firestore.Increment så samtidiga LLM-anrop inte race:ar."""
+    return client_doc(client_id).collection("cost_usage").document(month)
+
+
+def iter_cost_usage(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
+    for doc in client_doc(client_id).collection("cost_usage").stream():
+        yield doc.id, doc.to_dict() or {}
+
+
 def verifications_col(client_id: str):
     """Manuella Geogiraph-verifieringar (docs/humanization-trust-gap-spec.md §5.4)."""
     return client_doc(client_id).collection("verifications")

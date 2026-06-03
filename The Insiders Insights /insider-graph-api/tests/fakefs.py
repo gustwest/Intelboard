@@ -91,6 +91,8 @@ def reset(
     output_quality_logs: dict[str, dict] | None = None,
     recipes: dict[str, dict] | None = None,
     interventions: dict[str, dict] | None = None,
+    cost_budget: dict | None = None,
+    cost_usage: dict[str, dict] | None = None,
 ) -> None:
     STATE.clear()
     STATE.update(
@@ -118,6 +120,8 @@ def reset(
         output_quality_logs=output_quality_logs or {},
         recipes=recipes or {},
         interventions=interventions or {},
+        cost_budget=cost_budget,
+        cost_usage=cost_usage or {},
         writes={},
     )
 
@@ -414,6 +418,49 @@ def intervention_doc(client_id: str, intervention_id: str) -> _DocRef:
 
 def iter_interventions(client_id: str):
     return list(STATE.get("interventions", {}).items())
+
+
+def cost_budget_doc(client_id: str) -> _DocRef:
+    return _DocRef(
+        "current",
+        STATE.get("cost_budget"),
+        on_set=lambda _i, p: STATE.__setitem__("cost_budget", p),
+        on_update=lambda _i, p: STATE.__setitem__(
+            "cost_budget", {**(STATE.get("cost_budget") or {}), **p},
+        ),
+    )
+
+
+def cost_usage_doc(client_id: str, month: str) -> _DocRef:
+    # Atomic Increment hanteras separat — testerna injicerar färdiga räknare via
+    # cost_usage-arg till reset(). Vid update inkrement-mockas av cost_budget-modulen.
+    return _DocRef(
+        month,
+        STATE.get("cost_usage", {}).get(month),
+        on_set=lambda i, p: STATE.setdefault("cost_usage", {}).__setitem__(i, p),
+        on_update=lambda i, p: STATE.setdefault("cost_usage", {}).__setitem__(
+            i, {**(STATE.get("cost_usage", {}).get(i) or {}), **_apply_increment(STATE.get("cost_usage", {}).get(i) or {}, p)},
+        ),
+    )
+
+
+def _apply_increment(existing: dict, payload: dict) -> dict:
+    """fakefs-stöd för firestore.Increment: detekterar det riktiga
+    Increment-objektet (har .value) eller fallback-strukturen {"_increment": n}
+    och adderar till befintligt värde. Övriga värden passerar rakt igenom."""
+    out: dict = {}
+    for k, v in payload.items():
+        if isinstance(v, dict) and "_increment" in v:
+            out[k] = (existing.get(k) or 0) + v["_increment"]
+        elif hasattr(v, "value") and type(v).__name__ == "Increment":
+            out[k] = (existing.get(k) or 0) + v.value
+        else:
+            out[k] = v
+    return out
+
+
+def iter_cost_usage(client_id: str):
+    return list(STATE.get("cost_usage", {}).items())
 
 
 def _oq_logs_bucket(client_id: str) -> dict:

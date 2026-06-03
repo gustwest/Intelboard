@@ -56,29 +56,47 @@ class TokenMeter:
 
 
 _current: ContextVar[TokenMeter | None] = ContextVar("_current_token_meter", default=None)
+# Klient-id för budget-enforcement (Fas 1.6). Bunden av measure(client_id=...).
+# None → enforce/record_usage är no-op (anonyma anrop, t.ex. admin-interaktivt).
+_current_client_id: ContextVar[str | None] = ContextVar("_current_client_id", default=None)
 
 
 @contextmanager
-def measure() -> Iterator[TokenMeter]:
+def measure(client_id: str | None = None) -> Iterator[TokenMeter]:
     """Bind en ny TokenMeter till denna context. Anropas av jobs/_run_tracker så
-    varje per-kund-körning får sin egen mätare."""
+    varje per-kund-körning får sin egen mätare.
+
+    client_id (Fas 1.6) binds till en separat ContextVar och gör att
+    `_TrackedLLM.invoke()` enforce:ar budgeten innan anropet + record:ar
+    månadsräknaren efter. None → ingen budget-koppling (admin/standalone)."""
     meter = TokenMeter()
-    token = _current.set(meter)
+    tk_meter = _current.set(meter)
+    tk_client = _current_client_id.set(client_id)
     try:
         yield meter
     finally:
-        _current.reset(token)
+        _current.reset(tk_meter)
+        _current_client_id.reset(tk_client)
 
 
 def record(model: str, input_tokens: int, output_tokens: int) -> None:
-    """Registrera ett LLM-anrops tokenförbrukning i den aktiva mätaren. No-op
-    utanför en `measure()`-context."""
+    """Registrera ett LLM-anrops tokenförbrukning i den aktiva mätaren + i kundens
+    månadsräknare för budget-uppföljning. No-op utanför en `measure()`-context."""
     m = _current.get()
     if m is None:
         return
     if not (input_tokens or output_tokens):
         return
     m.record(model, input_tokens, output_tokens)
+    # Budget-räkning (Fas 1.6) — sen-import för att undvika cirkulär; cost_budget
+    # importerar inget från token_meter men token_meter används av många moduler.
+    client_id = _current_client_id.get()
+    if client_id:
+        try:
+            from services import cost_budget
+            cost_budget.record_usage(client_id, input_tokens, output_tokens)
+        except Exception:  # noqa: BLE001 — mätning får aldrig fälla anropet
+            pass
 
 
 def _extract_usage(response: Any) -> tuple[int, int]:
@@ -113,6 +131,19 @@ class _TrackedLLM:
         self._model = model
 
     def invoke(self, *args: Any, **kwargs: Any) -> Any:
+        # Fas 1.6: spärra anropet om kundens månadsbudget är överskriden i hard
+        # mode. cost_budget.enforce kastar BudgetExceededError — den propagerar
+        # uppåt så anroparen ser att det INTE handlade om en LLM-tajmout utan
+        # en avsiktlig spärr. Soft mode + saknad client_id = no-op.
+        client_id = _current_client_id.get()
+        if client_id:
+            try:
+                from services import cost_budget
+                cost_budget.enforce(client_id)
+            except ImportError:
+                pass  # cost_budget kanske inte är installerad i alla deploys än
+            # BudgetExceededError propagerar avsiktligt — fångas EJ av detta try.
+
         resp = self._inner.invoke(*args, **kwargs)
         try:
             i, o = _extract_usage(resp)

@@ -75,7 +75,7 @@ def record_run(job_type: str, client_id: str | None = None) -> Iterator[RunHandl
         log.exception("job_runs: kunde inte skriva start (%s/%s)", job_type, client_id)
         doc = None
 
-    with token_meter.measure() as meter:
+    with token_meter.measure(client_id=client_id) as meter:
         try:
             yield handle
         except Exception as exc:  # jobbet kraschade
