@@ -18,6 +18,11 @@ langchain-openai==0.2.5
 openai==1.109.1
 langchain-google-genai==2.0.4
 langchain-google-vertexai==2.0.7
+# ChatAnthropicVertex (langchain_google_vertexai.model_garden) kräver anthropic-
+# SDK:n vid runtime även om vi går via Vertex Model Garden — utan den failar
+# Claude-proben med "No module named 'anthropic'" vid init. langchain-google-
+# vertexai pinnar inte den som hård dep, så vi måste lägga in den explicit.
+anthropic==0.40.0
 trafilatura==2.0.0
 pypdf==6.12.1
 sendgrid==6.11.0
