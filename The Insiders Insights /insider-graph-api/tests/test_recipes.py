@@ -163,16 +163,17 @@ class GenerateForClientTest(unittest.TestCase):
         self.assertIn("over_claim-community", fakefs.STATE["recipes"])
 
     def test_skips_stubbed_gap_types_silently(self):
-        # Stubbade typer (persona_mismatch) ska inte räknas — Lager A returnerar
-        # None, persist anropas aldrig.
+        # Stubbade typer (competitive_displacement — Fas 4) ska inte räknas — Lager A
+        # returnerar None, persist anropas aldrig. (persona_mismatch är AKTIV sedan
+        # Fas 2.1e och producerar recept.)
         _setup(trust_gap=_tg_with_flags(
-            _flag("persona_mismatch", "ethics"),
+            _flag("competitive_displacement", "ethics"),
             _flag("missing_evidence", "ethics"),
         ))
         with patch.object(grl, "_pick_detailifier", return_value=_fake_llm()):
             summary = recipes.generate_for_client("acme")
         self.assertEqual(summary["total"], 1)
-        self.assertNotIn("persona_mismatch-ethics", fakefs.STATE["recipes"])
+        self.assertNotIn("competitive_displacement-ethics", fakefs.STATE["recipes"])
 
     def test_llm_failure_persists_skeleton_only(self):
         # När LLM:n faller → details=None, men receptet PERSISTERAS ändå

@@ -101,13 +101,62 @@ class FactualDriftRecipeTest(unittest.TestCase):
         self.assertIn(gr.CHANNEL_PRESS, skel.target_channels)
 
 
-class StubbedTypesTest(unittest.TestCase):
-    def test_persona_mismatch_returns_none_until_fas_2(self):
-        # Persona-mismatch är registrerad i GAP_TAXONOMY men har ingen regel än —
-        # Lager A returnerar None. När Fas 2.1 aktiverar typen läggs regel till.
-        self.assertIn("persona_mismatch", hc.GAP_TAXONOMY)
-        self.assertIsNone(gr.build_recipe_skeleton(_flag("persona_mismatch")))
+class PersonaMismatchRecipeTest(unittest.TestCase):
+    """Fas 2.1e — persona_mismatch aktiverad. Receptet siktar på den coolaste
+    personan och väljer kanaler kopplade till den målgruppen."""
 
+    def test_produces_skeleton_targeting_coolest_persona(self):
+        skel = gr.build_recipe_skeleton(_flag(
+            "persona_mismatch", dimension="wellbeing",
+            warmest_persona="customer", coolest_persona="employee",
+            warmest_valence=0.8, coolest_valence=0.3, spread=0.5,
+        ))
+        self.assertIsNotNone(skel)
+        self.assertEqual(skel.gap_type, "persona_mismatch")
+        self.assertEqual(skel.action_type, gr.ACTION_PUBLISH_PROOF)
+        # Receptet ska sikta på den coolaste personan (employee), inte den varma.
+        self.assertEqual(skel.target_personas, ("employee",))
+        # Impact mäts som persona-valens-spread.
+        self.assertEqual(skel.expected_impact_metric, gr.METRIC_VALENCE_BY_PERSONA)
+
+    def test_channels_come_from_coolest_persona_registry(self):
+        # employee → default_channels innehåller Glassdoor + LinkedIn (kandidat-ytor)
+        skel = gr.build_recipe_skeleton(_flag(
+            "persona_mismatch", dimension="wellbeing",
+            warmest_persona="customer", coolest_persona="employee",
+        ))
+        self.assertIn(gr.CHANNEL_GLASSDOOR, skel.target_channels)
+        self.assertIn(gr.CHANNEL_LINKEDIN, skel.target_channels)
+
+    def test_investor_coolest_gets_investor_channels(self):
+        # investor → press + attested (finansiella ytor), INTE Glassdoor
+        skel = gr.build_recipe_skeleton(_flag(
+            "persona_mismatch", dimension="ethics",
+            warmest_persona="customer", coolest_persona="investor",
+        ))
+        self.assertIn(gr.CHANNEL_PRESS, skel.target_channels)
+        self.assertNotIn(gr.CHANNEL_GLASSDOOR, skel.target_channels)
+
+    def test_persona_labels_in_why_text(self):
+        # Klartexten ska bära mänskliga persona-labels, inte råa id:n.
+        skel = gr.build_recipe_skeleton(_flag(
+            "persona_mismatch", dimension="wellbeing",
+            warmest_persona="customer", coolest_persona="employee",
+        ))
+        self.assertIn("Kund", skel.why_template)              # customer.label_sv
+        self.assertIn("Anställd & kandidat", skel.why_template)  # employee.label_sv
+
+    def test_unknown_coolest_persona_falls_back_gracefully(self):
+        # Okänd persona → fallback-kanaler, inget krasch.
+        skel = gr.build_recipe_skeleton(_flag(
+            "persona_mismatch", dimension="ethics",
+            warmest_persona="customer", coolest_persona="weird_persona",
+        ))
+        self.assertIsNotNone(skel)
+        self.assertTrue(len(skel.target_channels) >= 1)
+
+
+class StubbedTypesTest(unittest.TestCase):
     def test_competitive_displacement_returns_none_until_fas_4(self):
         self.assertIn("competitive_displacement", hc.GAP_TAXONOMY)
         self.assertIsNone(gr.build_recipe_skeleton(_flag("competitive_displacement")))
@@ -125,25 +174,34 @@ class StubbedTypesTest(unittest.TestCase):
 
 class BatchTest(unittest.TestCase):
     def test_build_skeletons_filters_none(self):
-        # En batch med blandade flaggor — stubbade hoppas över tyst, aktiva tas med.
+        # En batch med blandade flaggor — stubbade/okända hoppas över tyst, aktiva tas med.
         flags = [
             _flag("over_claim", confidence=0.8),
-            _flag("persona_mismatch"),     # stubbad → hoppas över
+            _flag("competitive_displacement"),     # stubbad → hoppas över
             _flag("missing_evidence", dimension="ethics"),
-            _flag("totally_unknown"),      # okänd → hoppas över
+            _flag("totally_unknown"),              # okänd → hoppas över
         ]
         skeletons = gr.build_recipe_skeletons(flags)
         self.assertEqual(len(skeletons), 2)
         kinds = {s.gap_type for s in skeletons}
         self.assertEqual(kinds, {"over_claim", "missing_evidence"})
 
+    def test_persona_mismatch_now_included_in_batch(self):
+        # Fas 2.1e: persona_mismatch är inte längre stubbad — tas med i batchen.
+        flags = [
+            _flag("persona_mismatch", warmest_persona="customer", coolest_persona="employee"),
+            _flag("competitive_displacement"),  # fortfarande stubbad
+        ]
+        skeletons = gr.build_recipe_skeletons(flags)
+        self.assertEqual(len(skeletons), 1)
+        self.assertEqual(skeletons[0].gap_type, "persona_mismatch")
+
 
 class CoverageInvariantTest(unittest.TestCase):
     def test_all_active_taxonomy_types_have_rules(self):
         # Strukturell invariant: varje icke-stubbad typ i GAP_TAXONOMY ska ha en
-        # regel i _RULES. Annars finns det en gap-typ utan recept — operatör skulle
-        # få en flagga utan handlingsbar instruktion.
-        stubbed = {"persona_mismatch", "competitive_displacement"}
+        # regel i _RULES. Endast competitive_displacement är stubbad nu (Fas 4).
+        stubbed = {"competitive_displacement"}
         active_types = set(hc.GAP_TAXONOMY) - stubbed
         rule_types = set(gr._RULES.keys())
         self.assertEqual(

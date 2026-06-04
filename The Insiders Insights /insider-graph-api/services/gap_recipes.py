@@ -43,10 +43,15 @@ class RecipeSkeleton:
     skeleton_text: str
     expected_impact_metric: str
     confidence: float
+    # Persona-relevans (Fas 2.1e). Tom för persona-oberoende gap-typer; för
+    # persona_mismatch = den/de personor receptet siktar på (typiskt den coolaste).
+    # Driver intervention-spårningens val av VILKEN personas valens som följs.
+    target_personas: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["target_channels"] = list(self.target_channels)
+        d["target_personas"] = list(self.target_personas)
         return d
 
 
@@ -76,6 +81,7 @@ METRIC_DEMONSTRATED = "demonstrated"        # demonstrated-score på dimensionen
 METRIC_VALENCE = "perceived.valence"        # perception-valens på dimensionen
 METRIC_VALENCE_VARIANCE = "perceived.valence_variance"  # spread mellan motorer
 METRIC_VALENCE_BY_SOURCE = "perceived.valence_by_source"  # split training vs web_rag
+METRIC_VALENCE_BY_PERSONA = "perceived.valence_by_persona"  # spread mellan personor (Fas 2.1e)
 
 
 # --- Regler per gap-typ -------------------------------------------------------
@@ -223,15 +229,70 @@ def _rule_factual_drift(flag: dict[str, Any], dimension_label: str) -> RecipeSke
     )
 
 
-# Routing-tabell: gap-typ → regel. Stubbade typer (persona_mismatch,
-# competitive_displacement) saknas — build_recipe_skeleton returnerar None
-# för dem tills Fas 2.1 / Fas 4 lägger till regler.
+def _persona_label(persona_id: str) -> str:
+    """Mänsklig label för en persona — för recept-texter. Faller till id om okänd."""
+    from services import persona_registry as pr
+    try:
+        return pr.get(persona_id).label_sv
+    except KeyError:
+        return persona_id
+
+
+def _persona_channels(persona_id: str) -> tuple[str, ...]:
+    """Default-kanaler för en persona från registret. Tom om okänd persona."""
+    from services import persona_registry as pr
+    try:
+        return pr.get(persona_id).default_channels
+    except KeyError:
+        return ()
+
+
+def _rule_persona_mismatch(flag: dict[str, Any], dimension_label: str) -> RecipeSkeleton:
+    """AI uppfattar bolaget tydligt olika beroende på persona. Receptet siktar på
+    den COOLASTE personan — där perceptionen släpar — och väljer kanaler som når
+    just den målgruppen (employee → Glassdoor/LinkedIn, customer → case study/press)."""
+    coolest = flag.get("coolest_persona", "")
+    warmest = flag.get("warmest_persona", "")
+    coolest_label = _persona_label(coolest) if coolest else "(okänd målgrupp)"
+    warmest_label = _persona_label(warmest) if warmest else "(annan målgrupp)"
+    # Kanaler kopplade till den coolaste personan — det är där vi behöver flytta nålen.
+    channels = _persona_channels(coolest) or (CHANNEL_WEBSITE, CHANNEL_PRESS)
+    return RecipeSkeleton(
+        gap_type="persona_mismatch",
+        dimension=flag["dimension"],
+        dimension_label=dimension_label,
+        # Persona-perception drabbar båda motor-typerna — vi vill flytta hela bilden
+        # för den coolaste målgruppen, oavsett om motorn är training eller web_rag.
+        knowledge_source_target="both",
+        action_type=ACTION_PUBLISH_PROOF,
+        target_channels=channels,
+        target_personas=(coolest,) if coolest else (),
+        why_template=(
+            f"AI beskriver er olika inom {dimension_label} beroende på vem som frågar: "
+            f"varmt för {warmest_label}, svalt för {coolest_label}. Ni når en målgrupp "
+            f"men inte den andra — vanligtvis för att kommunikationen mot {coolest_label} "
+            f"är tunnare eller mindre synlig."
+        ),
+        skeleton_text=(
+            f"Stärk hur ni kommunicerar {dimension_label} mot {coolest_label}: "
+            f"publicera proof points på kanaler den målgruppen faktiskt läser. "
+            f"Lager B väljer vilken befintlig styrka som ska lyftas och i vilken "
+            f"ton {coolest_label} möter den bäst."
+        ),
+        expected_impact_metric=METRIC_VALENCE_BY_PERSONA,
+        confidence=0.65,
+    )
+
+
+# Routing-tabell: gap-typ → regel. competitive_displacement saknas — den är
+# stubbad i GAP_TAXONOMY tills Fas 4 levererar konkurrent-probe-data.
 _RULES: dict[str, Callable[[dict[str, Any], str], RecipeSkeleton]] = {
     "over_claim": _rule_over_claim,
     "opportunity": _rule_opportunity,
     "missing_evidence": _rule_missing_evidence,
     "contradiction": _rule_contradiction,
     "factual_drift": _rule_factual_drift,
+    "persona_mismatch": _rule_persona_mismatch,
 }
 
 
