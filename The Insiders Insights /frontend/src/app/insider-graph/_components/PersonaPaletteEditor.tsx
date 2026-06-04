@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Users, Save, Check, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
+import { Users, Check, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { graphColors as C } from './GraphPageShell';
 import { graphFetch } from '../_lib/api';
+import * as UI from './ui';
 
 // Speglar services/persona_registry — men hämtas live från /api/personas/registry
 // så vi aldrig hårdkodar paletten på två ställen.
@@ -107,16 +108,25 @@ export default function PersonaPaletteEditor({ clientId }: { clientId: string })
 
   if (!loaded || !registry) {
     return (
-      <div style={cardStyle}>
+      <UI.Card padding="20px" style={{ marginBottom: 16 }}>
         <SectionTitle />
         <p style={{ color: C.dim, fontSize: 13 }}>Laddar persona-palett…</p>
-      </div>
+      </UI.Card>
     );
   }
 
   return (
-    <div style={cardStyle}>
+    <UI.Card padding="20px" style={{ marginBottom: 16 }}>
       <SectionTitle />
+      {msg && (
+        <UI.StatusBanner
+          tone={msg.tone === 'ok' ? 'ok' : 'err'}
+          icon={msg.tone === 'ok' ? <Check size={13} /> : <AlertCircle size={13} />}
+          style={{ marginTop: 8, marginBottom: 12 }}
+        >
+          {msg.text}
+        </UI.StatusBanner>
+      )}
       <p style={{ fontSize: 13, color: C.muted, marginBottom: 14, lineHeight: 1.55 }}>
         Välj vilka målgrupper AI-motorerna mäts mot. Varje persona mäts på alla sex
         värmedimensioner — fler personor ger djupare bild men kostar mer mätning.{' '}
@@ -179,37 +189,17 @@ export default function PersonaPaletteEditor({ clientId }: { clientId: string })
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14 }}>
-        <button
-          onClick={save}
-          disabled={!dirty || saving}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px',
-            background: dirty ? C.accent : C.border, color: dirty ? '#fff' : C.dim,
-            border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600,
-            cursor: dirty && !saving ? 'pointer' : 'default',
-          }}
-        >
-          <Save size={14} /> {saving ? 'Sparar…' : 'Spara personor'}
-        </button>
-        {msg && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: msg.tone === 'ok' ? '#16a34a' : '#dc2626' }}>
-            {msg.tone === 'ok' ? <Check size={13} /> : <AlertCircle size={13} />} {msg.text}
-          </span>
-        )}
+        <UI.SaveButton dirty={dirty} saving={saving} onClick={save} label="Spara personor" savingLabel="Sparar…" />
       </div>
-    </div>
+    </UI.Card>
   );
 }
-
-const cardStyle: React.CSSProperties = {
-  background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, marginBottom: 16,
-};
 
 function SectionTitle() {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
       <Users size={16} color={C.accent} />
-      <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#1a1a1a' }}>Persona-palett</h3>
+      <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: C.text }}>Persona-palett</h3>
     </div>
   );
 }

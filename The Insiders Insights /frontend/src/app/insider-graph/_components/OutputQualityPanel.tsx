@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Gauge, ExternalLink, Sparkles } from 'lucide-react';
+import { Gauge, ExternalLink, Sparkles, AlertCircle } from 'lucide-react';
 import { graphColors as C } from './GraphPageShell';
 import { graphFetch } from '../_lib/api';
 import { VerdictBadge, ScoreBadge, ShadowGateBadge } from './OutputQualityBits';
+import * as UI from './ui';
 
 type LogSummary = {
   log_id: string;
@@ -57,33 +58,31 @@ export default function OutputQualityPanel({ clientId }: { clientId: string }) {
     return () => { cancelled = true; };
   }, [clientId]);
 
-  const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 };
-
   if (!loaded) {
-    return <div style={card}><div style={{ fontSize: 12, color: C.muted }}>Laddar output-kvalitet…</div></div>;
+    return <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}><div style={{ fontSize: 12, color: C.muted }}>Laddar output-kvalitet…</div></UI.Card>;
   }
 
   if (error) {
     return (
-      <div style={card}>
+      <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 8 }}>
           <Gauge size={16} color={C.accent} /> Output-kvalitet
         </div>
-        <div style={{ fontSize: 12, color: '#b91c1c' }}>{error}</div>
-      </div>
+        <UI.StatusBanner tone="err" icon={<AlertCircle size={13} />}>{error}</UI.StatusBanner>
+      </UI.Card>
     );
   }
 
   if (!latest) {
     return (
-      <div style={card}>
+      <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 8 }}>
           <Gauge size={16} color={C.accent} /> Output-kvalitet
         </div>
         <div style={{ fontSize: 12, color: C.muted }}>
           Ingen logg än — kör <strong>Återpublicera</strong> för att producera första scoringen.
         </div>
-      </div>
+      </UI.Card>
     );
   }
 
@@ -93,7 +92,7 @@ export default function OutputQualityPanel({ clientId }: { clientId: string }) {
     .sort((a, b) => a.avg_score - b.avg_score);
 
   return (
-    <div style={card}>
+    <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: C.text }}>
           <Gauge size={16} color={C.accent} /> Output-kvalitet
@@ -172,6 +171,6 @@ export default function OutputQualityPanel({ clientId }: { clientId: string }) {
           </div>
         </div>
       )}
-    </div>
+    </UI.Card>
   );
 }

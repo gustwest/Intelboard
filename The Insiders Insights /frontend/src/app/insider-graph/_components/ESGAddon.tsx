@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Leaf, ArrowRight } from 'lucide-react';
 import { graphColors as C } from './GraphPageShell';
 import { graphFetch } from '../_lib/api';
+import * as UI from './ui';
 
 /**
  * AI-synlighet — ESG & CSRD Perception Audit: valbart tillägg per kund.
@@ -51,7 +52,7 @@ export default function ESGAddon({ clientId }: { clientId: string }) {
   }
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>
+    <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <Leaf size={16} color="#16a34a" />
@@ -82,19 +83,9 @@ export default function ESGAddon({ clientId }: { clientId: string }) {
       </div>
 
       {banner && (
-        <div
-          style={{
-            marginTop: 12,
-            fontSize: 12,
-            padding: '8px 12px',
-            borderRadius: 8,
-            background: banner.tone === 'ok' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-            color: banner.tone === 'ok' ? '#16a34a' : '#ef4444',
-            border: `1px solid ${banner.tone === 'ok' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`,
-          }}
-        >
+        <UI.StatusBanner tone={banner.tone === 'ok' ? 'ok' : 'err'} style={{ marginTop: 12 }}>
           {banner.text}
-        </div>
+        </UI.StatusBanner>
       )}
 
       {enabled && (
@@ -110,6 +101,6 @@ export default function ESGAddon({ clientId }: { clientId: string }) {
           </Link>
         </div>
       )}
-    </div>
+    </UI.Card>
   );
 }

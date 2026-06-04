@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Radar, Plus, Trash2, Save, Check, AlertCircle } from 'lucide-react';
+import { Radar, Plus, Trash2, Check, AlertCircle } from 'lucide-react';
 import { graphColors as C } from './GraphPageShell';
+import * as UI from './ui';
 import { graphFetch } from '../_lib/api';
 
 // Håll i synk med backend: routers/clients.py (MEASUREMENT_PERSONAS, POLLING_CATEGORIES).
@@ -102,29 +103,25 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
     }
   }
 
-  const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 };
   const inp: React.CSSProperties = { padding: '8px 12px', background: '#eef0f1', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none' };
-  const labelStyle: React.CSSProperties = { fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginBottom: 6, display: 'block' };
 
   return (
-    <div style={card}>
+    <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: C.text }}>
           <Radar size={16} color={C.accent} /> Mätkonfiguration (AI-synlighet)
         </div>
-        <button
-          onClick={save}
-          disabled={!dirty || saving}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: dirty ? 'rgba(159,81,182,0.18)' : 'transparent', color: dirty ? C.accent : C.muted, border: `1px solid ${dirty ? 'rgba(159,81,182,0.3)' : C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: dirty && !saving ? 'pointer' : 'not-allowed' }}
-        >
-          <Save size={12} /> {saving ? 'Sparar…' : 'Spara'}
-        </button>
+        <UI.SaveButton dirty={dirty} saving={saving} onClick={save} />
       </div>
 
       {msg && (
-        <div style={{ background: msg.tone === 'ok' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${msg.tone === 'ok' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, borderRadius: 8, padding: '8px 12px', color: msg.tone === 'ok' ? '#16a34a' : '#b91c1c', fontSize: 12, marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
-          {msg.tone === 'ok' ? <Check size={14} /> : <AlertCircle size={14} />} {msg.text}
-        </div>
+        <UI.StatusBanner
+          tone={msg.tone === 'ok' ? 'ok' : 'err'}
+          icon={msg.tone === 'ok' ? <Check size={14} /> : <AlertCircle size={14} />}
+          style={{ marginBottom: 12 }}
+        >
+          {msg.text}
+        </UI.StatusBanner>
       )}
 
       {!loaded ? (
@@ -134,16 +131,16 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
           {/* Bransch-platshållare — fyller {industry}/{topic}/{service_area} i default-frågorna */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 18 }}>
             <div>
-              <label style={labelStyle}>Bransch (industry)</label>
-              <input value={industry} onChange={(e) => { setIndustry(e.target.value); setDirty(true); }} placeholder="t.ex. molninfrastruktur" style={{ ...inp, width: '100%' }} />
+              <UI.FieldLabel>Bransch (industry)</UI.FieldLabel>
+              <UI.Input value={industry} onChange={(e) => { setIndustry(e.target.value); setDirty(true); }} placeholder="t.ex. molninfrastruktur" style={{ width: '100%' }} />
             </div>
             <div>
-              <label style={labelStyle}>Område (topic)</label>
-              <input value={topic} onChange={(e) => { setTopic(e.target.value); setDirty(true); }} placeholder="t.ex. AI-säkerhet" style={{ ...inp, width: '100%' }} />
+              <UI.FieldLabel>Område (topic)</UI.FieldLabel>
+              <UI.Input value={topic} onChange={(e) => { setTopic(e.target.value); setDirty(true); }} placeholder="t.ex. AI-säkerhet" style={{ width: '100%' }} />
             </div>
             <div>
-              <label style={labelStyle}>Tjänsteområde (service area)</label>
-              <input value={serviceArea} onChange={(e) => { setServiceArea(e.target.value); setDirty(true); }} placeholder="t.ex. molnmigrering" style={{ ...inp, width: '100%' }} />
+              <UI.FieldLabel>Tjänsteområde (service area)</UI.FieldLabel>
+              <UI.Input value={serviceArea} onChange={(e) => { setServiceArea(e.target.value); setDirty(true); }} placeholder="t.ex. molnmigrering" style={{ width: '100%' }} />
             </div>
           </div>
           <p style={{ fontSize: 11, color: C.dim, margin: '-10px 0 18px' }}>
@@ -151,7 +148,7 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
           </p>
 
           {/* Personas som riskloopen mäter */}
-          <label style={labelStyle}>Personas i riskloopen</label>
+          <UI.FieldLabel>Personas i riskloopen</UI.FieldLabel>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
             {PERSONAS.map((p) => {
               const on = personas.includes(p.id);
@@ -171,7 +168,7 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
           )}
 
           {/* Egna pollingfrågor per kategori (tomt = default-batteriet) */}
-          <label style={labelStyle}>Egna pollingfrågor</label>
+          <UI.FieldLabel>Egna pollingfrågor</UI.FieldLabel>
           <p style={{ fontSize: 11, color: C.dim, margin: '0 0 12px' }}>
             Ersätter default-frågorna per kategori. Tomma kategorier använder defaults (med platshållarna ovan).
           </p>
@@ -193,7 +190,7 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {qs.map((q, i) => (
                         <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 36px', gap: 8 }}>
-                          <input value={q} onChange={(e) => setQ(cat.id, i, e.target.value)} placeholder="Fråga som ställs till AI-motorerna" style={inp} />
+                          <UI.Input value={q} onChange={(e) => setQ(cat.id, i, e.target.value)} placeholder="Fråga som ställs till AI-motorerna" />
                           <button onClick={() => removeQ(cat.id, i)} style={{ ...inp, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <Trash2 size={12} />
                           </button>
@@ -207,6 +204,6 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
           </div>
         </>
       )}
-    </div>
+    </UI.Card>
   );
 }

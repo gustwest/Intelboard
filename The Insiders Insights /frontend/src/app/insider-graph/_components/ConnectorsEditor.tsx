@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plug, Plus, Trash2, Save, Check, AlertCircle } from 'lucide-react';
+import { Plug, Plus, Trash2, Check, AlertCircle } from 'lucide-react';
 import { graphColors as C } from './GraphPageShell';
 import { graphFetch } from '../_lib/api';
+import * as UI from './ui';
 
 type InputFieldMeta = { name: string; label: string; type: string; required: boolean; placeholder?: string; help?: string };
 type ConnectorMeta = { id: string; fetch_method: string; output_types: string[]; frequency: string; tier: string; input_fields: InputFieldMeta[] };
@@ -88,28 +89,23 @@ export default function ConnectorsEditor({ clientId }: { clientId: string }) {
     }
   }
 
-  const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 };
-  const inp: React.CSSProperties = { padding: '8px 12px', background: '#eef0f1', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none' };
-
   return (
-    <div style={card}>
+    <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: C.text }}>
           <Plug size={16} color={C.accent} /> Connectors
         </div>
-        <button
-          onClick={save}
-          disabled={!dirty || saving}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: dirty ? 'rgba(159,81,182,0.18)' : 'transparent', color: dirty ? C.accent : C.muted, border: `1px solid ${dirty ? 'rgba(159,81,182,0.3)' : C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: dirty && !saving ? 'pointer' : 'not-allowed' }}
-        >
-          <Save size={12} /> {saving ? 'Sparar…' : 'Spara'}
-        </button>
+        <UI.SaveButton dirty={dirty} saving={saving} onClick={save} />
       </div>
 
       {msg && (
-        <div style={{ background: msg.tone === 'ok' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${msg.tone === 'ok' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, borderRadius: 8, padding: '8px 12px', color: msg.tone === 'ok' ? '#16a34a' : '#b91c1c', fontSize: 12, marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
-          {msg.tone === 'ok' ? <Check size={14} /> : <AlertCircle size={14} />} {msg.text}
-        </div>
+        <UI.StatusBanner
+          tone={msg.tone === 'ok' ? 'ok' : 'err'}
+          icon={msg.tone === 'ok' ? <Check size={14} /> : <AlertCircle size={14} />}
+          style={{ marginBottom: 12 }}
+        >
+          {msg.text}
+        </UI.StatusBanner>
       )}
 
       {state === null ? (
@@ -138,11 +134,11 @@ export default function ConnectorsEditor({ clientId }: { clientId: string }) {
                   <label style={{ fontSize: 12, fontWeight: 600, color: C.text }}>
                     {f.label} <span style={{ color: C.muted, fontWeight: 400 }}>· {NAME[f.connector] || f.connector}</span>
                   </label>
-                  <input
+                  <UI.Input
                     value={params[f.name] ?? ''}
                     onChange={(e) => updateParam(f.name, e.target.value)}
                     placeholder={f.placeholder || ''}
-                    style={{ ...inp, maxWidth: 320 }}
+                    style={{ maxWidth: 320 }}
                   />
                   {f.help && <span style={{ fontSize: 11, color: C.muted }}>{f.help}</span>}
                 </div>
@@ -164,8 +160,8 @@ export default function ConnectorsEditor({ clientId }: { clientId: string }) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {feeds.map((f, i) => (
                     <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 160px 140px 36px', gap: 8 }}>
-                      <input value={f.url} onChange={(e) => updateFeed(i, { url: e.target.value })} placeholder="https://example.com/feed.xml" style={inp} />
-                      <input value={f.label || ''} onChange={(e) => updateFeed(i, { label: e.target.value })} placeholder="Etikett" style={inp} />
+                      <UI.Input value={f.url} onChange={(e) => updateFeed(i, { url: e.target.value })} placeholder="https://example.com/feed.xml" style={{ width: '100%' }} />
+                      <UI.Input value={f.label || ''} onChange={(e) => updateFeed(i, { label: e.target.value })} placeholder="Etikett" style={{ width: '100%' }} />
                       <select value={f.schema_type} onChange={(e) => updateFeed(i, { schema_type: e.target.value })} style={inp}>
                         {SCHEMA_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
@@ -180,6 +176,9 @@ export default function ConnectorsEditor({ clientId }: { clientId: string }) {
           )}
         </>
       )}
-    </div>
+    </UI.Card>
   );
 }
+
+// Behållen lokal stil för <select> och trash-knappen (ej UI.Input-mål).
+const inp: React.CSSProperties = { padding: '8px 12px', background: '#eef0f1', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none' };

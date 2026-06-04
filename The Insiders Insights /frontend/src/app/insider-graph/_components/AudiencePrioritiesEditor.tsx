@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Target, Sparkles, Plus, Trash2, Save, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { Target, Sparkles, Plus, Trash2, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { graphColors as C } from './GraphPageShell';
+import * as UI from './ui';
 import { graphFetch } from '../_lib/api';
 
 // Audience-typer — håll i synk med services/output_quality.py (AUDIENCE_TYPES)
@@ -156,14 +157,12 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
     }
   }
 
-  const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 };
   const inp: React.CSSProperties = { padding: '8px 12px', background: '#eef0f1', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none' };
-  const labelStyle: React.CSSProperties = { fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginBottom: 6, display: 'block' };
 
   const missingAudiences = ORDER.filter((t) => !priorities.some((p) => p.audience_type === t));
 
   return (
-    <div style={card}>
+    <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: C.text }}>
           <Target size={16} color={C.accent} /> Persona-targets (output-kvalitet)
@@ -178,13 +177,7 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
             {deriving ? <Loader2 size={12} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Sparkles size={12} />}
             {deriving ? 'Härleder…' : 'Auto-härled'}
           </button>
-          <button
-            onClick={save}
-            disabled={!dirty || saving}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: dirty ? 'rgba(159,81,182,0.18)' : 'transparent', color: dirty ? C.accent : C.muted, border: `1px solid ${dirty ? 'rgba(159,81,182,0.3)' : C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: dirty && !saving ? 'pointer' : 'not-allowed' }}
-          >
-            <Save size={12} /> {saving ? 'Sparar…' : 'Spara'}
-          </button>
+          <UI.SaveButton dirty={dirty} saving={saving} onClick={save} />
         </div>
       </div>
 
@@ -194,24 +187,23 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
       </p>
 
       {msg && (
-        <div style={{
-          background: msg.tone === 'ok' ? 'rgba(34,197,94,0.1)' : msg.tone === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(159,81,182,0.08)',
-          border: `1px solid ${msg.tone === 'ok' ? 'rgba(34,197,94,0.3)' : msg.tone === 'error' ? 'rgba(239,68,68,0.3)' : 'rgba(159,81,182,0.25)'}`,
-          borderRadius: 8, padding: '8px 12px',
-          color: msg.tone === 'ok' ? '#16a34a' : msg.tone === 'error' ? '#b91c1c' : '#7c3aed',
-          fontSize: 12, marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center',
-        }}>
-          {msg.tone === 'ok' ? <Check size={14} /> : msg.tone === 'error' ? <AlertCircle size={14} /> : <Sparkles size={14} />}
-          <span style={{ flex: 1 }}>{msg.text}</span>
-          {derivedPreview && msg.tone === 'info' && (
-            <button
-              onClick={applyDerived}
-              style={{ padding: '4px 10px', background: 'rgba(159,81,182,0.18)', color: C.accent, border: '1px solid rgba(159,81,182,0.4)', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
-            >
-              Använd förslag
-            </button>
-          )}
-        </div>
+        <UI.StatusBanner
+          tone={msg.tone === 'ok' ? 'ok' : msg.tone === 'error' ? 'err' : 'info'}
+          icon={msg.tone === 'ok' ? <Check size={14} /> : msg.tone === 'error' ? <AlertCircle size={14} /> : <Sparkles size={14} />}
+          style={{ marginBottom: 12 }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+            <span style={{ flex: 1 }}>{msg.text}</span>
+            {derivedPreview && msg.tone === 'info' && (
+              <button
+                onClick={applyDerived}
+                style={{ padding: '4px 10px', background: 'rgba(159,81,182,0.18)', color: C.accent, border: '1px solid rgba(159,81,182,0.4)', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+              >
+                Använd förslag
+              </button>
+            )}
+          </span>
+        </UI.StatusBanner>
       )}
 
       {!loaded ? (
@@ -258,7 +250,7 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
                 {/* Personas */}
                 <div style={{ marginBottom: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <label style={labelStyle}>Personor</label>
+                    <UI.FieldLabel>Personor</UI.FieldLabel>
                     <button onClick={() => addPersona(idx)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', background: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
                       <Plus size={11} /> Lägg till
                     </button>
@@ -269,9 +261,9 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {p.personas.map((pp, pidx) => (
                         <div key={pidx} style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.5fr 1fr 36px', gap: 6 }}>
-                          <input value={pp.role} onChange={(e) => setPersonaField(idx, pidx, 'role', e.target.value)} placeholder="Roll (t.ex. CXO)" style={inp} />
-                          <input value={pp.industry || ''} onChange={(e) => setPersonaField(idx, pidx, 'industry', e.target.value)} placeholder="Bransch" style={inp} />
-                          <input value={pp.company_size || ''} onChange={(e) => setPersonaField(idx, pidx, 'company_size', e.target.value)} placeholder="Storlek" style={inp} />
+                          <UI.Input value={pp.role} onChange={(e) => setPersonaField(idx, pidx, 'role', e.target.value)} placeholder="Roll (t.ex. CXO)" />
+                          <UI.Input value={pp.industry || ''} onChange={(e) => setPersonaField(idx, pidx, 'industry', e.target.value)} placeholder="Bransch" />
+                          <UI.Input value={pp.company_size || ''} onChange={(e) => setPersonaField(idx, pidx, 'company_size', e.target.value)} placeholder="Storlek" />
                           <button onClick={() => removePersona(idx, pidx)} style={{ ...inp, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <Trash2 size={12} />
                           </button>
@@ -284,7 +276,7 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
                 {/* Berättelseaxlar */}
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <label style={labelStyle}>Berättelseaxlar (3–5)</label>
+                    <UI.FieldLabel>Berättelseaxlar (3–5)</UI.FieldLabel>
                     <button onClick={() => addAxis(idx)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', background: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
                       <Plus size={11} /> Lägg till
                     </button>
@@ -295,7 +287,7 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {p.narrative_axes.map((a, aidx) => (
                         <div key={aidx} style={{ display: 'grid', gridTemplateColumns: '1fr 36px', gap: 6 }}>
-                          <input value={a} onChange={(e) => setAxis(idx, aidx, e.target.value)} placeholder="t.ex. praktisk AI utan hype" style={inp} />
+                          <UI.Input value={a} onChange={(e) => setAxis(idx, aidx, e.target.value)} placeholder="t.ex. praktisk AI utan hype" />
                           <button onClick={() => removeAxis(idx, aidx)} style={{ ...inp, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <Trash2 size={12} />
                           </button>
@@ -324,6 +316,6 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
           )}
         </div>
       )}
-    </div>
+    </UI.Card>
   );
 }

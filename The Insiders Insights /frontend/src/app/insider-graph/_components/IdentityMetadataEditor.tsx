@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Image as ImageIcon, Save, Check, AlertCircle, Download, Loader2 } from 'lucide-react';
+import { Image as ImageIcon, Check, AlertCircle, Download, Loader2 } from 'lucide-react';
 import { graphColors as C } from './GraphPageShell';
+import * as UI from './ui';
 import { graphFetch } from '../_lib/api';
 
 type ClientIdentity = {
@@ -107,12 +108,8 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
     }
   }
 
-  const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 };
-  const inp: React.CSSProperties = { padding: '8px 12px', background: '#eef0f1', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none', width: '100%' };
-  const labelStyle: React.CSSProperties = { fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginBottom: 6, display: 'block' };
-
   return (
-    <div style={card}>
+    <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: C.text }}>
           <ImageIcon size={16} color={C.accent} /> Identitetsmetadata
@@ -127,28 +124,20 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
             {fetching ? <Loader2 size={12} className="spin" /> : <Download size={12} />}
             {fetching ? 'Hämtar…' : 'Hämta automatiskt'}
           </button>
-          <button
-            onClick={save}
-            disabled={!dirty || saving}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: dirty ? 'rgba(159,81,182,0.18)' : 'transparent', color: dirty ? C.accent : C.muted, border: `1px solid ${dirty ? 'rgba(159,81,182,0.3)' : C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: dirty && !saving ? 'pointer' : 'not-allowed' }}
-          >
-            <Save size={12} /> {saving ? 'Sparar…' : 'Spara'}
-          </button>
+          <UI.SaveButton dirty={dirty} saving={saving} onClick={save} />
         </div>
       </div>
 
       <style>{`@keyframes spin { to { transform: rotate(360deg) } } .spin { animation: spin 1s linear infinite; }`}</style>
 
       {msg && (
-        <div style={{
-          background: msg.tone === 'ok' ? 'rgba(34,197,94,0.1)' : msg.tone === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(159,81,182,0.1)',
-          border: `1px solid ${msg.tone === 'ok' ? 'rgba(34,197,94,0.3)' : msg.tone === 'error' ? 'rgba(239,68,68,0.3)' : 'rgba(159,81,182,0.3)'}`,
-          borderRadius: 8, padding: '8px 12px',
-          color: msg.tone === 'ok' ? '#16a34a' : msg.tone === 'error' ? '#b91c1c' : '#7d3b94',
-          fontSize: 12, marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center',
-        }}>
-          {msg.tone === 'ok' ? <Check size={14} /> : <AlertCircle size={14} />} {msg.text}
-        </div>
+        <UI.StatusBanner
+          tone={msg.tone === 'ok' ? 'ok' : msg.tone === 'error' ? 'err' : 'info'}
+          icon={msg.tone === 'ok' ? <Check size={14} /> : <AlertCircle size={14} />}
+          style={{ marginBottom: 12 }}
+        >
+          {msg.text}
+        </UI.StatusBanner>
       )}
 
       {!loaded || !identity ? (
@@ -161,12 +150,12 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, alignItems: 'start' }}>
             <div>
-              <label style={labelStyle}>Logotyp (URL)</label>
-              <input
+              <UI.FieldLabel>Logotyp (URL)</UI.FieldLabel>
+              <UI.Input
                 value={logoUrl}
                 onChange={(e) => { setLogoUrl(e.target.value); setDirty(true); }}
                 placeholder="https://kund.se/logo.svg"
-                style={inp}
+                style={{ width: '100%' }}
               />
               <ProvenanceLine source={identity.logo_url_source} setAt={identity.logo_url_set_at} hasValue={!!identity.logo_url} />
               {logoUrl && (
@@ -179,12 +168,12 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
             </div>
 
             <div>
-              <label style={labelStyle}>Org.nr (svenskt)</label>
-              <input
+              <UI.FieldLabel>Org.nr (svenskt)</UI.FieldLabel>
+              <UI.Input
                 value={orgNumber}
                 onChange={(e) => { setOrgNumber(e.target.value); setDirty(true); }}
                 placeholder="556677-8899"
-                style={inp}
+                style={{ width: '100%' }}
               />
               <ProvenanceLine source={identity.org_number_source} setAt={identity.org_number_set_at} hasValue={!!identity.org_number} />
               <p style={{ fontSize: 10, color: C.dim, margin: '6px 0 0' }}>
@@ -194,7 +183,7 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
           </div>
         </>
       )}
-    </div>
+    </UI.Card>
   );
 }
 

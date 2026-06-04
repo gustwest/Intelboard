@@ -17,9 +17,10 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ShieldCheck, UploadCloud, FileCheck2, CheckCircle2, AlertCircle, XCircle, Stamp, ChevronDown,
+  ShieldCheck, UploadCloud, FileCheck2, CheckCircle2, XCircle, Stamp, ChevronDown,
 } from 'lucide-react';
 import { graphColors as C } from './GraphPageShell';
+import * as UI from './ui';
 import { graphFetch } from '../_lib/api';
 
 type EvidenceType = {
@@ -106,7 +107,7 @@ export default function VerificationCockpit({ clientId }: { clientId: string }) 
   }, [clientId, loadRows]);
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>
+    <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <ShieldCheck size={15} color={C.accent} />
         <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>Verifiering — &quot;Manually verified by Geogiraph&quot;</div>
@@ -117,9 +118,9 @@ export default function VerificationCockpit({ clientId }: { clientId: string }) 
       </div>
 
       {error && (
-        <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', color: '#b91c1c', fontSize: 12, marginBottom: 12 }}>
+        <UI.StatusBanner tone="err" style={{ marginBottom: 12 }}>
           {error}
-        </div>
+        </UI.StatusBanner>
       )}
 
       {/* Befintliga verifieringar (revisionsspår) */}
@@ -135,7 +136,7 @@ export default function VerificationCockpit({ clientId }: { clientId: string }) 
           <UploadCloud size={14} /> Ladda upp underlag
         </button>
       )}
-    </div>
+    </UI.Card>
   );
 }
 
@@ -319,22 +320,22 @@ function UploadForm({
             )}
           </div>
           <label style={{ ...labelStyle, display: 'block', marginBottom: 10 }}>Påstående (läsbar mening för profil/rapport)
-            <input value={statement} onChange={(e) => setStatement(e.target.value)} placeholder="t.ex. eNPS 8,5 i medarbetarenkät Q1 2026" style={inputStyle} />
+            <UI.Input value={statement} onChange={(e) => setStatement(e.target.value)} placeholder="t.ex. eNPS 8,5 i medarbetarenkät Q1 2026" style={{ padding: '6px 10px', width: '100%', display: 'block', marginTop: 4 }} />
           </label>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
             <label style={labelStyle}>Mätvärde/metric (valfritt)
-              <input value={metric} onChange={(e) => setMetric(e.target.value)} placeholder="eNPS" style={inputStyle} />
+              <UI.Input value={metric} onChange={(e) => setMetric(e.target.value)} placeholder="eNPS" style={{ padding: '6px 10px', width: '100%', display: 'block', marginTop: 4 }} />
             </label>
             <label style={labelStyle}>schema.org-predikat (valfritt)
-              <input value={predicate} onChange={(e) => setPredicate(e.target.value)} placeholder="aggregateRating" style={inputStyle} />
+              <UI.Input value={predicate} onChange={(e) => setPredicate(e.target.value)} placeholder="aggregateRating" style={{ padding: '6px 10px', width: '100%', display: 'block', marginTop: 4 }} />
             </label>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
             <label style={labelStyle}>Instrument/utfärdare
-              <input value={instrument} onChange={(e) => setInstrument(e.target.value)} placeholder="Winningtemp / GPTW / Bolagsverket" style={inputStyle} />
+              <UI.Input value={instrument} onChange={(e) => setInstrument(e.target.value)} placeholder="Winningtemp / GPTW / Bolagsverket" style={{ padding: '6px 10px', width: '100%', display: 'block', marginTop: 4 }} />
             </label>
             <label style={labelStyle}>Underlagets datum
-              <input type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} style={inputStyle} />
+              <UI.Input type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} style={{ padding: '6px 10px', width: '100%', display: 'block', marginTop: 4 }} />
             </label>
           </div>
         </>
@@ -364,9 +365,9 @@ function UploadForm({
 
           {/* Metodik-metadata (matar auto-kontrollen "metodik") */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
-            <label style={labelStyle}>Period<input value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="2026-Q1" style={inputStyle} /></label>
-            <label style={labelStyle}>Urval (N)<input value={sampleN} onChange={(e) => setSampleN(e.target.value)} inputMode="numeric" placeholder="420" style={inputStyle} /></label>
-            <label style={labelStyle}>Svarsfrekvens<input value={responseRate} onChange={(e) => setResponseRate(e.target.value)} inputMode="decimal" placeholder="0.78" style={inputStyle} /></label>
+            <label style={labelStyle}>Period<UI.Input value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="2026-Q1" style={{ padding: '6px 10px', width: '100%', display: 'block', marginTop: 4 }} /></label>
+            <label style={labelStyle}>Urval (N)<UI.Input value={sampleN} onChange={(e) => setSampleN(e.target.value)} inputMode="numeric" placeholder="420" style={{ padding: '6px 10px', width: '100%', display: 'block', marginTop: 4 }} /></label>
+            <label style={labelStyle}>Svarsfrekvens<UI.Input value={responseRate} onChange={(e) => setResponseRate(e.target.value)} inputMode="decimal" placeholder="0.78" style={{ padding: '6px 10px', width: '100%', display: 'block', marginTop: 4 }} /></label>
           </div>
 
           {/* Ops bockar oberoende + spårbarhet; metodik + färskhet auto */}
@@ -400,7 +401,7 @@ function UploadForm({
             <input type="checkbox" checked={rejecting} onChange={(e) => setRejecting(e.target.checked)} /> Avvisa underlaget (ingen stämpel)
           </label>
           {rejecting && (
-            <input value={rejectedReason} onChange={(e) => setRejectedReason(e.target.value)} placeholder="Skäl till avvisning" style={{ ...inputStyle, marginTop: 6 }} />
+            <UI.Input value={rejectedReason} onChange={(e) => setRejectedReason(e.target.value)} placeholder="Skäl till avvisning" style={{ padding: '6px 10px', width: '100%', display: 'block', marginTop: 6 }} />
           )}
         </div>
       )}

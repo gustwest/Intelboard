@@ -8,9 +8,10 @@
  * /api/connectors/{clientId} (samma settings.job_feeds som Connectors-sidan).
  */
 import { useCallback, useEffect, useState } from 'react';
-import { Briefcase, Plus, Trash2, Save, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Briefcase, Plus, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { graphColors as C } from './GraphPageShell';
 import { graphFetch } from '../_lib/api';
+import * as UI from './ui';
 
 type JobFeed = { url: string; label?: string };
 type ClientConnectors = { active_connectors: string[]; job_feeds: JobFeed[] };
@@ -75,13 +76,11 @@ export default function JobFeedsEditor({ clientId }: { clientId: string }) {
   const jobfeedOn = active.includes('jobfeed');
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>
+    <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 4 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: C.text, display: 'flex', alignItems: 'center', gap: 8 }}>
           <Briefcase size={15} color={C.accent} /> Platsannonser (ATS)
-          <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, fontWeight: 600, background: jobfeedOn ? 'rgba(34,197,94,0.15)' : '#eef0f1', color: jobfeedOn ? '#16a34a' : C.muted }}>
-            {jobfeedOn ? 'Aktiv' : 'Av'}
-          </span>
+          <UI.Badge tone={jobfeedOn ? 'ok' : 'neutral'}>{jobfeedOn ? 'Aktiv' : 'Av'}</UI.Badge>
         </div>
         <button onClick={add} style={btnSubtle}>
           <Plus size={12} /> Lägg till
@@ -94,10 +93,13 @@ export default function JobFeedsEditor({ clientId }: { clientId: string }) {
       </div>
 
       {banner && (
-        <div style={{ background: banner.tone === 'ok' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${banner.tone === 'ok' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, borderRadius: 8, padding: '8px 12px', color: banner.tone === 'ok' ? '#16a34a' : '#b91c1c', fontSize: 12, marginBottom: 10, display: 'flex', gap: 6, alignItems: 'center' }}>
-          {banner.tone === 'ok' ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+        <UI.StatusBanner
+          tone={banner.tone === 'ok' ? 'ok' : 'err'}
+          icon={banner.tone === 'ok' ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+          style={{ marginBottom: 10 }}
+        >
           {banner.text}
-        </div>
+        </UI.StatusBanner>
       )}
 
       {feeds.length === 0 ? (
@@ -106,8 +108,8 @@ export default function JobFeedsEditor({ clientId }: { clientId: string }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
           {feeds.map((f, i) => (
             <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 160px 36px', gap: 8 }}>
-              <input value={f.url} onChange={(e) => update(i, { url: e.target.value })} placeholder="https://kund.teamtailor.com/jobs.xml" style={inp} />
-              <input value={f.label || ''} onChange={(e) => update(i, { label: e.target.value })} placeholder="Etikett" style={inp} />
+              <UI.Input value={f.url} onChange={(e) => update(i, { url: e.target.value })} placeholder="https://kund.teamtailor.com/jobs.xml" style={{ width: '100%' }} />
+              <UI.Input value={f.label || ''} onChange={(e) => update(i, { label: e.target.value })} placeholder="Etikett" style={{ width: '100%' }} />
               <button onClick={() => remove(i)} style={{ ...btnSubtle, padding: '8px', justifyContent: 'center' }}>
                 <Trash2 size={12} />
               </button>
@@ -116,10 +118,8 @@ export default function JobFeedsEditor({ clientId }: { clientId: string }) {
         </div>
       )}
 
-      <button onClick={save} disabled={!dirty || saving} style={{ ...btnSubtle, background: dirty ? 'rgba(159,81,182,0.18)' : 'transparent', color: dirty ? C.accent : C.muted, borderColor: dirty ? 'rgba(159,81,182,0.3)' : C.border }}>
-        <Save size={12} /> {saving ? 'Sparar…' : 'Spara feeds'}
-      </button>
-    </div>
+      <UI.SaveButton dirty={dirty} saving={saving} onClick={save} label="Spara feeds" savingLabel="Sparar…" />
+    </UI.Card>
   );
 }
 
@@ -135,14 +135,4 @@ const btnSubtle: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 600,
   cursor: 'pointer',
-};
-
-const inp: React.CSSProperties = {
-  padding: '8px 12px',
-  background: '#eef0f1',
-  color: C.text,
-  border: `1px solid ${C.border}`,
-  borderRadius: 6,
-  fontSize: 12,
-  outline: 'none',
 };

@@ -7,7 +7,8 @@
 // kopiera inline-stilar.
 
 import { CSSProperties, ReactNode } from 'react';
-import { graphColors as C, statusColors } from '../GraphPageShell';
+import { Save } from 'lucide-react';
+import { graphColors as C, statusColors, surfaces } from '../GraphPageShell';
 
 type StatusTone = 'ok' | 'warn' | 'err' | 'info';
 
@@ -197,6 +198,65 @@ export function Button({ variant = 'ghost', icon, children, style, disabled, ...
     >
       {icon}
       {children}
+    </button>
+  );
+}
+
+// ── Input ──────────────────────────────────────────────────────────────────
+// Textfält (bg surfaces.inputBg). ≥6 inline-kopior i editorerna.
+export function Input({ style, ...rest }: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...rest}
+      style={{
+        padding: '8px 12px', background: surfaces.inputBg, color: C.text,
+        border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none', ...style,
+      }}
+    />
+  );
+}
+
+// ── FieldLabel ───────────────────────────────────────────────────────────────
+// Versal formulär-label (block-variant av Eyebrow, renderar <label> för a11y).
+export function FieldLabel({
+  children, htmlFor, style,
+}: { children: ReactNode; htmlFor?: string; style?: CSSProperties }) {
+  return (
+    <label
+      htmlFor={htmlFor}
+      style={{
+        display: 'block', fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase',
+        color: C.muted, fontWeight: 600, marginBottom: 6, ...style,
+      }}
+    >
+      {children}
+    </label>
+  );
+}
+
+// ── SaveButton ───────────────────────────────────────────────────────────────
+// Dirty-state spara-knapp: tonad accent när dirty, dämpad/inaktiv annars.
+// 5+ inline-kopior i editorerna med identisk logik.
+export function SaveButton({
+  dirty, saving, onClick, label = 'Spara', savingLabel = 'Sparar…', style,
+}: {
+  dirty: boolean; saving?: boolean; onClick?: () => void;
+  label?: string; savingLabel?: string; style?: CSSProperties;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={!dirty || saving}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px',
+        background: dirty ? 'rgba(159,81,182,0.18)' : 'transparent',
+        color: dirty ? C.accent : C.muted,
+        border: `1px solid ${dirty ? 'rgba(159,81,182,0.3)' : C.border}`,
+        borderRadius: 8, fontSize: 12, fontWeight: 600,
+        cursor: dirty && !saving ? 'pointer' : 'not-allowed', ...style,
+      }}
+    >
+      <Save size={12} /> {saving ? savingLabel : label}
     </button>
   );
 }

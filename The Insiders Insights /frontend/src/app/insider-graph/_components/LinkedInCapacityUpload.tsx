@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Network, UploadCloud, CheckCircle2, AlertCircle, FileCheck2, X, BellRing } from 'lucide-react';
 import { graphColors as C } from './GraphPageShell';
 import { graphFetch } from '../_lib/api';
+import * as UI from './ui';
 
 type Snapshot = { id: string; status: string; is_active: boolean; skills: string[]; quarter: string | null; uploaded_at: string | null };
 type Todo = { id: string; type: string; status: string; message: string; created_at: string | null };
@@ -96,12 +97,10 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
   const on = active.includes('linkedin_capacity');
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>
+    <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
       <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
         <Network size={15} color={C.accent} /> LinkedIn-kapacitetsdata (kvartal)
-        <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, fontWeight: 600, background: on ? 'rgba(34,197,94,0.15)' : '#eef0f1', color: on ? '#16a34a' : C.muted }}>
-          {on ? 'Aktiv' : 'Av'}
-        </span>
+        <UI.Badge tone={on ? 'ok' : 'neutral'}>{on ? 'Aktiv' : 'Av'}</UI.Badge>
       </div>
       <div style={{ fontSize: 11, color: C.muted, marginBottom: 12, lineHeight: 1.5 }}>
         Vi samlar in datan själva. Dra in export/skärmklipp över bolagets samlade kompetensstatistik
@@ -117,10 +116,13 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
       ))}
 
       {banner && (
-        <div style={{ background: banner.tone === 'ok' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${banner.tone === 'ok' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, borderRadius: 8, padding: '8px 12px', color: banner.tone === 'ok' ? '#16a34a' : '#b91c1c', fontSize: 12, marginBottom: 10, display: 'flex', gap: 6, alignItems: 'center' }}>
-          {banner.tone === 'ok' ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+        <UI.StatusBanner
+          tone={banner.tone === 'ok' ? 'ok' : 'err'}
+          icon={banner.tone === 'ok' ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+          style={{ marginBottom: 10 }}
+        >
           {banner.text}
-        </div>
+        </UI.StatusBanner>
       )}
 
       {/* drag-drop-zon */}
@@ -153,8 +155,8 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
         style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, color: C.text, background: '#eef0f1', border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 12px', lineHeight: 1.5, resize: 'vertical', fontFamily: 'inherit', marginBottom: 10 }} />
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-        <input value={quarter} onChange={(e) => setQuarter(e.target.value)} placeholder="Kvartal (2026-Q2)" style={inp} />
-        <input value={followers} onChange={(e) => setFollowers(e.target.value)} placeholder="Följarantal (intern)" inputMode="numeric" style={inp} />
+        <UI.Input value={quarter} onChange={(e) => setQuarter(e.target.value)} placeholder="Kvartal (2026-Q2)" style={{ flex: 1, minWidth: 140 }} />
+        <UI.Input value={followers} onChange={(e) => setFollowers(e.target.value)} placeholder="Följarantal (intern)" inputMode="numeric" style={{ flex: 1, minWidth: 140 }} />
       </div>
 
       <button onClick={upload} disabled={busy || (!file && !skills.trim())}
@@ -178,18 +180,6 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
           })}
         </div>
       )}
-    </div>
+    </UI.Card>
   );
 }
-
-const inp: React.CSSProperties = {
-  flex: 1,
-  minWidth: 140,
-  padding: '8px 12px',
-  background: '#eef0f1',
-  color: C.text,
-  border: `1px solid ${C.border}`,
-  borderRadius: 6,
-  fontSize: 12,
-  outline: 'none',
-};

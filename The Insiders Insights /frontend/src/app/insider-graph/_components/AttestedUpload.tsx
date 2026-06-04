@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { UploadCloud, FileCheck2, RefreshCw, PlusCircle, CheckCircle2, AlertCircle, Trash2 } from 'lucide-react';
 import { graphColors as C } from './GraphPageShell';
+import * as UI from './ui';
 import { graphFetch } from '../_lib/api';
 
 // Filtyper + label-text per källtyp — text-baserade källor (people_bio) tar PDF/text,
@@ -77,16 +78,16 @@ export default function AttestedUpload({ clientId }: { clientId: string }) {
   }, [clientId]);
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>
+    <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
       <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 4 }}>Officiell data (attesterad)</div>
       <div style={{ fontSize: 11, color: C.muted, marginBottom: 14, lineHeight: 1.5 }}>
         Filer vi själva hämtat från officiell källa. Vi datumsätter och går i god för att datan är oförvanskad.
       </div>
 
       {error && (
-        <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', color: '#b91c1c', fontSize: 12, marginBottom: 12 }}>
+        <UI.StatusBanner tone="err" style={{ marginBottom: 12 }}>
           {error}
-        </div>
+        </UI.StatusBanner>
       )}
 
       {sources === null ? (
@@ -98,7 +99,7 @@ export default function AttestedUpload({ clientId }: { clientId: string }) {
           ))}
         </div>
       )}
-    </div>
+    </UI.Card>
   );
 }
 
@@ -232,20 +233,20 @@ function SourceUploader({ clientId, source, onDone }: { clientId: string; source
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
         <label style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>
           Attesterat datum
-          <input
+          <UI.Input
             type="date"
             value={attestedAt}
             onChange={(e) => setAttestedAt(e.target.value)}
-            style={{ display: 'block', marginTop: 4, padding: '6px 10px', background: '#eef0f1', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none' }}
+            style={{ display: 'block', marginTop: 4, padding: '6px 10px' }}
           />
         </label>
         <label style={{ fontSize: 11, color: C.muted, fontWeight: 600, flex: 1, minWidth: 180 }}>
           Publik ankare (valfritt, t.ex. LinkedIn-sidan)
-          <input
+          <UI.Input
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://www.linkedin.com/company/…"
-            style={{ display: 'block', width: '100%', marginTop: 4, padding: '6px 10px', background: '#eef0f1', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none' }}
+            style={{ display: 'block', width: '100%', marginTop: 4, padding: '6px 10px' }}
           />
         </label>
       </div>
