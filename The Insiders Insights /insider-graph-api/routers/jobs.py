@@ -221,19 +221,42 @@ def trigger_warmth_probes(client_id: str, background: BackgroundTasks) -> dict[s
     """Riktad värme-probe-körning för EN kund (Fas 2.1/2.2). Mäter hur AI-motorerna
     uppfattar kunden per (aktiv persona × dimension) med N-domarkörningar + canary.
 
-    Speglar de andra per-kund-triggers — kör i API-tjänsten (har probe-creds), ingen
-    sharding, ingen Cloud Run-job-mutation. Reapar föräldralösa warmth-running-poster
-    som ett städsteg först (cheap, idempotent) så aktivitetsflödet inte visar
-    eviga 'kör fortfarande'.
+    Primär väg (Fas #2): starta en RIKTIG Cloud Run Job-execution med override
+    (tasks=1, --client-id) — garanterad CPU, ingen request-timeout, ingen sharding.
+    Tunga probes (~minuter av LLM-anrop) får inte köra i en FastAPI BackgroundTask
+    som CPU-stryps efter response.
+
+    Fallback: om Admin API inte är nåbart (lokal utveckling/test/saknade creds)
+    faller vi tillbaka till en BackgroundTask så flödet funkar ändå.
+
+    Reapar föräldralösa warmth-running-poster som ett städsteg först (cheap, idempotent).
     """
     if not fs.client_doc(client_id).get().exists:
         raise HTTPException(404, "client not found")
     from jobs.warmth_probes import reap_stale_runs
-    from services.warmth_probes import run_for_client
+    from services import cloud_run_jobs
 
     reaped = reap_stale_runs(older_than_hours=6)
+
+    # Primär: Cloud Run Job-execution med override (args ERSÄTTER → full kommando).
+    execution = cloud_run_jobs.run_job(
+        "warmth-probes",
+        args=["-m", "jobs.warmth_probes", "--client-id", client_id],
+        task_count=1,
+    )
+    if execution:
+        return {
+            "status": "queued", "job": "warmth_probes", "client_id": client_id,
+            "via": "cloud_run_job", "execution": execution, "reaped_stale": reaped,
+        }
+
+    # Fallback: BackgroundTask (lokal/test eller Admin API otillgängligt).
+    from services.warmth_probes import run_for_client
     background.add_task(tracked, "warmth_probes", client_id, run_for_client, client_id)
-    return {"status": "queued", "job": "warmth_probes", "client_id": client_id, "reaped_stale": reaped}
+    return {
+        "status": "queued", "job": "warmth_probes", "client_id": client_id,
+        "via": "background_task", "reaped_stale": reaped,
+    }
 
 
 @router.post("/monthly-report/{client_id}")
