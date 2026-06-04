@@ -26,6 +26,7 @@ persona_mismatch-flaggan i Fas 2.1d).
 from __future__ import annotations
 
 import logging
+import os
 import statistics
 from datetime import datetime, timezone
 from typing import Any
@@ -43,6 +44,23 @@ log = logging.getLogger(__name__)
 
 PROMPT_VERSION = "v2-persona"   # v1 = pre-persona-templates; v2 = persona-axel via registry
 _SALIENCE_MIN_FOR_VALENCE = 0.1  # motor som inget vet bidrar ej till valens-snittet
+
+
+def _probe_runs_per_query() -> int:
+    """Antal domar-körningar per probe (Fas 2.2a — statistisk signifikans).
+
+    Probe-FRÅGORNA ställs en gång (temp=0 → motorsvaren är nära-deterministiska),
+    men DOMAREN körs N gånger på samma svar. Det är i domarens tolkning den
+    praktiska variansen sitter — och vi multiplicerar då inte de dyra probe-
+    anropen, bara de billigare domar-anropen (respekterar cost-taket, Fas 1.6).
+
+    Default 3. Env PROBE_RUNS_PER_QUERY=1 stänger av kalibreringen (snabbt/billigt
+    läge), högre = mer signal. Clampas till [1, 7]."""
+    try:
+        n = int(os.getenv("PROBE_RUNS_PER_QUERY", "3"))
+    except ValueError:
+        return 3
+    return max(1, min(7, n))
 # Ankare: känt, stabilt faktum. Driver svaret mellan körningar → motorn/förhållandena
 # har skiftat → körningen kan flaggas som ojämförbar (skyddar trenden).
 ANCHOR_QUESTION = "I vilket land har {company} sitt huvudkontor?"
@@ -88,6 +106,37 @@ def _clamp(v: Any) -> float:
     return max(0.0, min(1.0, float(v)))
 
 
+def _judge_verdict_calibrated(
+    judge: Any, company: str, dimension: str, answers: list[str], runs: int,
+) -> dict[str, float] | None:
+    """Kör domaren `runs` gånger på samma probe-svar → median-verdict + valens-varians.
+
+    Median (inte snitt) som centralvärde — robust mot enstaka domar-utliggare.
+    valence_variance = populationsstandardavvikelse av valens över körningarna; det
+    är måttet på hur STABIL mätningen är. Hög varians → domaren tolkar svaret olika
+    mellan körningar → trust_gap (Fas 2.2c) sänker confidence på ev. flaggor så vi
+    inte reser larm på brus. None om alla körningar föll.
+    """
+    verdicts: list[dict[str, float]] = []
+    for _ in range(max(1, runs)):
+        v = _judge_verdict(judge, company, dimension, answers)
+        if v is not None:
+            verdicts.append(v)
+    if not verdicts:
+        return None
+    sals = [v["salience"] for v in verdicts]
+    vals = [v["valence"] for v in verdicts]
+    confs = [v["confidence"] for v in verdicts]
+    return {
+        "salience": round(statistics.median(sals), 3),
+        "valence": round(statistics.median(vals), 3),
+        "confidence": round(statistics.median(confs), 3),
+        # Mätstabilitet: spridning i valens över körningarna. 0 = perfekt stabilt.
+        "valence_variance": round(statistics.pstdev(vals), 3) if len(vals) > 1 else 0.0,
+        "n_runs": len(verdicts),
+    }
+
+
 def _aggregate_by_engine(by_engine_for_dim: dict[str, dict | None]) -> dict[str, Any]:
     """Aggregera över motorer för EN dimension (eller en persona × dimension).
 
@@ -106,12 +155,25 @@ def _aggregate_by_engine(by_engine_for_dim: dict[str, dict | None]) -> dict[str,
     base_conf = statistics.fmean(confs) if confs else 0.0
     agreement = 1.0 - statistics.pstdev(vals) if len(vals) > 1 else 1.0
     confidence = round(base_conf * salience * max(0.0, agreement), 3)
+    # Mätstabilitet (Fas 2.2a): kombinera (a) inom-motor run-varians (domarens
+    # tolkningsbrus per motor) och (b) mellan-motor spread. Vi tar MAX genomgående,
+    # inte snitt — en enskild instabil motor ska inte maskeras av en stabil. 2.2c
+    # grindar flaggor mot detta så vi aldrig reser larm på instabil data.
+    run_variances = [
+        x["valence_variance"] for x in per.values()
+        if x.get("valence_variance") is not None
+    ]
+    within_engine_var = max(run_variances) if run_variances else 0.0
+    between_engine_var = statistics.pstdev(vals) if len(vals) > 1 else 0.0
     return {
         "salience": salience,
         "valence": valence,
         "confidence": confidence,
         "n_samples": len(per),
         "by_engine": dict(per),
+        # Total mätosäkerhet — max av brus-källorna (konservativt: vi underskattar
+        # aldrig instabiliteten genom att medelvärda bort en av dem).
+        "valence_variance": round(max(within_engine_var, between_engine_var), 3),
     }
 
 
@@ -207,10 +269,13 @@ def run_for_client(
 
     active_persona_ids = persona_derivation.get_active_personas(client_id)
     active_personas = [persona_registry.get(pid) for pid in active_persona_ids]
+    runs = _probe_runs_per_query()
     log.info(
-        "värme-probes för %s: %d motorer × %d personor × %d dim × 2 frågor = %d anrop",
-        client_id, len(engines), len(active_personas), len(hc.DIMENSIONS),
+        "värme-probes för %s: %d motorer × %d personor × %d dim × 2 frågor "
+        "(× %d domar-körningar) = %d probe-anrop + %d domar-anrop",
+        client_id, len(engines), len(active_personas), len(hc.DIMENSIONS), runs,
         len(engines) * len(active_personas) * len(hc.DIMENSIONS) * 2,
+        len(engines) * len(active_personas) * len(hc.DIMENSIONS) * runs,
     )
 
     # by_engine_persona[engine][persona_id][dim] = verdict | None
@@ -230,7 +295,7 @@ def run_for_client(
                         _ask(neutral_q.format(company=company), llm),
                         _ask(adversarial_q.format(company=company), llm),
                     ]
-                    verdict = _judge_verdict(judge, company, dim, answers)
+                    verdict = _judge_verdict_calibrated(judge, company, dim, answers, runs)
                 except Exception as exc:  # noqa: BLE001
                     log.warning("probe %s/%s/%s misslyckades: %s", ename, persona.id, dim, exc)
                     verdict = None
