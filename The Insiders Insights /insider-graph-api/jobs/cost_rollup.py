@@ -119,9 +119,10 @@ def _build_rollup(target_date) -> dict[str, Any]:
                 bc["by_model"][mid]["output"] += o
                 bc["by_model"][mid]["calls"] += c
 
-    # Översätt till USD och normalisera defaultdicts.
+    # Översätt till USD och normalisera defaultdicts. calls skickas med så att
+    # per-request-avgifter (Perplexity Sonar) räknas in, inte bara tokens.
     by_model_usd = {
-        mid: {**u, "usd": round(cost_estimator.usd_for(mid, u["input"], u["output"]), 6)}
+        mid: {**u, "usd": round(cost_estimator.usd_for(mid, u["input"], u["output"], u["calls"]), 6)}
         for mid, u in by_model.items()
     }
     if any(u["usd"] == 0 and (u["input"] or u["output"]) for u in by_model_usd.values()):
@@ -132,7 +133,7 @@ def _build_rollup(target_date) -> dict[str, Any]:
     by_client_out: dict[str, dict[str, Any]] = {}
     for cid, bc in by_client.items():
         cm = {
-            mid: {**u, "usd": round(cost_estimator.usd_for(mid, u["input"], u["output"]), 6)}
+            mid: {**u, "usd": round(cost_estimator.usd_for(mid, u["input"], u["output"], u["calls"]), 6)}
             for mid, u in bc["by_model"].items()
         }
         by_client_out[cid] = {
@@ -149,7 +150,7 @@ def _build_rollup(target_date) -> dict[str, Any]:
     by_job_type_out: dict[str, dict[str, Any]] = {}
     for jt, u in by_job_type.items():
         jm = {
-            mid: {**mu, "usd": round(cost_estimator.usd_for(mid, mu["input"], mu["output"]), 6)}
+            mid: {**mu, "usd": round(cost_estimator.usd_for(mid, mu["input"], mu["output"], mu["calls"]), 6)}
             for mid, mu in u["by_model"].items()
         }
         by_job_type_out[jt] = {

@@ -26,11 +26,17 @@ log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class ModelPrice:
-    """USD per 1 000 000 tokens. Input = prompt, output = completion."""
+    """USD per 1 000 000 tokens. Input = prompt, output = completion.
+
+    `per_request_usd`: fast avgift PER ANROP utöver token-kostnaden. Krävs för
+    web-RAG-motorer som Perplexity Sonar, som debiterar en sök-/request-avgift
+    ($5–$12 per 1000 requests beroende på search-context-storlek) ovanpå tokens.
+    För rena token-modeller (Gemini, GPT, Claude) är den 0."""
     input_per_million: float
     output_per_million: float
     label: str = ""        # läsbar visningsetikett
     vendor: str = ""       # för UI-färgkodning
+    per_request_usd: float = 0.0
 
 
 # Publika listpriser per 1M tokens (USD), uppdaterade 2026-06.
@@ -56,12 +62,21 @@ PRICE_TABLE: dict[str, ModelPrice] = {
     "gpt-5.5": ModelPrice(2.50, 10.00, "GPT-5.5", "openai"),
     # --- Övriga --------------------------------------------------------
     "mistral-medium-3": ModelPrice(0.40, 2.00, "Mistral Medium 3", "mistral"),
-    "sonar": ModelPrice(0.20, 0.80, "Perplexity Sonar", "perplexity"),
+    # Perplexity Sonar: $1/$1 per 1M tokens + en request-avgift på $5–$12 per 1000
+    # requests beroende på search-context (Low/Medium/High). Vi använder Low-tier
+    # ($5/1000 = $0.005/request) som baslinje — det är defaulten när vi inte sätter
+    # search_context_size. Request-avgiften DOMINERAR Sonars kostnad vid korta svar,
+    # så token-only-modellen (gamla 0.20/0.80) underskattade Perplexity grovt.
+    "sonar": ModelPrice(1.00, 1.00, "Perplexity Sonar", "perplexity", per_request_usd=0.005),
 }
 
 
-def usd_for(model_id: str, input_tokens: int, output_tokens: int) -> float:
-    """Beräkna USD för ett enskilt LLM-anrop. 0.0 om priset saknas."""
+def usd_for(model_id: str, input_tokens: int, output_tokens: int, calls: int = 0) -> float:
+    """Beräkna USD för token-förbrukning på en modell. 0.0 om priset saknas.
+
+    `calls` lägger till per-request-avgiften (price.per_request_usd × calls) —
+    behövs för Perplexity Sonars sök-avgift. Lämnas 0 för rena token-modeller
+    eller där anropsantal saknas (då fås bara token-kostnaden, oförändrat beteende)."""
     price = PRICE_TABLE.get(model_id)
     if price is None:
         log.warning("cost: saknar pris för modell %s (input=%d output=%d)",
@@ -70,6 +85,7 @@ def usd_for(model_id: str, input_tokens: int, output_tokens: int) -> float:
     return (
         (input_tokens / 1_000_000.0) * price.input_per_million
         + (output_tokens / 1_000_000.0) * price.output_per_million
+        + (calls or 0) * price.per_request_usd
     )
 
 
@@ -93,12 +109,12 @@ def estimate_summary(summary_tokens: dict[str, Any]) -> dict[str, Any]:
     unknown: list[str] = []
     total_usd = 0.0
     for mid, u in (summary_tokens.get("by_model") or {}).items():
-        i, o = int(u.get("input") or 0), int(u.get("output") or 0)
-        usd = usd_for(mid, i, o)
+        i, o, c = int(u.get("input") or 0), int(u.get("output") or 0), int(u.get("calls") or 0)
+        usd = usd_for(mid, i, o, c)
         out_by_model[mid] = {
             "input": i,
             "output": o,
-            "calls": int(u.get("calls") or 0),
+            "calls": c,
             "usd": round(usd, 6),
         }
         total_usd += usd
@@ -121,6 +137,7 @@ def prices_for_ui() -> list[dict[str, Any]]:
             "vendor": p.vendor,
             "input_per_million_usd": p.input_per_million,
             "output_per_million_usd": p.output_per_million,
+            "per_request_usd": p.per_request_usd,
         }
         for mid, p in sorted(PRICE_TABLE.items())
     ]

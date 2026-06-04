@@ -52,6 +52,37 @@ class CostEstimatorTest(unittest.TestCase):
         self.assertIn("future-model-x", result["unknown_models"])
         self.assertNotIn("gemini-2.5-pro", result["unknown_models"])
 
+    def test_sonar_token_rate_corrected(self):
+        # Sonar token-rate ska vara $1/$1 per M (inte gamla 0.20/0.80), exkl. request-avgift.
+        usd = cost_estimator.usd_for("sonar", 1_000_000, 1_000_000, calls=0)
+        self.assertAlmostEqual(usd, 1.00 + 1.00, places=4)
+
+    def test_sonar_per_request_fee_added(self):
+        # Sonar har en request-avgift utöver tokens. 200 anrop × $0.005 = $1.00.
+        token_only = cost_estimator.usd_for("sonar", 1_000_000, 1_000_000, calls=0)
+        with_requests = cost_estimator.usd_for("sonar", 1_000_000, 1_000_000, calls=200)
+        self.assertAlmostEqual(with_requests - token_only, 200 * 0.005, places=6)
+
+    def test_token_only_model_ignores_calls(self):
+        # Gemini har ingen per-request-avgift → calls påverkar inte kostnaden.
+        a = cost_estimator.usd_for("gemini-2.5-pro", 1000, 1000, calls=0)
+        b = cost_estimator.usd_for("gemini-2.5-pro", 1000, 1000, calls=999)
+        self.assertEqual(a, b)
+
+    def test_estimate_summary_includes_request_fee(self):
+        # estimate_summary ska räkna in Sonars request-avgift via calls.
+        summary = {
+            "by_model": {
+                "sonar": {"input": 0, "output": 0, "calls": 100},
+            },
+        }
+        result = cost_estimator.estimate_summary(summary)
+        # 100 requests × $0.005 = $0.50, inga tokens
+        self.assertAlmostEqual(result["total_usd"], 0.50, places=4)
+        self.assertAlmostEqual(result["by_model"]["sonar"]["usd"], 0.50, places=4)
+        # En modell med bara request-avgift (0 tokens) ska INTE flaggas som okänd.
+        self.assertEqual(result["unknown_models"], [])
+
     def test_prices_for_ui_has_required_fields(self):
         prices = cost_estimator.prices_for_ui()
         self.assertTrue(len(prices) > 0)
