@@ -45,6 +45,7 @@ def _run_company_level(client_id: str, client: dict, active: list[str]) -> None:
     """Connectors som körs en gång per kund (LinkedIn-företagssida, GLEIF, RSS)."""
     params = {
         "lei": client.get("lei"),
+        "wikidata_id": client.get("wikidata_id"),
         "linkedin_url": client.get("company_linkedin_url"),
         "rss_feeds": (client.get("settings") or {}).get("rss_feeds") or [],
     }

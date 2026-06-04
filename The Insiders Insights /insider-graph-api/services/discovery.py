@@ -50,6 +50,7 @@ def onboard_client(req: OnboardRequest) -> OnboardResponse:
     payload: dict = {
         "company_name": req.company_name,
         "lei": req.lei,
+        "wikidata_id": (req.wikidata_id or "").strip().upper() or None,
         "org_number": org_number,
         "logo_url": logo_url,
         "company_linkedin_url": req.company_linkedin_url,

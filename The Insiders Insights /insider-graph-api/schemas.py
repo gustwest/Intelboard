@@ -28,6 +28,9 @@ class OnboardRequest(BaseModel):
     company_linkedin_url: str | None = None
     # LEI-kod (Legal Entity Identifier) — matar GLEIF-connectorn (koncernstruktur).
     lei: str | None = None
+    # Wikidata-ID (Q-nummer) — matar Wikipedia/Wikidata-connectorn (faktabas +
+    # entity-reconciliation via sameAs). Exakt match, ingen namn-auto-matchning.
+    wikidata_id: str | None = None
     # Svenskt organisationsnummer (10 siffror, ev. med bindestreck). Lyfts till
     # Organization.identifier (PropertyValue, propertyID="SE-orgnr") så AI-motorer får
     # en hård svensk identifierare. Auto-extraherbart via GLEIF (local_identifiers).
