@@ -128,8 +128,10 @@ def _action_priority(e: dict[str, Any], flag_kinds: set[str]) -> tuple[int, str]
         return 2, "AI:s bild av er har svalnat sedan förra mätningen — något har förändrats utåt."
     if "contradiction" in flag_kinds:
         return 3, "Motorerna är oense — vissa AI:er beskriver er varmt, andra svalt."
+    if "persona_mismatch" in flag_kinds:
+        return 4, "Olika målgrupper får olika bild — ni når en grupp men inte en annan."
     if "opportunity" in flag_kinds:
-        return 4, "Möjlighet: ni gör mer än vad som syns utåt."
+        return 5, "Möjlighet: ni gör mer än vad som syns utåt."
     if "missing_evidence" in flag_kinds:
         return 5, "Ni säger det, men kan inte belägga det ännu."
     if declared and not demo:
@@ -158,7 +160,22 @@ def _flag_plain(flag: dict[str, Any]) -> str:
         since = flag.get("since_date")
         suffix = f" sedan {since}" if since else ""
         return f"{label}: AI:s bild av er har svalnat{suffix} utan att underlaget gjort det."
+    if kind == "persona_mismatch":
+        warm = _persona_label(flag.get("warmest_persona"))
+        cool = _persona_label(flag.get("coolest_persona"))
+        return f"{label}: AI beskriver er varmt för {warm}, svalt för {cool} — ni når en målgrupp men inte en annan."
     return f"{label}: flagga av typ {kind} — se rådata."
+
+
+def _persona_label(persona_id: str | None) -> str:
+    """Svensk persona-label från registret. Faller till id/neutral text om okänd."""
+    if not persona_id:
+        return "en målgrupp"
+    from services import persona_registry
+    try:
+        return persona_registry.get(persona_id).label_sv.lower()
+    except KeyError:
+        return persona_id
 
 
 # --- Modell -------------------------------------------------------------------

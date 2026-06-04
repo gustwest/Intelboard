@@ -130,6 +130,32 @@ class TrustGapReportTest(unittest.TestCase):
         # None (trust_gap ej beräknad) → upplysning, ingen krasch
         self.assertIn("beräknas", tgr.render_fragment(None))
 
+    def test_persona_mismatch_flag_renders_with_persona_labels(self):
+        # Fas 2.1g: persona_mismatch ska renderas med svenska persona-labels,
+        # inte fallback-texten "flagga av typ X".
+        fakefs.reset(
+            client={"company_name": "Acme AB"},
+            trust_gap=_tg(
+                {"wellbeing": {"declared": 1.0, "demonstrated": 0.5, "score": 0.65}},
+                flags=[{
+                    "kind": "persona_mismatch", "dimension": "wellbeing",
+                    "warmest_persona": "customer", "coolest_persona": "employee",
+                    "spread": 0.5,
+                }],
+            ),
+        )
+        model = tgr.build_report_model("acme")
+        flags_text = " ".join(model["opportunities_and_risks"])
+        # Svenska labels, inte råa id:n eller fallback-text
+        self.assertIn("kund", flags_text.lower())
+        self.assertIn("anställd & kandidat", flags_text.lower())
+        self.assertNotIn("flagga av typ", flags_text)
+        # Och den ska finnas i den rankade handlingslistan
+        ranked = model["ranked_actions"]
+        wb = next((a for a in ranked if "välmående" in a["label"].lower()), None)
+        self.assertIsNotNone(wb)
+        self.assertIn("målgrupp", wb["why"])
+
 
 if __name__ == "__main__":
     unittest.main()

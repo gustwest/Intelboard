@@ -15,6 +15,7 @@ import ConnectorsEditor from '../../_components/ConnectorsEditor';
 import MeasurementConfigEditor from '../../_components/MeasurementConfigEditor';
 import IdentityMetadataEditor from '../../_components/IdentityMetadataEditor';
 import AudiencePrioritiesEditor from '../../_components/AudiencePrioritiesEditor';
+import PersonaPaletteEditor from '../../_components/PersonaPaletteEditor';
 import OutputQualityPanel from '../../_components/OutputQualityPanel';
 import { graphFetch } from '../../_lib/api';
 import { useJobRuns, fmtRelative } from '../../_lib/jobRuns';
@@ -227,6 +228,9 @@ export default function ClientDetailPage() {
 
           {/* Audience-priorities — vem ska bli citerad av AI-motorer (driver output-kvalitet) */}
           <AudiencePrioritiesEditor clientId={clientId} />
+
+          {/* Persona-palett — vilka målgrupper warmth-probarna mäter (Fas 2.1) */}
+          <PersonaPaletteEditor clientId={clientId} />
 
           {/* Output-kvalitet — senaste rubric-scoring + länk till detaljvyn */}
           <OutputQualityPanel clientId={clientId} />

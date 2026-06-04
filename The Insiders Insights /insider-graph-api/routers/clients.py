@@ -16,7 +16,7 @@ import ttl_cache
 from config import settings
 from routers.inbox import _count_client  # samma "väntar på människa"-räkning som inkorgen
 from schema_org import urls
-from services import blob_storage, persona_derivation
+from services import blob_storage, persona_derivation, persona_registry
 from services.discovery import _normalize_org_number
 from services.identity_enrichment import apply_identity_metadata
 from services.output_quality import AudiencePriority
@@ -49,6 +49,10 @@ class ClientConfigUpdate(BaseModel):
     risk_personas: list[str] | None = None
     polling_questions: dict[str, list[str]] | None = None
     audience_priorities: list[AudiencePriority] | None = None
+    # Aktiva warmth-probe-personor (Fas 2.1g). Lista av persona-id från
+    # services/persona_registry. Saniteras via validate_active_set (kapar till
+    # MAX_ACTIVE_PERSONAS_PER_CLIENT, dedupar, faller till defaults om tom/ogiltig).
+    personas: list[str] | None = None
     # Identitetsmetadata som lyfts till Organization.logo + Organization.identifier
     # på compiler-grafen och i delivery-snippeten. Manuell input vinner alltid över
     # auto-extraherade värden (ops-redigering är sanning).
@@ -129,6 +133,8 @@ def get_client(client_id: str) -> dict[str, Any]:
         # härlett via /derive-personas. None om aldrig satt (UI visar tom-state).
         "audience_priorities": data.get("audience_priorities"),
         "audience_priorities_set_at": _iso(data.get("audience_priorities_set_at")),
+        # Aktiva warmth-probe-personor (Fas 2.1g). Default = registry-defaults om aldrig satt.
+        "personas": (data.get("personas") or {}).get("active") or list(persona_registry.default_persona_ids()),
         "employees": employees,
     }
 
@@ -168,6 +174,14 @@ def update_client_config(client_id: str, payload: ClientConfigUpdate) -> dict[st
         # Spara som dict-lista (Firestore hanterar inte Pydantic-modeller direkt).
         update["audience_priorities"] = [a.model_dump() for a in payload.audience_priorities]
         update["audience_priorities_set_at"] = datetime.now(timezone.utc).isoformat()
+
+    if payload.personas is not None:
+        # Sanitera via registret: kapar till max-cap, dedupar, filtrerar okända,
+        # faller till defaults om allt rensas bort. Aldrig en tom aktiv-lista.
+        update["personas"] = {
+            "active": persona_registry.validate_active_set(payload.personas),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
 
     now_iso = datetime.now(timezone.utc).isoformat()
     if payload.logo_url is not None:
