@@ -445,5 +445,77 @@ class GapTaxonomyPersonaMismatchTest(unittest.TestCase):
         self.assertEqual(pm["coolest_persona"], "media")
 
 
+class VarianceGatingTest(unittest.TestCase):
+    """Fas 2.2c: perception-flaggor grindas av mätstabiliteten (valence_variance).
+    Instabil perception → inga perception-flaggor (vi larmar inte på brus).
+    missing_evidence är perception-oberoende och passerar grinden."""
+
+    def test_high_variance_suppresses_over_claim(self):
+        # Skulle annars resa over_claim (valens >> evidens, hög konfidens) men
+        # variansen är över taket → flaggan reses inte.
+        _setup(
+            {"c1": _claim("community", "declared")},
+            perceived={"community": {
+                "salience": 0.7, "valence": 0.8, "confidence": 0.8,
+                "valence_variance": 0.4,  # > PERCEPTION_VARIANCE_CEILING (0.25)
+            }},
+        )
+        kinds = {f["kind"] for f in ctg.compute("acme")["flags"]}
+        self.assertNotIn("over_claim", kinds)
+        self.assertNotIn("opportunity", kinds)
+
+    def test_high_variance_suppresses_persona_mismatch(self):
+        _setup(
+            {"c1": _claim("wellbeing", "demonstrated", kind="item")},
+            perceived={"wellbeing": {
+                "salience": 0.7, "valence": 0.55, "confidence": 0.7,
+                "valence_variance": 0.5,  # instabilt
+                "per_persona": {
+                    "employee": {"salience": 0.7, "valence": 0.3},
+                    "customer": {"salience": 0.7, "valence": 0.8},
+                },
+            }},
+        )
+        kinds = {f["kind"] for f in ctg.compute("acme")["flags"]}
+        self.assertNotIn("persona_mismatch", kinds)
+
+    def test_high_variance_still_allows_missing_evidence(self):
+        # missing_evidence är perception-oberoende → passerar variansgrinden.
+        _setup(
+            {"c1": _claim("ethics", "declared")},  # declared utan demonstrated
+            perceived={"ethics": {
+                "salience": 0.6, "valence": 0.8, "confidence": 0.8,
+                "valence_variance": 0.6,  # mycket instabilt
+            }},
+        )
+        kinds = {f["kind"] for f in ctg.compute("acme")["flags"]}
+        self.assertIn("missing_evidence", kinds)
+
+    def test_low_variance_allows_flags(self):
+        # Stabil mätning (varians under taket) → flaggorna reses som vanligt.
+        _setup(
+            {"c1": _claim("community", "declared")},
+            perceived={"community": {
+                "salience": 0.7, "valence": 0.8, "confidence": 0.8,
+                "valence_variance": 0.05,  # stabilt
+            }},
+        )
+        kinds = {f["kind"] for f in ctg.compute("acme")["flags"]}
+        self.assertIn("over_claim", kinds)
+
+    def test_missing_variance_field_treated_as_stable(self):
+        # Bakåtkompat: warmth-data utan valence_variance (pre-2.2a) → behandlas
+        # som stabil, flaggor reses som tidigare.
+        _setup(
+            {"c1": _claim("community", "declared")},
+            perceived={"community": {
+                "salience": 0.7, "valence": 0.8, "confidence": 0.8,
+                # ingen valence_variance
+            }},
+        )
+        kinds = {f["kind"] for f in ctg.compute("acme")["flags"]}
+        self.assertIn("over_claim", kinds)
+
+
 if __name__ == "__main__":
     unittest.main()

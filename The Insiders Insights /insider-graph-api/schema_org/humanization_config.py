@@ -110,6 +110,13 @@ CONTRADICTION_SPREAD_MIN: float = 0.3
 # (ofta = bolaget kommunicerar bra mot en målgrupp men inte mot andra).
 PERSONA_MISMATCH_SPREAD_MIN: float = 0.3
 
+# Variansgrind (Fas 2.2c): om en dimensions valence_variance (mätstabilitet från
+# probe-kalibreringen, Fas 2.2a) når detta tak är perceptionsmätningen för instabil
+# för att resa perception-baserade flaggor (over_claim, opportunity, contradiction,
+# persona_mismatch, factual_drift). missing_evidence är perception-oberoende och
+# grindas aldrig. 0.25 = valensen vobblar ±0.25 mellan körningar → otillförlitligt.
+PERCEPTION_VARIANCE_CEILING: float = 0.25
+
 # Factual drift: minsta valens-fall sedan förra snapshot (på samma dimension) som
 # inte förklaras av att underlaget rasat. 0.15 = märkbart utan att vara hyperkänsligt.
 DRIFT_DROP_MIN: float = 0.15

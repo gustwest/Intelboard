@@ -88,6 +88,13 @@ def _detect_flags(
     credibility_gap = entry.get("credibility_gap")
     is_visible = perceived.get("status") != "not_visible"
 
+    # Variansgrind (Fas 2.2c): är perceptionsmätningen stabil nog att lita på?
+    # valence_variance kommer från probe-kalibreringen (Fas 2.2a). Över taket =
+    # för instabilt → vi reser INGA perception-baserade flaggor (vi larmar inte på
+    # brus). missing_evidence är perception-oberoende och passerar grinden.
+    variance = perceived.get("valence_variance")
+    perception_stable = variance is None or variance < hc.PERCEPTION_VARIANCE_CEILING
+
     # 1. missing_evidence — deklarerat men ej belagt. Perception-oberoende.
     # Severity är "high" om AI redan ser oss (då sticker risken ut), annars "medium".
     if declared and demonstrated == 0:
@@ -96,6 +103,14 @@ def _detect_flags(
             "dimension": dimension,
             "severity": "high" if is_visible and salience >= hc.SALIENCE_FLOOR else "medium",
         })
+
+    # Alla perception-baserade detektioner nedan grindas av mätstabiliteten.
+    if not perception_stable:
+        log.info(
+            "dimension %s: perception-flaggor grindade (valence_variance=%.3f ≥ tak %.2f)",
+            dimension, variance, hc.PERCEPTION_VARIANCE_CEILING,
+        )
+        return flags
 
     # 2 & 3. Perception-baserade flaggor — asymmetrisk grind (anseenderisk ribbas högre).
     if credibility_gap is not None and abs(credibility_gap) >= hc.GAP_MAGNITUDE_MIN \
