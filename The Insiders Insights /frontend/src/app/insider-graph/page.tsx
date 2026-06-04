@@ -7,6 +7,7 @@ import {
   Quote, Inbox, Network, Radar, Leaf, Check, X, Loader2, HeartPulse, AlertTriangle, Bell, DollarSign,
 } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from './_components/GraphPageShell';
+import * as UI from './_components/ui';
 import { graphFetch } from './_lib/api';
 
 type Client = { client_id: string; active_connectors: string[]; cdn_url: string | null };
@@ -182,13 +183,11 @@ export default function InsiderGraphHomePage() {
               {queues.map((q) => {
                 const Icon = q.icon;
                 return (
-                  <button key={q.label} onClick={() => router.push(q.href)} style={rowBtn}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.03)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                  <UI.Button key={q.label} variant="row" style={{ gap: 10 }} onClick={() => router.push(q.href)}>
                     <Icon size={15} color={q.color} />
                     <span style={{ flex: 1, color: C.text }}>{q.label}</span>
-                    <span style={pill}>{q.count}</span>
-                  </button>
+                    <UI.Pill>{q.count}</UI.Pill>
+                  </UI.Button>
                 );
               })}
             </div>
@@ -242,12 +241,11 @@ export default function InsiderGraphHomePage() {
                 Senaste lyckade körning per nyckeljobb. Gult/rött = äldre än {health.stale_days} dagar eller saknas — något kan ha stannat.
               </div>
               {health.clients.map((row) => (
-                <button
+                <UI.Button
                   key={row.client_id}
+                  variant="row"
+                  style={{ gap: 10 }}
                   onClick={() => router.push(`/insider-graph/kunder/${row.client_id}`)}
-                  style={{ ...rowBtn, alignItems: 'center' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.03)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                 >
                   <HealthBadge row={row} />
                   <span style={{ flex: 1, color: C.text, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -258,7 +256,7 @@ export default function InsiderGraphHomePage() {
                       <JobFreshness key={jt} label={HEALTH_JOB_SHORT[jt] || jt} job={row.jobs[jt]} staleDays={health.stale_days} />
                     ))}
                   </span>
-                </button>
+                </UI.Button>
               ))}
             </div>
           )}
@@ -283,30 +281,11 @@ export default function InsiderGraphHomePage() {
 }
 
 function Stat({ icon, label, value, sub, tone }: { icon: React.ReactNode; label: string; value: number | null; sub?: string; tone?: 'ok' | 'attention' }) {
-  return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>
-        <span style={{ color: C.accent }}>{icon}</span>
-        {label}
-      </div>
-      <div style={{ fontSize: 28, fontWeight: 600, color: tone === 'attention' ? '#d97706' : C.text, marginTop: 8, letterSpacing: '-0.02em' }}>
-        {value === null ? '—' : value}
-      </div>
-      {sub && <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>{sub}</div>}
-    </div>
-  );
+  return <UI.StatTile icon={icon} label={label} value={value} sub={sub} tone={tone} />;
 }
 
 function Panel({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
-  return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 22px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        {icon}
-        <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: C.text }}>{title}</h2>
-      </div>
-      {children}
-    </div>
-  );
+  return <UI.Card icon={icon} title={title}>{children}</UI.Card>;
 }
 
 function RunStatus({ status }: { status: JobRun['status'] }) {
@@ -316,7 +295,7 @@ function RunStatus({ status }: { status: JobRun['status'] }) {
 }
 
 function Empty({ text }: { text: string }) {
-  return <div style={{ fontSize: 12, color: C.muted, padding: '16px 4px', textAlign: 'center' }}>{text}</div>;
+  return <UI.Empty>{text}</UI.Empty>;
 }
 
 function HealthBadge({ row }: { row: HealthRow }) {
@@ -345,13 +324,3 @@ function JobFreshness({ label, job, staleDays }: { label: string; job: HealthJob
 function dot(color: string): React.CSSProperties {
   return { width: 18, height: 18, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
 }
-
-const rowBtn: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 8px',
-  border: 'none', background: 'transparent', borderRadius: 8, cursor: 'pointer', textAlign: 'left', fontSize: 13, transition: 'background 0.12s',
-};
-
-const pill: React.CSSProperties = {
-  minWidth: 22, padding: '1px 8px', background: 'rgba(159,81,182,0.14)', color: C.accent,
-  borderRadius: 10, fontSize: 12, fontWeight: 700, textAlign: 'center',
-};

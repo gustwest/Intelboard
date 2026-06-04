@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DollarSign, TrendingUp, Layers, Users, AlertTriangle, Info, RefreshCw } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
+import * as UI from '../_components/ui';
 import { graphFetch } from '../_lib/api';
 
 type ModelUsage = {
@@ -292,34 +293,15 @@ export default function CostsPage() {
 }
 
 function Stat({ icon, label, value, sub, tone }: { icon: React.ReactNode; label: string; value: string; sub?: string; tone?: 'attention' | 'ok' }) {
-  return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: C.muted, fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-        {icon}
-        {label}
-      </div>
-      <div style={{ fontSize: 24, fontWeight: 600, color: tone === 'attention' ? '#d97706' : C.text, marginTop: 8, letterSpacing: '-0.02em' }}>
-        {value}
-      </div>
-      {sub && <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>{sub}</div>}
-    </div>
-  );
+  return <UI.StatTile icon={icon} label={label} value={value} sub={sub} tone={tone} size={24} />;
 }
 
 function Panel({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
-  return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 22px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        {icon}
-        <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: C.text }}>{title}</h2>
-      </div>
-      {children}
-    </div>
-  );
+  return <UI.Card icon={icon} title={title}>{children}</UI.Card>;
 }
 
 function Empty({ text }: { text: string }) {
-  return <div style={{ fontSize: 12, color: C.muted, padding: '16px 4px', textAlign: 'center' }}>{text}</div>;
+  return <UI.Empty>{text}</UI.Empty>;
 }
 
 function Banner({ color, children }: { color: string; children: React.ReactNode }) {
