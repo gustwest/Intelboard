@@ -144,10 +144,54 @@ def trigger_scrape_active(background: BackgroundTasks) -> dict[str, Any]:
     return {"status": "queued", "job": "scrape_active"}
 
 
+def _execute_cloud_run_job(job_name: str) -> bool:
+    """Trigga ett Cloud Run Job via Admin-API:t med tjänstens ADC (samma SA som
+    Cloud Scheduler använder för de schemalagda körningarna). Returnerar True om
+    jobbet startades, False vid fel — anroparen kan då falla tillbaka på in-process.
+
+    Varför inte BackgroundTask: på Cloud Run dör en BackgroundTask när instansen
+    skalar ner (vilket sker så fort HTTP-svaret returnerats), så tunga LLM-jobb
+    som polling trunkeras halvvägs och run-posten fastnar i status=running."""
+    from config import settings
+
+    project = settings.gcp_project or settings.firestore_project_id
+    region = settings.cloud_run_region
+    if not project:
+        return False
+    try:
+        import httpx
+        from google.auth import default as _adc
+        from google.auth.transport.requests import Request as _AuthRequest
+
+        creds, _ = _adc(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        creds.refresh(_AuthRequest())
+        url = (
+            f"https://{region}-run.googleapis.com/apis/run.googleapis.com/v1/"
+            f"namespaces/{project}/jobs/{job_name}:run"
+        )
+        resp = httpx.post(
+            url,
+            headers={"Authorization": f"Bearer {creds.token}"},
+            timeout=30,
+        )
+        if resp.status_code in (200, 202):
+            return True
+        log.warning("Cloud Run job %s trigger gav %s: %s", job_name, resp.status_code, resp.text[:200])
+        return False
+    except Exception as exc:  # noqa: BLE001 — fallback till in-process
+        log.warning("Cloud Run job %s trigger misslyckades: %s", job_name, exc)
+        return False
+
+
 @router.post("/polling")
 def trigger_polling(background: BackgroundTasks) -> dict[str, Any]:
+    """Trigga en polling-runda. Föredrar Cloud Run Job (kör garanterat till slut),
+    faller tillbaka på in-process BackgroundTask om jobb-triggern inte går (t.ex.
+    lokalt utan GCP-projekt)."""
+    if _execute_cloud_run_job("polling-weekly"):
+        return {"status": "started", "job": "polling-weekly", "mode": "cloud_run_job"}
     background.add_task(polling_weekly.run)
-    return {"status": "queued", "job": "polling_weekly"}
+    return {"status": "queued", "job": "polling_weekly", "mode": "in_process"}
 
 
 @router.post("/xml-sync")

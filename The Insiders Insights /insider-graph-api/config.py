@@ -89,6 +89,10 @@ class Settings(BaseSettings):
     # första-parts US-väg. Service-account-auth (ADC).
     gcp_project: str = ""
     vertex_location: str = "europe-west1"  # EU-region för Vertex AI (Gemini)
+    # Region där Cloud Run-tjänsten + jobben körs. Används av manuella jobb-triggers
+    # (routers/jobs.py) för att exekvera Cloud Run Jobs istället för in-process
+    # BackgroundTasks (som dör när instansen skalar ner). Speglar REGION i bootstrap.sh.
+    cloud_run_region: str = "europe-north1"
     # Cloud Scheduler ligger i europe-west1 (ej tillgängligt i europe-north1). Speglar
     # SCHEDULER_LOCATION i scripts/bootstrap.sh. Styr schema-status/paus-API:t.
     scheduler_location: str = "europe-west1"

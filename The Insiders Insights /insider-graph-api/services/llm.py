@@ -325,8 +325,8 @@ PROBE_ENGINE_REGISTRY: list[dict[str, Any]] = [
              "När Subscribe är klar + anrop ger 200: flippa denna 'planned' → 'live'."},
     {"id": model_registry.get_id("probe_perplexity"), "label": "Perplexity",
      "vendor": "Perplexity AI (web-RAG)", "status": "live", "note": None},
-    {"id": "copilot", "label": "Copilot", "vendor": "Microsoft", "status": "planned",
-     "note": "Retrieval-augmenterad sök — planerad"},
+    # Copilot borttagen 2026-06-04: drivs av OpenAI/GPT i bakgrunden, så det är samma
+    # signal som probe_openai mäter redan — ingen separat mätvärde att vinna.
 ]
 
 
