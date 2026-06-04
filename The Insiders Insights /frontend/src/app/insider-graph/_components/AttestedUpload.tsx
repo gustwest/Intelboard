@@ -23,6 +23,10 @@ const FILE_HINTS: Record<string, { accept: string; label: string }> = {
     accept: '.pdf,.txt,.md',
     label: 'Dra PDF eller textfil med personbiografier hit, eller klicka',
   },
+  glassdoor_reviews: {
+    accept: '.csv,.tsv,.xls,.xlsx',
+    label: 'Dra Glassdoor-betyg hit (CSV/Excel: category, rating, review_count) eller klicka',
+  },
 };
 const DEFAULT_FILE_HINT = {
   accept: '.csv,.tsv,.txt,.xls,.xlsx',
