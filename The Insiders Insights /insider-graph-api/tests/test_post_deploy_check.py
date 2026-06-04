@@ -87,6 +87,33 @@ class JobRunsTests(unittest.TestCase):
         r = pdc.evaluate_job_runs(runs, NOW, 24)
         self.assertEqual(r.status, "ok")
 
+    def test_recovered_failure_does_not_block(self) -> None:
+        """Failure följd av senare lyckad körning (samma jobb+kund) = åtgärdad."""
+        runs = [
+            self._run(status="failed", started_at=_iso(NOW - timedelta(hours=3))),
+            self._run(status="success", started_at=_iso(NOW - timedelta(hours=1))),
+        ]
+        r = pdc.evaluate_job_runs(runs, NOW, 24)
+        self.assertEqual(r.status, "ok")
+
+    def test_failure_after_last_success_still_blocks(self) -> None:
+        """En lyckad körning FÖRE failuren återhämtar den inte."""
+        runs = [
+            self._run(status="success", started_at=_iso(NOW - timedelta(hours=3))),
+            self._run(status="failed", started_at=_iso(NOW - timedelta(hours=1))),
+        ]
+        r = pdc.evaluate_job_runs(runs, NOW, 24)
+        self.assertEqual(r.status, "fail")
+
+    def test_recovery_is_per_client(self) -> None:
+        """En annan kunds success återhämtar inte denna kunds failure."""
+        runs = [
+            self._run(status="failed", client_id="acme", started_at=_iso(NOW - timedelta(hours=3))),
+            self._run(status="success", client_id="other", started_at=_iso(NOW - timedelta(hours=1))),
+        ]
+        r = pdc.evaluate_job_runs(runs, NOW, 24)
+        self.assertEqual(r.status, "fail")
+
 
 class ScheduleTests(unittest.TestCase):
     def test_warn_when_unavailable(self) -> None:

@@ -68,8 +68,25 @@ def evaluate_job_runs(
     ignore_jobs: tuple[str, ...] = (),
 ) -> CheckResult:
     """Failed-runs senaste `since_hours`. `ignore_jobs` = job_types som inte räknas
-    (för att hantera kända flakiga jobb under inkörning)."""
+    (för att hantera kända flakiga jobb under inkörning).
+
+    En failure som SEDAN återhämtats — dvs det finns en lyckad körning för samma
+    (job_type, client_id) som startat senare — räknas inte. Annars skulle en redan
+    åtgärdad incident blockera varje ny deploy tills den åldrats ut ur fönstret,
+    trots att jobbet fungerar igen (speglar ops_alerts auto-resolve)."""
     cutoff = now - timedelta(hours=since_hours)
+    # Senaste lyckade körning per (job_type, client_id).
+    last_success: dict[tuple[str, str | None], datetime] = {}
+    for r in runs:
+        if r.get("status") != "success":
+            continue
+        started = _parse_iso(r.get("started_at"))
+        if started is None:
+            continue
+        key = (r.get("job_type") or "", r.get("client_id"))
+        if key not in last_success or started > last_success[key]:
+            last_success[key] = started
+
     failed: list[dict[str, Any]] = []
     for r in runs:
         if r.get("status") != "failed":
@@ -79,6 +96,9 @@ def evaluate_job_runs(
         started = _parse_iso(r.get("started_at"))
         if started is None or started < cutoff:
             continue
+        recovered = last_success.get((r.get("job_type") or "", r.get("client_id")))
+        if recovered is not None and recovered > started:
+            continue  # senare lyckad körning → incidenten är åtgärdad
         failed.append(r)
     if not failed:
         return CheckResult("job_runs", "ok", f"0 failed senaste {since_hours}h")
