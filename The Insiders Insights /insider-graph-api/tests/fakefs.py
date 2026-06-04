@@ -95,6 +95,7 @@ def reset(
     cost_usage: dict[str, dict] | None = None,
     job_runs: dict[str, dict] | None = None,
     cost_summary: dict[str, dict] | None = None,
+    persona_templates: dict[str, dict] | None = None,
 ) -> None:
     STATE.clear()
     STATE.update(
@@ -126,6 +127,7 @@ def reset(
         cost_usage=cost_usage or {},
         job_runs=job_runs or {},
         cost_summary=cost_summary or {},
+        persona_templates=persona_templates or {},
         writes={},
     )
 
@@ -465,6 +467,22 @@ def _apply_increment(existing: dict, payload: dict) -> dict:
 
 def iter_cost_usage(client_id: str):
     return list(STATE.get("cost_usage", {}).items())
+
+
+def persona_templates_col() -> _Col:
+    return _Col(STATE.get("persona_templates"), writable=True)
+
+
+def persona_template_doc(persona_id: str) -> _DocRef:
+    return _DocRef(
+        persona_id,
+        STATE.get("persona_templates", {}).get(persona_id),
+        on_set=lambda i, p: STATE.setdefault("persona_templates", {}).__setitem__(i, p),
+    )
+
+
+def iter_persona_templates():
+    return list(STATE.get("persona_templates", {}).items())
 
 
 def job_run_doc(run_id: str) -> _DocRef:

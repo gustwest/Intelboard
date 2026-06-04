@@ -299,6 +299,25 @@ def iter_cost_usage(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
         yield doc.id, doc.to_dict() or {}
 
 
+def persona_templates_col():
+    """Global palett av probe-templates per persona (Fas 2.1a, Nivå 2).
+
+    Read-only spegel av services/persona_registry._REGISTRY — frontend renderar
+    detta så operatörer kan kvalitetskolla probe-frågorna. Skrivs av
+    persona_registry.seed_to_firestore() vid deploy/bootstrap; aldrig från UI.
+    Doc-id = persona-id (customer, employee, ...)."""
+    return db().collection("persona_templates")
+
+
+def persona_template_doc(persona_id: str):
+    return persona_templates_col().document(persona_id)
+
+
+def iter_persona_templates() -> Iterator[tuple[str, dict[str, Any]]]:
+    for doc in persona_templates_col().stream():
+        yield doc.id, doc.to_dict() or {}
+
+
 def verifications_col(client_id: str):
     """Manuella Geogiraph-verifieringar (docs/humanization-trust-gap-spec.md §5.4)."""
     return client_doc(client_id).collection("verifications")
