@@ -176,6 +176,22 @@ def _perplexity_chat(model: str):
     )
 
 
+def _anthropic_chat(model: str):
+    """Claude-probe via första-parts Anthropic API (api.anthropic.com). 2026-06-04
+    bytte vi från Vertex Model Garden (quota=0 på global endpoint + hostname-bugg) till
+    direkt-API — samma mönster som ChatGPT/Perplexity. Publik probe-payload, ingen
+    kunddata, så ingen EU-residens-konflikt."""
+    from langchain_anthropic import ChatAnthropic
+
+    return ChatAnthropic(
+        api_key=settings.anthropic_api_key,
+        model=model,
+        temperature=0,
+        max_tokens=1024,
+        timeout=60,
+    )
+
+
 def _vertex_mistral(model: str, location: str | None = None):
     """Mistral via Vertex Model Garden MaaS — OpenAI-kompatibel chat-completions-endpoint.
     Auth görs med en kortlivad gcloud-access-token (service account), inte med en separat
@@ -244,15 +260,6 @@ def make_probe_engines() -> dict[str, Any]:
             except Exception as exc:
                 log.warning("Gemini probe (Vertex) init failed: %s", exc)
 
-        cid = model_registry.get_id("probe_claude")
-        if cid not in planned:
-            try:
-                engines[cid] = token_meter.track(
-                    _vertex_anthropic(cid, location=_location_for("probe_claude")), cid,
-                )
-            except Exception as exc:
-                log.warning("Claude probe (Vertex) init failed: %s", exc)
-
         mid = model_registry.get_id("probe_mistral")
         if mid not in planned:
             try:
@@ -273,6 +280,16 @@ def make_probe_engines() -> dict[str, Any]:
                 log.warning("OpenAI probe init failed: %s", exc)
     else:
         log.warning("OPENAI_API_KEY ej satt — ChatGPT-probe inte tillgänglig")
+
+    if settings.anthropic_api_key:
+        cid = model_registry.get_id("probe_claude")
+        if cid not in planned:
+            try:
+                engines[cid] = token_meter.track(_anthropic_chat(cid), cid)
+            except Exception as exc:
+                log.warning("Claude probe (Anthropic direkt) init failed: %s", exc)
+    else:
+        log.warning("ANTHROPIC_API_KEY ej satt — Claude-probe inte tillgänglig")
 
     if settings.perplexity_api_key:
         pid = model_registry.get_id("probe_perplexity")
@@ -295,13 +312,7 @@ def make_probe_engines() -> dict[str, Any]:
 # services/model_registry — uppdatera DÄR, inte här.
 PROBE_ENGINE_REGISTRY: list[dict[str, Any]] = [
     {"id": model_registry.get_id("probe_claude"), "label": "Claude",
-     "vendor": "Anthropic (Vertex global)", "status": "planned",
-     "note": "Routing-buggen löst 2026-06-04 (anthropic-SDK bumpad 0.40→0.104.1 så "
-             "rätt hostname aiplatform.googleapis.com används för location=global). "
-             "Modellen svarar nu 429 RESOURCE_EXHAUSTED — ÅTERSTÅR: höj quotan "
-             "'global_online_prediction_requests_per_base_model' för "
-             "anthropic-claude-sonnet-4-6 från 0 → 60 RPM i Console (IAM & Admin → "
-             "Quotas). När quotan är höjd: flippa denna 'planned' → 'live'."},
+     "vendor": "Anthropic (direkt)", "status": "live", "note": None},
     {"id": model_registry.get_id("probe_gemini"), "label": "Gemini",
      "vendor": "Google (Vertex europe-west1)", "status": "live", "note": None},
     {"id": model_registry.get_id("probe_openai"), "label": "ChatGPT",

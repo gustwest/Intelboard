@@ -83,45 +83,63 @@ class ProbeEnginesTest(unittest.TestCase):
             row["status"] = "live"
         self._orig = (
             llm.settings.gcp_project, llm.settings.openai_api_key,
+            llm.settings.perplexity_api_key, llm.settings.anthropic_api_key,
             llm.settings.vertex_location,
-            llm._vertex_gemini, llm._vertex_anthropic, llm._vertex_mistral, llm._openai_chat,
+            llm._vertex_gemini, llm._vertex_mistral, llm._openai_chat,
+            llm._anthropic_chat, llm._perplexity_chat,
         )
         llm._vertex_gemini = lambda model, temperature=0, location=None: ("gemini", model, location)
-        llm._vertex_anthropic = lambda model, location=None: ("claude", model, location)
         llm._vertex_mistral = lambda model, location=None: ("mistral", model, location)
         llm._openai_chat = lambda model: ("openai", model)
+        llm._anthropic_chat = lambda model: ("claude", model)
+        llm._perplexity_chat = lambda model: ("perplexity", model)
 
     def tearDown(self):
         # Återställ status-flaggorna
         for i, row in enumerate(llm.PROBE_ENGINE_REGISTRY):
             row["status"] = self._orig_registry[i]["status"]
         (llm.settings.gcp_project, llm.settings.openai_api_key,
+         llm.settings.perplexity_api_key, llm.settings.anthropic_api_key,
          llm.settings.vertex_location,
-         llm._vertex_gemini, llm._vertex_anthropic, llm._vertex_mistral, llm._openai_chat) = self._orig
+         llm._vertex_gemini, llm._vertex_mistral, llm._openai_chat,
+         llm._anthropic_chat, llm._perplexity_chat) = self._orig
 
-    def test_all_four_probes_when_credentials_set(self):
+    def test_all_probes_when_credentials_set(self):
+        """Gemini + Mistral via Vertex (gcp_project), ChatGPT/Claude/Perplexity via
+        sina respektive direkt-API-nycklar."""
         llm.settings.gcp_project = "proj-eu"
         llm.settings.openai_api_key = "sk-test"
+        llm.settings.anthropic_api_key = "sk-ant-test"
+        llm.settings.perplexity_api_key = "pplx-test"
         engines = llm.make_probe_engines()
         self.assertEqual(set(engines), {
             model_registry.get_id("probe_claude"),
             model_registry.get_id("probe_gemini"),
             model_registry.get_id("probe_mistral"),
             model_registry.get_id("probe_openai"),
+            model_registry.get_id("probe_perplexity"),
         })
 
-    def test_openai_probe_works_without_gcp_project(self):
+    def test_direct_api_probes_work_without_gcp_project(self):
+        """ChatGPT/Claude/Perplexity är direkt-API — fungerar utan Vertex/GCP."""
         llm.settings.gcp_project = ""
         llm.settings.openai_api_key = "sk-test"
-        engines = llm.make_probe_engines()
-        self.assertEqual(set(engines), {model_registry.get_id("probe_openai")})
-
-    def test_vertex_probes_work_without_openai_key(self):
-        llm.settings.gcp_project = "proj-eu"
-        llm.settings.openai_api_key = ""
+        llm.settings.anthropic_api_key = "sk-ant-test"
+        llm.settings.perplexity_api_key = ""
         engines = llm.make_probe_engines()
         self.assertEqual(set(engines), {
+            model_registry.get_id("probe_openai"),
             model_registry.get_id("probe_claude"),
+        })
+
+    def test_vertex_probes_work_without_direct_keys(self):
+        """Utan direkt-API-nycklar kör bara Vertex-probarna (Gemini + Mistral)."""
+        llm.settings.gcp_project = "proj-eu"
+        llm.settings.openai_api_key = ""
+        llm.settings.anthropic_api_key = ""
+        llm.settings.perplexity_api_key = ""
+        engines = llm.make_probe_engines()
+        self.assertEqual(set(engines), {
             model_registry.get_id("probe_gemini"),
             model_registry.get_id("probe_mistral"),
         })
@@ -129,16 +147,20 @@ class ProbeEnginesTest(unittest.TestCase):
     def test_empty_when_no_credentials(self):
         llm.settings.gcp_project = ""
         llm.settings.openai_api_key = ""
+        llm.settings.anthropic_api_key = ""
+        llm.settings.perplexity_api_key = ""
         self.assertEqual(llm.make_probe_engines(), {})
 
     def test_resilient_to_individual_probe_init_failure(self):
         llm.settings.gcp_project = "proj-eu"
         llm.settings.openai_api_key = "sk-test"
+        llm.settings.anthropic_api_key = "sk-ant-test"
+        llm.settings.perplexity_api_key = ""
 
         def boom(*_a, **_kw):
             raise RuntimeError("simulated init failure")
 
-        llm._vertex_anthropic = boom
+        llm._anthropic_chat = boom  # Claude failar att initieras
         engines = llm.make_probe_engines()
         self.assertEqual(set(engines), {
             model_registry.get_id("probe_gemini"),
@@ -146,18 +168,18 @@ class ProbeEnginesTest(unittest.TestCase):
             model_registry.get_id("probe_openai"),
         })
 
-    def test_probes_use_registry_location_override(self):
-        """vertex_location i registret ska överstyra settings per roll. Verifierar att
-        Claude (global), Gemini (europe-west1) och Mistral (europe-west4) följer registret
-        oavsett att settings.vertex_location pekar på något annat."""
+    def test_vertex_probes_use_registry_location_override(self):
+        """vertex_location i registret ska överstyra settings per roll. Gemini
+        (europe-west1) och Mistral (europe-west4) följer registret. Claude är inte
+        längre Vertex-baserad så den ingår inte här."""
         llm.settings.gcp_project = "proj-eu"
         llm.settings.openai_api_key = ""
+        llm.settings.anthropic_api_key = ""
+        llm.settings.perplexity_api_key = ""
         llm.settings.vertex_location = "europe-north1"  # avsiktligt fel — registret ska vinna
         engines = llm.make_probe_engines()
-        claude_inner = engines[model_registry.get_id("probe_claude")]._inner
         gemini_inner = engines[model_registry.get_id("probe_gemini")]._inner
         mistral_inner = engines[model_registry.get_id("probe_mistral")]._inner
-        self.assertEqual(claude_inner[-1], model_registry.get("probe_claude").vertex_location)
         self.assertEqual(gemini_inner[-1], model_registry.get("probe_gemini").vertex_location)
         self.assertEqual(mistral_inner[-1], model_registry.get("probe_mistral").vertex_location)
 

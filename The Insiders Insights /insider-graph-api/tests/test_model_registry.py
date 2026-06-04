@@ -35,7 +35,7 @@ class LookupTest(unittest.TestCase):
     def test_get_returns_entry(self):
         entry = model_registry.get("probe_claude")
         self.assertEqual(entry.role, "probe_claude")
-        self.assertEqual(entry.provider, "vertex_anthropic")
+        self.assertEqual(entry.provider, "anthropic")
 
     def test_get_id_shortcut(self):
         self.assertEqual(

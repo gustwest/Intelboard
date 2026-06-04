@@ -50,6 +50,7 @@ _TESTABLE_PROVIDERS = frozenset({
     "google_genai_vertex",
     "openai",
     "perplexity",
+    "anthropic",
 })
 
 # Kort prompt — räcker för att tvinga ett genuint anrop utan att slösa tokens.
@@ -202,6 +203,11 @@ def _build_by_provider(entry: model_registry.ModelEntry):
             return None
         from services import llm
         return llm._perplexity_chat(entry.model_id)
+    if entry.provider == "anthropic":
+        if not settings.anthropic_api_key:
+            return None
+        from services import llm
+        return llm._anthropic_chat(entry.model_id)
     return None
 
 

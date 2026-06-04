@@ -89,12 +89,14 @@ _REGISTRY: tuple[ModelEntry, ...] = (
     ModelEntry(
         role="probe_claude",
         model_id="claude-sonnet-4-6",
-        provider="vertex_anthropic",
-        purpose="Claude-probe i polling + risk_detector (Vertex Model Garden, global)",
+        provider="anthropic",
+        purpose="Claude-probe i polling + risk_detector (första-parts Anthropic API)",
         latest_known="claude-sonnet-4-6",
-        checked_at=_CHECKED,
-        effective_since=_EFFECTIVE,
-        vertex_location="global",
+        checked_at="2026-06-04",
+        effective_since="2026-06-04",
+        # 2026-06-04: bytte från vertex_anthropic (Vertex Model Garden, quota=0 +
+        # hostname-bugg) till första-parts api.anthropic.com — samma mönster som
+        # probe_openai/probe_perplexity. Publik payload, ingen EU-residens-konflikt.
     ),
     ModelEntry(
         role="probe_gemini",
@@ -228,6 +230,10 @@ LEGACY_ALIASES: frozenset[str] = frozenset({
     "claude-opus-4-7",   # legacy agent_default + historiska prissatta anrop
     "gemini-3.5-flash",  # listad i Model Garden men 404 för vårt projekt 2026-06-03 — rollback till 2.5-flash
     "gemini-3.5-pro",    # spekulativ pricing-entry (modellen finns inte stable ännu)
+    # Prefix-strängar i kod (services/llm._openai_chat: model.startswith("gpt-5")),
+    # inte faktiska model-ID. Drift-scannens regex matchar dem ändå.
+    "gpt-5",
+    "gpt-4",
 })
 
 

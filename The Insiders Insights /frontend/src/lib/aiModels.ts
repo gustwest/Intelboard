@@ -20,6 +20,7 @@ export type ModelProvider =
   | "vertex_anthropic"
   | "vertex_mistral"
   | "openai"
+  | "anthropic"
   | "perplexity"
   | "google_genai"
   | "google_genai_vertex"
@@ -75,13 +76,14 @@ export const MODEL_REGISTRY: readonly ModelEntry[] = [
   },
   {
     role: "probe_claude",
+    // 2026-06-04: bytte vertex_anthropic → första-parts Anthropic API (quota=0 på
+    // Vertex global + hostname-bugg). Samma mönster som probe_openai/probe_perplexity.
     modelId: "claude-sonnet-4-6",
-    provider: "vertex_anthropic",
-    purpose: "Claude-probe i polling + risk_detector (Vertex Model Garden, global)",
+    provider: "anthropic",
+    purpose: "Claude-probe i polling + risk_detector (första-parts Anthropic API)",
     latestKnown: "claude-sonnet-4-6",
-    checkedAt: _CHECKED,
-    effectiveSince: _EFFECTIVE,
-    vertexLocation: "global",
+    checkedAt: "2026-06-04",
+    effectiveSince: "2026-06-04",
   },
   {
     role: "probe_gemini",

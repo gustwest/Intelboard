@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     # Garden). Mäter AI-discoverability (web-RAG-signal) — distinkt från training-
     # data-baserade probarna. Saknas nyckeln → proben skippas tyst i make_probe_engines.
     perplexity_api_key: str = ""
+    # Claude-probe: första-parts Anthropic API (api.anthropic.com). 2026-06-04 bytte vi
+    # från Vertex Model Garden (quota=0-blockerad) till direkt-API — konsekvent med
+    # ChatGPT/Perplexity som också är första-parts. Publik probe-payload, ingen kunddata.
+    anthropic_api_key: str = ""
     # (Ingen anthropic_api_key: validatorn (Claude) går via Vertex AI EU, inte
     # förstaparts-API. EU-only-beslut 2026-05-26. Se services/llm.py.)
 
@@ -75,7 +79,7 @@ class Settings(BaseSettings):
     # osynliga Unicode-tecken vid laddning. Förhindrar 'Illegal header value' (httpx)
     # och gRPC UNAUTHENTICATED-fel som orsakas av kontaminerade env-värden.
     # Se docs/api-key-rotation-runbook.md.
-    @field_validator("openai_api_key", "gemini_api_key", "perplexity_api_key", "sendgrid_api_key", "admin_api_key", mode="before")
+    @field_validator("openai_api_key", "gemini_api_key", "perplexity_api_key", "anthropic_api_key", "sendgrid_api_key", "admin_api_key", mode="before")
     @classmethod
     def _strip_api_keys(cls, v: str, info) -> str:
         return _sanitize_api_key(v, info.field_name) if isinstance(v, str) else v
