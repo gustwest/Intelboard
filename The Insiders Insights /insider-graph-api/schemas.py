@@ -131,6 +131,14 @@ class Claim(BaseModel):
     # dimension: en av de sex värmedimensionerna i humanization_config.DIMENSIONS
     # (endast facet="culture"). None för slogan o.dyl. som inte hör till en dimension.
     dimension: str | None = None
+    # --- Persona-relevans (Fas 2.1b, docs/persona-model.md §4.2) ----------------
+    # audience: persona-id:n från services/persona_registry som detta claim är
+    # *särskilt* relevant för. Tom = "evergreen" (för alla personor — default).
+    # Driver Schema.org Audience-markup (Fas 2.1f) och llms.txt-sektionering.
+    # Härleds vid claim-persistens av services/persona_derivation.derive_claim_audience;
+    # kan ops-justeras manuellt. Backward-compat: existerande claims utan fältet
+    # läses som tom lista (= evergreen).
+    audience: list[str] = Field(default_factory=list)
 
 
 # --- Manuell Geogiraph-verifiering ("Manually verified by Geogiraph") --------

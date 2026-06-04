@@ -273,3 +273,81 @@ def _str_or_none(v: Any) -> str | None:
         return None
     s = str(v).strip()
     return s or None
+
+
+# --- Claim audience-taggning (Fas 2.1b, docs/persona-model.md §4.2) ---------
+# Härleder vilka personor ett claim är *särskilt* relevant för. Default-strategin
+# är **regelbaserad** — dimension + warmth_mode + (förvalt) claim-typ → personor.
+# Det är deterministiskt, gratis och snabbt. LLM-augmenterad taggning (för att
+# fånga subtila signaler i statement-texten) kan läggas till som ett andra pass
+# senare om vi ser i UI:t att default-mappningen missar relevanta claims.
+#
+# Returnerar bara personor som ÄR aktiva för kunden — vi taggar inte med personor
+# som operatören inte spårar.
+
+
+def derive_claim_audience(
+    claim_data: dict[str, Any], active_personas: list[str] | None = None,
+) -> list[str]:
+    """Härled audience-taggar för ett claim baserat på dimension + facet.
+
+    claim_data: dict med (minst) `facet`, `dimension`, `claim_kind`-fälten — kan vara
+    en pydantic-model-dump eller en rå Firestore-payload.
+    active_personas: personor som kunden faktiskt spårar (från clients/{id}.personas).
+    None → använd hela paletten (för standalone-användning, t.ex. tester).
+
+    Tom lista som returvärde = "evergreen" — claim är relevant för ALLA personor,
+    schema.org-compilern emitterar inget Audience-objekt. Det är defaultens default.
+
+    Designval: vi favoriserar precision över recall. En claim som taggas med en
+    persona ska *verkligen* tala till den personan, annars förlorar audience-
+    sektioneringen i llms.txt sitt värde. Bättre att en relevant claim är evergreen
+    än att en irrelevant claim får fel tagg.
+    """
+    # Sen-import för att undvika cirkulär (persona_registry importerar inget från
+    # services-laget men låt oss vara säkra).
+    from services import persona_registry as pr
+
+    facet = claim_data.get("facet") or "operational"
+    dimension = claim_data.get("dimension")
+
+    # Operational claims (företagsfakta, produkter, tjänster) är default evergreen.
+    # Värme-claims är de som har persona-relevans genom dimensionen.
+    if facet != "culture":
+        return []
+    if not dimension or dimension not in pr.DIMENSION_PERSONA_RELEVANCE:
+        return []
+
+    relevant = pr.DIMENSION_PERSONA_RELEVANCE[dimension]
+
+    # Begränsa till kundens aktiva personor. None = ingen begränsning (testläge).
+    if active_personas is not None:
+        active = {p for p in active_personas if pr.is_valid(p)}
+        if not active:
+            return []
+        relevant = relevant & active
+
+    if not relevant:
+        return []
+
+    # Returnera i registry-ordning för UI-stabilitet (samma som validate_active_set).
+    order = {p.id: i for i, p in enumerate(pr.all_personas())}
+    return sorted(relevant, key=lambda pid: order.get(pid, 999))
+
+
+def get_active_personas(client_id: str) -> list[str]:
+    """Hämta clients/{id}.personas.active. Faller till persona_registry-defaults
+    om kunden aldrig konfigurerat något. Best-effort — Firestore-fel → defaults."""
+    from services import persona_registry as pr
+    try:
+        snap = fs.client_doc(client_id).get()
+        if not getattr(snap, "exists", False):
+            return list(pr.default_persona_ids())
+        data = snap.to_dict() or {}
+        personas = (data.get("personas") or {}).get("active") or []
+        if isinstance(personas, list) and personas:
+            return pr.validate_active_set(personas)
+        return list(pr.default_persona_ids())
+    except Exception as exc:  # noqa: BLE001 — audience-lookup får aldrig fälla skrivpath
+        log.warning("get_active_personas failed for %s: %s", client_id, exc)
+        return list(pr.default_persona_ids())

@@ -456,6 +456,24 @@ _REGISTRY: tuple[CanonicalPersona, ...] = (
 _BY_ID: dict[str, CanonicalPersona] = {p.id: p for p in _REGISTRY}
 
 
+# --- Dimension → persona-relevans (Fas 2.1b) ---------------------------------
+# Per värmedimension: vilka personor är claim på denna dimension *särskilt*
+# relevanta för? Driver default-taggningen i persona_derivation.derive_claim_audience.
+# Tom mängd = "ingen särskild persona" → claimet förblir evergreen (relevant för alla).
+#
+# Princip: lägg bara med personor där claim genuint flyttar nålen för denna persona.
+# Inte alla — då blir audience-fältet bara brus och retrieval-relevansen försvinner.
+# Justera när vi ser i UI:t att signal-densiteten är fel.
+DIMENSION_PERSONA_RELEVANCE: dict[str, frozenset[str]] = {
+    "inclusion": frozenset({"employee", "customer", "student", "patient", "citizen"}),
+    "wellbeing": frozenset({"employee", "patient", "student", "investor"}),  # investor → HR-risk
+    "transparency": frozenset({"investor", "regulator", "media", "customer", "partner"}),
+    "ethics": frozenset({"investor", "regulator", "media", "customer", "partner", "donor"}),
+    "development": frozenset({"employee", "student", "investor", "partner"}),
+    "community": frozenset({"citizen", "donor", "customer", "media"}),
+}
+
+
 # --- Publikt API --------------------------------------------------------------
 
 
