@@ -138,7 +138,7 @@ class RunForClientShapeTest(unittest.TestCase):
 
 class CallCountTest(unittest.TestCase):
     """Antal probe-anrop måste matcha (engines × personas × dimensioner × 2) +
-    (engines × 1 ankar). Annars är vi inte 5x-säkra mot dagens flöde i tier-modellen."""
+    (engines × canary-suite). Annars är vi inte 5x-säkra mot dagens flöde i tier-modellen."""
 
     def test_call_count_matches_formula(self):
         _setup_client(personas=["customer", "employee"])
@@ -147,8 +147,8 @@ class CallCountTest(unittest.TestCase):
         engines = {"gemini": e1, "chatgpt": e2}
         wp.run_for_client("acme", engines=engines, judge=_FakeJudge())
 
-        # 2 personor × 6 dim × 2 frågor = 24 probe-anrop per motor + 1 ankarfråga = 25
-        expected_per_engine = len(hc.DIMENSIONS) * 2 * 2 + 1
+        # 2 personor × 6 dim × 2 frågor = 24 probe-anrop per motor + canary-suite (3)
+        expected_per_engine = len(hc.DIMENSIONS) * 2 * 2 + len(wp.CANARY_QUESTIONS)
         self.assertEqual(len(e1.received_questions), expected_per_engine)
         self.assertEqual(len(e2.received_questions), expected_per_engine)
 
@@ -164,10 +164,11 @@ class CallCountTest(unittest.TestCase):
         wp.run_for_client("acme", engines={"gemini": e2}, judge=_FakeJudge())
         with_three = len(e2.received_questions)
 
-        # 3 personor → ~3x probe-anrop (förutom 1 ankar konstant)
-        non_anchor_one = with_one - 1
-        non_anchor_three = with_three - 1
-        self.assertEqual(non_anchor_three, non_anchor_one * 3)
+        # 3 personor → 3x probe-anrop (förutom canary-suiten som är konstant per motor)
+        canary = len(wp.CANARY_QUESTIONS)
+        non_canary_one = with_one - canary
+        non_canary_three = with_three - canary
+        self.assertEqual(non_canary_three, non_canary_one * 3)
 
 
 class DefaultPersonasTest(unittest.TestCase):

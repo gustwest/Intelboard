@@ -61,9 +61,21 @@ def _probe_runs_per_query() -> int:
     except ValueError:
         return 3
     return max(1, min(7, n))
-# Ankare: känt, stabilt faktum. Driver svaret mellan körningar → motorn/förhållandena
-# har skiftat → körningen kan flaggas som ojämförbar (skyddar trenden).
-ANCHOR_QUESTION = "I vilket land har {company} sitt huvudkontor?"
+# Canary-suite (Fas 2.2b): kända, stabila fakta vars svar INTE bör ändras mellan
+# körningar. Om en motors canary-svar driftar kraftigt → motorn/förhållandena har
+# skiftat → körningen flaggas som potentiellt ojämförbar (skyddar trenden, kompletterar
+# jobs/model_drift_scan). ANCHOR_QUESTION behålls som alias (bakåtkompat).
+CANARY_QUESTIONS: list[str] = [
+    "I vilket land har {company} sitt huvudkontor?",
+    "Vilken bransch är {company} verksamt inom?",
+    "Är {company} ett privat företag, börsnoterat eller offentligt ägt?",
+]
+ANCHOR_QUESTION = CANARY_QUESTIONS[0]  # bakåtkompat — tester/legacy refererar denna
+
+# Token-overlap under denna tröskel mellan nuvarande och föregående canary-svar
+# → drift misstänks för den motorn. 0.3 = svaret har bytt mer än 70% av sina
+# meningsbärande ord (konservativt — fångar verklig drift, inte parafrasering).
+_CANARY_DRIFT_OVERLAP_MIN = 0.3
 
 _JUDGE_SYSTEM = (
     "Du läser vad en AI-motor svarat om ett bolag på EN dimension. Returnera ENDAST JSON: "
@@ -104,6 +116,58 @@ def _judge_verdict(judge: Any, company: str, dimension: str, answers: list[str])
 
 def _clamp(v: Any) -> float:
     return max(0.0, min(1.0, float(v)))
+
+
+# --- Canary-drift-detektion (Fas 2.2b) ---------------------------------------
+
+
+def _read_prior_canaries(client_id: str) -> dict[str, list[str]]:
+    """Föregående körnings canary-svar per motor. Tom dict om ingen tidigare körning
+    eller om dokumentet saknar canaries (pre-2.2b-data). Best-effort."""
+    try:
+        snap = fs.polling_results_col(client_id).document(hc.WARMTH_PROBE_DOC).get()
+    except Exception:  # noqa: BLE001
+        return {}
+    if not getattr(snap, "exists", False):
+        return {}
+    return ((snap.to_dict() or {}).get("measurement") or {}).get("canaries") or {}
+
+
+def _token_overlap(a: str, b: str) -> float:
+    """Jaccard-överlapp på meningsbärande ordmängder (gemener, kortord bort).
+    1.0 = identiska ordmängder, 0.0 = inga gemensamma ord. Robust mot ordföljd
+    och små formuleringsskillnader — fångar verklig faktaförändring, inte parafras."""
+    def toks(s: str) -> set[str]:
+        return {w for w in "".join(c.lower() if c.isalnum() else " " for c in s).split() if len(w) > 2}
+    ta, tb = toks(a), toks(b)
+    if not ta and not tb:
+        return 1.0   # båda tomma → ingen förändring
+    if not ta or not tb:
+        return 0.0   # en blev tom → maximal förändring
+    return len(ta & tb) / len(ta | tb)
+
+
+def _detect_canary_drift(
+    current: dict[str, list[str]], prior: dict[str, list[str]],
+) -> list[str]:
+    """Returnera motorer vars canary-svar driftat sedan förra körningen.
+
+    En motor flaggas om NÅGON av dess canary-frågor har token-overlap under
+    tröskeln mot förra körningens svar. Motorer utan tidigare data (ny motor /
+    första körningen) flaggas ALDRIG — vi har inget att jämföra mot."""
+    drifted: list[str] = []
+    for engine, answers in current.items():
+        prior_answers = prior.get(engine)
+        if not prior_answers:
+            continue  # ingen baslinje → kan inte vara drift
+        # Jämför parvis upp till min-längden (canary-suiten kan ha ändrats mellan versioner).
+        pairs = list(zip(answers, prior_answers))
+        if not pairs:
+            continue
+        worst_overlap = min(_token_overlap(cur, prev) for cur, prev in pairs)
+        if worst_overlap < _CANARY_DRIFT_OVERLAP_MIN:
+            drifted.append(engine)
+    return sorted(drifted)
 
 
 def _judge_verdict_calibrated(
@@ -278,15 +342,22 @@ def run_for_client(
         len(engines) * len(active_personas) * len(hc.DIMENSIONS) * runs,
     )
 
+    # Föregående körnings canary-svar (för drift-jämförelse). Tom dict om första körningen.
+    prior_canaries = _read_prior_canaries(client_id)
+
     # by_engine_persona[engine][persona_id][dim] = verdict | None
     by_engine_persona: dict[str, dict[str, dict[str, dict | None]]] = {}
-    anchors: dict[str, str] = {}
+    canaries: dict[str, list[str]] = {}  # engine → lista av canary-svar (samma ordning som CANARY_QUESTIONS)
     for ename, llm in engines.items():
-        # Ankarfråga en gång per motor — persona-oberoende. Driftkontroll.
-        try:
-            anchors[ename] = _ask(ANCHOR_QUESTION.format(company=company), llm)
-        except Exception as exc:  # noqa: BLE001
-            log.warning("ankarfråga misslyckades för %s: %s", ename, exc)
+        # Canary-frågor en gång per motor — persona-oberoende. Driftkontroll.
+        engine_canaries: list[str] = []
+        for q in CANARY_QUESTIONS:
+            try:
+                engine_canaries.append(_ask(q.format(company=company), llm))
+            except Exception as exc:  # noqa: BLE001
+                log.warning("canary-fråga misslyckades för %s: %s", ename, exc)
+                engine_canaries.append("")
+        canaries[ename] = engine_canaries
 
         for persona in active_personas:
             for dim, (neutral_q, adversarial_q) in persona.probe_templates.items():
@@ -301,6 +372,7 @@ def run_for_client(
                     verdict = None
                 by_engine_persona.setdefault(ename, {}).setdefault(persona.id, {})[dim] = verdict
 
+    drift_engines = _detect_canary_drift(canaries, prior_canaries)
     doc = {
         "dimensions": _aggregate_with_personas(by_engine_persona),
         "measurement": {
@@ -308,9 +380,19 @@ def run_for_client(
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "engines": sorted(engines.keys()),
             "personas": active_persona_ids,
-            "anchors": anchors,  # driftkontroll — jämförs mellan körningar
+            # Canary-suite (Fas 2.2b): nuvarande svar + ev. drift-flagga. anchors
+            # behålls som alias (första canary-svaret) för bakåtkompat.
+            "canaries": canaries,
+            "anchors": {e: (v[0] if v else "") for e, v in canaries.items()},
+            "drift_suspected": bool(drift_engines),
+            "drift_engines": drift_engines,
         },
     }
+    if drift_engines:
+        log.warning(
+            "canary-drift misstänkt för %s — motorer: %s (körningen kan vara ojämförbar)",
+            client_id, drift_engines,
+        )
     fs.polling_results_col(client_id).document(hc.WARMTH_PROBE_DOC).set(doc)
     log.info(
         "värme-probes skrivna för %s (%d motorer × %d personor)",

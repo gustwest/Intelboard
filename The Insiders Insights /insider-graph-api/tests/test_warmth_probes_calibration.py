@@ -149,9 +149,9 @@ class CostDisciplineTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"PROBE_RUNS_PER_QUERY": "3"}):
             wp.run_for_client("acme", engines={"e": engine}, judge=judge)
 
-        # 1 persona × 6 dim × 2 frågor = 12 probe-anrop + 1 ankarfråga = 13.
+        # 1 persona × 6 dim × 2 frågor = 12 probe-anrop + canary-suite (3) = 15.
         # INTE 12 × 3 = 36 (domar-körningarna multiplicerar inte probe-anropen).
-        self.assertEqual(engine.ask_count, len(hc.DIMENSIONS) * 2 + 1)
+        self.assertEqual(engine.ask_count, len(hc.DIMENSIONS) * 2 + len(wp.CANARY_QUESTIONS))
 
 
 if __name__ == "__main__":
