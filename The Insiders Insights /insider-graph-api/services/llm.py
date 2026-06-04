@@ -296,21 +296,22 @@ def make_probe_engines() -> dict[str, Any]:
 PROBE_ENGINE_REGISTRY: list[dict[str, Any]] = [
     {"id": model_registry.get_id("probe_claude"), "label": "Claude",
      "vendor": "Anthropic (Vertex global)", "status": "planned",
-     "note": "anthropic-SDK installerad och ChatAnthropicVertex initialiseras OK, "
-             "men service-account-kallet mot Anthropic global endpoint returnerar 404 "
-             "(quota-/scope-issue per SA). Med användar-ADC svarar samma endpoint med "
-             "429 quota — så modellen finns. Kräver troligen quota-höjning eller "
-             "Anthropic-aktivering per service-account i Console. Se "
-             "docs/model-activation-todo.md."},
+     "note": "Routing-buggen löst 2026-06-04 (anthropic-SDK bumpad 0.40→0.104.1 så "
+             "rätt hostname aiplatform.googleapis.com används för location=global). "
+             "Modellen svarar nu 429 RESOURCE_EXHAUSTED — ÅTERSTÅR: höj quotan "
+             "'global_online_prediction_requests_per_base_model' för "
+             "anthropic-claude-sonnet-4-6 från 0 → 60 RPM i Console (IAM & Admin → "
+             "Quotas). När quotan är höjd: flippa denna 'planned' → 'live'."},
     {"id": model_registry.get_id("probe_gemini"), "label": "Gemini",
      "vendor": "Google (Vertex europe-west1)", "status": "live", "note": None},
     {"id": model_registry.get_id("probe_openai"), "label": "ChatGPT",
      "vendor": "OpenAI (direkt)", "status": "live", "note": None},
     {"id": model_registry.get_id("probe_mistral"), "label": "Mistral Le Chat",
      "vendor": "Mistral AI (Vertex MaaS)", "status": "planned",
-     "note": "EULA är accepterad men modellen returnerar 404 i alla regioner — "
-             "kräver troligen Console-prenumeration utöver EULA. Se "
-             "docs/model-activation-todo.md."},
+     "note": "EULA accepterad programmatiskt 2026-06-04 men modellen returnerar "
+             "fortfarande 404 — kräver INTERAKTIV Subscribe/Get-started i Cloud "
+             "Console (Model Garden → Mistral Medium 3) kopplad till faktureringskonto. "
+             "När Subscribe är klar + anrop ger 200: flippa denna 'planned' → 'live'."},
     {"id": model_registry.get_id("probe_perplexity"), "label": "Perplexity",
      "vendor": "Perplexity AI (web-RAG)", "status": "live", "note": None},
     {"id": "copilot", "label": "Copilot", "vendor": "Microsoft", "status": "planned",

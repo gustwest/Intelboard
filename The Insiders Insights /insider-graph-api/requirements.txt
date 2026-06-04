@@ -22,7 +22,13 @@ langchain-google-vertexai==2.0.7
 # SDK:n vid runtime även om vi går via Vertex Model Garden — utan den failar
 # Claude-proben med "No module named 'anthropic'" vid init. langchain-google-
 # vertexai pinnar inte den som hård dep, så vi måste lägga in den explicit.
-anthropic==0.40.0
+#
+# 2026-06-04: bumpad 0.40.0 → 0.104.1. Den gamla versionen byggde FEL endpoint för
+# location="global": "https://global-aiplatform.googleapis.com/..." (ogiltig värd →
+# 404 "generic Google page"). 0.104.1 bygger korrekt "https://aiplatform.googleapis.com/
+# v1/" med location=global i path:en. Verifierat: med rätt hostname svarar Claude med
+# 429 (quota) istället för 404 — modellen är åtkomlig, bara quota-begränsad.
+anthropic==0.104.1
 trafilatura==2.0.0
 pypdf==6.12.1
 sendgrid==6.11.0
