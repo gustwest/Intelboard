@@ -216,6 +216,26 @@ def trigger_risk_detect(client_id: str, background: BackgroundTasks) -> dict[str
     return {"status": "queued", "job": "risk_detect", "client_id": client_id}
 
 
+@router.post("/warmth-probes/{client_id}")
+def trigger_warmth_probes(client_id: str, background: BackgroundTasks) -> dict[str, Any]:
+    """Riktad värme-probe-körning för EN kund (Fas 2.1/2.2). Mäter hur AI-motorerna
+    uppfattar kunden per (aktiv persona × dimension) med N-domarkörningar + canary.
+
+    Speglar de andra per-kund-triggers — kör i API-tjänsten (har probe-creds), ingen
+    sharding, ingen Cloud Run-job-mutation. Reapar föräldralösa warmth-running-poster
+    som ett städsteg först (cheap, idempotent) så aktivitetsflödet inte visar
+    eviga 'kör fortfarande'.
+    """
+    if not fs.client_doc(client_id).get().exists:
+        raise HTTPException(404, "client not found")
+    from jobs.warmth_probes import reap_stale_runs
+    from services.warmth_probes import run_for_client
+
+    reaped = reap_stale_runs(older_than_hours=6)
+    background.add_task(tracked, "warmth_probes", client_id, run_for_client, client_id)
+    return {"status": "queued", "job": "warmth_probes", "client_id": client_id, "reaped_stale": reaped}
+
+
 @router.post("/monthly-report/{client_id}")
 def trigger_monthly_report(client_id: str, background: BackgroundTasks, month: str | None = None) -> dict[str, Any]:
     """GEO-riskloop skiva 3 — bygg + persistera månadsrapporten (default innevarande månad)."""
