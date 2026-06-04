@@ -63,6 +63,11 @@ EXPECTED_ROOT_COLLECTIONS = {
     # totaler + topplistor. by_client innehåller client_id men det är
     # operationell-mätdata (samma som job_runs) — ingår ej i delete_client.
     "cost_summary",
+    # GLOBAL kurerad persona-palett (Fas 2.1a, services/persona_registry). Read-
+    # only spegel av _REGISTRY, doc-id = persona-typ (customer/employee/...).
+    # Skrivs bara av seed_to_firestore vid deploy — innehåller aldrig kunddata,
+    # ingår ej i delete_client.
+    "persona_templates",
 }
 
 
