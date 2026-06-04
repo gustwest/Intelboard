@@ -44,7 +44,7 @@ const QUEUES: Queue[] = [
   { label: 'LinkedIn att verifiera', keys: ['linkedin'], href: '/insider-graph/review', icon: Network, color: '#0ea5e9' },
   { label: 'Risk att åtgärda', keys: ['risk_findings', 'risk_questions'], href: '/insider-graph/polling', icon: Radar, color: '#f59e0b' },
   { label: 'ESG att granska', keys: ['esg_questions', 'esg_findings'], href: '/insider-graph/kunder', icon: Leaf, color: '#22c55e' },
-  { label: 'Drift-larm', globalKey: 'ops_alerts', href: '/insider-graph/ops-alerts', icon: AlertTriangle, color: '#ef4444' },
+  { label: 'Drift-larm', globalKey: 'ops_alerts', href: '/insider-graph/alerts', icon: AlertTriangle, color: '#ef4444' },
 ];
 
 /** Geogiraph "Att göra"-inkorg: aggregerar allt som väntar på en människa. */
