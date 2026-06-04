@@ -61,6 +61,12 @@ def render_llms_txt(client_id: str) -> str:
             lines.append(f"- {jp.title or 'Roll'}{skills}")
         lines.append("")
 
+    # Persona-sektioner (Fas 2.1f): gruppera persona-taggade claims under tydliga
+    # rubriker ("## För kunder", "## För anställda & kandidater"). Web_rag-motorer
+    # (Perplexity) läser strukturen och citerar rätt sektion vid persona-laddad
+    # query. Evergreen-claims (tom audience) ligger kvar i description/fakta ovan.
+    lines += _audience_sections(model)
+
     faq = build_faq(model)
     if faq:
         lines.append("## Frågor & svar")
@@ -77,6 +83,51 @@ def render_llms_txt(client_id: str) -> str:
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _audience_sections(model: RenderModel) -> list[str]:
+    """Bygg markdown-sektioner per persona ur persona-taggade claims (Fas 2.1f).
+
+    Samlar både facts och prose vars audience-fält nämner en persona. En claim som
+    är taggad för flera personor visas under varje relevant rubrik (medveten
+    redundans — varje persona-sektion ska vara självständigt läsbar för en motor
+    som zoomat in på just den målgruppen). Tom = inga sektioner (allt evergreen).
+    """
+    from services import persona_registry as pr
+
+    # Persona-id → lista av claim-texter (facts + prose) taggade för den personan.
+    by_persona: dict[str, list[str]] = {}
+    for f in model.facts:
+        text = f.statement or f"{f.predicate}: {_fact_value_text(f.value)}"
+        for pid in getattr(f, "audience", None) or []:
+            by_persona.setdefault(pid, []).append(text)
+    for p in model.prose:
+        for pid in getattr(p, "audience", None) or []:
+            by_persona.setdefault(pid, []).append(p.statement)
+
+    if not by_persona:
+        return []
+
+    out: list[str] = []
+    # Registry-ordning för stabil rendering.
+    for persona in pr.all_personas():
+        texts = by_persona.get(persona.id)
+        if not texts:
+            continue
+        out.append(f"## För {persona.label_sv.lower()}")
+        # Dedup inom sektionen (samma claim kan ha mergeats in flera gånger).
+        seen: set[str] = set()
+        for t in texts:
+            key = t.strip()
+            if key and key not in seen:
+                seen.add(key)
+                out.append(f"- {t}")
+        out.append("")
+    return out
+
+
+def _fact_value_text(value) -> str:
+    return ", ".join(str(v) for v in value) if isinstance(value, list) else str(value)
 
 
 def _render(model: RenderModel, graph: dict) -> str:

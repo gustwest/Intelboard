@@ -65,6 +65,9 @@ class Fact:
     # Visas aldrig som siffra publikt — styr bara ordningen så starkast bevisade
     # värden hamnar först (prominens = signal för AI-motorer/llms.txt).
     confidence: float = 1.0
+    # Persona-relevans (Fas 2.1f). Tom = evergreen (alla personor). Driver
+    # Schema.org Audience-markup + llms.txt-sektionering.
+    audience: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -72,6 +75,8 @@ class Prose:
     statement: str
     footnotes: list[int] = field(default_factory=list)
     manual_label: str | None = None
+    # Persona-relevans (Fas 2.1f) — union av sammanslagna claims audience-fält.
+    audience: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -184,10 +189,12 @@ def build_render_model(client_id: str) -> RenderModel:
             if label and manual_label is None:
                 manual_label = label
 
+        audience = list(getattr(claim, "audience", None) or [])
         if claim.claim_kind == "property" and claim.predicate:
-            facts.append(Fact(claim.predicate, claim.value, claim.statement, footnotes, manual_label, claim.confidence))
+            facts.append(Fact(claim.predicate, claim.value, claim.statement, footnotes,
+                              manual_label, claim.confidence, audience))
         elif claim.claim_kind == "narrative" and claim.statement:
-            _merge_prose(prose_by_key, claim.statement.strip(), footnotes, manual_label)
+            _merge_prose(prose_by_key, claim.statement.strip(), footnotes, manual_label, audience)
 
     # Starkast bevisade fakta först. Stabil sortering → värden med samma vikt
     # behåller upptäcktsordningen. Avgör ordningen på t.ex. knowsAbout-listan
@@ -321,6 +328,12 @@ def compile_client(client_id: str) -> dict[str, Any]:
         based_on = [{"@id": by_number[n].sid} for n in entry.footnotes if n in by_number]
         if based_on:
             node["isBasedOn"] = based_on if len(based_on) > 1 else based_on[0]
+        # Persona-relevans (Fas 2.1f): emittera Schema.org Audience-noder för claims
+        # taggade med specifika personor. Tom audience = evergreen → ingen markup
+        # (claimet gäller alla, ingen poäng att signalera en specifik publik).
+        audience_nodes = _audience_markup(getattr(entry, "audience", None) or [])
+        if audience_nodes:
+            node["audience"] = audience_nodes if len(audience_nodes) > 1 else audience_nodes[0]
         claim_nodes.append(node)
 
     faq_nodes: list[dict[str, Any]] = []
@@ -430,18 +443,50 @@ def _apply_property(node: dict[str, Any], predicate: str, value: Any) -> None:
     node[predicate] = bag if len(bag) > 1 else bag[0]
 
 
-def _merge_prose(bag: dict[str, "Prose"], statement: str, footnotes: list[int], manual_label: str | None) -> None:
-    """Slå ihop snarlika narrative-claims (samma normaliserade text) och förena källor."""
+def _merge_prose(
+    bag: dict[str, "Prose"], statement: str, footnotes: list[int],
+    manual_label: str | None, audience: list[str] | None = None,
+) -> None:
+    """Slå ihop snarlika narrative-claims (samma normaliserade text) och förena källor.
+    Audience-fältet unionas — ett sammanslaget påstående är relevant för alla personor
+    som något av de ingående claims var taggat för."""
     key = _normalize(statement)
+    audience = audience or []
     existing = bag.get(key)
     if existing is None:
-        bag[key] = Prose(statement, list(footnotes), manual_label)
+        bag[key] = Prose(statement, list(footnotes), manual_label, list(audience))
         return
     for n in footnotes:
         if n not in existing.footnotes:
             existing.footnotes.append(n)
     if existing.manual_label is None and manual_label:
         existing.manual_label = manual_label
+    for a in audience:
+        if a not in existing.audience:
+            existing.audience.append(a)
+
+
+def _audience_markup(persona_ids: list[str]) -> list[dict[str, Any]]:
+    """Bygg Schema.org Audience-noder från persona-id:n (Fas 2.1f).
+
+    Slår upp audienceType + label i persona_registry. Okända id:n hoppas tyst
+    över (registret är källan av sanning — ett claim taggat med en avregistrerad
+    persona ska inte emittera trasig markup). Returnerar [] om inget giltigt.
+    """
+    from services import persona_registry as pr
+
+    out: list[dict[str, Any]] = []
+    for pid in persona_ids:
+        try:
+            persona = pr.get(pid)
+        except KeyError:
+            continue
+        out.append({
+            "@type": "Audience",
+            "audienceType": persona.schema_audience_type,
+            "name": persona.label_sv,
+        })
+    return out
 
 
 def _normalize(text: str) -> str:
