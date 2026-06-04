@@ -348,6 +348,136 @@ def _people_bio_build(text: str, ctx: BuildCtx) -> list[Write]:
     return writes
 
 
+# --- Glassdoor-recensioner → demonstrated culture-claims (Spår B) ----------------
+#
+# Glassdoor har inget öppet API + scraping bryter ToS → attesterad upload (operatör
+# laddar upp exporterade betyg som CSV/Excel). Strukturerade betyg blir DEMONSTRATED
+# culture-claims med assurance_level=third_party_reviewed — oberoende employee-
+# sentiment, inte bolagets eget ord (väger 0.7 i compute_trust_gap). Stärker
+# employee-personans demonstrated-lager.
+#
+# Sanning, inte smink: betyg ≥ tröskel blir proof points; LÄGRE betyg blir INTE
+# bevis utan lagras som markerat raw_item (tom content → aldrig claim-extraherat,
+# synligt för ops + framtida risk-loop-koppling). Fritext-recensioner ingår INTE i
+# MVP (kräver LLM-grundning; verbatim-citat görs via verifierings-flödet senare).
+
+GLASSDOOR_LABEL = "Glassdoor-recensioner, verifierad av Geogiraph"
+GLASSDOOR_PROOF_THRESHOLD = 3.5  # av 5 — under detta blir betyget ej demonstrated proof
+
+# Glassdoor-kategori (gemener) → värmedimension. Vanliga alias hanteras.
+_GLASSDOOR_CATEGORY_TO_DIM: dict[str, str] = {
+    "work/life balance": "wellbeing",
+    "work-life balance": "wellbeing",
+    "work life balance": "wellbeing",
+    "balans mellan arbete och fritid": "wellbeing",
+    "compensation & benefits": "wellbeing",
+    "compensation and benefits": "wellbeing",
+    "comp & benefits": "wellbeing",
+    "culture & values": "ethics",
+    "culture and values": "ethics",
+    "kultur & värderingar": "ethics",
+    "senior management": "ethics",
+    "career opportunities": "development",
+    "karriärmöjligheter": "development",
+    "diversity & inclusion": "inclusion",
+    "diversity and inclusion": "inclusion",
+    "diversity": "inclusion",
+}
+
+
+def _to_float(s: str) -> float | None:
+    try:
+        return float(str(s).strip().replace(",", "."))
+    except (ValueError, AttributeError):
+        return None
+
+
+def _fmt_rating(r: float) -> str:
+    return str(int(r)) if r == int(r) else f"{r:.1f}".replace(".", ",")
+
+
+def _glassdoor_build(sheets: dict[str, list[list[str]]], ctx: BuildCtx) -> list[Write]:
+    """CSV/Excel med kolumnerna category,rating[,review_count] → claims/raw_items.
+    Tar första fliken med rader. Okända kategorier hoppas tyst (vi mappar bara de
+    som motsvarar en värmedimension)."""
+    rows = next((r for r in sheets.values() if r), [])
+    if len(rows) < 2:
+        return []
+    header = [c.strip().lower() for c in rows[0]]
+
+    def col(*names: str) -> int | None:
+        for n in names:
+            if n in header:
+                return header.index(n)
+        return None
+
+    c_cat = col("category", "kategori")
+    c_rat = col("rating", "betyg", "score")
+    c_cnt = col("review_count", "reviews", "antal", "antal_recensioner", "n")
+    if c_cat is None or c_rat is None:
+        return []
+
+    writes: list[Write] = []
+    for r in rows[1:]:
+        if c_cat >= len(r) or c_rat >= len(r):
+            continue
+        category = r[c_cat].strip()
+        dim = _GLASSDOOR_CATEGORY_TO_DIM.get(category.lower())
+        rating = _to_float(r[c_rat])
+        if not dim or rating is None or not (0 < rating <= 5):
+            continue
+        count = _to_int(r[c_cnt]) if c_cnt is not None and c_cnt < len(r) else None
+        if rating >= GLASSDOOR_PROOF_THRESHOLD:
+            writes.append(_glassdoor_claim(ctx, dim, category, rating, count))
+        else:
+            writes.append(_glassdoor_low_rating(ctx, dim, category, rating, count))
+    return writes
+
+
+def _glassdoor_claim(ctx: BuildCtx, dim: str, category: str, rating: float, count: int | None) -> Write:
+    cnt = f" baserat på {count} recensioner" if count else ""
+    statement = f"{ctx.company} har {_fmt_rating(rating)}/5 i {category} på Glassdoor{cnt}."
+    claim_id = "att-gd-" + hashlib.sha1(f"glassdoor|{dim}|{category.lower()}".encode("utf-8")).hexdigest()[:14]
+    # third_party_reviewed: oberoende employee-sentiment, inte bolagets ord. Väger 0.7.
+    source = ClaimSource(
+        kind="attested", label=GLASSDOOR_LABEL,
+        attested_at=ctx.attested_at, url=ctx.url, assurance_level="third_party_reviewed",
+    )
+    claim = Claim(
+        claim_kind="narrative",
+        subject_ref="org",
+        statement=statement[:200],
+        source=[source],
+        confidence=1.0,
+        included_in_output=False,  # staged tills "Inkludera i leverans"
+        needs_review=False,
+        facet="culture",
+        warmth_mode="demonstrated",
+        dimension=dim,
+        audience=["employee"],  # Glassdoor = employee-genererad evidens
+    )
+    return ("claim", claim_id, claim.model_dump())
+
+
+def _glassdoor_low_rating(ctx: BuildCtx, dim: str, category: str, rating: float, count: int | None) -> Write:
+    """Under tröskel → INTE proof. Lagras som markerat raw_item (tom content → aldrig
+    claim-extraherat), synligt för ops + framtida risk-loop. Sanning utan smink."""
+    item_id = "att-gd-low-" + hashlib.sha1(f"glassdoor|{dim}|{category.lower()}".encode("utf-8")).hexdigest()[:14]
+    payload = {
+        "source": "Glassdoor (attesterad)",
+        "schema_type": "EmployerRating",
+        "content": "",  # tom → claim_extraction hoppar över (blir aldrig proof)
+        "url": ctx.url,
+        "included_in_output": False,
+        "attested_source": "glassdoor_reviews",  # → _delete_existing städar vid omladdning
+        "extra": {
+            "category": category, "rating": rating, "review_count": count,
+            "dimension": dim, "below_threshold": True,
+        },
+    }
+    return ("raw_item", item_id, payload)
+
+
 # --- Källtyps-register -----------------------------------------------------------
 
 
@@ -388,6 +518,16 @@ SOURCE_TYPES: dict[str, SourceType] = {
         mode="replace",
         build=_people_bio_build,
         parser=read_text,
+    ),
+    "glassdoor_reviews": SourceType(
+        key="glassdoor_reviews",
+        label="Glassdoor – arbetsgivarbetyg",
+        description="Exporterade Glassdoor-betyg (CSV/Excel: category,rating,review_count) → "
+                    "oberoende bevis (third_party_reviewed) för välmående, kultur/etik, "
+                    "utveckling och inkludering. Betyg ≥3,5 blir proof points; lägre lagras "
+                    "som risksignal. Ögonblicksbild — ersätter tidigare uppladdning.",
+        mode="replace",
+        build=_glassdoor_build,
     ),
 }
 
