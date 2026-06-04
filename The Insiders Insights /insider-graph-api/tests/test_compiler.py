@@ -56,6 +56,23 @@ class CompileClientTest(unittest.TestCase):
         self.assertEqual(org["foundingDate"], "2014")
         self.assertEqual(org["address"], "Göteborg")
 
+    def test_aggregated_claim_skipped_even_when_included(self):
+        """Regression: ett aggregerat original med review_status='aggregated' och
+        included_in_output=True (gammal data) får inte fälla compile på Claim-
+        validering — det ska skippas, inte renderas."""
+        _graph_setup(claims={
+            "agg-orphan": {
+                "claim_kind": "narrative",
+                "subject_ref": "org",
+                "statement": "Original som slukats av ett narrative",
+                "source": [{"kind": "manual", "label": "uppgift från bolaget"}],
+                "included_in_output": True,   # gammal data — flaggan kvar truthy
+                "review_status": "aggregated",
+            },
+        })
+        graph = compile_client("acme")  # ska inte kasta ValidationError
+        self.assertNotIn("slukats av ett narrative", repr(graph))
+
     def test_social_metrics_never_emitted(self):
         _graph_setup()
         org = _nodes(compile_client("acme"), "Organization")[0]

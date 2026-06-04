@@ -118,7 +118,11 @@ class Claim(BaseModel):
     confidence: float = 1.0
     included_in_output: bool = True
     needs_review: bool = False
-    review_status: Literal["approved", "rejected"] | None = None
+    # "aggregated" = originalet har slagits ihop till ett narrative-claim (se
+    # services/claim_aggregation.py). Bevaras som evidens men renderas aldrig —
+    # läsvägarna skippar det. Tillåts i literalen så att Claim(**raw) aldrig
+    # kraschar även om en sådan post råkar ha included_in_output=True.
+    review_status: Literal["approved", "rejected", "aggregated"] | None = None
     # Sätts när validator-LLM:en (Claude via Vertex EU) bekräftat att claimet stöds av
     # sin källa. Narrative-claims valideras alltid före persist (ingen källa/validering
     # → inget claim), så ett persisterat narrative-claim bär alltid dessa. ISO-tid + modell.

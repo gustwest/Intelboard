@@ -120,7 +120,9 @@ def iter_culture_claims(client_id: str) -> Iterator[Claim]:
     for _claim_id, raw in fs.iter_claims(client_id):
         if not raw.get("included_in_output", True):
             continue
-        if raw.get("review_status") == "rejected":
+        # rejected = bortvald; aggregated = uppslukad av ett narrative-claim
+        # (evidens, renderas aldrig). Skippas oavsett included_in_output.
+        if raw.get("review_status") in ("rejected", "aggregated"):
             continue
         if raw.get("facet") != "culture":
             continue
