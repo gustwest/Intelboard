@@ -134,7 +134,7 @@ export default function GraphKunderPage() {
         }}
       >
         <div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56' }}>Onboarda ny kund</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>Onboarda ny kund</div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>
             Fyll i företagsuppgifter, välj connectors och lägg till medarbetare manuellt.
           </div>
@@ -167,7 +167,7 @@ export default function GraphKunderPage() {
               gap: 6,
               padding: '8px 14px',
               background: 'rgba(159,81,182,0.18)',
-              color: '#9f51b6',
+              color: C.accent,
               border: '1px solid rgba(159,81,182,0.3)',
               borderRadius: 8,
               fontSize: 13,
@@ -211,7 +211,7 @@ export default function GraphKunderPage() {
           }}
         >
           <Users size={32} color={C.dim} style={{ marginBottom: 12 }} />
-          <div style={{ fontSize: 14, color: '#3a4b56', fontWeight: 600 }}>Inga Graph-kunder ännu</div>
+          <div style={{ fontSize: 14, color: C.text, fontWeight: 600 }}>Inga Graph-kunder ännu</div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 6, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto' }}>
             Klicka på <strong>Ny kund</strong> för att onboarda din första kund.
           </div>
@@ -280,7 +280,7 @@ function ClientCard({ client, counts }: { client: Client; counts?: InboxCounts }
       >
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56' }}>{client.company_name || client.client_id}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{client.company_name || client.client_id}</div>
             <div style={{ fontSize: 11, color: C.muted, marginTop: 2, fontFamily: 'ui-monospace, monospace' }}>
               {client.client_id}
             </div>
@@ -310,7 +310,7 @@ function ClientCard({ client, counts }: { client: Client; counts?: InboxCounts }
               <PendingChip
                 label={`${split.risk} risk`}
                 title="Åtgärda risk-findings/frågor under AI-synlighet"
-                color="#9f51b6"
+                color={C.accent}
                 bg="rgba(159,81,182,0.15)"
                 border="rgba(159,81,182,0.3)"
                 onClick={(e) => go(e, '/insider-graph/polling')}
@@ -325,7 +325,7 @@ function ClientCard({ client, counts }: { client: Client; counts?: InboxCounts }
                   e.stopPropagation();
                   window.open(client.cdn_url!, '_blank', 'noopener,noreferrer');
                 }}
-                style={{ color: '#9f51b6', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', display: 'flex' }}
+                style={{ color: C.accent, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', display: 'flex' }}
               >
                 <ExternalLink size={14} />
               </button>
@@ -334,7 +334,7 @@ function ClientCard({ client, counts }: { client: Client; counts?: InboxCounts }
         </div>
 
         <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
-          {client.tier === 'premium' && <Badge color="#9f51b6" label="premium" />}
+          {client.tier === 'premium' && <Badge color={C.accent} label="premium" />}
           <Badge color={C.muted} label={`${client.employee_count} medarbetare`} />
         </div>
 
@@ -421,7 +421,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
       <span>{label}</span>
-      <span style={{ color: '#3a4b56' }}>{value}</span>
+      <span style={{ color: C.text }}>{value}</span>
     </div>
   );
 }
@@ -558,7 +558,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 600, color: '#3a4b56', margin: 0 }}>Onboarda ny Graph-kund</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 600, color: C.text, margin: 0 }}>Onboarda ny Graph-kund</h2>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer' }}>
             <X size={20} />
           </button>
@@ -586,7 +586,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
                   >
                     {s.done ? <Check size={12} strokeWidth={3} /> : i + 1}
                   </span>
-                  <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600, color: s.done ? '#3a4b56' : C.muted, whiteSpace: 'nowrap' }}>{s.label}</span>
+                  <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600, color: s.done ? C.text : C.muted, whiteSpace: 'nowrap' }}>{s.label}</span>
                   {i < steps.length - 1 && <span style={{ flex: 1, height: 2, background: s.done ? '#22c55e' : C.border, margin: '0 12px' }} />}
                 </div>
               ))}
@@ -618,7 +618,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
                   border: 'none',
                   cursor: 'pointer',
                   background: tier === v ? 'rgba(159,81,182,0.18)' : '#eef0f1',
-                  color: tier === v ? '#9f51b6' : '#3a4b56',
+                  color: tier === v ? C.accent : C.text,
                 }}
               >
                 {label}
@@ -694,7 +694,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
             gap: 6,
             padding: '6px 12px',
             background: 'transparent',
-            color: '#3a4b56',
+            color: C.text,
             border: `1px dashed ${C.border}`,
             borderRadius: 8,
             fontSize: 12,
@@ -713,7 +713,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
             style={{
               padding: '9px 16px',
               background: 'rgba(159,81,182,0.25)',
-              color: '#9f51b6',
+              color: C.accent,
               border: '1px solid rgba(159,81,182,0.5)',
               borderRadius: 8,
               fontSize: 13,
@@ -760,7 +760,7 @@ function ConnectorCard({
     >
       <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
         <input type="checkbox" checked={active} onChange={onToggle} />
-        <span style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56', textTransform: 'capitalize' }}>{conn.id}</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: C.text, textTransform: 'capitalize' }}>{conn.id}</span>
         <span style={{ fontSize: 10, color: C.muted }}>· {conn.fetch_method} · {conn.frequency}</span>
       </label>
 
@@ -781,7 +781,7 @@ function ConnectorCard({
             }
             if (f.type === 'bool') {
               return (
-                <label key={f.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#3a4b56', cursor: 'pointer' }}>
+                <label key={f.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: C.text, cursor: 'pointer' }}>
                   <input
                     type="checkbox"
                     checked={!!fieldValues[f.name]}
@@ -863,7 +863,7 @@ function RssFeedEditor({
           padding: '5px 10px',
           marginTop: 8,
           background: 'transparent',
-          color: '#3a4b56',
+          color: C.text,
           border: `1px dashed ${C.border}`,
           borderRadius: 7,
           fontSize: 11,
@@ -881,8 +881,8 @@ const selectStyle: React.CSSProperties = {
   width: '100%',
   padding: '8px 8px',
   background: '#eef0f1',
-  color: '#3a4b56',
-  border: '1px solid #dfe3e7',
+  color: C.text,
+  border: `1px solid ${C.border}`,
   borderRadius: 6,
   fontSize: 12,
   outline: 'none',
@@ -898,8 +898,8 @@ function RowInput({ value, onChange, placeholder }: { value: string; onChange: (
         width: '100%',
         padding: '8px 10px',
         background: '#eef0f1',
-        color: '#3a4b56',
-        border: '1px solid #dfe3e7',
+        color: C.text,
+        border: `1px solid ${C.border}`,
         borderRadius: 6,
         fontSize: 12,
         outline: 'none',
@@ -932,8 +932,8 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
           marginTop: 4,
           padding: '8px 12px',
           background: '#eef0f1',
-          color: '#3a4b56',
-          border: '1px solid #dfe3e7',
+          color: C.text,
+          border: `1px solid ${C.border}`,
           borderRadius: 6,
           fontSize: 13,
           outline: 'none',
@@ -994,8 +994,8 @@ function LeiSearchField({
     flex: 1,
     padding: '8px 12px',
     background: '#eef0f1',
-    color: '#3a4b56',
-    border: '1px solid #dfe3e7',
+    color: C.text,
+    border: `1px solid ${C.border}`,
     borderRadius: 6,
     fontSize: 13,
     outline: 'none',
@@ -1035,7 +1035,7 @@ function LeiSearchField({
             gap: 5,
             padding: '0 12px',
             background: 'transparent',
-            color: '#3a4b56',
+            color: C.text,
             border: `1px solid ${C.border}`,
             borderRadius: 6,
             fontSize: 12,
@@ -1049,7 +1049,7 @@ function LeiSearchField({
       </div>
 
       {value && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, fontSize: 12, color: '#3a4b56' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, fontSize: 12, color: C.text }}>
           <CheckCircle2 size={13} style={{ color: '#22c55e' }} />
           <span>
             Vald LEI: <strong style={{ fontFamily: 'monospace' }}>{value}</strong>
@@ -1085,7 +1085,7 @@ function LeiSearchField({
                 cursor: 'pointer',
               }}
             >
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#3a4b56' }}>{h.name || '(namnlöst)'}</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{h.name || '(namnlöst)'}</div>
               <div style={{ fontSize: 11, color: C.muted }}>
                 <span style={{ fontFamily: 'monospace' }}>{h.lei}</span>
                 {h.address ? ` · ${h.address}` : ''}

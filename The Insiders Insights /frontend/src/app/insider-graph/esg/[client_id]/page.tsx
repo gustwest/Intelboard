@@ -527,8 +527,8 @@ function MetricsFormModal({ clientId, finding, onClose, onSubmitted }: { clientI
 }
 
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '7px 10px', background: '#fff', color: '#3a4b56',
-  border: '1px solid #dfe3e7', borderRadius: 6, fontSize: 13, outline: 'none',
+  width: '100%', padding: '7px 10px', background: '#fff', color: C.text,
+  border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, outline: 'none',
 };
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

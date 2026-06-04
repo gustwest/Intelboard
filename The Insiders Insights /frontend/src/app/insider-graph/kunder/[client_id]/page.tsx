@@ -192,7 +192,7 @@ export default function ClientDetailPage() {
                 return (
                   <span key={type} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                     <Clock size={11} color={C.dim} />
-                    <strong style={{ color: '#3a4b56', fontWeight: 600 }}>{label}:</strong>
+                    <strong style={{ color: C.text, fontWeight: 600 }}>{label}:</strong>
                     {run ? <><span>{fmtRelative(run.started_at)}</span>{run.status === 'success' && <Check size={11} color="#16a34a" />}</> : <span style={{ color: C.dim }}>aldrig körd</span>}
                   </span>
                 );
@@ -209,7 +209,7 @@ export default function ClientDetailPage() {
               {client.company_linkedin_url && (
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>LinkedIn</span>
-                  <a href={client.company_linkedin_url} target="_blank" rel="noreferrer" style={{ color: '#9f51b6', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <a href={client.company_linkedin_url} target="_blank" rel="noreferrer" style={{ color: C.accent, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                     Företagssida <ExternalLink size={12} />
                   </a>
                 </div>
@@ -252,7 +252,7 @@ export default function ClientDetailPage() {
 
           {/* Medarbetare */}
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56', marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 14 }}>
               Medarbetare ({client.employees.length})
             </div>
             {client.employees.length === 0 ? (
@@ -274,7 +274,7 @@ export default function ClientDetailPage() {
                     }}
                   >
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.text, display: 'flex', alignItems: 'center', gap: 8 }}>
                         {emp.name || emp.employee_id}
                         {emp.opted_out && (
                           <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 3, background: 'rgba(239,68,68,0.15)', color: '#ef4444', fontWeight: 600, textTransform: 'uppercase' }}>
@@ -287,7 +287,7 @@ export default function ClientDetailPage() {
                         {emp.linkedin_url && (
                           <>
                             {' · '}
-                            <a href={emp.linkedin_url} target="_blank" rel="noreferrer" style={{ color: '#9f51b6' }}>LinkedIn</a>
+                            <a href={emp.linkedin_url} target="_blank" rel="noreferrer" style={{ color: C.accent }}>LinkedIn</a>
                           </>
                         )}
                       </div>
@@ -391,20 +391,20 @@ function ConfirmDeleteModal({
             <X size={18} />
           </button>
         </div>
-        <p style={{ fontSize: 12, color: '#3a4b56', lineHeight: 1.6, margin: '0 0 14px' }}>{description}</p>
+        <p style={{ fontSize: 12, color: C.text, lineHeight: 1.6, margin: '0 0 14px' }}>{description}</p>
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>
-          Skriv <strong style={{ color: '#3a4b56' }}>{expected}</strong> för att bekräfta:
+          Skriv <strong style={{ color: C.text }}>{expected}</strong> för att bekräfta:
         </div>
         <input
           value={typed}
           onChange={(e) => setTyped(e.target.value)}
           autoFocus
-          style={{ display: 'block', width: '100%', padding: '8px 12px', background: '#eef0f1', color: '#3a4b56', border: '1px solid #dfe3e7', borderRadius: 6, fontSize: 13, outline: 'none', marginBottom: 16 }}
+          style={{ display: 'block', width: '100%', padding: '8px 12px', background: '#eef0f1', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, outline: 'none', marginBottom: 16 }}
         />
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button
             onClick={onCancel}
-            style={{ padding: '8px 14px', background: 'transparent', color: '#3a4b56', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+            style={{ padding: '8px 14px', background: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
           >
             Avbryt
           </button>
@@ -434,7 +434,7 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
       <span>{label}</span>
-      <span style={{ color: '#3a4b56', fontFamily: mono ? 'ui-monospace, monospace' : undefined }}>{value}</span>
+      <span style={{ color: C.text, fontFamily: mono ? 'ui-monospace, monospace' : undefined }}>{value}</span>
     </div>
   );
 }

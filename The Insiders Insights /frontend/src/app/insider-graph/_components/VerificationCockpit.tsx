@@ -109,7 +109,7 @@ export default function VerificationCockpit({ clientId }: { clientId: string }) 
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <ShieldCheck size={15} color={C.accent} />
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56' }}>Verifiering — &quot;Manually verified by Geogiraph&quot;</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>Verifiering — &quot;Manually verified by Geogiraph&quot;</div>
       </div>
       <div style={{ fontSize: 11, color: C.muted, marginBottom: 14, lineHeight: 1.5 }}>
         Ladda upp underlag (mejl/fil) och bestäm dess roll. Stämpeln är avsiktlig och knapp — bara &quot;bevis&quot; som
@@ -130,7 +130,7 @@ export default function VerificationCockpit({ clientId }: { clientId: string }) 
       ) : (
         <button
           onClick={() => setOpen(true)}
-          style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'rgba(159,81,182,0.15)', color: '#9f51b6', border: '1px solid rgba(159,81,182,0.3)', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+          style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'rgba(159,81,182,0.15)', color: C.accent, border: '1px solid rgba(159,81,182,0.3)', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
         >
           <UploadCloud size={14} /> Ladda upp underlag
         </button>
@@ -150,11 +150,11 @@ function VerificationList({ rows }: { rows: VerificationRow[] | null }) {
         const color = rejected ? '#b91c1c' : '#16a34a';
         return (
           <div key={r.id} style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: '#3a4b56' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: C.text }}>
               <Icon size={14} color={color} />
               {r.evidence_type || 'bevis'}
               {r.assurance_level && (
-                <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: 'rgba(159,81,182,0.12)', color: '#9f51b6', fontWeight: 600 }}>
+                <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: 'rgba(159,81,182,0.12)', color: C.accent, fontWeight: 600 }}>
                   {ASSURANCE.find((a) => a.key === r.assurance_level)?.label || r.assurance_level}
                 </span>
               )}
@@ -251,14 +251,14 @@ function UploadForm({
 
   const inputStyle: React.CSSProperties = {
     display: 'block', width: '100%', marginTop: 4, padding: '6px 10px', background: '#eef0f1',
-    color: '#3a4b56', border: '1px solid #dfe3e7', borderRadius: 6, fontSize: 12, outline: 'none',
+    color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none',
   };
   const labelStyle: React.CSSProperties = { fontSize: 11, color: C.muted, fontWeight: 600 };
 
   return (
     <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: 16, marginTop: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#3a4b56' }}>Nytt underlag</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>Nytt underlag</div>
         <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: C.muted, fontSize: 12, cursor: 'pointer' }}>Stäng</button>
       </div>
 
@@ -272,10 +272,10 @@ function UploadForm({
             style={{
               flex: 1, minWidth: 120, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
               background: role === r.key ? 'rgba(159,81,182,0.12)' : 'transparent',
-              border: `1px solid ${role === r.key ? '#9f51b6' : C.border}`,
+              border: `1px solid ${role === r.key ? C.accent : C.border}`,
             }}
           >
-            <div style={{ fontSize: 12, fontWeight: 600, color: role === r.key ? '#9f51b6' : '#3a4b56' }}>{r.label}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: role === r.key ? C.accent : C.text }}>{r.label}</div>
             <div style={{ fontSize: 10, color: C.muted, marginTop: 2, lineHeight: 1.4 }}>{r.help}</div>
           </button>
         ))}
@@ -294,7 +294,7 @@ function UploadForm({
         }}
       >
         <UploadCloud size={20} color={C.muted} />
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#3a4b56', marginTop: 4 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginTop: 4 }}>
           {file ? <><FileCheck2 size={13} style={{ verticalAlign: 'middle' }} /> {file.name}</> : 'Dra underlaget hit eller klicka (PDF, bild, kalkylblad)'}
         </div>
         <input ref={fileInput} type="file" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) setFile(f); e.target.value = ''; }} />
@@ -343,7 +343,7 @@ function UploadForm({
       {/* GRIND 2: checklistan — bara för "bevis" */}
       {role === 'bevis' && (
         <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginTop: 4, background: '#fbfbfc' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#3a4b56', marginBottom: 8 }}>De fyra kontrollerna</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: C.text, marginBottom: 8 }}>De fyra kontrollerna</div>
 
           {/* Bevistyp + krävda metodik-fält */}
           <label style={{ ...labelStyle, display: 'block', marginBottom: 8 }}>Bevistyp
@@ -386,8 +386,8 @@ function UploadForm({
                 <label key={a.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, opacity: locked ? 0.45 : 1, cursor: locked ? 'not-allowed' : 'pointer' }}>
                   <input type="radio" name="assurance" disabled={locked} checked={assurance === a.key} onChange={() => setAssurance(a.key)} style={{ marginTop: 2 }} />
                   <span>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#3a4b56' }}>{a.label}</span>
-                    {a.key === profile?.suggested_assurance_level && <span style={{ fontSize: 9, marginLeft: 6, color: '#9f51b6' }}>(föreslagen)</span>}
+                    <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{a.label}</span>
+                    {a.key === profile?.suggested_assurance_level && <span style={{ fontSize: 9, marginLeft: 6, color: C.accent }}>(föreslagen)</span>}
                     <span style={{ fontSize: 10, color: C.muted, display: 'block', lineHeight: 1.4 }}>{a.help}{locked ? ' — kräver oberoende + spårbarhet.' : ''}</span>
                   </span>
                 </label>
@@ -428,7 +428,7 @@ function CheckRow({ checked, onChange, label, help }: { checked: boolean; onChan
     <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 8, cursor: 'pointer' }}>
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} style={{ marginTop: 2 }} />
       <span>
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#3a4b56' }}>{label}</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{label}</span>
         <span style={{ fontSize: 10, color: C.muted, display: 'block', lineHeight: 1.4 }}>{help}</span>
       </span>
     </label>

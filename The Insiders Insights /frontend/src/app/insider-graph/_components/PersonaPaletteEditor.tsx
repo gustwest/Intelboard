@@ -120,7 +120,7 @@ export default function PersonaPaletteEditor({ clientId }: { clientId: string })
       <p style={{ fontSize: 13, color: C.muted, marginBottom: 14, lineHeight: 1.55 }}>
         Välj vilka målgrupper AI-motorerna mäts mot. Varje persona mäts på alla sex
         värmedimensioner — fler personor ger djupare bild men kostar mer mätning.{' '}
-        <strong style={{ color: '#3a4b56' }}>{active.length}/{maxActive}</strong> aktiva.
+        <strong style={{ color: C.text }}>{active.length}/{maxActive}</strong> aktiva.
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -137,7 +137,7 @@ export default function PersonaPaletteEditor({ clientId }: { clientId: string })
                   title={disabled ? `Max ${maxActive} aktiva` : (isActive ? 'Avaktivera' : 'Aktivera')}
                   style={{
                     width: 38, height: 22, borderRadius: 11, border: 'none', flexShrink: 0,
-                    background: isActive ? '#9f51b6' : C.border,
+                    background: isActive ? C.accent : C.border,
                     cursor: disabled ? 'not-allowed' : 'pointer',
                     opacity: disabled ? 0.4 : 1, position: 'relative', transition: 'background .15s',
                   }}
@@ -146,7 +146,7 @@ export default function PersonaPaletteEditor({ clientId }: { clientId: string })
                 </button>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56' }}>{p.label_sv}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{p.label_sv}</span>
                     {p.is_default && <span style={{ fontSize: 10, color: C.muted, background: C.border, borderRadius: 4, padding: '1px 6px' }}>standard</span>}
                   </div>
                   <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>{p.description_sv}</div>
@@ -166,7 +166,7 @@ export default function PersonaPaletteEditor({ clientId }: { clientId: string })
                   </div>
                   {Object.entries(p.probe_templates).map(([dim, t]) => (
                     <div key={dim} style={{ marginBottom: 8 }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#3a4b56', marginBottom: 2 }}>{DIMENSION_LABELS[dim] || dim}</div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: C.text, marginBottom: 2 }}>{DIMENSION_LABELS[dim] || dim}</div>
                       <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.5 }}>+ {t.neutral}</div>
                       <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.5 }}>− {t.adversarial}</div>
                     </div>
@@ -184,7 +184,7 @@ export default function PersonaPaletteEditor({ clientId }: { clientId: string })
           disabled={!dirty || saving}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px',
-            background: dirty ? '#9f51b6' : C.border, color: dirty ? '#fff' : C.dim,
+            background: dirty ? C.accent : C.border, color: dirty ? '#fff' : C.dim,
             border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600,
             cursor: dirty && !saving ? 'pointer' : 'default',
           }}
@@ -208,7 +208,7 @@ const cardStyle: React.CSSProperties = {
 function SectionTitle() {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-      <Users size={16} color="#9f51b6" />
+      <Users size={16} color={C.accent} />
       <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#1a1a1a' }}>Persona-palett</h3>
     </div>
   );

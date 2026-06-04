@@ -97,7 +97,7 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
 
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
         <Network size={15} color={C.accent} /> LinkedIn-kapacitetsdata (kvartal)
         <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, fontWeight: 600, background: on ? 'rgba(34,197,94,0.15)' : '#eef0f1', color: on ? '#16a34a' : C.muted }}>
           {on ? 'Aktiv' : 'Av'}
@@ -132,7 +132,7 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
         style={{ background: dragOver ? 'rgba(159,81,182,0.08)' : '#f7f8f9', border: `2px dashed ${dragOver ? C.accent : C.border}`, borderRadius: 10, padding: '18px 16px', textAlign: 'center', cursor: busy ? 'wait' : 'pointer', transition: 'all 0.15s', marginBottom: 10 }}
       >
         {file ? (
-          <div style={{ fontSize: 12, color: '#3a4b56', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <div style={{ fontSize: 12, color: C.text, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             <FileCheck2 size={16} color={C.accent} /> {file.name}
             <button onClick={(e) => { e.stopPropagation(); setFile(null); if (fileInput.current) fileInput.current.value = ''; }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: C.muted, display: 'inline-flex' }}>
               <X size={14} />
@@ -141,7 +141,7 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
         ) : (
           <>
             <UploadCloud size={22} color={C.muted} />
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#3a4b56', marginTop: 4 }}>Dra skärmklipp/export hit eller klicka för att välja</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginTop: 4 }}>Dra skärmklipp/export hit eller klicka för att välja</div>
           </>
         )}
         <input ref={fileInput} type="file" accept=".png,.jpg,.jpeg,.csv,.xlsx,.xls,.pdf" style={{ display: 'none' }}
@@ -150,7 +150,7 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
 
       <textarea value={skills} onChange={(e) => setSkills(e.target.value)} rows={2}
         placeholder="Aggregerade kompetenser (valfritt): AWS, Kubernetes, ESG …"
-        style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, color: '#3a4b56', background: '#eef0f1', border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 12px', lineHeight: 1.5, resize: 'vertical', fontFamily: 'inherit', marginBottom: 10 }} />
+        style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, color: C.text, background: '#eef0f1', border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 12px', lineHeight: 1.5, resize: 'vertical', fontFamily: 'inherit', marginBottom: 10 }} />
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
         <input value={quarter} onChange={(e) => setQuarter(e.target.value)} placeholder="Kvartal (2026-Q2)" style={inp} />
@@ -158,7 +158,7 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
       </div>
 
       <button onClick={upload} disabled={busy || (!file && !skills.trim())}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', background: (file || skills.trim()) ? 'rgba(159,81,182,0.18)' : 'transparent', color: (file || skills.trim()) ? '#9f51b6' : C.muted, border: `1px solid ${(file || skills.trim()) ? 'rgba(159,81,182,0.3)' : C.border}`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: busy ? 'wait' : 'pointer' }}>
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', background: (file || skills.trim()) ? 'rgba(159,81,182,0.18)' : 'transparent', color: (file || skills.trim()) ? C.accent : C.muted, border: `1px solid ${(file || skills.trim()) ? 'rgba(159,81,182,0.3)' : C.border}`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: busy ? 'wait' : 'pointer' }}>
         <UploadCloud size={14} /> {busy ? 'Laddar upp…' : 'Ladda upp'}
       </button>
 
@@ -187,7 +187,7 @@ const inp: React.CSSProperties = {
   minWidth: 140,
   padding: '8px 12px',
   background: '#eef0f1',
-  color: '#3a4b56',
+  color: C.text,
   border: `1px solid ${C.border}`,
   borderRadius: 6,
   fontSize: 12,

@@ -56,7 +56,7 @@ export default function ESGAddon({ clientId }: { clientId: string }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <Leaf size={16} color="#16a34a" />
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56' }}>ESG &amp; CSRD Perception Audit</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>ESG &amp; CSRD Perception Audit</div>
             <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
               AI-synlighet — valbart tillägg. Blind nollmätning av bolagets hållbarhetsrykte i AI-motorer.
             </div>

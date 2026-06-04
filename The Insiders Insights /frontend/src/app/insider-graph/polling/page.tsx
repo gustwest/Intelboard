@@ -426,7 +426,7 @@ const PERSONAS: Persona[] = ['buyer', 'candidate', 'investor'];
 const S = {
   open: { fg: '#b91c1c', bg: 'rgba(239,68,68,0.10)', border: 'rgba(239,68,68,0.28)' },
   waiting: { fg: '#b45309', bg: 'rgba(245,158,11,0.10)', border: 'rgba(245,158,11,0.28)' },
-  inProgress: { fg: '#9f51b6', bg: 'rgba(159,81,182,0.10)', border: 'rgba(159,81,182,0.28)' },
+  inProgress: { fg: C.accent, bg: 'rgba(159,81,182,0.10)', border: 'rgba(159,81,182,0.28)' },
   resolved: { fg: '#16a34a', bg: 'rgba(22,163,74,0.08)', border: 'rgba(22,163,74,0.25)' },
   info: { fg: '#0e7490', bg: 'rgba(14,116,144,0.08)', border: 'rgba(14,116,144,0.25)' },
   neutral: { fg: '#6a7e8a', bg: 'rgba(106,126,138,0.10)', border: 'rgba(106,126,138,0.22)' },
@@ -529,7 +529,7 @@ export default function GraphRiskLoopPage() {
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px',
           background: st === 'success' ? 'rgba(159,81,182,0.18)' : 'transparent',
-          color: st === 'success' ? '#9f51b6' : '#3a4b56',
+          color: st === 'success' ? C.accent : C.text,
           border: `1px solid ${st === 'success' ? 'rgba(159,81,182,0.3)' : C.border}`,
           borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: st === 'running' ? 'wait' : 'pointer',
         }}
@@ -807,14 +807,14 @@ export default function GraphRiskLoopPage() {
             ) : (
               <>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 4 }}>
-                  <span style={{ fontSize: 44, fontWeight: 600, color: '#3a4b56', letterSpacing: '-0.02em' }}>{conf.score}</span>
+                  <span style={{ fontSize: 44, fontWeight: 600, color: C.text, letterSpacing: '-0.02em' }}>{conf.score}</span>
                   <span style={{ fontSize: 14, color: C.muted }}>/ 100</span>
                   <span style={{ fontSize: 13, fontWeight: 600, color: C.accent }}>{conf.stage}</span>
                 </div>
                 <StageScale score={conf.score} ceiling={conf.ceiling} />
-                <p style={{ fontSize: 13, color: '#3a4b56', margin: '14px 0 0', lineHeight: 1.6 }}>{report.verdict}</p>
+                <p style={{ fontSize: 13, color: C.text, margin: '14px 0 0', lineHeight: 1.6 }}>{report.verdict}</p>
                 <p style={{ fontSize: 12, color: C.muted, margin: '10px 0 0' }}>
-                  <strong style={{ color: '#3a4b56' }}>Nästa steg:</strong> {conf.next_step}
+                  <strong style={{ color: C.text }}>Nästa steg:</strong> {conf.next_step}
                 </p>
                 <p style={{ fontSize: 11, color: C.dim, margin: '6px 0 0' }}>
                   {conf.safe}/{conf.answers} svar säkra · {conf.covered_personas}/3 personas mätta · tak {conf.ceiling}
@@ -833,7 +833,7 @@ export default function GraphRiskLoopPage() {
                     <div style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>
                       {PERSONA_SV[p]}
                     </div>
-                    <div style={{ fontSize: 28, fontWeight: 600, color: '#3a4b56', marginTop: 8, letterSpacing: '-0.02em' }}>
+                    <div style={{ fontSize: 28, fontWeight: 600, color: C.text, marginTop: 8, letterSpacing: '-0.02em' }}>
                       {e?.score != null ? `${Math.round(e.score * 100)}%` : '—'}
                     </div>
                     <div style={{ fontSize: 12, color: C.dim, marginTop: 4 }}>
@@ -861,7 +861,7 @@ export default function GraphRiskLoopPage() {
               <SectionHead title="Vad vår mjukvara gjorde" hint="Källförsedda korrigeringar som mött detekterade risker — publicerade i JSON-LD, FAQ och profilsida." />
               {report.actions.map((a, i) => (
                 <div key={i} style={{ padding: '10px 0', borderBottom: i < report.actions.length - 1 ? `1px solid ${C.border}` : 'none' }}>
-                  <div style={{ fontSize: 13, color: '#3a4b56' }}>{a.question || '—'}</div>
+                  <div style={{ fontSize: 13, color: C.text }}>{a.question || '—'}</div>
                   <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
                     {a.persona ? PERSONA_SV[a.persona] || a.persona : '—'} · {harmLabel(a.harm)} · {a.action_taken || 'åtgärdad'}
                     {a.action_at ? ` · ${a.action_at.slice(0, 10)}` : ''}
@@ -886,7 +886,7 @@ export default function GraphRiskLoopPage() {
                 </div>
                 <div style={{ fontSize: 12, color: C.dim, marginTop: 4 }}>Könsbalans i porträtteringen — eget mått, ingår ej i beslutssäkerheten.</div>
               </div>
-              <div style={{ fontSize: 28, fontWeight: 600, color: '#3a4b56', letterSpacing: '-0.02em' }}>
+              <div style={{ fontSize: 28, fontWeight: 600, color: C.text, letterSpacing: '-0.02em' }}>
                 {report.parity_index != null ? `${Math.round(report.parity_index * 100)}%` : '—'}
               </div>
             </div>
@@ -920,7 +920,7 @@ function SectionHead({ title, hint, collapsible, open, onToggle, badge }: {
         {collapsible && (
           <span style={{ fontSize: 10, color: C.muted, transition: 'transform 0.2s', display: 'inline-block', transform: open ? 'rotate(90deg)' : 'none' }}>▶</span>
         )}
-        <h2 style={{ fontSize: 16, fontWeight: 600, color: '#3a4b56', margin: 0, letterSpacing: '-0.005em' }}>{title}</h2>
+        <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: 0, letterSpacing: '-0.005em' }}>{title}</h2>
         {badge && (
           <span style={{ fontSize: 10, fontWeight: 600, color: S.inProgress.fg, background: S.inProgress.bg, border: `1px solid ${S.inProgress.border}`, borderRadius: 5, padding: '2px 7px', letterSpacing: '0.04em' }}>{badge}</span>
         )}
@@ -961,13 +961,13 @@ function RiskTable({ findings }: { findings: Finding[] }) {
         const sev = SEVERITY[f.severity || 'low'] || SEVERITY.low;
         return (
           <div key={i} style={{ ...rowGrid, padding: '10px 0', borderBottom: `1px solid ${C.border}`, fontSize: 12, alignItems: 'start' }}>
-            <span style={{ color: '#3a4b56' }}>{f.persona ? PERSONA_SV[f.persona] || f.persona : '—'}</span>
-            <span style={{ color: '#3a4b56' }}>
+            <span style={{ color: C.text }}>{f.persona ? PERSONA_SV[f.persona] || f.persona : '—'}</span>
+            <span style={{ color: C.text }}>
               {f.question || '—'}
               {f.via_follow_up && <span style={{ marginLeft: 6, fontSize: 10, color: C.dim }}>(följdfråga)</span>}
             </span>
             <span style={{ color: C.muted, fontStyle: 'italic' }}>{f.engine_excerpt ? `"${f.engine_excerpt}"` : '—'}</span>
-            <span style={{ color: '#3a4b56' }}>{harmLabel(f.harm)}</span>
+            <span style={{ color: C.text }}>{harmLabel(f.harm)}</span>
             <span>
               <span style={{ fontSize: 11, fontWeight: 600, color: sev.color, background: sev.bg, borderRadius: 6, padding: '3px 8px' }}>{sev.label}</span>
             </span>
@@ -988,7 +988,7 @@ function TrendView({ trend, currentScore }: { trend: Trend; currentScore: number
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: series.length > 1 ? 16 : 0 }}>
         <div>
           <div style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>Beslutssäkerhet nu</div>
-          <div style={{ fontSize: 24, fontWeight: 600, color: '#3a4b56' }}>
+          <div style={{ fontSize: 24, fontWeight: 600, color: C.text }}>
             {currentScore ?? '—'}
             {trend.delta != null && (
               <span style={{ fontSize: 14, color: arrowColor, marginLeft: 8 }}>
@@ -1000,7 +1000,7 @@ function TrendView({ trend, currentScore }: { trend: Trend; currentScore: number
         </div>
         <div>
           <div style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>Lösta risker</div>
-          <div style={{ fontSize: 24, fontWeight: 600, color: '#3a4b56' }}>{trend.resolved_count}</div>
+          <div style={{ fontSize: 24, fontWeight: 600, color: C.text }}>{trend.resolved_count}</div>
           <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>motorerna svarar nu säkert</div>
         </div>
       </div>
@@ -1047,7 +1047,7 @@ function SchedulesPanel({ rows, onToggle }: { rows: ScheduleRow[]; onToggle: (na
             <div key={r.name} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 1.3fr 1.3fr auto', gap: 12, alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <CalendarClock size={14} color={C.accent} />
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56' }}>{r.label}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{r.label}</span>
               </div>
               <span style={{ fontSize: 12, color: C.muted }}>{r.cadence}</span>
               <span style={{ fontSize: 11, color: C.dim }}>Senast: {fmt(r.last_run)}</span>
@@ -1204,9 +1204,9 @@ function EnginesBySourceSection({
   return (
     <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px dashed ${C.border}` }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: '#3a4b56' }}>{title}</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{title}</div>
         <div style={{ fontSize: 11, color: C.muted, display: 'flex', gap: 12 }}>
-          <span>SoV: <span style={{ fontWeight: 600, color: '#3a4b56' }}>{agg.sov != null ? `${Math.round(agg.sov * 100)}%` : '—'}</span></span>
+          <span>SoV: <span style={{ fontWeight: 600, color: C.text }}>{agg.sov != null ? `${Math.round(agg.sov * 100)}%` : '—'}</span></span>
           <span>Sentiment: <span style={{ fontWeight: 600, color: sent.color }}>{sent.text}</span></span>
           <span style={{ color: C.dim }}>{agg.mentions}/{agg.answers} svar</span>
         </div>
@@ -1223,8 +1223,8 @@ function EnginesBySourceSection({
         const es = sentimentLabel(r.sentiment_score);
         return (
           <div key={eng} style={{ ...engineGrid, padding: '8px 0', borderBottom: `1px solid ${C.border}`, fontSize: 12, alignItems: 'center' }}>
-            <span style={{ color: '#3a4b56', fontWeight: 600 }}>{ENGINE_SV[eng] || eng}</span>
-            <span style={{ color: '#3a4b56' }}>{Math.round(r.share_of_voice * 100)}%</span>
+            <span style={{ color: C.text, fontWeight: 600 }}>{ENGINE_SV[eng] || eng}</span>
+            <span style={{ color: C.text }}>{Math.round(r.share_of_voice * 100)}%</span>
             <span style={{ color: es.color }}>{es.text}</span>
             <span style={{ color: C.dim }}>{r.mention_count}/{r.answer_count}</span>
             <Sparkline series={trend[eng]} />
@@ -1259,11 +1259,11 @@ function CategoryRow({ cat, row, competitors, clientSoV, trend }: {
         onClick={() => canExpand && setOpen((o) => !o)}
         title={canExpand ? 'Klicka för att se vilka konkurrenter AI nämner i den här kategorin' : 'Konkurrent-data fylls vid nästa polling-körning'}
       >
-        <span style={{ color: '#3a4b56', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ color: C.text, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           {canExpand && <span style={{ fontSize: 9, color: C.muted, transition: 'transform 0.2s', display: 'inline-block', transform: open ? 'rotate(90deg)' : 'none' }}>▶</span>}
           {CATEGORY_SV[cat] || cat}
         </span>
-        <span style={{ color: '#3a4b56' }}>{Math.round(row.share_of_voice * 100)}%</span>
+        <span style={{ color: C.text }}>{Math.round(row.share_of_voice * 100)}%</span>
         <span style={{ color: cs.color }}>{cs.text}</span>
         <span style={{ color: C.dim }}>{Math.round(row.mention_count)}/{Math.round(row.answer_count)}</span>
         <Sparkline series={trend} />
@@ -1293,7 +1293,7 @@ function CompetitorBar({ name, share, mentions, highlight }: { name: string; sha
   const color = highlight ? C.accent : '#6a7e8a';
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 60px', alignItems: 'center', gap: 10, fontSize: 12 }}>
-      <span style={{ color: highlight ? C.accent : '#3a4b56', fontWeight: highlight ? 600 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <span style={{ color: highlight ? C.accent : C.text, fontWeight: highlight ? 600 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {name}
       </span>
       <div style={{ height: 8, background: 'rgba(106,126,138,0.12)', borderRadius: 4, overflow: 'hidden' }}>
@@ -1329,7 +1329,7 @@ function PollingQuestionsPanel({ data, clientId, mode }: { data: PollingQuestion
         <>
           {mode === 'ops' && !data.is_custom && (
             <div style={{ marginBottom: 14, padding: '10px 14px', background: 'rgba(159,81,182,0.04)', border: `1px solid ${S.inProgress.border}`, borderRadius: 8, fontSize: 11, color: C.muted, lineHeight: 1.5 }}>
-              <strong style={{ color: '#3a4b56' }}>Default-frågor ifyllda med kundens kontext:</strong>{' '}
+              <strong style={{ color: C.text }}>Default-frågor ifyllda med kundens kontext:</strong>{' '}
               industry=<code style={{ color: C.accent }}>{data.substitutions.industry}</code> ·{' '}
               topic=<code style={{ color: C.accent }}>{data.substitutions.topic}</code> ·{' '}
               service_area=<code style={{ color: C.accent }}>{data.substitutions.service_area}</code>
@@ -1350,7 +1350,7 @@ function PollingQuestionsPanel({ data, clientId, mode }: { data: PollingQuestion
                       border: `1px solid ${q.source === 'custom' ? S.inProgress.border : C.border}`,
                       borderRadius: 6,
                       fontSize: 12,
-                      color: '#3a4b56',
+                      color: C.text,
                       lineHeight: 1.5,
                       display: 'flex',
                       alignItems: 'flex-start',
@@ -1454,11 +1454,11 @@ function TrustGapCockpit({
       />
       {!open ? null : (
       <>
-      <p style={{ fontSize: 13, color: '#3a4b56', margin: '0 0 14px', lineHeight: 1.6 }}>{model.coverage_plain}</p>
+      <p style={{ fontSize: 13, color: C.text, margin: '0 0 14px', lineHeight: 1.6 }}>{model.coverage_plain}</p>
 
       {trend?.previous_date && (
         <div style={{ fontSize: 12, color: C.muted, margin: '0 0 14px', lineHeight: 1.5 }}>
-          <strong style={{ color: '#3a4b56' }}>Sedan {trend.previous_date}:</strong>{' '}
+          <strong style={{ color: C.text }}>Sedan {trend.previous_date}:</strong>{' '}
           belagda områden {signedDelta(trend.demonstrated_delta)} · uttalade områden {signedDelta(trend.declared_delta)}.
         </div>
       )}
@@ -1480,7 +1480,7 @@ function TrustGapCockpit({
       {ranked.length > 0 && (
         <div style={{ marginBottom: 16, padding: '12px 14px', background: 'rgba(159,81,182,0.06)', border: '1px solid rgba(159,81,182,0.18)', borderRadius: 8 }}>
           <div style={{ fontSize: 11, color: C.accent, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Att göra — mest angeläget först</div>
-          <ol style={{ margin: 0, paddingLeft: 18, color: '#3a4b56', fontSize: 13, lineHeight: 1.65 }}>
+          <ol style={{ margin: 0, paddingLeft: 18, color: C.text, fontSize: 13, lineHeight: 1.65 }}>
             {ranked.map((a, i) => (
               <li key={i} style={{ marginBottom: i < ranked.length - 1 ? 6 : 0 }}>
                 <strong>{a.label}:</strong> {a.why} <span style={{ color: '#16a34a' }}>{a.action}</span>
@@ -1493,7 +1493,7 @@ function TrustGapCockpit({
       {flags.length > 0 && (
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 6 }}>Möjligheter &amp; risker</div>
-          <ul style={{ margin: 0, paddingLeft: 18, color: '#3a4b56', fontSize: 13, lineHeight: 1.6 }}>
+          <ul style={{ margin: 0, paddingLeft: 18, color: C.text, fontSize: 13, lineHeight: 1.6 }}>
             {flags.map((f, i) => <li key={i}>{f}</li>)}
           </ul>
         </div>
@@ -1530,7 +1530,7 @@ function DimensionRow({ dim, mode, recipe }: { dim: HumanizationDim; mode: ViewM
   return (
     <div style={{ padding: '14px 0', borderBottom: `1px solid ${C.border}` }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56' }}>{dim.label}</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{dim.label}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {overClaim && <span style={trustGapBadge('#b45309', 'rgba(245,158,11,0.14)')}>Risk: över-claim</span>}
           {opportunity && <span style={trustGapBadge('#0e7490', 'rgba(14,116,144,0.12)')}>Möjlighet: berätta mer</span>}
@@ -1553,7 +1553,7 @@ function DimensionRow({ dim, mode, recipe }: { dim: HumanizationDim; mode: ViewM
           />
         </div>
       )}
-      <div style={{ fontSize: 12, color: '#3a4b56', marginTop: 4, lineHeight: 1.5 }}>{dim.evidence_plain}</div>
+      <div style={{ fontSize: 12, color: C.text, marginTop: 4, lineHeight: 1.5 }}>{dim.evidence_plain}</div>
       <div style={{ fontSize: 12, color: C.muted, marginTop: 4, lineHeight: 1.5 }}>{dim.perception_plain}</div>
       {dim.perception_by_engine.length > 0 && (() => {
         // Splitta per knowledge-source så bas-kunskap (RLHF) och live-signal (web-RAG)
@@ -1601,7 +1601,7 @@ const RECIPE_STATUS_LABEL: Record<RecipeStatus, string> = {
 
 function recipeStatusColor(status: RecipeStatus): [string, string] {
   switch (status) {
-    case 'pending':   return ['#9f51b6', 'rgba(159,81,182,0.12)'];  // lila — väntar handling
+    case 'pending':   return [C.accent, 'rgba(159,81,182,0.12)'];  // lila — väntar handling
     case 'agreed':    return ['#0e7490', 'rgba(14,116,144,0.12)'];  // blå — i loopen
     case 'acted':     return ['#b45309', 'rgba(245,158,11,0.14)'];  // gul — mäts nu
     case 'verified':  return ['#16a34a', 'rgba(22,163,74,0.12)'];   // grön — loopen stängd
@@ -1647,7 +1647,7 @@ function RecipesPanel({
     const openCount = counts.pending + counts.agreed + counts.acted;
     return (
       <div style={{ marginBottom: 14, padding: '10px 14px', background: 'rgba(14,116,144,0.06)', border: '1px solid rgba(14,116,144,0.18)', borderRadius: 8 }}>
-        <div style={{ fontSize: 12, color: '#3a4b56' }}>
+        <div style={{ fontSize: 12, color: C.text }}>
           <strong>{openCount}</strong> öppna recept under intern review · <strong>{counts.verified}</strong> verifierade i tidigare cykler
         </div>
       </div>
@@ -1658,7 +1658,7 @@ function RecipesPanel({
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
         <div style={{ fontSize: 11, color: '#0e7490', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Aktiva recept</div>
         <div style={{ display: 'flex', gap: 10, fontSize: 11, color: C.muted }}>
-          <span><strong style={{ color: '#9f51b6' }}>{counts.pending}</strong> förslag</span>
+          <span><strong style={{ color: C.accent }}>{counts.pending}</strong> förslag</span>
           <span><strong style={{ color: '#0e7490' }}>{counts.agreed}</strong> godkända</span>
           <span><strong style={{ color: '#b45309' }}>{counts.acted}</strong> mäts nu</span>
           <span><strong style={{ color: '#16a34a' }}>{counts.verified}</strong> verifierade</span>
@@ -1715,7 +1715,7 @@ function RecipeRow({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           <span style={{ ...trustGapBadge(color, bg), flexShrink: 0 }}>{RECIPE_STATUS_LABEL[recipe.status]}</span>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56' }}>{skel.dimension_label}</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{skel.dimension_label}</span>
           <span style={{ fontSize: 11, color: C.muted }}>·</span>
           <span style={{ fontSize: 11, color: C.muted, fontStyle: 'italic' }}>{gapTypeLabel(skel.gap_type)}</span>
           <span style={{ fontSize: 11, color: C.muted }}>·</span>
@@ -1727,29 +1727,29 @@ function RecipeRow({
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${C.border}` }}>
           {det ? (
             <>
-              <p style={{ fontSize: 12, color: '#3a4b56', margin: '0 0 8px', lineHeight: 1.55 }}>
+              <p style={{ fontSize: 12, color: C.text, margin: '0 0 8px', lineHeight: 1.55 }}>
                 <strong>Varför:</strong> {det.refined_why}
               </p>
-              <p style={{ fontSize: 12, color: '#3a4b56', margin: '0 0 8px', lineHeight: 1.55 }}>
+              <p style={{ fontSize: 12, color: C.text, margin: '0 0 8px', lineHeight: 1.55 }}>
                 <strong>Att göra:</strong> {det.detailed_action}
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, margin: '0 0 8px' }}>
                 <div>
                   <div style={{ fontSize: 10, color: C.muted, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 3 }}>Kanal först</div>
-                  <div style={{ fontSize: 12, color: '#3a4b56' }}>
+                  <div style={{ fontSize: 12, color: C.text }}>
                     {CHANNEL_LABEL_SV[det.prioritized_channel] || det.prioritized_channel}
                   </div>
                   <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>{det.prioritized_channel_reason}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: 10, color: C.muted, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 3 }}>Klart när</div>
-                  <div style={{ fontSize: 12, color: '#3a4b56' }}>{det.success_criteria}</div>
+                  <div style={{ fontSize: 12, color: C.text }}>{det.success_criteria}</div>
                 </div>
               </div>
               {det.specific_proof_points.length > 0 && (
                 <div style={{ marginBottom: 8 }}>
                   <div style={{ fontSize: 10, color: C.muted, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 3 }}>Befintliga proof points att aktivera</div>
-                  <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: '#3a4b56', lineHeight: 1.5 }}>
+                  <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: C.text, lineHeight: 1.5 }}>
                     {det.specific_proof_points.map((p, i) => <li key={i}>{p}</li>)}
                   </ul>
                 </div>
@@ -1757,7 +1757,7 @@ function RecipeRow({
               {det.risks.length > 0 && (
                 <div style={{ marginBottom: 8 }}>
                   <div style={{ fontSize: 10, color: '#b45309', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 3 }}>Se upp för</div>
-                  <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: '#3a4b56', lineHeight: 1.5 }}>
+                  <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: C.text, lineHeight: 1.5 }}>
                     {det.risks.map((r, i) => <li key={i}>{r}</li>)}
                   </ul>
                 </div>
@@ -1843,7 +1843,7 @@ function InterventionStatusView({ intervention }: { intervention: Intervention }
       <div style={{ fontSize: 10, color: C.muted, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
         Sluten-loop-mätning · {INTERVENTION_STATUS_LABEL[i.status]}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, fontSize: 11, color: '#3a4b56' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, fontSize: 11, color: C.text }}>
         <div>
           <span style={{ color: C.muted }}>Belägger:</span>{' '}
           {fmtBar(i.baseline.demonstrated)} → <strong>{fmtBar(i.current.demonstrated)}</strong>
@@ -1885,7 +1885,7 @@ function gapTypeLabel(t: string): string {
 function TrustBar({ label, value, hint, tone }: { label: string; value: number | null; hint?: string; tone: 'declared' | 'demonstrated' | 'perceived' }) {
   const colors = {
     declared: { fill: '#6a7e8a', track: 'rgba(106,126,138,0.14)' },
-    demonstrated: { fill: '#9f51b6', track: 'rgba(159,81,182,0.14)' },
+    demonstrated: { fill: C.accent, track: 'rgba(159,81,182,0.14)' },
     perceived: { fill: '#0e7490', track: 'rgba(14,116,144,0.14)' },
   }[tone];
   const pctVal = value != null ? Math.max(0, Math.min(1, value)) * 100 : 0;
@@ -2081,7 +2081,7 @@ function StickyContextBar({ clients, selected, onSelectClient, months, month, on
               style={{
                 padding: '6px 14px',
                 background: mode === m ? '#ffffff' : 'transparent',
-                color: mode === m ? '#3a4b56' : C.muted,
+                color: mode === m ? C.text : C.muted,
                 border: 'none',
                 borderRadius: 6,
                 fontSize: 11,
@@ -2099,7 +2099,7 @@ function StickyContextBar({ clients, selected, onSelectClient, months, month, on
 
         {/* Hero-tal */}
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
-          <span style={{ fontSize: 32, fontWeight: 600, letterSpacing: '-0.02em', color: '#3a4b56', lineHeight: 1 }}>{hero.primary}</span>
+          <span style={{ fontSize: 32, fontWeight: 600, letterSpacing: '-0.02em', color: C.text, lineHeight: 1 }}>{hero.primary}</span>
           {hero.unit && <span style={{ fontSize: 12, color: C.muted }}>{hero.unit}</span>}
           {hero.stage && <span style={{ fontSize: 11, fontWeight: 600, color: C.accent, background: 'rgba(159,81,182,0.1)', padding: '3px 8px', borderRadius: 5, letterSpacing: '0.04em' }}>{hero.stage}</span>}
           {hero.delta && <span style={{ fontSize: 11, fontWeight: 600, color: deltaColor }}>{hero.delta}</span>}
@@ -2205,7 +2205,7 @@ function EngineHealthBar({ data, onRefresh }: { data: EngineHealthResp; onRefres
         if (!e) return null;
         return (
           <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(106,126,138,0.05)', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11, lineHeight: 1.5 }}>
-            <strong style={{ color: '#3a4b56' }}>{e.label}</strong>
+            <strong style={{ color: C.text }}>{e.label}</strong>
             <span style={{ color: C.muted, marginLeft: 6 }}>· {e.vendor}</span>
             {e.status === 'planned' ? (
               <>
@@ -2322,7 +2322,7 @@ function ActivityFeed({ runs }: { runs: import('../_lib/jobRuns').JobRun[] | nul
             <div key={r.id} style={{ display: 'grid', gridTemplateColumns: '90px 14px 1fr auto', alignItems: 'center', gap: 10, fontSize: 12, padding: '4px 0' }}>
               <span style={{ color: stale ? '#b45309' : C.muted, fontFamily: 'ui-monospace, monospace' }}>{fmtRelative(r.started_at)}</span>
               <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: dot, boxShadow: `0 0 0 3px ${dot}22` }} />
-              <span style={{ color: '#3a4b56' }}>
+              <span style={{ color: C.text }}>
                 <strong style={{ fontWeight: 600 }}>{label}</strong>
                 {blurb && <span style={{ color: C.dim, marginLeft: 8 }}>{blurb}</span>}
                 {r.error_message && <span style={{ color: '#b91c1c', marginLeft: 8 }}>· {r.error_message}</span>}
@@ -2389,7 +2389,7 @@ function RiskLoopStatus({ questions, findings, latestDetect, latestGenerate, cli
         border: `1px solid ${nextStep.tone === 'urgent' ? 'rgba(245,158,11,0.3)' : nextStep.tone === 'good' ? 'rgba(22,163,74,0.25)' : C.border}`,
         borderRadius: 8,
         fontSize: 12,
-        color: '#3a4b56',
+        color: C.text,
         display: 'flex',
         alignItems: 'center',
         gap: 8,
@@ -2405,7 +2405,7 @@ function RiskLoopStatus({ questions, findings, latestDetect, latestGenerate, cli
               padding: '4px 10px',
               fontSize: 11,
               fontWeight: 600,
-              color: showApprover ? '#3a4b56' : S.waiting.fg,
+              color: showApprover ? C.text : S.waiting.fg,
               background: showApprover ? '#ffffff' : S.waiting.bg,
               border: `1px solid ${showApprover ? C.border : S.waiting.border}`,
               borderRadius: 6,
@@ -2552,7 +2552,7 @@ function RiskQuestionsInlineApprover({ clientId, questions, onChanged }: {
               <span style={{ fontSize: 10, color: C.dim, fontFamily: 'ui-monospace, monospace' }}>
                 {q.type || '—'}
               </span>
-              <span style={{ color: '#3a4b56', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={q.text || ''}>
+              <span style={{ color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={q.text || ''}>
                 {q.text || '(ingen text)'}
                 {err && <span style={{ color: S.open.fg, marginLeft: 8 }}>· {err}</span>}
               </span>
@@ -2728,7 +2728,7 @@ function ApprovedQuestionsPanel({ questions, clientId, mode, onChanged }: {
                     {personaLabel}
                   </span>
                   <span style={{ fontSize: 10, color: C.muted, fontStyle: 'italic' }}>{typeLabel}</span>
-                  <span style={{ color: '#3a4b56', lineHeight: 1.5 }}>
+                  <span style={{ color: C.text, lineHeight: 1.5 }}>
                     {q.text || <span style={{ color: C.dim, fontStyle: 'italic' }}>(saknar fråge-text)</span>}
                     {q.custom && (
                       <span style={{ marginLeft: 8, fontSize: 9, fontWeight: 600, color: C.accent, background: 'rgba(159,81,182,0.1)', border: `1px solid ${S.inProgress.border}`, borderRadius: 4, padding: '1px 6px', letterSpacing: '0.04em', textTransform: 'uppercase', verticalAlign: 'middle' }}>
@@ -2817,7 +2817,7 @@ function CustomQuestionModal({ clientId, onClose, onCreated }: {
           border: `1px solid ${C.border}`,
         }}
       >
-        <div style={{ fontSize: 16, fontWeight: 600, color: '#3a4b56', marginBottom: 4 }}>
+        <div style={{ fontSize: 16, fontWeight: 600, color: C.text, marginBottom: 4 }}>
           Lägg till egen risk-fråga
         </div>
         <p style={{ fontSize: 12, color: C.muted, margin: '0 0 18px', lineHeight: 1.5 }}>
@@ -2853,9 +2853,9 @@ function CustomQuestionModal({ clientId, onClose, onCreated }: {
                   onClick={() => setType(v)}
                   style={{
                     padding: '6px 14px', fontSize: 11, fontWeight: 600,
-                    color: type === v ? '#3a4b56' : C.muted,
+                    color: type === v ? C.text : C.muted,
                     background: type === v ? '#f4f5f6' : 'transparent',
-                    border: `1px solid ${type === v ? '#3a4b56' : C.border}`,
+                    border: `1px solid ${type === v ? C.text : C.border}`,
                     borderRadius: 6, cursor: 'pointer', letterSpacing: '0.02em',
                   }}
                 >
@@ -2866,7 +2866,7 @@ function CustomQuestionModal({ clientId, onClose, onCreated }: {
               <select
                 value={language}
                 onChange={(e) => setLanguage(e.target.value as 'sv' | 'en')}
-                style={{ padding: '6px 10px', fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 6, color: '#3a4b56', background: 'white' }}
+                style={{ padding: '6px 10px', fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, background: 'white' }}
               >
                 <option value="sv">Svenska</option>
                 <option value="en">Engelska</option>
@@ -2882,7 +2882,7 @@ function CustomQuestionModal({ clientId, onClose, onCreated }: {
               rows={4}
               style={{
                 width: '100%', padding: '10px 12px', fontSize: 13,
-                color: '#3a4b56', border: `1px solid ${C.border}`,
+                color: C.text, border: `1px solid ${C.border}`,
                 borderRadius: 6, fontFamily: 'inherit', lineHeight: 1.5,
                 resize: 'vertical',
               }}
@@ -3017,7 +3017,7 @@ function RiskTimelineEmpty({ approvedQuestions }: { approvedQuestions: number | 
   }
   if (approvedQuestions === 0) {
     return (
-      <div style={{ padding: '12px 14px', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 8, fontSize: 13, color: '#3a4b56', lineHeight: 1.55 }}>
+      <div style={{ padding: '12px 14px', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 8, fontSize: 13, color: C.text, lineHeight: 1.55 }}>
         <strong style={{ color: '#b45309' }}>Loopen är inte aktiverad än.</strong> Inga godkända frågor finns — det betyder att risk-detect kör en no-op
         ({'questions_asked: 0'}). Kör <code style={{ color: C.accent }}>risk-generate</code> i jobbraden ovan, sedan godkänn frågor i Granska-fliken;
         därefter kommer denna tidslinje fyllas allt eftersom motorerna producerar farliga svar.
@@ -3025,7 +3025,7 @@ function RiskTimelineEmpty({ approvedQuestions }: { approvedQuestions: number | 
     );
   }
   return (
-    <div style={{ padding: '12px 14px', background: 'rgba(22,163,74,0.06)', border: '1px solid rgba(22,163,74,0.2)', borderRadius: 8, fontSize: 13, color: '#3a4b56', lineHeight: 1.55 }}>
+    <div style={{ padding: '12px 14px', background: 'rgba(22,163,74,0.06)', border: '1px solid rgba(22,163,74,0.2)', borderRadius: 8, fontSize: 13, color: C.text, lineHeight: 1.55 }}>
       <strong style={{ color: '#16a34a' }}>Inga risker hittade.</strong> {approvedQuestions} godkända fråga{approvedQuestions === 1 ? '' : 'or'} kördes
       — motorerna svarade säkert på alla. Tidslinjen fylls den vecka något bryter mönstret.
     </div>
@@ -3061,7 +3061,7 @@ function RiskTimelineCard({ row, isLast }: { row: RiskTimelineRow; isLast: boole
     <div style={{ padding: '14px 0', borderBottom: isLast ? 'none' : `1px solid ${C.border}` }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, color: '#3a4b56', lineHeight: 1.5 }}>{row.question || '—'}</div>
+          <div style={{ fontSize: 13, color: C.text, lineHeight: 1.5 }}>{row.question || '—'}</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
             {row.persona ? PERSONA_SV[row.persona] || row.persona : '—'}
             {row.engine && ` · ${ENGINE_SV[row.engine] || row.engine}`}
@@ -3114,7 +3114,7 @@ function buildLifecycleEvents(row: RiskTimelineRow): { label: string; date: stri
     out.push({
       label: row.action_taken === 'reinforced_claim' ? 'Korrigerad' : row.status === 'dismissed' ? 'Avfärdad' : 'Åtgärdad',
       date: fmtDate(row.action_at),
-      color: row.status === 'dismissed' ? '#6a7e8a' : '#9f51b6',
+      color: row.status === 'dismissed' ? '#6a7e8a' : C.accent,
     });
   }
   if (row.resolved_at) {
@@ -3134,7 +3134,7 @@ function Stat({ label, value, accent, color }: { label: string; value: string; a
   return (
     <div>
       <div style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>{label}</div>
-      <div style={{ fontSize: 28, fontWeight: 600, marginTop: 8, letterSpacing: '-0.02em', color: color || (accent ? C.accent : '#3a4b56') }}>{value}</div>
+      <div style={{ fontSize: 28, fontWeight: 600, marginTop: 8, letterSpacing: '-0.02em', color: color || (accent ? C.accent : C.text) }}>{value}</div>
     </div>
   );
 }
@@ -3143,7 +3143,7 @@ function EmptyState() {
   return (
     <div style={{ ...cardStyle, padding: '48px 24px', textAlign: 'center' }}>
       <Radar size={32} color={C.dim} style={{ marginBottom: 12 }} />
-      <div style={{ fontSize: 14, color: '#3a4b56', fontWeight: 600 }}>Ingen riskrapport ännu</div>
+      <div style={{ fontSize: 14, color: C.text, fontWeight: 600 }}>Ingen riskrapport ännu</div>
       <div style={{ fontSize: 12, color: C.muted, marginTop: 6, maxWidth: 480, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.6 }}>
         Generera och godkänn ett frågebatteri, kör riskdetekteringen och bygg månadsrapporten
         (jobben <code style={{ color: C.accent }}>risk-generate</code> → <code style={{ color: C.accent }}>risk-detect</code> → <code style={{ color: C.accent }}>monthly-report</code>).
@@ -3208,7 +3208,7 @@ const engineGrid: React.CSSProperties = {
 const selectStyle: React.CSSProperties = {
   padding: '8px 12px',
   background: '#eef0f1',
-  color: '#3a4b56',
+  color: C.text,
   border: `1px solid ${C.border}`,
   borderRadius: 8,
   fontSize: 13,

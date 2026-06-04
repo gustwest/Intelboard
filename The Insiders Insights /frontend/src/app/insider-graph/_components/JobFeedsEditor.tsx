@@ -77,7 +77,7 @@ export default function JobFeedsEditor({ clientId }: { clientId: string }) {
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 4 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: C.text, display: 'flex', alignItems: 'center', gap: 8 }}>
           <Briefcase size={15} color={C.accent} /> Platsannonser (ATS)
           <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, fontWeight: 600, background: jobfeedOn ? 'rgba(34,197,94,0.15)' : '#eef0f1', color: jobfeedOn ? '#16a34a' : C.muted }}>
             {jobfeedOn ? 'Aktiv' : 'Av'}
@@ -116,7 +116,7 @@ export default function JobFeedsEditor({ clientId }: { clientId: string }) {
         </div>
       )}
 
-      <button onClick={save} disabled={!dirty || saving} style={{ ...btnSubtle, background: dirty ? 'rgba(159,81,182,0.18)' : 'transparent', color: dirty ? '#9f51b6' : C.muted, borderColor: dirty ? 'rgba(159,81,182,0.3)' : C.border }}>
+      <button onClick={save} disabled={!dirty || saving} style={{ ...btnSubtle, background: dirty ? 'rgba(159,81,182,0.18)' : 'transparent', color: dirty ? C.accent : C.muted, borderColor: dirty ? 'rgba(159,81,182,0.3)' : C.border }}>
         <Save size={12} /> {saving ? 'Sparar…' : 'Spara feeds'}
       </button>
     </div>
@@ -129,7 +129,7 @@ const btnSubtle: React.CSSProperties = {
   gap: 6,
   padding: '8px 14px',
   background: 'transparent',
-  color: '#3a4b56',
+  color: C.text,
   border: `1px solid ${C.border}`,
   borderRadius: 8,
   fontSize: 12,
@@ -140,7 +140,7 @@ const btnSubtle: React.CSSProperties = {
 const inp: React.CSSProperties = {
   padding: '8px 12px',
   background: '#eef0f1',
-  color: '#3a4b56',
+  color: C.text,
   border: `1px solid ${C.border}`,
   borderRadius: 6,
   fontSize: 12,

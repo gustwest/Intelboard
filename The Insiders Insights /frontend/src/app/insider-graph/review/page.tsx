@@ -316,12 +316,12 @@ export default function GraphReviewPage() {
                   border: 'none',
                   cursor: 'pointer',
                   background: tab === v ? 'rgba(159,81,182,0.18)' : '#eef0f1',
-                  color: tab === v ? '#9f51b6' : '#3a4b56',
+                  color: tab === v ? C.accent : C.text,
                 }}
               >
                 {label}
                 {n > 0 && (
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 8, background: tab === v ? 'rgba(159,81,182,0.25)' : 'rgba(0,0,0,0.08)', color: tab === v ? '#9f51b6' : C.muted }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 8, background: tab === v ? 'rgba(159,81,182,0.25)' : 'rgba(0,0,0,0.08)', color: tab === v ? C.accent : C.muted }}>
                     {n}
                   </span>
                 )}
@@ -357,7 +357,7 @@ export default function GraphReviewPage() {
                 <div style={{ display: 'flex', gap: 12, flex: 1, minWidth: 0 }}>
                   <IconBox><Network size={16} /></IconBox>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56' }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
                       {snap.quarter || 'LinkedIn-kapacitetsdata'}
                     </div>
                     <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
@@ -369,7 +369,7 @@ export default function GraphReviewPage() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                   {snap.has_file && (
-                    <button onClick={() => viewFile(snap)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', background: 'transparent', color: '#3a4b56', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    <button onClick={() => viewFile(snap)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', background: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                       <FileText size={12} /> Visa underlag
                     </button>
                   )}
@@ -392,7 +392,7 @@ export default function GraphReviewPage() {
                   width: '100%',
                   boxSizing: 'border-box',
                   fontSize: 13,
-                  color: '#3a4b56',
+                  color: C.text,
                   background: '#eef0f1',
                   border: `1px solid ${C.border}`,
                   borderRadius: 6,
@@ -423,7 +423,7 @@ export default function GraphReviewPage() {
                 <div style={{ display: 'flex', gap: 12, flex: 1, minWidth: 0 }}>
                   <IconBox><Icon size={16} /></IconBox>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56' }}>{item.name || '(utan titel)'}</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{item.name || '(utan titel)'}</div>
                     <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
                       {item.schema_type} · {item.employee_name || item.employee_id}
                       {item.start_date && ` · ${item.start_date}`}
@@ -435,7 +435,7 @@ export default function GraphReviewPage() {
               </div>
               {(item.subject || item.from_email) && (
                 <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>
-                  <strong style={{ color: '#3a4b56' }}>{item.subject || '(utan ämne)'}</strong>
+                  <strong style={{ color: C.text }}>{item.subject || '(utan ämne)'}</strong>
                   {item.from_email && <span> · från {item.from_email}</span>}
                 </div>
               )}
@@ -494,7 +494,7 @@ export default function GraphReviewPage() {
                     width: '100%',
                     boxSizing: 'border-box',
                     fontSize: 13,
-                    color: '#3a4b56',
+                    color: C.text,
                     background: '#eef0f1',
                     border: `1px solid ${C.border}`,
                     borderRadius: 6,
@@ -540,8 +540,8 @@ function GroupedList<T extends { id: string }>({
 function ClientGroupHeader({ name, count }: { name: string; count: number }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 2px 4px' }}>
-      <span style={{ fontSize: 13, fontWeight: 700, color: '#3a4b56' }}>{name}</span>
-      <span style={{ fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 10, background: 'rgba(159,81,182,0.15)', color: '#9f51b6' }}>
+      <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{name}</span>
+      <span style={{ fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 10, background: 'rgba(159,81,182,0.15)', color: C.accent }}>
         {count}
       </span>
     </div>
@@ -556,7 +556,7 @@ function Empty({ hint }: { hint: string }) {
   return (
     <div style={{ ...cardStyle, padding: '48px 24px', textAlign: 'center' }}>
       <Inbox size={32} color={C.dim} style={{ marginBottom: 12 }} />
-      <div style={{ fontSize: 14, color: '#3a4b56', fontWeight: 600 }}>Inget att granska</div>
+      <div style={{ fontSize: 14, color: C.text, fontWeight: 600 }}>Inget att granska</div>
       <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>{hint}</div>
     </div>
   );
@@ -564,7 +564,7 @@ function Empty({ hint }: { hint: string }) {
 
 function IconBox({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ width: 36, height: 36, borderRadius: 9, background: 'rgba(159,81,182,0.15)', color: '#9f51b6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+    <div style={{ width: 36, height: 36, borderRadius: 9, background: 'rgba(159,81,182,0.15)', color: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
       {children}
     </div>
   );
@@ -589,7 +589,7 @@ function Actions({ confidence, busy, onApprove, onReject }: { confidence: number
 const selectStyle: React.CSSProperties = {
   padding: '8px 12px',
   background: '#eef0f1',
-  color: '#3a4b56',
+  color: C.text,
   border: `1px solid ${C.border}`,
   borderRadius: 8,
   fontSize: 13,
@@ -605,7 +605,7 @@ const cardStyle: React.CSSProperties = {
 
 const contentStyle: React.CSSProperties = {
   fontSize: 12,
-  color: '#3a4b56',
+  color: C.text,
   background: '#eef0f1',
   padding: '10px 14px',
   borderRadius: 6,

@@ -4,6 +4,7 @@
 // Färgkonventionen är konsekvent: grönt = bra, gult = behöver granskning, rött = block/drop.
 
 import { Check, AlertCircle, Ban, Shuffle, Sparkles, ShieldOff } from 'lucide-react';
+import { graphColors as C } from './GraphPageShell';
 
 export type Verdict = 'pass' | 'needs_review' | 'block';
 export type ClaimAction = 'publish' | 'transform' | 'drop';
@@ -21,7 +22,7 @@ const actionMeta: Record<ClaimAction, { label: string; color: string; bg: string
 };
 
 export function VerdictBadge({ verdict, size = 'md' }: { verdict: Verdict | string; size?: 'sm' | 'md' }) {
-  const meta = verdictMeta[verdict as Verdict] || { label: verdict, color: '#6a7e8a', bg: 'transparent', border: '#dfe3e7', icon: Sparkles };
+  const meta = verdictMeta[verdict as Verdict] || { label: verdict, color: '#6a7e8a', bg: 'transparent', border: C.border, icon: Sparkles };
   const Icon = meta.icon;
   const px = size === 'sm' ? 8 : 12;
   const py = size === 'sm' ? 3 : 5;
@@ -81,11 +82,11 @@ export function AudiencePill({ audience }: { audience: string | null | undefined
     return <span style={{ color: '#6a7e8a', fontSize: 10 }}>—</span>;
   }
   const map: Record<string, { label: string; color: string; bg: string }> = {
-    customer: { label: '🛒 customer', color: '#9f51b6', bg: 'rgba(159,81,182,0.14)' },
+    customer: { label: '🛒 customer', color: C.accent, bg: 'rgba(159,81,182,0.14)' },
     candidate: { label: '🎯 candidate', color: '#0ea5e9', bg: 'rgba(14,165,233,0.14)' },
     investor: { label: '💰 investor', color: '#16a34a', bg: 'rgba(34,197,94,0.14)' },
   };
-  const m = map[audience] || { label: audience, color: '#3a4b56', bg: 'transparent' };
+  const m = map[audience] || { label: audience, color: C.text, bg: 'transparent' };
   return (
     <span style={{ display: 'inline-block', padding: '2px 7px', background: m.bg, color: m.color, borderRadius: 999, fontSize: 10, fontWeight: 600 }}>
       {m.label}
@@ -96,7 +97,7 @@ export function AudiencePill({ audience }: { audience: string | null | undefined
 export function HintChip({ hint }: { hint: string | null | undefined }) {
   if (!hint) return null;
   return (
-    <span style={{ display: 'inline-block', padding: '2px 7px', background: '#eef0f1', color: '#3a4b56', borderRadius: 4, fontFamily: 'ui-monospace, monospace', fontSize: 10 }}>
+    <span style={{ display: 'inline-block', padding: '2px 7px', background: '#eef0f1', color: C.text, borderRadius: 4, fontFamily: 'ui-monospace, monospace', fontSize: 10 }}>
       {hint}
     </span>
   );

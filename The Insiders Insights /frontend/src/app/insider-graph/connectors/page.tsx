@@ -72,7 +72,7 @@ export default function GraphConnectorsPage() {
     return (
       <div key={j.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 14px', border: `1px solid ${C.border}`, borderRadius: 10 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56' }}>{j.label}</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{j.label}</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 2, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <Clock size={11} color={C.dim} />
             {run ? (
@@ -83,7 +83,7 @@ export default function GraphConnectorsPage() {
         <button
           onClick={() => runJob(j.key, j.path, j.type)}
           disabled={st === 'running'}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'transparent', color: '#3a4b56', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: st === 'running' ? 'wait' : 'pointer', flexShrink: 0 }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: st === 'running' ? 'wait' : 'pointer', flexShrink: 0 }}
         >
           <Icon size={12} color={color} style={st === 'running' ? { animation: 'spin 0.8s linear infinite' } : undefined} />
           {st === 'running' ? 'Kör…' : 'Kör'}
@@ -102,7 +102,7 @@ export default function GraphConnectorsPage() {
 
       {/* Globala jobb */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 22px', marginBottom: 16 }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56', margin: '0 0 4px' }}>Globala körningar</h2>
+        <h2 style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: '0 0 4px' }}>Globala körningar</h2>
         <p style={{ fontSize: 12, color: C.muted, margin: '0 0 14px' }}>Batch-jobb som körs för alla kunder. Schemaläggs via Cloud Scheduler — kör en runda direkt här.</p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
           {GLOBAL_JOBS.map(renderJobBtn)}
@@ -121,7 +121,7 @@ export default function GraphConnectorsPage() {
             <div key={c.id} style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr 1fr 1.6fr 1fr', gap: 12, padding: '14px 20px', borderBottom: `1px solid ${C.border}`, fontSize: 13, alignItems: 'center' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: isLive ? '#22c55e' : 'rgba(0,0,0,0.2)' }} />
-                <span style={{ color: '#3a4b56', fontWeight: 500 }}>{NAME[c.id] || c.id}</span>
+                <span style={{ color: C.text, fontWeight: 500 }}>{NAME[c.id] || c.id}</span>
               </span>
               <span style={{ color: C.muted }}>{c.fetch_method}</span>
               <span style={{ color: C.muted }}>{c.frequency}</span>
@@ -130,10 +130,10 @@ export default function GraphConnectorsPage() {
               </span>
               <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                 {c.output_types.map((o) => (
-                  <span key={o} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, background: 'rgba(159,81,182,0.12)', color: '#9f51b6', fontWeight: 500 }}>{o}</span>
+                  <span key={o} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, background: 'rgba(159,81,182,0.12)', color: C.accent, fontWeight: 500 }}>{o}</span>
                 ))}
               </span>
-              <span style={{ textAlign: 'right', color: isLive ? '#3a4b56' : C.dim, fontWeight: 600, fontSize: 12 }}>
+              <span style={{ textAlign: 'right', color: isLive ? C.text : C.dim, fontWeight: 600, fontSize: 12 }}>
                 {isLive ? (used > 0 ? `${used} kund${used === 1 ? '' : 'er'}` : '0 kunder') : <span style={{ fontStyle: 'italic', fontWeight: 400 }}>Ej implementerad</span>}
               </span>
             </div>

@@ -108,13 +108,13 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
   }
 
   const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 };
-  const inp: React.CSSProperties = { padding: '8px 12px', background: '#eef0f1', color: '#3a4b56', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none', width: '100%' };
+  const inp: React.CSSProperties = { padding: '8px 12px', background: '#eef0f1', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none', width: '100%' };
   const labelStyle: React.CSSProperties = { fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginBottom: 6, display: 'block' };
 
   return (
     <div style={card}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: '#3a4b56' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: C.text }}>
           <ImageIcon size={16} color={C.accent} /> Identitetsmetadata
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -130,7 +130,7 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
           <button
             onClick={save}
             disabled={!dirty || saving}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: dirty ? 'rgba(159,81,182,0.18)' : 'transparent', color: dirty ? '#9f51b6' : C.muted, border: `1px solid ${dirty ? 'rgba(159,81,182,0.3)' : C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: dirty && !saving ? 'pointer' : 'not-allowed' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: dirty ? 'rgba(159,81,182,0.18)' : 'transparent', color: dirty ? C.accent : C.muted, border: `1px solid ${dirty ? 'rgba(159,81,182,0.3)' : C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: dirty && !saving ? 'pointer' : 'not-allowed' }}
           >
             <Save size={12} /> {saving ? 'Sparar…' : 'Spara'}
           </button>

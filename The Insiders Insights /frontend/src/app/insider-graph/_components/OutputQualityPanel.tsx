@@ -66,7 +66,7 @@ export default function OutputQualityPanel({ clientId }: { clientId: string }) {
   if (error) {
     return (
       <div style={card}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: '#3a4b56', marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 8 }}>
           <Gauge size={16} color={C.accent} /> Output-kvalitet
         </div>
         <div style={{ fontSize: 12, color: '#b91c1c' }}>{error}</div>
@@ -77,7 +77,7 @@ export default function OutputQualityPanel({ clientId }: { clientId: string }) {
   if (!latest) {
     return (
       <div style={card}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: '#3a4b56', marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 8 }}>
           <Gauge size={16} color={C.accent} /> Output-kvalitet
         </div>
         <div style={{ fontSize: 12, color: C.muted }}>
@@ -95,7 +95,7 @@ export default function OutputQualityPanel({ clientId }: { clientId: string }) {
   return (
     <div style={card}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: '#3a4b56' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: C.text }}>
           <Gauge size={16} color={C.accent} /> Output-kvalitet
         </div>
         <Link
@@ -139,7 +139,7 @@ export default function OutputQualityPanel({ clientId }: { clientId: string }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
             <Sparkles size={11} /> Åtgärdsförslag
           </div>
-          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: '#3a4b56', lineHeight: 1.55 }}>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: C.text, lineHeight: 1.55 }}>
             {latest.top_improvements.map((t, i) => <li key={i} style={{ marginBottom: 3 }}>{t}</li>)}
           </ul>
         </div>
@@ -159,7 +159,7 @@ export default function OutputQualityPanel({ clientId }: { clientId: string }) {
               const publishPct = ((c.action_counts?.publish ?? 0) / total) * 100;
               return (
                 <div key={c.name} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'center', fontSize: 12 }}>
-                  <div style={{ fontFamily: 'ui-monospace, monospace', color: '#3a4b56' }}>{c.name}</div>
+                  <div style={{ fontFamily: 'ui-monospace, monospace', color: C.text }}>{c.name}</div>
                   <ScoreBadge score={c.avg_score} size="sm" />
                   <div style={{ display: 'flex', width: 100, height: 6, borderRadius: 3, overflow: 'hidden', background: '#eef0f1' }}>
                     {publishPct > 0 && <div style={{ width: `${publishPct}%`, background: '#22c55e' }} title={`publish ${publishPct.toFixed(0)}%`} />}

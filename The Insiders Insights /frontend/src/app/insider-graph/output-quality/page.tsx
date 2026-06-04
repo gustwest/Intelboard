@@ -71,7 +71,7 @@ export default function OutputQualityPage() {
                 style={{
                   padding: '6px 12px', borderRadius: 7, fontSize: 12, fontWeight: 600,
                   background: active ? 'rgba(159,81,182,0.16)' : 'transparent',
-                  color: active ? '#9f51b6' : C.muted,
+                  color: active ? C.accent : C.muted,
                   border: `1px solid ${active ? 'rgba(159,81,182,0.4)' : C.border}`,
                   cursor: 'pointer',
                 }}
@@ -98,12 +98,12 @@ export default function OutputQualityPage() {
       )}
 
       {/* Förklaring */}
-      <div style={{ background: 'rgba(159,81,182,0.06)', border: '1px solid rgba(159,81,182,0.18)', borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 12, color: '#3a4b56', lineHeight: 1.6 }}>
+      <div style={{ background: 'rgba(159,81,182,0.06)', border: '1px solid rgba(159,81,182,0.18)', borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 12, color: C.text, lineHeight: 1.6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, marginBottom: 4 }}>
-          <Sparkles size={14} color="#9f51b6" /> Hur du läser tabellen
+          <Sparkles size={14} color={C.accent} /> Hur du läser tabellen
         </div>
         Sorterad efter <strong>lägsta snittpoäng</strong> först — sämsta connector överst.
-        Connectors markerade <strong style={{ color: '#9f51b6' }}>promotion-kandidat</strong> har konsekvent låg poäng
+        Connectors markerade <strong style={{ color: C.accent }}>promotion-kandidat</strong> har konsekvent låg poäng
         och tillräckligt med data för att flyttas från shadow till active gate.
         <strong> LinkedIn-demografi är redan i active gate</strong> sedan dag 1.
       </div>
@@ -142,7 +142,7 @@ export default function OutputQualityPage() {
                 {data.connectors.map((c) => (
                   <tr key={c.connector} style={{ borderTop: `1px solid ${C.border}` }}>
                     <Td>
-                      <div style={{ fontWeight: 600, color: '#3a4b56' }}>{c.connector}</div>
+                      <div style={{ fontWeight: 600, color: C.text }}>{c.connector}</div>
                       <div style={{ fontSize: 10, color: C.dim, marginTop: 2 }}>
                         {c.last_seen_at ? `senast ${new Date(c.last_seen_at).toLocaleDateString('sv-SE')}` : ''}
                       </div>
@@ -163,7 +163,7 @@ export default function OutputQualityPage() {
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                           {c.top_origins.map((o) => (
-                            <span key={o.origin} style={{ fontFamily: 'ui-monospace, monospace', fontSize: 10, color: '#3a4b56' }}>
+                            <span key={o.origin} style={{ fontFamily: 'ui-monospace, monospace', fontSize: 10, color: C.text }}>
                               {o.origin} <span style={{ color: C.dim }}>({o.count})</span>
                             </span>
                           ))}
@@ -174,7 +174,7 @@ export default function OutputQualityPage() {
                       {c.connector === 'linkedin_capacity' ? (
                         <Pill icon={<ShieldCheck size={11} />} color="#16a34a" bg="rgba(34,197,94,0.12)">Active gate</Pill>
                       ) : c.promotion_candidate ? (
-                        <Pill icon={<TrendingDown size={11} />} color="#9f51b6" bg="rgba(159,81,182,0.16)">Promotion-kandidat</Pill>
+                        <Pill icon={<TrendingDown size={11} />} color={C.accent} bg="rgba(159,81,182,0.16)">Promotion-kandidat</Pill>
                       ) : c.redundant_flag_count > 0 ? (
                         <Pill icon={<AlertTriangle size={11} />} color="#d97706" bg="rgba(245,158,11,0.16)">Redundans</Pill>
                       ) : (
@@ -225,7 +225,7 @@ function Td({ children, align, mono, color }: { children: React.ReactNode; align
       textAlign: align || 'left',
       fontSize: 12,
       fontFamily: mono ? 'ui-monospace, monospace' : undefined,
-      color: color || '#3a4b56',
+      color: color || C.text,
       verticalAlign: 'top',
     }}>
       {children}

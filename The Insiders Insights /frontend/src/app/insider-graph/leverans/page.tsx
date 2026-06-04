@@ -90,7 +90,7 @@ export default function LeveransPage() {
   const [variant, setVariant] = useState<Variant>('footer');
   const [mode, setMode] = useState<DeliveryMode>('static');
   const [useAccent, setUseAccent] = useState(false);
-  const [accent, setAccent] = useState('#9f51b6');
+  const [accent, setAccent] = useState(C.accent);
 
   // Full kompilerad JSON-LD-graf (QA-vy, hopfällbar) — egen felhantering
   // så att en CDN-miss inte förorenar sidans huvud-fel-banner.
@@ -200,7 +200,7 @@ export default function LeveransPage() {
         <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', fontSize: 12 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: C.muted }}>
             <Clock size={13} color={C.dim} />
-            <strong style={{ color: '#3a4b56', fontWeight: 600 }}>Kompilerad:</strong>
+            <strong style={{ color: C.text, fontWeight: 600 }}>Kompilerad:</strong>
             {(() => {
               const r = latest('compile_schema');
               if (!r) return <span style={{ color: C.dim }}>aldrig</span>;
@@ -214,7 +214,7 @@ export default function LeveransPage() {
             })()}
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: C.muted }}>
-            <strong style={{ color: '#3a4b56', fontWeight: 600 }}>CDN:</strong>
+            <strong style={{ color: C.text, fontWeight: 600 }}>CDN:</strong>
             {!selectedClient?.cdn_url ? (
               <span style={{ color: C.dim }}>ej publicerad</span>
             ) : fullJson && !outputError ? (
@@ -229,7 +229,7 @@ export default function LeveransPage() {
         {(() => {
           const st = jobActive['compile'] || 'idle';
           const Icon = st === 'running' ? Loader2 : st === 'success' ? Check : st === 'failed' ? X : Play;
-          const color = st === 'failed' ? '#dc2626' : st === 'success' ? '#16a34a' : '#9f51b6';
+          const color = st === 'failed' ? '#dc2626' : st === 'success' ? '#16a34a' : C.accent;
           return (
             <button
               onClick={async () => {
@@ -238,7 +238,7 @@ export default function LeveransPage() {
                 setRefreshTick((t) => t + 1);
               }}
               disabled={!selected || st === 'running'}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'rgba(159,81,182,0.18)', color: '#9f51b6', border: '1px solid rgba(159,81,182,0.3)', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: !selected || st === 'running' ? 'not-allowed' : 'pointer' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'rgba(159,81,182,0.18)', color: C.accent, border: '1px solid rgba(159,81,182,0.3)', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: !selected || st === 'running' ? 'not-allowed' : 'pointer' }}
             >
               <Icon size={13} color={color} style={st === 'running' ? { animation: 'spin 0.8s linear infinite' } : undefined} />
               {st === 'running' ? 'Kompilerar…' : 'Kompilera om'}
@@ -253,7 +253,7 @@ export default function LeveransPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {attested.filter((a) => a.included > 0 || a.staged > 0).map((a) => (
               <div key={a.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, fontSize: 13 }}>
-                <span style={{ color: '#3a4b56' }}>{a.label}</span>
+                <span style={{ color: C.text }}>{a.label}</span>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                   {a.included > 0 && (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#16a34a', fontWeight: 600, fontSize: 12 }}>
@@ -373,7 +373,7 @@ export default function LeveransPage() {
         >
           {showOutput ? <ChevronDown size={16} color={C.muted} /> : <ChevronRight size={16} color={C.muted} />}
           <div style={{ flex: 1 }}>
-            <h2 style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56', margin: 0 }}>JSON-LD-output (kompilerad graf)</h2>
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: 0 }}>JSON-LD-output (kompilerad graf)</h2>
             <p style={{ fontSize: 12, color: C.muted, margin: '2px 0 0', lineHeight: 1.5 }}>
               Hela Schema.org-grafen som distribueras via CDN. För granskning/QA — det är profilsidan ovan kunden faktiskt installerar.
             </p>
@@ -417,7 +417,7 @@ function Card({ title, hint, action, children }: { title: string; hint?: string;
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 22px', marginBottom: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: hint ? 4 : 12 }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600, color: '#3a4b56', margin: 0 }}>{title}</h2>
+        <h2 style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: 0 }}>{title}</h2>
         {action}
       </div>
       {hint && <p style={{ fontSize: 12, color: C.muted, margin: '0 0 12px', lineHeight: 1.5 }}>{hint}</p>}
@@ -453,7 +453,7 @@ function Toggle<T extends string>({ value, setValue, options }: { value: T; setV
             border: 'none',
             cursor: 'pointer',
             background: value === v ? 'rgba(159,81,182,0.18)' : '#eef0f1',
-            color: value === v ? '#9f51b6' : '#3a4b56',
+            color: value === v ? C.accent : C.text,
           }}
         >
           {label}
@@ -473,7 +473,7 @@ function CopyBtn({ label, copied, onClick }: { label: string; copied: boolean; o
         gap: 6,
         padding: '6px 12px',
         background: copied ? 'rgba(34,197,94,0.15)' : 'rgba(159,81,182,0.18)',
-        color: copied ? '#16a34a' : '#9f51b6',
+        color: copied ? '#16a34a' : C.accent,
         border: `1px solid ${copied ? 'rgba(34,197,94,0.3)' : 'rgba(159,81,182,0.3)'}`,
         borderRadius: 6,
         fontSize: 12,
@@ -491,7 +491,7 @@ function CopyBtn({ label, copied, onClick }: { label: string; copied: boolean; o
 const selectStyle: React.CSSProperties = {
   padding: '8px 12px',
   background: '#eef0f1',
-  color: '#3a4b56',
+  color: C.text,
   border: `1px solid ${C.border}`,
   borderRadius: 8,
   fontSize: 13,
@@ -517,7 +517,7 @@ const preStyle: React.CSSProperties = {
   fontSize: 12,
   fontFamily: 'ui-monospace, SFMono-Regular, monospace',
   lineHeight: 1.6,
-  color: '#3a4b56',
+  color: C.text,
   overflowX: 'auto',
   margin: 0,
   whiteSpace: 'pre-wrap',
@@ -530,7 +530,7 @@ const btnStyle: React.CSSProperties = {
   gap: 6,
   padding: '8px 14px',
   background: 'transparent',
-  color: '#3a4b56',
+  color: C.text,
   border: `1px solid ${C.border}`,
   borderRadius: 8,
   fontSize: 13,

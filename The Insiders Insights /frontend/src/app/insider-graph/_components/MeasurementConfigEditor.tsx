@@ -103,19 +103,19 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
   }
 
   const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 };
-  const inp: React.CSSProperties = { padding: '8px 12px', background: '#eef0f1', color: '#3a4b56', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none' };
+  const inp: React.CSSProperties = { padding: '8px 12px', background: '#eef0f1', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none' };
   const labelStyle: React.CSSProperties = { fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginBottom: 6, display: 'block' };
 
   return (
     <div style={card}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: '#3a4b56' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: C.text }}>
           <Radar size={16} color={C.accent} /> Mätkonfiguration (AI-synlighet)
         </div>
         <button
           onClick={save}
           disabled={!dirty || saving}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: dirty ? 'rgba(159,81,182,0.18)' : 'transparent', color: dirty ? '#9f51b6' : C.muted, border: `1px solid ${dirty ? 'rgba(159,81,182,0.3)' : C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: dirty && !saving ? 'pointer' : 'not-allowed' }}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: dirty ? 'rgba(159,81,182,0.18)' : 'transparent', color: dirty ? C.accent : C.muted, border: `1px solid ${dirty ? 'rgba(159,81,182,0.3)' : C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: dirty && !saving ? 'pointer' : 'not-allowed' }}
         >
           <Save size={12} /> {saving ? 'Sparar…' : 'Spara'}
         </button>
@@ -159,7 +159,7 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
                 <button
                   key={p.id}
                   onClick={() => togglePersona(p.id)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 999, background: on ? 'rgba(159,81,182,0.16)' : 'transparent', color: on ? '#9f51b6' : C.muted, border: `1px solid ${on ? 'rgba(159,81,182,0.4)' : C.border}`, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 999, background: on ? 'rgba(159,81,182,0.16)' : 'transparent', color: on ? C.accent : C.muted, border: `1px solid ${on ? 'rgba(159,81,182,0.4)' : C.border}`, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
                 >
                   {on && <Check size={12} />} {p.label}
                 </button>
@@ -181,11 +181,11 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
               return (
                 <div key={cat.id}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#3a4b56' }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>
                       {cat.label}
                       {qs.length === 0 && <span style={{ fontSize: 11, color: C.dim, fontWeight: 400, marginLeft: 8 }}>använder default</span>}
                     </span>
-                    <button onClick={() => addQ(cat.id)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', background: 'transparent', color: '#3a4b56', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    <button onClick={() => addQ(cat.id)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', background: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                       <Plus size={12} /> Lägg till
                     </button>
                   </div>

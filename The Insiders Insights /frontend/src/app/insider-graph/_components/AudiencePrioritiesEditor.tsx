@@ -157,7 +157,7 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
   }
 
   const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 };
-  const inp: React.CSSProperties = { padding: '8px 12px', background: '#eef0f1', color: '#3a4b56', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none' };
+  const inp: React.CSSProperties = { padding: '8px 12px', background: '#eef0f1', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none' };
   const labelStyle: React.CSSProperties = { fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginBottom: 6, display: 'block' };
 
   const missingAudiences = ORDER.filter((t) => !priorities.some((p) => p.audience_type === t));
@@ -165,7 +165,7 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
   return (
     <div style={card}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: '#3a4b56' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: C.text }}>
           <Target size={16} color={C.accent} /> Persona-targets (output-kvalitet)
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -173,7 +173,7 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
             onClick={deriveFromData}
             disabled={deriving}
             title="Härled ur hemsidedata + jobbannonser via LLM"
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: 'transparent', color: '#3a4b56', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: deriving ? 'wait' : 'pointer' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: deriving ? 'wait' : 'pointer' }}
           >
             {deriving ? <Loader2 size={12} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Sparkles size={12} />}
             {deriving ? 'Härleder…' : 'Auto-härled'}
@@ -181,7 +181,7 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
           <button
             onClick={save}
             disabled={!dirty || saving}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: dirty ? 'rgba(159,81,182,0.18)' : 'transparent', color: dirty ? '#9f51b6' : C.muted, border: `1px solid ${dirty ? 'rgba(159,81,182,0.3)' : C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: dirty && !saving ? 'pointer' : 'not-allowed' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: dirty ? 'rgba(159,81,182,0.18)' : 'transparent', color: dirty ? C.accent : C.muted, border: `1px solid ${dirty ? 'rgba(159,81,182,0.3)' : C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: dirty && !saving ? 'pointer' : 'not-allowed' }}
           >
             <Save size={12} /> {saving ? 'Sparar…' : 'Spara'}
           </button>
@@ -206,7 +206,7 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
           {derivedPreview && msg.tone === 'info' && (
             <button
               onClick={applyDerived}
-              style={{ padding: '4px 10px', background: 'rgba(159,81,182,0.18)', color: '#9f51b6', border: '1px solid rgba(159,81,182,0.4)', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+              style={{ padding: '4px 10px', background: 'rgba(159,81,182,0.18)', color: C.accent, border: '1px solid rgba(159,81,182,0.4)', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
             >
               Använd förslag
             </button>
@@ -231,7 +231,7 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 16 }}>{meta.emoji}</span>
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56' }}>{meta.label}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{meta.label}</div>
                       <div style={{ fontSize: 11, color: C.dim }}>{meta.hint}</div>
                     </div>
                   </div>
@@ -252,14 +252,14 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
                     onChange={(e) => patch(idx, (pp) => ({ ...pp, weight: parseFloat(e.target.value) }))}
                     style={{ flex: 1 }}
                   />
-                  <span style={{ fontSize: 12, color: '#3a4b56', fontWeight: 600, minWidth: 36 }}>{p.weight.toFixed(2)}</span>
+                  <span style={{ fontSize: 12, color: C.text, fontWeight: 600, minWidth: 36 }}>{p.weight.toFixed(2)}</span>
                 </div>
 
                 {/* Personas */}
                 <div style={{ marginBottom: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                     <label style={labelStyle}>Personor</label>
-                    <button onClick={() => addPersona(idx)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', background: 'transparent', color: '#3a4b56', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                    <button onClick={() => addPersona(idx)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', background: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
                       <Plus size={11} /> Lägg till
                     </button>
                   </div>
@@ -285,7 +285,7 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                     <label style={labelStyle}>Berättelseaxlar (3–5)</label>
-                    <button onClick={() => addAxis(idx)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', background: 'transparent', color: '#3a4b56', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                    <button onClick={() => addAxis(idx)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', background: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
                       <Plus size={11} /> Lägg till
                     </button>
                   </div>
@@ -315,7 +315,7 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
                 <button
                   key={t}
                   onClick={() => addAudience(t)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', background: 'transparent', color: '#3a4b56', border: `1px solid ${C.border}`, borderRadius: 999, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', background: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: 999, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
                 >
                   <Plus size={11} /> {AUDIENCE_LABELS[t].label}
                 </button>

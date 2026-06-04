@@ -78,7 +78,7 @@ export default function AttestedUpload({ clientId }: { clientId: string }) {
 
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56', marginBottom: 4 }}>Officiell data (attesterad)</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 4 }}>Officiell data (attesterad)</div>
       <div style={{ fontSize: 11, color: C.muted, marginBottom: 14, lineHeight: 1.5 }}>
         Filer vi själva hämtat från officiell källa. Vi datumsätter och går i god för att datan är oförvanskad.
       </div>
@@ -173,7 +173,7 @@ function SourceUploader({ clientId, source, onDone }: { clientId: string; source
   return (
     <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: '14px 16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#3a4b56', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: C.text, display: 'flex', alignItems: 'center', gap: 8 }}>
           <FileCheck2 size={15} color={C.accent} /> {source.label}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -202,7 +202,7 @@ function SourceUploader({ clientId, source, onDone }: { clientId: string; source
             <button
               onClick={includeInDelivery}
               disabled={including}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: 'rgba(159,81,182,0.18)', color: '#9f51b6', border: '1px solid rgba(159,81,182,0.3)', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: including ? 'wait' : 'pointer' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: 'rgba(159,81,182,0.18)', color: C.accent, border: '1px solid rgba(159,81,182,0.3)', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: including ? 'wait' : 'pointer' }}
             >
               <CheckCircle2 size={12} /> {including ? 'Inkluderar…' : 'Inkludera i leverans'}
             </button>
@@ -236,7 +236,7 @@ function SourceUploader({ clientId, source, onDone }: { clientId: string; source
             type="date"
             value={attestedAt}
             onChange={(e) => setAttestedAt(e.target.value)}
-            style={{ display: 'block', marginTop: 4, padding: '6px 10px', background: '#eef0f1', color: '#3a4b56', border: '1px solid #dfe3e7', borderRadius: 6, fontSize: 12, outline: 'none' }}
+            style={{ display: 'block', marginTop: 4, padding: '6px 10px', background: '#eef0f1', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none' }}
           />
         </label>
         <label style={{ fontSize: 11, color: C.muted, fontWeight: 600, flex: 1, minWidth: 180 }}>
@@ -245,7 +245,7 @@ function SourceUploader({ clientId, source, onDone }: { clientId: string; source
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://www.linkedin.com/company/…"
-            style={{ display: 'block', width: '100%', marginTop: 4, padding: '6px 10px', background: '#eef0f1', color: '#3a4b56', border: '1px solid #dfe3e7', borderRadius: 6, fontSize: 12, outline: 'none' }}
+            style={{ display: 'block', width: '100%', marginTop: 4, padding: '6px 10px', background: '#eef0f1', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none' }}
           />
         </label>
       </div>
@@ -273,7 +273,7 @@ function SourceUploader({ clientId, source, onDone }: { clientId: string; source
         }}
       >
         <UploadCloud size={22} color={C.muted} />
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#3a4b56', marginTop: 4 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginTop: 4 }}>
           {busy ? 'Laddar upp…' : fileHint.label}
         </div>
         <input

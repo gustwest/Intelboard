@@ -41,7 +41,7 @@ type Queue = {
   scope?: 'client' | 'global';
 };
 const QUEUES: Queue[] = [
-  { label: 'Claims att granska', keys: ['claims'], href: '/insider-graph/review', icon: Quote, color: '#9f51b6' },
+  { label: 'Claims att granska', keys: ['claims'], href: '/insider-graph/review', icon: Quote, color: C.accent },
   { label: 'Inkommande att granska', keys: ['items'], href: '/insider-graph/review', icon: Inbox, color: '#3b82f6' },
   { label: 'LinkedIn att verifiera', keys: ['linkedin'], href: '/insider-graph/review', icon: Network, color: '#0ea5e9' },
   { label: 'Risk att åtgärda', keys: ['risk_findings', 'risk_questions'], href: '/insider-graph/polling', icon: Radar, color: '#f59e0b' },
@@ -352,6 +352,6 @@ const rowBtn: React.CSSProperties = {
 };
 
 const pill: React.CSSProperties = {
-  minWidth: 22, padding: '1px 8px', background: 'rgba(159,81,182,0.14)', color: '#9f51b6',
+  minWidth: 22, padding: '1px 8px', background: 'rgba(159,81,182,0.14)', color: C.accent,
   borderRadius: 10, fontSize: 12, fontWeight: 700, textAlign: 'center',
 };
