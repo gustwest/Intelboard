@@ -96,13 +96,19 @@ GAP_TAXONOMY: tuple[str, ...] = (
     "missing_evidence",          # deklarerat men ej belagt; perception-oberoende
     "contradiction",             # motorerna är oense; spread mellan engines över tröskel
     "factual_drift",             # AI:s bild har svalnat sedan förra mätningen utan att underlaget gjort det
-    "persona_mismatch",          # STUBB — kräver per-persona-scoring (Fas 2.1)
+    "persona_mismatch",          # AKTIV från Fas 2.1d — spread mellan personor över tröskel
     "competitive_displacement",  # STUBB — kräver konkurrent-probe-data (Fas 4)
 )
 
 # Contradiction: minsta valens-spread mellan probe-motorer för att resa flagga.
 # 0.3 = en motor varm (≥0.6) och en sval (≤0.3) — tydlig oenighet, inte brus.
 CONTRADICTION_SPREAD_MIN: float = 0.3
+
+# Persona-mismatch: minsta valens-spread mellan aktiva personor på samma dimension.
+# Mirror av CONTRADICTION_SPREAD_MIN men över persona-axeln — operatören ska få
+# larm när AI uppfattar bolaget tydligt annorlunda beroende på vem som frågar
+# (ofta = bolaget kommunicerar bra mot en målgrupp men inte mot andra).
+PERSONA_MISMATCH_SPREAD_MIN: float = 0.3
 
 # Factual drift: minsta valens-fall sedan förra snapshot (på samma dimension) som
 # inte förklaras av att underlaget rasat. 0.15 = märkbart utan att vara hyperkänsligt.

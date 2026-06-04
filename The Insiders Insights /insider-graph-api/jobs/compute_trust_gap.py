@@ -71,9 +71,10 @@ def _detect_flags(
 ) -> list[dict[str, Any]]:
     """Detektera alla applicerbara gap-typer för en dimension (spec §10 punkt 4).
 
-    Aktiva typer: over_claim, opportunity, missing_evidence, contradiction, factual_drift.
-    Stubbade: persona_mismatch (Fas 2.1), competitive_displacement (Fas 4) — datamodellen
-    känner till dem men de reses aldrig härifrån.
+    Aktiva typer: over_claim, opportunity, missing_evidence, contradiction,
+    factual_drift, persona_mismatch (Fas 2.1d).
+    Stubbade: competitive_displacement (Fas 4) — datamodellen känner till den
+    men den reses aldrig härifrån.
 
     En dimension kan producera flera flaggor samtidigt (t.ex. missing_evidence + over_claim).
     """
@@ -136,7 +137,36 @@ def _detect_flags(
                 "coolest_engine": coolest[0],
             })
 
-    # 5. factual_drift — AI:s bild har svalnat sedan förra mätningen utan att underlaget
+    # 5. persona_mismatch — aktiva personor uppfattar bolaget tydligt olika på samma
+    # dimension. Mirror av contradiction-detektionen men över persona-axeln.
+    # Driver "AI ser er som varma för X-målgrupp men inte för Y" i ops-cockpiten +
+    # recept-routing till persona-specifika kanaler i Fas 2.1e.
+    per_persona = perceived.get("per_persona") or {}
+    persona_eligible = [
+        (pid, (stats or {}).get("valence"))
+        for pid, stats in per_persona.items()
+        if (stats or {}).get("valence") is not None
+        and (stats or {}).get("salience", 0.0) >= hc.SALIENCE_FLOOR
+    ]
+    if len(persona_eligible) >= 2:
+        p_vals = [v for _, v in persona_eligible]
+        p_spread = max(p_vals) - min(p_vals)
+        if p_spread >= hc.PERSONA_MISMATCH_SPREAD_MIN:
+            warmest_p = max(persona_eligible, key=lambda x: x[1])
+            coolest_p = min(persona_eligible, key=lambda x: x[1])
+            flags.append({
+                "kind": "persona_mismatch",
+                "dimension": dimension,
+                "spread": round(p_spread, 3),
+                "warmest_persona": warmest_p[0],
+                "coolest_persona": coolest_p[0],
+                # warmest/coolest valence-snapshots så receptet i Fas 2.1e kan rendera
+                # konkret: "perceived som 0.78 för customer, 0.32 för employee"
+                "warmest_valence": round(warmest_p[1], 3),
+                "coolest_valence": round(coolest_p[1], 3),
+            })
+
+    # 6. factual_drift — AI:s bild har svalnat sedan förra mätningen utan att underlaget
     # gjort det. Kräver föregående snapshot med synlig perception + valens.
     if prior_entry and valence is not None:
         prior_perceived = prior_entry.get("perceived") or {}

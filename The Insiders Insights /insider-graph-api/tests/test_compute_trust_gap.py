@@ -337,5 +337,113 @@ class GapTaxonomyMultipleFlagsTest(unittest.TestCase):
         self.assertIn("over_claim", kinds)
 
 
+# --- Persona-mismatch-detektion (Fas 2.1d) -----------------------------------
+
+
+class GapTaxonomyPersonaMismatchTest(unittest.TestCase):
+    """Aktiverar persona_mismatch — stubbad sedan Fas 1.1. Mirror av contradiction
+    men över persona-axeln. Tröskel: hc.PERSONA_MISMATCH_SPREAD_MIN (0.3)."""
+
+    def test_personas_with_large_spread_raises_flag(self):
+        # Två personor med valens-spread över tröskeln → persona_mismatch.
+        # employee ser bolaget kallt (0.3), customer ser det varmt (0.8) — klassiskt
+        # "vi når kunder men inte kandidater"-mönster.
+        _setup(
+            {"c1": _claim("wellbeing", "demonstrated", kind="item")},
+            perceived={"wellbeing": {
+                "salience": 0.7, "valence": 0.55, "confidence": 0.7,
+                "per_persona": {
+                    "employee": {"salience": 0.7, "valence": 0.3, "confidence": 0.7},
+                    "customer": {"salience": 0.7, "valence": 0.8, "confidence": 0.7},
+                },
+            }},
+        )
+        flags = ctg.compute("acme")["flags"]
+        pm = [f for f in flags if f["kind"] == "persona_mismatch"]
+        self.assertEqual(len(pm), 1)
+        self.assertEqual(pm[0]["dimension"], "wellbeing")
+        self.assertEqual(pm[0]["warmest_persona"], "customer")
+        self.assertEqual(pm[0]["coolest_persona"], "employee")
+        self.assertAlmostEqual(pm[0]["spread"], 0.5)
+        self.assertAlmostEqual(pm[0]["warmest_valence"], 0.8)
+        self.assertAlmostEqual(pm[0]["coolest_valence"], 0.3)
+
+    def test_small_spread_no_flag(self):
+        # Spread under tröskeln (0.2 vs 0.3) → ingen flagga, personor är "i linje"
+        _setup(
+            {"c1": _claim("wellbeing", "demonstrated", kind="item")},
+            perceived={"wellbeing": {
+                "salience": 0.7, "valence": 0.55, "confidence": 0.7,
+                "per_persona": {
+                    "employee": {"salience": 0.7, "valence": 0.45},
+                    "customer": {"salience": 0.7, "valence": 0.65},
+                },
+            }},
+        )
+        flags = ctg.compute("acme")["flags"]
+        self.assertFalse(any(f["kind"] == "persona_mismatch" for f in flags))
+
+    def test_persona_below_salience_floor_excluded(self):
+        # Persona under salience-golvet räknas inte (den "vet inget" → kan inte
+        # vara i konflikt). Inga flaggor även om dess valence skulle gett stor spread.
+        _setup(
+            {"c1": _claim("wellbeing", "demonstrated", kind="item")},
+            perceived={"wellbeing": {
+                "salience": 0.7, "valence": 0.7, "confidence": 0.7,
+                "per_persona": {
+                    "employee": {"salience": 0.05, "valence": 0.2},  # under floor
+                    "customer": {"salience": 0.7, "valence": 0.8},
+                },
+            }},
+        )
+        flags = ctg.compute("acme")["flags"]
+        self.assertFalse(any(f["kind"] == "persona_mismatch" for f in flags))
+
+    def test_single_persona_no_flag(self):
+        # Bara EN persona över salience-golvet — kan inte vara "oense med sig själv".
+        _setup(
+            {"c1": _claim("wellbeing", "demonstrated", kind="item")},
+            perceived={"wellbeing": {
+                "salience": 0.7, "valence": 0.55, "confidence": 0.7,
+                "per_persona": {
+                    "customer": {"salience": 0.7, "valence": 0.8},
+                },
+            }},
+        )
+        flags = ctg.compute("acme")["flags"]
+        self.assertFalse(any(f["kind"] == "persona_mismatch" for f in flags))
+
+    def test_missing_per_persona_no_crash(self):
+        # Bakåtkompat: warmth-data utan per_persona (gammal körning) ska inte krascha
+        # eller resa flaggor. Compute_trust_gap fortsätter funka.
+        _setup(
+            {"c1": _claim("wellbeing", "demonstrated", kind="item")},
+            perceived={"wellbeing": {
+                "salience": 0.7, "valence": 0.5, "confidence": 0.7,
+                # ingen per_persona-axel
+            }},
+        )
+        flags = ctg.compute("acme")["flags"]
+        self.assertFalse(any(f["kind"] == "persona_mismatch" for f in flags))
+
+    def test_three_personas_picks_extremes(self):
+        # Med 3 personor: warmest/coolest ska vara de yttre, inte mittenpersonan.
+        _setup(
+            {"c1": _claim("ethics", "demonstrated", kind="item")},
+            perceived={"ethics": {
+                "salience": 0.7, "valence": 0.6, "confidence": 0.7,
+                "per_persona": {
+                    "investor": {"salience": 0.7, "valence": 0.85},   # warmest
+                    "regulator": {"salience": 0.7, "valence": 0.55},  # mid
+                    "media": {"salience": 0.7, "valence": 0.30},      # coolest
+                },
+            }},
+        )
+        flags = ctg.compute("acme")["flags"]
+        pm = next(f for f in flags if f["kind"] == "persona_mismatch")
+        self.assertEqual(pm["warmest_persona"], "investor")
+        self.assertEqual(pm["coolest_persona"], "media")
+
+
 if __name__ == "__main__":
     unittest.main()
