@@ -6,6 +6,7 @@ from connectors.jobfeed import JobFeedConnector
 from connectors.linkedin_capacity import LinkedInCapacityConnector
 from connectors.rss import RssConnector
 from connectors.website import WebsiteConnector
+from connectors.wikipedia import WikipediaConnector
 
 REGISTRY: dict[str, type[BaseConnector]] = {
     LinkedInCapacityConnector.id: LinkedInCapacityConnector,
@@ -13,6 +14,7 @@ REGISTRY: dict[str, type[BaseConnector]] = {
     JobFeedConnector.id: JobFeedConnector,
     GleifConnector.id: GleifConnector,
     WebsiteConnector.id: WebsiteConnector,
+    WikipediaConnector.id: WikipediaConnector,
 }
 
 
