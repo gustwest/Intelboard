@@ -29,10 +29,12 @@ langchain-google-vertexai==2.0.7
 # v1/" med location=global i path:en.
 anthropic==0.104.1
 # Claude-proben bytte 2026-06-04 från Vertex Model Garden (quota=0) till första-parts
-# Anthropic API via langchain_anthropic.ChatAnthropic. Pinnad till 0.3.x för att hålla
-# langchain-core <0.4 (langchain-google-vertexai 2.0.7 kräver det; 1.x-linjen av
-# langchain-anthropic drar in langchain-core 1.x och bryter trädet).
-langchain-anthropic==0.3.22
+# Anthropic API via langchain_anthropic.ChatAnthropic. Pinnad till 0.3.13 — verifierat
+# i clean-room (tom venv, pip dry-run) att den löser mot HELA requirements.txt med
+# Dockers strikta resolver. 0.3.22 löste lokalt men inte i Docker (krockade med
+# anthropic==0.104.1-pinningen). 1.x-linjen drar in langchain-core 1.x och bryter
+# langchain-google-vertexai 2.0.7 (kräver langchain-core <0.4).
+langchain-anthropic==0.3.13
 trafilatura==2.0.0
 pypdf==6.12.1
 sendgrid==6.11.0
