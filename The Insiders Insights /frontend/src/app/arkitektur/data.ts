@@ -75,6 +75,21 @@ export type Interaction = {
   detail: string;
 };
 
+export type LoopStep = {
+  id: string;
+  num: number;
+  actor: 'System' | 'Operatör' | 'Extern';
+  color: string; // CSS-klass: nodeGreen | nodeOrange | nodePurple | nodeBlue | nodeCyan
+  label: string;
+  sub: string;
+  detail: {
+    what: string; // vad steget gör
+    who: string; // automatiskt vs människa
+    where: string; // var det syns / vilken fil
+    output: string; // vad det producerar / nästa steg
+  };
+};
+
 export type ModuleNode = {
   id: string;
   emoji: string;
@@ -621,6 +636,135 @@ export const DIAGRAM_INTERACTIONS: Interaction[] = [
 ];
 
 /* ------------------------------------------------------------------ */
+/* Den slutna loopen — Geogiraphs mät → recept → leverera → mät-cykel  */
+/* ------------------------------------------------------------------ */
+// Renderas som en numrerad cykel i Loop-fliken. Steg 8 sluter tillbaka
+// till steg 1. Kärnprincip (se ADR-008): systemet MÄTER, FÖRESLÅR och
+// VERIFIERAR automatiskt, men operatören GODKÄNNER och PUBLICERAR det
+// faktiska innehållet — inga claims fabriceras för att täcka ett gap.
+export const CLOSED_LOOP_STEPS: LoopStep[] = [
+  {
+    id: 'measure-gap',
+    num: 1,
+    actor: 'System',
+    color: 'nodeGreen',
+    label: 'Mät gapet',
+    sub: 'compute_trust_gap',
+    detail: {
+      what:
+        'Jämför per dimension vad kunden SÄGER (declared), kan BELÄGGA (demonstrated) och hur AI UPPFATTAR det (perceived). Sex flaggor kan tändas: over_claim, opportunity, missing_evidence, contradiction, persona_mismatch, factual_drift.',
+      who: 'Automatiskt. Schemalagt jobb (veckovis polling).',
+      where: 'jobs/compute_trust_gap.py · _detect_flags()',
+      output: 'En lista flaggor per dimension → matar receptmotorn.',
+    },
+  },
+  {
+    id: 'generate-recipe',
+    num: 2,
+    actor: 'System',
+    color: 'nodeOrange',
+    label: 'Generera recept',
+    sub: 'Receptmotor · Lager A/B/C',
+    detail: {
+      what:
+        'Lager A (regler): ett låst skelett per gap-typ — kanal, åtgärdstyp, förväntad metrik. Lager B (LLM): Gemini på Vertex EU detaljerar skelettet och pekar ut VILKA befintliga claims som ska aktiveras — får aldrig ändra strategin (valideringsgrind förkastar otillåten kanal). Lager C: sparas idempotent (id = hash av gap-typ + dimension).',
+      who: 'Automatiskt. Triggas i kedjan extract_claims → compile_schema → POST /api/recipes/{client_id}/generate.',
+      where: 'services/gap_recipes.py · gap_recipes_llm.py · recipes.py',
+      output: "Ett recept i status 'pending'.",
+    },
+  },
+  {
+    id: 'surface-cockpit',
+    num: 3,
+    actor: 'Operatör',
+    color: 'nodePurple',
+    label: 'Förslag i cockpit',
+    sub: 'AI-synlighet → TrustGapCockpit',
+    detail: {
+      what:
+        'Receptet dyker upp för OPERATÖREN (byrån/ops) — inte kunden. Visar varför, konkret åtgärd, prioriterad kanal, framgångskriterium, vilka proof points och risker.',
+      who: 'Människa läser. Status-badge: Förslag / Godkänt / Publicerat / Verifierat / Avfärdat.',
+      where: 'frontend polling/page.tsx · TrustGapCockpit · GET /api/recipes/{client_id}',
+      output: 'Operatören väljer: godkänn eller avfärda.',
+    },
+  },
+  {
+    id: 'approve',
+    num: 4,
+    actor: 'Operatör',
+    color: 'nodeCyan',
+    label: 'Godkänn',
+    sub: 'status → agreed',
+    detail: {
+      what: "Operatören accepterar förslaget. Avfärda i stället → 'dismissed' (terminalt).",
+      who: 'Människa. Beslutet låser receptet — nya mätkörningar skriver inte över ett recept som lämnat pending.',
+      where: 'POST /api/recipes/{client_id}/{recipe_id}/status',
+      output: 'Klart att agera på.',
+    },
+  },
+  {
+    id: 'publish-external',
+    num: 5,
+    actor: 'Extern',
+    color: 'nodeCyan',
+    label: 'Publicera externt',
+    sub: 'LinkedIn / press / attesterad uppladdning',
+    detail: {
+      what:
+        'Operatören publicerar det FAKTISKA innehållet själv — systemet skriver inte texten. Receptet pekar bara ut vilka befintliga proof points som ska lyftas.',
+      who: 'Människa, utanför verktyget. Inga claims fabriceras — hela poängen är att "demonstrated" måste vara sant.',
+      where: 'Manuellt steg (LinkedIn-inlägg, pressrelease, dokument-upload).',
+      output: 'Nytt verkligt innehåll ute i världen.',
+    },
+  },
+  {
+    id: 'mark-acted',
+    num: 6,
+    actor: 'Operatör',
+    color: 'nodeBlue',
+    label: 'Markera "acted"',
+    sub: 'status → acted · intervention skapas',
+    detail: {
+      what:
+        'När operatören markerar "acted" tar systemet en baseline-snapshot av gapet (declared, demonstrated, valence, salience, öppna flaggor) och öppnar en intervention.',
+      who: 'Operatör klickar; systemet snapshotar automatiskt (idempotent id = hash av recipe_id + acted_at).',
+      where: 'services/interventions.py · create_for_acted_recipe()',
+      output: "Intervention i status 'open' — mätningen av effekten börjar.",
+    },
+  },
+  {
+    id: 'harvest-deliver',
+    num: 7,
+    actor: 'System',
+    color: 'nodeBlue',
+    label: 'Skörda claims + leverera',
+    sub: 'extract_claims → JSON-LD',
+    detail: {
+      what:
+        'Nästa körning skördar det nya, verkliga innehållet → blir riktiga claims → compile_schema projicerar in dem i leveransen: JSON-LD, profilsida och llms.txt på CDN.',
+      who: 'Automatiskt. Samma claim-pipeline som vanligt — inget specialspår för recept.',
+      where: 'jobs/extract_claims.py → compile_schema → schema_org/compiler.py → GCS/CDN',
+      output: 'Uppdaterad publik kunskapsgraf som probe-motorerna kan läsa.',
+    },
+  },
+  {
+    id: 'verify-intervention',
+    num: 8,
+    actor: 'System',
+    color: 'nodeGreen',
+    label: 'Mät igen + verifiera',
+    sub: 'verify_open() → days_to_close',
+    detail: {
+      what:
+        'Efter nästa trust_gap-mätning klassas interventionen mot baseline: resolved_full / resolved_partial / regressed / no_change_yet. Vid stängning byggs en closure (valence_delta, demonstrated_delta, days_to_close) och receptet auto-verifieras.',
+      who: 'Automatiskt. Sluter loopen tillbaka till steg 1 för nästa mätning.',
+      where: 'services/interventions.py · verify_open() · _classify()',
+      output: '↩ Tillbaka till steg 1 — kausalt spår: "stängde på N dagar".',
+    },
+  },
+];
+
+/* ------------------------------------------------------------------ */
 /* Domänmoduler — per spår                                             */
 /* ------------------------------------------------------------------ */
 
@@ -981,6 +1125,20 @@ export const ADRS: Adr[] = [
       'Moduler refererar SourceField.id. Vid rapportändring läggs en ny SourceVersion med uppdaterade SourceFieldMapping-rader. Modulerna fortsätter fungera.',
     consequences: 'Ett extra mappningslager, men robusthet mot kolumnbyten och bevarad historik.',
     revisitWhen: 'Om en källa byter datapunkter helt så gamla SourceField saknar motsvarighet.',
+  },
+  {
+    id: 'adr-008',
+    title: 'Sluten loop: mät → recept → publicera → mät — men aldrig auto-fabricerade claims',
+    date: '2026-06',
+    status: 'Aktiv',
+    context:
+      'Geogiraph mäter ett förtroendegap (declared vs demonstrated vs perceived). Mätning utan åtgärd ger ingen förbättring. Samtidigt får systemet ALDRIG hitta på claims för att täcka ett gap — då tappar "demonstrated" sin mening och hela trovärdigheten i den publicerade grafen faller.',
+    decision:
+      'Receptmotorn (Lager A regler + B LLM på Vertex EU + C persistens) föreslår åtgärder och pekar ut BEFINTLIGA proof points, men en operatör godkänner och publicerar det faktiska innehållet externt. Först när operatören markerar "acted" öppnas en intervention som mäter om gapet stängdes och auto-verifierar receptet. Hela cykeln visualiseras i Loop-fliken.',
+    consequences:
+      'Human-in-the-loop: systemet auto-detekterar, föreslår och verifierar; människan beslutar och publicerar. Varje åtgärd får ett kausalt spår (days_to_close). Nackdel: takten begränsas av operatörens publiceringscykel, och perceptionstalen är gatade tills probe-kalibreringen (Fas 2.2) är klar.',
+    revisitWhen:
+      'Om vi vill auto-utkasta innehåll (fortfarande bakom mänsklig gate), eller när probe-kalibreringen är klar och perceptions-deltan blir skarpa.',
   },
 ];
 

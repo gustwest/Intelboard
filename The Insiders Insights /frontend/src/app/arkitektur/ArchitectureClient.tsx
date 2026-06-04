@@ -7,7 +7,7 @@
  * Diagram/ADR/Live ligger i egna filer. ALL data importeras från ./data.
  */
 import { useState } from 'react';
-import { Network, Layers, Palette, Boxes, BookOpen, Radio } from 'lucide-react';
+import { Network, RefreshCw, Layers, Palette, Boxes, BookOpen, Radio } from 'lucide-react';
 import css from './architecture.module.css';
 import {
   TECH_STACK,
@@ -27,14 +27,16 @@ import {
   type SchemaModel,
 } from './data';
 import DiagramTab from './DiagramTab';
+import LoopTab from './LoopTab';
 import AdrTab from './AdrTab';
 import LiveTab from './LiveTab';
 import ModuleGraph from './ModuleGraph';
 
-type TabId = 'diagram' | 'stack' | 'design' | 'modules' | 'adr' | 'live';
+type TabId = 'diagram' | 'loop' | 'stack' | 'design' | 'modules' | 'adr' | 'live';
 
 const TABS: { id: TabId; label: string; icon: typeof Network }[] = [
   { id: 'diagram', label: 'Diagram', icon: Network },
+  { id: 'loop', label: 'Loop', icon: RefreshCw },
   { id: 'stack', label: 'Teknikstack', icon: Layers },
   { id: 'design', label: 'Designsystem', icon: Palette },
   { id: 'modules', label: 'Domänmoduler', icon: Boxes },
@@ -86,6 +88,7 @@ export default function ArchitectureClient({
       </nav>
 
       {tab === 'diagram' && <DiagramTab />}
+      {tab === 'loop' && <LoopTab />}
       {tab === 'stack' && <StackTab />}
       {tab === 'design' && <DesignTab />}
       {tab === 'modules' && <ModulesTab />}
