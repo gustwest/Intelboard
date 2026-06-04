@@ -36,6 +36,10 @@ const MAX_RETRIES = 2;
 const RETRY_WINDOW_MS = 30 * 60 * 1000;
 const RETRY_LOG_MARKER = '🔁 Auto-retry';
 const STALE_ACTIVITY_MS = 10 * 60 * 1000; // 10 min without logs = hung
+// The poller flushes a "💰 Cost:" log the moment Claude emits its result — BEFORE the
+// terminal DONE patch. If that marker is older than this grace window and the task is still
+// RUNNING, the terminal patch was lost (process lingered / network blip) → safe to auto-complete.
+const COMPLETION_GRACE_MS = 45 * 1000;
 
 export async function GET(req: NextRequest) {
   if (!authenticateAgent(req)) {
@@ -55,18 +59,25 @@ export async function GET(req: NextRequest) {
       include: {
         logs: {
           orderBy: { createdAt: 'desc' },
-          take: 5,
+          take: 8,
           select: { createdAt: true, message: true },
         },
       },
     });
 
     const staleThreshold = new Date(Date.now() - STALE_ACTIVITY_MS);
+    const completionGraceThreshold = new Date(Date.now() - COMPLETION_GRACE_MS);
     for (const rt of runningTasks) {
+      // Explicit completion marker → complete immediately.
       const doneLog = rt.logs.find(l =>
         l.message.startsWith('✅ Done') || l.message.startsWith('✅ Agent completed') || l.message.startsWith('✅ Task completed')
       );
-      if (doneLog) {
+      // Turn-finished marker ("💰 Cost:") that's past the grace window — the terminal DONE
+      // patch never arrived, so the task is finished-but-stuck. This is the common case.
+      const costLog = rt.logs.find(l => l.message.startsWith('💰 Cost:'));
+      const completionLog =
+        doneLog || (costLog && costLog.createdAt < completionGraceThreshold ? costLog : null);
+      if (completionLog) {
         console.log(`🔄 Auto-completing stuck task ${rt.id} — logs show completion`);
         await prisma.agentTask.update({
           where: { id: rt.id },

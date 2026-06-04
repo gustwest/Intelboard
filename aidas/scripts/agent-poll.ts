@@ -67,15 +67,18 @@ async function poll(): Promise<AgentTask | null> {
   }
 }
 
-async function patchTask(body: Record<string, unknown>) {
+async function patchTask(body: Record<string, unknown>): Promise<boolean> {
   try {
-    await fetch(`${API_BASE}/api/admin/agent/poll`, {
+    const res = await fetch(`${API_BASE}/api/admin/agent/poll`, {
       method: 'PATCH',
       headers: authHeaders(),
       body: JSON.stringify(body),
     });
+    if (!res.ok) console.error(`[PATCH] HTTP ${res.status}`);
+    return res.ok;
   } catch (e) {
     console.error('[PATCH] Error:', e instanceof Error ? e.message : e);
+    return false;
   }
 }
 
@@ -83,6 +86,8 @@ async function sendLogs(taskId: string, logs: string[]) {
   await patchTask({ taskId, status: 'RUNNING', logs });
 }
 
+// The terminal status update (DONE/FAILED) is what flips the dashboard out of "RUNNING".
+// A single lost request used to leave the task stuck forever, so retry it with backoff.
 async function reportResult(
   taskId: string,
   status: string,
@@ -91,7 +96,13 @@ async function reportResult(
   logs?: string[],
   claudeSessionId?: string,
 ) {
-  await patchTask({ taskId, status, response, error, logs, claudeSessionId });
+  const body = { taskId, status, response, error, logs, claudeSessionId };
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    if (await patchTask(body)) return;
+    console.error(`[REPORT] Failed to report ${status} for ${taskId} (attempt ${attempt}/5) — retrying`);
+    await new Promise((r) => setTimeout(r, attempt * 2000));
+  }
+  console.error(`[REPORT] Gave up reporting ${status} for ${taskId} after 5 attempts — server safety net will recover it`);
 }
 
 // ── Claude CLI Runner ────────────────────────────────────────────
@@ -137,13 +148,24 @@ async function runClaude(task: AgentTask): Promise<{
     let claudeSessionId: string | undefined;
     let lastLogFlush = Date.now();
     const pendingLogs: string[] = [];
+    // Buffer partial lines: a single stdout chunk is NOT guaranteed to end on a newline,
+    // so the large final "type:result" JSON object can be split across chunks. Without
+    // buffering it never parses, the fast-path resolve never fires, and the task hangs.
+    let lineBuffer = '';
 
     proc.stdout.on('data', (chunk: Buffer) => {
       const text = chunk.toString();
       stdout += text;
 
+      // Only parse complete lines; keep any trailing fragment for the next chunk.
+      lineBuffer += text;
+      const lastNewline = lineBuffer.lastIndexOf('\n');
+      if (lastNewline === -1) return;
+      const completeLines = lineBuffer.slice(0, lastNewline);
+      lineBuffer = lineBuffer.slice(lastNewline + 1);
+
       // Parse stream-json for session ID and tool usage
-      for (const line of text.split('\n').filter(Boolean)) {
+      for (const line of completeLines.split('\n').filter(Boolean)) {
         try {
           const json = JSON.parse(line);
 
