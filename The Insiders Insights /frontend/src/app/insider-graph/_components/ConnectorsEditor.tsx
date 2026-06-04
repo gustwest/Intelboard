@@ -5,17 +5,20 @@ import { Plug, Plus, Trash2, Save, Check, AlertCircle } from 'lucide-react';
 import { graphColors as C } from './GraphPageShell';
 import { graphFetch } from '../_lib/api';
 
-type ConnectorMeta = { id: string; fetch_method: string; output_types: string[]; frequency: string; tier: string };
+type InputFieldMeta = { name: string; label: string; type: string; required: boolean; placeholder?: string; help?: string };
+type ConnectorMeta = { id: string; fetch_method: string; output_types: string[]; frequency: string; tier: string; input_fields: InputFieldMeta[] };
 type RssFeed = { url: string; schema_type: string; label?: string };
 type State = {
   available: ConnectorMeta[];
   active_connectors: string[];
   rss_feeds: RssFeed[];
+  connector_params: Record<string, string | null>;
 };
 
 const NAME: Record<string, string> = {
   linkedin: 'LinkedIn', linkedin_capacity: 'LinkedIn-kapacitet (kvartal)', rss: 'RSS-feeds',
   jobfeed: 'Platsannonser (ATS)', website: 'Webbplats', gleif: 'GLEIF (org-data)',
+  wikipedia: 'Wikipedia/Wikidata',
 };
 const SCHEMA_OPTIONS = ['NewsArticle', 'JobPosting', 'PodcastEpisode', 'Event'];
 
@@ -24,6 +27,7 @@ export default function ConnectorsEditor({ clientId }: { clientId: string }) {
   const [state, setState] = useState<State | null>(null);
   const [active, setActive] = useState<string[]>([]);
   const [feeds, setFeeds] = useState<RssFeed[]>([]);
+  const [params, setParams] = useState<Record<string, string>>({});
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
@@ -36,6 +40,7 @@ export default function ConnectorsEditor({ clientId }: { clientId: string }) {
         setState(d);
         setActive(d.active_connectors || []);
         setFeeds(d.rss_feeds || []);
+        setParams(Object.fromEntries(Object.entries(d.connector_params || {}).map(([k, v]) => [k, v ?? ''])));
         setDirty(false);
       })
       .catch((e) => { if (!cancelled) setMsg({ tone: 'error', text: e instanceof Error ? e.message : String(e) }); });
@@ -50,6 +55,16 @@ export default function ConnectorsEditor({ clientId }: { clientId: string }) {
     setFeeds((p) => p.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
     setDirty(true);
   }
+  function updateParam(name: string, value: string) {
+    setParams((p) => ({ ...p, [name]: value }));
+    setDirty(true);
+  }
+
+  // Text-input-fält (wikidata_id, lei …) för de connectors som är påslagna.
+  // feed_list/url har egna UI:n (RSS-editor, onboarding) och hanteras ej här.
+  const textFields = (state?.available || [])
+    .filter((c) => active.includes(c.id))
+    .flatMap((c) => (c.input_fields || []).filter((f) => f.type === 'text').map((f) => ({ ...f, connector: c.id })));
 
   async function save() {
     setSaving(true);
@@ -61,6 +76,7 @@ export default function ConnectorsEditor({ clientId }: { clientId: string }) {
         body: JSON.stringify({
           active_connectors: active,
           rss_feeds: feeds.filter((f) => f.url.trim()),
+          connector_params: params,
         }),
       });
       setDirty(false);
@@ -114,6 +130,25 @@ export default function ConnectorsEditor({ clientId }: { clientId: string }) {
               );
             })}
           </div>
+
+          {textFields.length > 0 && (
+            <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {textFields.map((f) => (
+                <div key={f.name} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: C.text }}>
+                    {f.label} <span style={{ color: C.muted, fontWeight: 400 }}>· {NAME[f.connector] || f.connector}</span>
+                  </label>
+                  <input
+                    value={params[f.name] ?? ''}
+                    onChange={(e) => updateParam(f.name, e.target.value)}
+                    placeholder={f.placeholder || ''}
+                    style={{ ...inp, maxWidth: 320 }}
+                  />
+                  {f.help && <span style={{ fontSize: 11, color: C.muted }}>{f.help}</span>}
+                </div>
+              ))}
+            </div>
+          )}
 
           {active.includes('rss') && (
             <div style={{ marginTop: 14 }}>
