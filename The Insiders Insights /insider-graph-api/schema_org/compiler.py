@@ -37,6 +37,25 @@ DEFAULT_MANUAL_LABEL = "uppgift från bolaget"
 DEFAULT_ATTESTED_LABEL = "verifierad av Geogiraph"
 ATTESTED_PUBLISHER = "Geogiraph"
 
+# Geogiraph som bestyrkande part i ClaimReview-noderna (assurance-markup, "Bron #1").
+# KONSTANT identitet, medvetet OBEROENDE av kundens profil-bas: den som går i god
+# för ett claim är alltid samma juridiska entitet, var sidan än hostas. Det är detta
+# som gör markup-en URL-agnostisk men URL-redo — när publik landning (Bron #2) byggs
+# byter bara `model.base`, aldrig vem som intygar. @id är därför ett stabilt brand-IRI,
+# inte härlett ur klientens bas.
+GEOGIRAPH_REVIEWER_ID = "https://geogiraph.com/#org"
+
+# assurance_level → (ratingValue, läsbart namn) på en 3-gradig skala (bestRating=3,
+# worstRating=1). Ordningen är också styrkeordningen: när ett claim har flera källor
+# med olika nivå väljs den starkaste (_strongest_assurance). Nivåerna speglar
+# schemas.ASSURANCE_LEVELS / humanization-trust-gap-spec.md §7.
+_ASSURANCE_RATING: dict[str, tuple[int, str]] = {
+    "self_declared": (1, "Självdeklarerad"),
+    "third_party_reviewed": (2, "Tredjepartsgranskad"),
+    "independently_assured": (3, "Oberoende bestyrkt"),
+}
+_ASSURANCE_RANK = {level: value for level, (value, _name) in _ASSURANCE_RATING.items()}
+
 # Källans raw-schema_type beskriver subjektet den gav, inte själva källdokumentet.
 # Org/Person/JobPosting-källor är i praktiken webbsidor vi läst — JobPosting-TYPEN är
 # reserverad för de dedikerade rollnoderna (#job-…), inte för källnoder (#src-…).
@@ -68,6 +87,11 @@ class Fact:
     # Persona-relevans (Fas 2.1f). Tom = evergreen (alla personor). Driver
     # Schema.org Audience-markup + llms.txt-sektionering.
     audience: list[str] = field(default_factory=list)
+    # Bestyrkandenivå (Bron #1): starkaste assurance_level bland claimets källor +
+    # verifieringsrecordet den kom ur. None = aldrig manuellt verifierad (auto-deriverade
+    # connector/ESG-claims) → ingen ClaimReview emitteras. Se _strongest_assurance.
+    assurance_level: str | None = None
+    verification_id: str | None = None
 
 
 @dataclass
@@ -77,6 +101,10 @@ class Prose:
     manual_label: str | None = None
     # Persona-relevans (Fas 2.1f) — union av sammanslagna claims audience-fält.
     audience: list[str] = field(default_factory=list)
+    # Bestyrkandenivå (Bron #1) — som Fact. Vid dedup av snarlika narrative-claims
+    # behålls den starkaste nivån (se _merge_prose).
+    assurance_level: str | None = None
+    verification_id: str | None = None
 
 
 @dataclass
@@ -190,11 +218,14 @@ def build_render_model(client_id: str) -> RenderModel:
                 manual_label = label
 
         audience = list(getattr(claim, "audience", None) or [])
+        assurance_level, verification_id = _strongest_assurance(claim.source)
         if claim.claim_kind == "property" and claim.predicate:
             facts.append(Fact(claim.predicate, claim.value, claim.statement, footnotes,
-                              manual_label, claim.confidence, audience))
+                              manual_label, claim.confidence, audience,
+                              assurance_level, verification_id))
         elif claim.claim_kind == "narrative" and claim.statement:
-            _merge_prose(prose_by_key, claim.statement.strip(), footnotes, manual_label, audience)
+            _merge_prose(prose_by_key, claim.statement.strip(), footnotes, manual_label,
+                         audience, assurance_level, verification_id)
 
     # Starkast bevisade fakta först. Stabil sortering → värden med samma vikt
     # behåller upptäcktsordningen. Avgör ordningen på t.ex. knowsAbout-listan
@@ -315,13 +346,16 @@ def compile_client(client_id: str) -> dict[str, Any]:
     ]
 
     claim_nodes: list[dict[str, Any]] = []
+    review_nodes: list[dict[str, Any]] = []
+    verif_cache: dict[str, dict[str, Any]] = {}
     for idx, entry in enumerate([*model.facts, *model.prose]):
+        claim_id = f"{model.base}#claim-{idx}"
         text = entry.statement or (
             f"{entry.predicate}: {entry.value}" if isinstance(entry, Fact) else ""
         )
         node: dict[str, Any] = {
             "@type": "Claim",
-            "@id": f"{model.base}#claim-{idx}",
+            "@id": claim_id,
             "text": text,
             "about": {"@id": model.org_id},
         }
@@ -335,6 +369,14 @@ def compile_client(client_id: str) -> dict[str, Any]:
         if audience_nodes:
             node["audience"] = audience_nodes if len(audience_nodes) > 1 else audience_nodes[0]
         claim_nodes.append(node)
+        # Bestyrkande-markup (Bron #1): claims som gått igenom manuell Geogiraph-
+        # verifiering bär en assurance_level → emittera en ClaimReview där Geogiraph
+        # (konstant reviewer-IRI) går i god för claimet på 3-gradig skala. Auto-deriverade
+        # claims saknar nivå och får ingen review. Compliance-stämpeln blir därmed
+        # maskinläsbar utan att lämna pipelinen — samma data, ny utsignal.
+        review = _claim_review(client_id, claim_id, idx, model.base, entry, verif_cache)
+        if review is not None:
+            review_nodes.append(review)
 
     faq_nodes: list[dict[str, Any]] = []
     faq = build_faq(model)
@@ -367,7 +409,8 @@ def compile_client(client_id: str) -> dict[str, Any]:
             node["url"] = jp.url
         job_nodes.append(node)
 
-    graph = [organization, *model.persons, *source_nodes, *claim_nodes, *faq_nodes, *job_nodes]
+    graph = [organization, *model.persons, *source_nodes, *claim_nodes,
+             *review_nodes, *faq_nodes, *job_nodes]
     return {"@context": "https://schema.org", "@graph": graph}
 
 
@@ -449,15 +492,19 @@ def _apply_property(node: dict[str, Any], predicate: str, value: Any) -> None:
 def _merge_prose(
     bag: dict[str, "Prose"], statement: str, footnotes: list[int],
     manual_label: str | None, audience: list[str] | None = None,
+    assurance_level: str | None = None, verification_id: str | None = None,
 ) -> None:
     """Slå ihop snarlika narrative-claims (samma normaliserade text) och förena källor.
     Audience-fältet unionas — ett sammanslaget påstående är relevant för alla personor
-    som något av de ingående claims var taggat för."""
+    som något av de ingående claims var taggat för. Bestyrkandenivån höjs till den
+    starkaste av de sammanslagna claimen (Bron #1): bekräftar två källor samma utsaga
+    och en är oberoende bestyrkt, ärver det förenade claimet den nivån."""
     key = _normalize(statement)
     audience = audience or []
     existing = bag.get(key)
     if existing is None:
-        bag[key] = Prose(statement, list(footnotes), manual_label, list(audience))
+        bag[key] = Prose(statement, list(footnotes), manual_label, list(audience),
+                         assurance_level, verification_id)
         return
     for n in footnotes:
         if n not in existing.footnotes:
@@ -467,6 +514,101 @@ def _merge_prose(
     for a in audience:
         if a not in existing.audience:
             existing.audience.append(a)
+    if _ASSURANCE_RANK.get(assurance_level, -1) > _ASSURANCE_RANK.get(existing.assurance_level, -1):
+        existing.assurance_level = assurance_level
+        existing.verification_id = verification_id
+
+
+def _strongest_assurance(sources: list[ClaimSource]) -> tuple[str | None, str | None]:
+    """Starkaste assurance_level bland claimets källor + det verification_id den kom ur.
+
+    Ett claim kan ha flera källor (t.ex. dual-source). Bestyrkandet ska spegla det
+    STARKASTE oberoende underlaget — en oberoende bestyrkt källa lyfter claimet även
+    om en annan källa bara är självdeklarerad. Auto-deriverade claims (connector/ESG)
+    saknar assurance_level helt → (None, None), ingen ClaimReview emitteras (§8: bara
+    den manuella verifieringen sätter nivå)."""
+    best_level: str | None = None
+    best_rank = -1
+    best_vid: str | None = None
+    for src in sources:
+        level = getattr(src, "assurance_level", None)
+        if not level:
+            continue
+        rank = _ASSURANCE_RANK.get(level, -1)
+        if rank > best_rank:
+            best_rank, best_level = rank, level
+            best_vid = getattr(src, "verification_id", None)
+    return best_level, best_vid
+
+
+def _claim_review(
+    client_id: str, claim_id: str, idx: int, base: str,
+    entry: "Fact | Prose", cache: dict[str, dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Bygg en schema.org ClaimReview-nod för ett bestyrkt claim (Bron #1), annars None.
+
+    Geogiraph är `author` via ett KONSTANT IRI (URL-agnostiskt — se GEOGIRAPH_REVIEWER_ID).
+    `reviewRating` bär assurance-nivån som maskinläsbart tal (1–3). Datum/text/utgång
+    berikas ur Verification-recordet när det går att slå upp; faller annars tillbaka
+    på vad ClaimSource redan bär. `reviewAspect="assurance"` gör tydligt att betyget
+    avser bevisstyrka, inte sanningshalt."""
+    level = getattr(entry, "assurance_level", None)
+    rating = _ASSURANCE_RATING.get(level or "")
+    if rating is None:
+        return None
+    rating_value, rating_name = rating
+    review: dict[str, Any] = {
+        "@type": "ClaimReview",
+        "@id": f"{base}#review-{idx}",
+        "itemReviewed": {"@id": claim_id},
+        "author": {
+            "@id": GEOGIRAPH_REVIEWER_ID,
+            "@type": "Organization",
+            "name": ATTESTED_PUBLISHER,
+        },
+        "reviewAspect": "assurance",
+        "reviewRating": {
+            "@type": "Rating",
+            "ratingValue": rating_value,
+            "bestRating": 3,
+            "worstRating": 1,
+            "alternateName": rating_name,
+        },
+    }
+    fields = _verification_fields(client_id, getattr(entry, "verification_id", None), cache)
+    if fields.get("date"):
+        review["datePublished"] = fields["date"]
+    if fields.get("text"):
+        review["reviewBody"] = fields["text"]
+    if fields.get("expires"):
+        review["expires"] = fields["expires"]
+    return review
+
+
+def _verification_fields(
+    client_id: str, verification_id: str | None, cache: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Hämta datum/text/utgång ur Verification-recordet (clients/{id}/verifications).
+    Cachas per verification_id (flera claims kan dela samma verifiering). Saknat/oläsbart
+    record → tom dict; ClaimReview byggs ändå ur assurance-nivån (graciös degradering)."""
+    if not verification_id:
+        return {}
+    if verification_id in cache:
+        return cache[verification_id]
+    out: dict[str, Any] = {}
+    try:
+        snap = fs.verification_doc(client_id, verification_id).get()
+        raw = snap.to_dict() if snap.exists else None
+    except Exception:
+        raw = None
+    if raw:
+        out = {
+            "date": raw.get("verified_at"),
+            "text": raw.get("verification_text"),
+            "expires": raw.get("expires_at"),
+        }
+    cache[verification_id] = out
+    return out
 
 
 def _audience_markup(persona_ids: list[str]) -> list[dict[str, Any]]:

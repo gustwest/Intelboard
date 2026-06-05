@@ -306,5 +306,124 @@ class CompileClientTest(unittest.TestCase):
             compile_client("ghost")
 
 
+class ClaimReviewMarkupTest(unittest.TestCase):
+    """Bestyrkande-markup (Bron #1): verifierade claims → ClaimReview-noder där
+    Geogiraph går i god för bevisstyrkan, maskinläsbart och URL-agnostiskt."""
+
+    def _assured(self, level="independently_assured", with_record=True, **claim_extra):
+        claim = {
+            "claim_kind": "narrative",
+            "subject_ref": "org",
+            "statement": "Tredjepartsmätt eNPS uppgår till 62",
+            "source": [{
+                "kind": "attested",
+                "label": "Medarbetarundersökning, bestyrkt av Geogiraph",
+                "attested_at": "2026-05-01",
+                "assurance_level": level,
+                "verification_id": "ver-abc123",
+            }],
+            "included_in_output": True,
+        }
+        claim.update(claim_extra)
+        setup = dict(claims={"c1": claim})
+        if with_record:
+            setup["verifications"] = {"ver-abc123": {
+                "verdict": "verified",
+                "verified_at": "2026-05-01T09:00:00+00:00",
+                "verification_text": "Oberoende bestyrkt av tredjepartsinstitut.",
+                "expires_at": "2027-05-01T09:00:00+00:00",
+            }}
+        _graph_setup(**setup)
+
+    def test_assured_claim_emits_claimreview(self):
+        from schema_org.compiler import GEOGIRAPH_REVIEWER_ID
+
+        self._assured()
+        graph = compile_client("acme")
+        reviews = _nodes(graph, "ClaimReview")
+        self.assertEqual(len(reviews), 1)
+        rev = reviews[0]
+        # pekar på rätt claim-nod
+        claim = [c for c in _nodes(graph, "Claim") if "eNPS" in c["text"]][0]
+        self.assertEqual(rev["itemReviewed"]["@id"], claim["@id"])
+        # Geogiraph går i god för — via det konstanta reviewer-IRI:t
+        self.assertEqual(rev["author"]["@id"], GEOGIRAPH_REVIEWER_ID)
+        self.assertEqual(rev["author"]["name"], "Geogiraph")
+        # betyget avser bevisstyrka, inte sanningshalt
+        self.assertEqual(rev["reviewAspect"], "assurance")
+        self.assertEqual(rev["reviewRating"]["ratingValue"], 3)
+        self.assertEqual(rev["reviewRating"]["bestRating"], 3)
+        self.assertEqual(rev["reviewRating"]["alternateName"], "Oberoende bestyrkt")
+        # berikat ur Verification-recordet
+        self.assertEqual(rev["datePublished"], "2026-05-01T09:00:00+00:00")
+        self.assertEqual(rev["reviewBody"], "Oberoende bestyrkt av tredjepartsinstitut.")
+        self.assertEqual(rev["expires"], "2027-05-01T09:00:00+00:00")
+
+    def test_unverified_claims_emit_no_claimreview(self):
+        # Default-setupen: item- och manual-källor utan assurance_level.
+        _graph_setup()
+        self.assertEqual(_nodes(compile_client("acme"), "ClaimReview"), [])
+
+    def test_self_declared_rated_lowest(self):
+        self._assured(level="self_declared")
+        rev = _nodes(compile_client("acme"), "ClaimReview")[0]
+        self.assertEqual(rev["reviewRating"]["ratingValue"], 1)
+        self.assertEqual(rev["reviewRating"]["alternateName"], "Självdeklarerad")
+
+    def test_strongest_assurance_wins_across_sources(self):
+        # Samma claim styrkt av två källor: självdeklarerad + oberoende bestyrkt.
+        # Betyget ska spegla den starkaste (3), inte den första/svagaste.
+        _graph_setup(claims={"c1": {
+            "claim_kind": "narrative", "subject_ref": "org",
+            "statement": "Klimatmål verifierat mot SBTi",
+            "source": [
+                {"kind": "manual", "label": "uppgift från bolaget",
+                 "assurance_level": "self_declared", "verification_id": "ver-weak"},
+                {"kind": "attested", "label": "SBTi-bestyrkande", "attested_at": "2026-04-01",
+                 "assurance_level": "independently_assured", "verification_id": "ver-strong"},
+            ],
+            "included_in_output": True,
+        }})
+        rev = _nodes(compile_client("acme"), "ClaimReview")[0]
+        self.assertEqual(rev["reviewRating"]["ratingValue"], 3)
+
+    def test_claimreview_url_agnostic_under_profile_base_url(self):
+        # URL-agnostiskt: review/claim-@id följer kundens profil-bas (Bron #2 byter
+        # bara denna), men vem som intygar är konstant oavsett hosting.
+        from schema_org.compiler import GEOGIRAPH_REVIEWER_ID
+
+        _graph_setup(
+            client={"company_name": "Acme AB", "profile_base_url": "https://profil.acme.se"},
+            claims={"c1": {
+                "claim_kind": "narrative", "subject_ref": "org",
+                "statement": "Tredjepartsmätt eNPS uppgår till 62",
+                "source": [{
+                    "kind": "attested", "label": "Medarbetarundersökning, bestyrkt av Geogiraph",
+                    "attested_at": "2026-05-01", "assurance_level": "independently_assured",
+                    "verification_id": "ver-abc123",
+                }],
+                "included_in_output": True,
+            }},
+            verifications={"ver-abc123": {
+                "verdict": "verified", "verified_at": "2026-05-01T09:00:00+00:00",
+                "verification_text": "Oberoende bestyrkt av tredjepartsinstitut.",
+            }},
+        )
+        rev = _nodes(compile_client("acme"), "ClaimReview")[0]
+        self.assertTrue(rev["@id"].startswith("https://profil.acme.se#review-"))
+        self.assertTrue(rev["itemReviewed"]["@id"].startswith("https://profil.acme.se#claim-"))
+        # bestyrkande part oförändrad — inte härledd ur kundens bas
+        self.assertEqual(rev["author"]["@id"], GEOGIRAPH_REVIEWER_ID)
+
+    def test_degrades_gracefully_without_verification_record(self):
+        # assurance_level satt men inget Verification-record → ClaimReview byggs ändå
+        # ur nivån; datum/text utelämnas hellre än att kasta.
+        self._assured(with_record=False)
+        rev = _nodes(compile_client("acme"), "ClaimReview")[0]
+        self.assertEqual(rev["reviewRating"]["ratingValue"], 3)
+        self.assertNotIn("reviewBody", rev)
+        self.assertNotIn("datePublished", rev)
+
+
 if __name__ == "__main__":
     unittest.main()
