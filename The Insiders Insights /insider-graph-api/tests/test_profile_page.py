@@ -19,6 +19,7 @@ def _setup():
                 "url": "https://www.allabolag.se/5566778899",
                 "published_at": datetime(2024, 3, 1, tzinfo=timezone.utc),
                 "included_in_output": True,
+                "excerpt": "Marknadsledande inom inbyggda system",
                 "extra": {"name": "Acme AB", "founded": "2014", "baseline_followers": 5000},
             }
         },
@@ -59,6 +60,33 @@ class ProfileHtmlTest(unittest.TestCase):
         html = render_profile_html("acme")
         self.assertIn("Vanliga frågor", html)
         self.assertIn("När grundades Acme AB?", html)
+
+    def test_inline_source_attribution_visible(self):
+        """A2: källans namn+datum syns inline vid påståendet, inte bara i källistan."""
+        _setup()
+        html = render_profile_html("acme")
+        self.assertIn('class="cite"', html)
+        # Datumet ska finnas i den inline-renderade attributionen (inte bara i botten).
+        before_sources = html.split('class="sources"')[0]
+        self.assertIn("mars 2024", before_sources)
+
+    def test_excerpt_rendered_as_quote_in_bibliography(self):
+        """A2: källans ordagranna utdrag visas som citat i KÄLListan (källnivå),
+        inte inline vid ett enskilt claim (där det skulle antyda fel proveniens)."""
+        _setup()
+        html = render_profile_html("acme")
+        self.assertIn('class="quote"', html)
+        self.assertIn("Marknadsledande inom inbyggda system", html)
+        # Citatet hör hemma i bibliografin, inte i den inline-citerade attributionen.
+        before_sources, sources_section = html.split('class="sources"', 1)
+        self.assertNotIn("Marknadsledande", before_sources)
+        self.assertIn("Marknadsledande", sources_section)
+
+    def test_footnote_anchor_still_present(self):
+        """A2 får inte regressa fotnotsankaret till bibliografin."""
+        _setup()
+        html = render_profile_html("acme")
+        self.assertIn("#src-1", html)
 
 
 class LlmsTxtTest(unittest.TestCase):

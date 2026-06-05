@@ -29,6 +29,9 @@ router = APIRouter(prefix="/api/clients", tags=["clients"])
 # delad med risk_detector + monthly_report + output_quality.
 MEASUREMENT_PERSONAS = audience_personas.CANONICAL  # customer / employee / investor
 POLLING_CATEGORIES = ("affar", "finans", "innovation", "hr")
+# Profilsidans språk (BCP 47-bas). Default sv; utbyggbart när C3-språkbeslutet tas.
+SUPPORTED_LANGUAGES = ("sv", "en")
+DEFAULT_LANGUAGE = "sv"
 
 
 class EmployeePatch(BaseModel):
@@ -63,6 +66,13 @@ class ClientConfigUpdate(BaseModel):
     # disambiguering. Risk_detector läser client.get("competitors"); prompten
     # överviktar dem aldrig (härleder landskapet självständigt). Tom lista = rensa.
     competitors: list[str] | None = None
+    # Kundkontakt för leverans-utskick (installationskit + månadsmejl, Spår B).
+    # Felnotiser går ALDRIG hit — de stannar internt hos ops. Tom sträng = rensa.
+    contact_email: str | None = None
+    contact_name: str | None = None
+    # Profilsidans språk (BCP 47-bas). Default sv. Driver i18n + inLanguage på
+    # profilsida/JSON-LD. Tom sträng = återgå till default (sv).
+    language: str | None = None
 
 
 @router.get("")
@@ -136,6 +146,11 @@ def get_client(client_id: str) -> dict[str, Any]:
         "polling_questions": data.get("polling_questions") or {},
         # Konkurrenter (GEO-riskloop §5.1 svaga ledtrådar). [] om aldrig satt.
         "competitors": data.get("competitors") or [],
+        # Kundkontakt för leverans-utskick (Spår B). None om aldrig satt.
+        "contact_email": data.get("contact_email"),
+        "contact_name": data.get("contact_name"),
+        # Profilsidans språk — default sv om aldrig satt.
+        "language": data.get("language") or DEFAULT_LANGUAGE,
         # Output-kvalitets-personor (audience_priorities). Sätt av användaren eller
         # härlett via /derive-personas. None om aldrig satt (UI visar tom-state).
         "audience_priorities": data.get("audience_priorities"),
@@ -217,6 +232,21 @@ def update_client_config(client_id: str, payload: ClientConfigUpdate) -> dict[st
                 seen.add(name.lower())
                 cleaned_comp.append(name)
         update["competitors"] = cleaned_comp
+
+    if payload.contact_email is not None:
+        email = payload.contact_email.strip()
+        if email and "@" not in email:
+            raise HTTPException(400, "ogiltig contact_email")
+        update["contact_email"] = email or None  # tom = rensa
+
+    if payload.contact_name is not None:
+        update["contact_name"] = payload.contact_name.strip() or None
+
+    if payload.language is not None:
+        lang = payload.language.strip().lower()
+        if lang and lang not in SUPPORTED_LANGUAGES:
+            raise HTTPException(400, f"unsupported language: {lang}")
+        update["language"] = lang or None  # tom = återgå till default (sv)
 
     if update:
         ref.update(update)

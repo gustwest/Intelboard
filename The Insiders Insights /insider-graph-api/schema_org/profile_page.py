@@ -136,8 +136,10 @@ def _render(model: RenderModel, graph: dict) -> str:
     canonical = html.escape(model.base)
     desc = html.escape((model.description or f"AI-profil för {model.company_name or model.client_id}.")[:300])
 
-    facts_html = "\n".join(_fact_row(f) for f in model.facts)
-    prose_html = "".join(_prose_sentence(p) for p in model.prose).strip()
+    # Källobjekt per fotnotsnummer → synlig inline-attribution vid varje påstående (A2).
+    by_number = {s.number: s for s in model.sources}
+    facts_html = "\n".join(_fact_row(f, by_number) for f in model.facts)
+    prose_html = "".join(_prose_sentence(p, by_number) for p in model.prose).strip()
     sources_html = "\n".join(_source_item(s) for s in model.sources)
     faq_html = _faq_section(model)
     roles_html = _roles_section(model)
@@ -168,6 +170,9 @@ def _render(model: RenderModel, graph: dict) -> str:
   .facts dd {{ margin: 0; }}
   sup a {{ color: #2563eb; text-decoration: none; font-size: .7em; padding: 0 .1em; }}
   .manual {{ color: #888; font-size: .8em; font-style: italic; white-space: nowrap; }}
+  .cite {{ color: #555; font-size: .85em; }}
+  .cite a {{ color: #555; text-decoration: none; border-bottom: 1px dotted #bbb; }}
+  .quote {{ font-style: italic; color: #444; }}
   .faq {{ margin-top: 2rem; }}
   .faq dt {{ font-weight: 600; margin-top: .75rem; }}
   .faq dd {{ margin: .15rem 0 0; color: #333; }}
@@ -234,33 +239,69 @@ def _footnote_marks(footnotes) -> str:
     return "".join(f'<sup><a href="#src-{n}" title="Källa {n}">[{n}]</a></sup>' for n in footnotes)
 
 
-def _fact_row(fact) -> str:
+def _fact_row(fact, by_number) -> str:
     label = html.escape(_FACT_LABELS.get(fact.predicate, fact.predicate))
     value = fact.value
     text = ", ".join(str(v) for v in value) if isinstance(value, list) else str(value)
-    return f"  <dt>{label}</dt><dd>{html.escape(text)}{_marks(fact)}</dd>"
+    return f"  <dt>{label}</dt><dd>{html.escape(text)}{_evidence(fact, by_number)}</dd>"
 
 
-def _prose_sentence(prose) -> str:
+def _prose_sentence(prose, by_number) -> str:
     sentence = html.escape(prose.statement.rstrip("."))
-    return f"{sentence}{_marks(prose)}. "
+    return f"{sentence}{_evidence(prose, by_number)}. "
 
 
-def _marks(entry) -> str:
-    """Fotnots-superscripts för item-källor + neutral etikett för manuell källa."""
+def _evidence(entry, by_number) -> str:
+    """Synlig bevisning vid ett påstående (A2): superscript-fotnot + inline källa
+    (namn, datum, ev. ordagrant citat) + neutral etikett för manuell källa.
+
+    Inbäddade citat/källor är den starkaste citeringsspaken (deep research 2026-06-05),
+    så vi lyfter källan ur fotnotslistan i botten till synligt läge vid faktan. Fotnoten
+    behålls som kompakt ankare till bibliografin."""
     out = ""
     for n in entry.footnotes:
         out += f'<sup><a href="#src-{n}" title="Källa {n}">[{n}]</a></sup>'
+    inline = _inline_sources(entry.footnotes, by_number)
+    if inline:
+        out += inline
     if entry.manual_label:
         out += f' <span class="manual">({html.escape(entry.manual_label)})</span>'
     return out
+
+
+def _inline_sources(footnotes, by_number) -> str:
+    """Bygg synlig källattribution (namn · datum · ev. citat) för en lista fotnoter.
+    Tom sträng om ingen av fotnoterna har en (länkbar) källa."""
+    parts: list[str] = []
+    for n in footnotes:
+        s = by_number.get(n)
+        if s is None:
+            continue
+        bits = []
+        if s.name:
+            bits.append(html.escape(s.name))
+        if s.date:
+            bits.append(_fmt_date(s.date))
+        label = ", ".join(bits) or f"Källa {n}"
+        # Bara namn+datum inline — alltid korrekt för varje claim som citerar källan.
+        # Källans ordagranna utdrag (excerpt) är KÄLLnivå, inte claim-nivå: det visas i
+        # bibliografin (_source_item), inte här, så det aldrig felaktigt antyds styrka
+        # ett specifikt påstående det inte stöder. Claim-nivå-citat = uppföljning (A2.1).
+        parts.append(f'<a href="#src-{n}">{label}</a>')
+    if not parts:
+        return ""
+    return f'<span class="cite"> — {" · ".join(parts)}</span>'
 
 
 def _source_item(source) -> str:
     label = html.escape(source.name or source.url or f"Källa {source.number}")
     date = f" · {_fmt_date(source.date)}" if source.date else ""
     inner = f'<a href="{html.escape(source.url)}">{label}</a>' if source.url else label
-    return f'  <li id="src-{source.number}">{inner}{date}</li>'
+    # Ordagrant utdrag ur källan (A2) — korrekt attribuerat på KÄLLnivå i bibliografin.
+    quote = ""
+    if getattr(source, "excerpt", None):
+        quote = f' <span class="quote">”{html.escape(source.excerpt.strip()[:200])}”</span>'
+    return f'  <li id="src-{source.number}">{inner}{date}{quote}</li>'
 
 
 def _trust_line(model: RenderModel) -> str:

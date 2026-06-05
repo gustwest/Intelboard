@@ -71,6 +71,10 @@ class Source:
     name: str | None
     schema_type: str
     attested: bool = False   # True → källa vi själva verifierar (sdPublisher=Geogiraph)
+    # Kort ordagrant utdrag/citat ur källan (A2). Exponeras synligt inline på
+    # profilsidan när det finns — inbäddade citat/siffror är den starkaste
+    # citeringsspaken (deep research 2026-06-05). None = visa bara namn+datum.
+    excerpt: str | None = None
 
 
 @dataclass
@@ -645,13 +649,17 @@ def _load_source(client_id: str, base: str, src: ClaimSource, number: int) -> So
     if not snap.exists:
         return None
     raw = snap.to_dict() or {}
+    extra = raw.get("extra") or {}
     return Source(
         number=number,
         sid=f"{base}#src-{src.item_id}",
         url=raw.get("url"),
         date=_iso(raw.get("published_at")),
-        name=raw.get("name") or (raw.get("extra") or {}).get("name"),
+        name=raw.get("name") or extra.get("name"),
         schema_type=raw.get("schema_type") or "CreativeWork",
+        # Ordagrant utdrag om connectorn lagrat ett (A2). Faller tyst tillbaka på
+        # namn+datum när det saknas — ingen regression för källor utan citat.
+        excerpt=raw.get("excerpt") or extra.get("excerpt"),
     )
 
 
