@@ -355,7 +355,7 @@ export default function GraphRiskLoopPage() {
         />
       )}
 
-      {/* Godkända risk-frågor — transparens kring vad som mäts (alla lägen, för kund-värde) */}
+      {/* Risk-frågor (beslutssäkerhet) — transparens, placerad direkt efter riskloopen den hör till */}
       {riskQuestions && (riskQuestions.counts.approved > 0) && (
         <ApprovedQuestionsPanel
           questions={riskQuestions.questions.filter((q) => q.status === 'approved')}
@@ -368,7 +368,7 @@ export default function GraphRiskLoopPage() {
       {/* Veckovis synlighet — det löpande, automatiska måttet (visas oavsett månadsrapport) */}
       {polling && polling.length > 0 && <WeeklyVisibility weeks={polling} />}
 
-      {/* Polling-frågor — vad AI-motorerna fick frågan om i veckan (transparens) */}
+      {/* Synlighets-frågor (Share of Voice) — transparens, placerad direkt efter veckovis synlighet den driver */}
       {pollingQuestions && pollingQuestions.total > 0 && selected && (
         <PollingQuestionsPanel data={pollingQuestions} clientId={selected} mode={mode} />
       )}

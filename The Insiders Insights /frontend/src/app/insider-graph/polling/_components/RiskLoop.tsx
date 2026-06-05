@@ -333,10 +333,10 @@ export function ApprovedQuestionsPanel({ questions, clientId, mode, onChanged }:
   return (
     <div style={{ ...cardStyle, marginBottom: 18 }}>
       <SectionHead
-        title={`Godkända frågor — vad AI-motorerna får frågan om`}
+        title={`Risk-frågor — mäter beslutssäkerhet`}
         hint={open
-          ? "De aktiva frågorna som risk-detect kör mot motorerna varje vecka. Avvisa en fråga som visat sig vara dålig — den körs inte längre och kan ersättas med en ny via Generera frågor."
-          : `${questions.length} ${questions.length === 1 ? 'godkänd fråga' : 'godkända frågor'} mäts veckovis · ${Array.from(byPersona.entries()).map(([p, n]) => `${n} ${PERSONA_SV[p] || p}`).join(' · ')}`
+          ? "De godkända, beslutskritiska frågorna som risk-detect kör mot motorerna varje vecka — de driver beslutssäkerheten (skilt från synlighets-frågorna nedan som mäter Share of Voice). Avvisa en fråga som visat sig vara dålig — den körs inte längre och kan ersättas med en ny via Generera frågor."
+          : `${questions.length} godkända risk-${questions.length === 1 ? 'fråga' : 'frågor'} mäts veckovis · ${Array.from(byPersona.entries()).map(([p, n]) => `${n} ${PERSONA_SV[p] || p}`).join(' · ')}`
         }
         collapsible
         open={open}

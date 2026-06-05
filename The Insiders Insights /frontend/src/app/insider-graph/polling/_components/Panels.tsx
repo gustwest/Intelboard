@@ -157,10 +157,10 @@ export function PollingQuestionsPanel({ data, clientId, mode }: { data: PollingQ
   return (
     <div style={{ ...cardStyle, marginBottom: 18 }}>
       <SectionHead
-        title={data.is_custom ? 'Polling-frågor — egna (skräddarsydda)' : 'Polling-frågor — default (genererade ur kundens kontext)'}
+        title={data.is_custom ? 'Synlighets-frågor — mäter Share of Voice (egna)' : 'Synlighets-frågor — mäter Share of Voice (default)'}
         hint={open
-          ? "Veckovis polling kör dessa frågor mot AI-motorerna och mäter hur ofta kunden nämns. Default-frågorna fylls med kundens industry/topic/service_area — du kan ersätta dem med egna via Mätningskonfig på kunddetalj."
-          : `${data.total} ${data.total === 1 ? 'fråga' : 'frågor'} mäts varje vecka · ${categories.length} kategorier${data.is_custom ? ' · egna' : ' · default-templates'}`
+          ? "Veckovis polling kör dessa frågor mot AI-motorerna och mäter hur ofta kunden nämns — de driver Share of Voice (skilt från risk-frågorna ovan som mäter beslutssäkerhet). Default-frågorna fylls med kundens industry/topic/service_area — du kan ersätta dem med egna via Mätningskonfig på kunddetalj."
+          : `${data.total} synlighets-${data.total === 1 ? 'fråga' : 'frågor'} mäts varje vecka · ${categories.length} kategorier${data.is_custom ? ' · egna' : ' · default-templates'}`
         }
         collapsible
         open={open}
