@@ -15,7 +15,7 @@
  * Talar med routers/verification.py: GET /evidence-types, GET /{cid}, POST /{cid} (multipart).
  * Servern är auktoritativ för grinden — vi speglar den bara för att vägleda valet.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ShieldCheck, UploadCloud, FileCheck2, CheckCircle2, XCircle, Stamp, ChevronDown,
 } from 'lucide-react';
@@ -196,11 +196,9 @@ function UploadForm({
   const [rejecting, setRejecting] = useState(false);
   const [rejectedReason, setRejectedReason] = useState('');
   const [file, setFile] = useState<File | null>(null);
-  const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<SubmitResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
 
   const profile = types.find((t) => t.evidence_type === evidenceType);
   // Klient-sidans spegling av grinden: utan oberoende+spårbarhet kan bara self_declared väljas.
@@ -283,23 +281,17 @@ function UploadForm({
       </div>
 
       {/* Filuppladdning (revisionsspår — alltid sparad) */}
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) setFile(f); }}
-        onClick={() => fileInput.current?.click()}
-        style={{
-          background: dragOver ? 'rgba(159,81,182,0.08)' : '#f7f8f9',
-          border: `2px dashed ${dragOver ? C.accent : C.border}`, borderRadius: 10, padding: '14px 16px',
-          textAlign: 'center', cursor: 'pointer', margin: '12px 0',
-        }}
+      <UI.DropZone
+        onFile={setFile}
+        padding="14px 16px"
+        style={{ margin: '12px 0' }}
+        ariaLabel="Ladda upp underlag — dra hit eller tryck för att välja (PDF, bild, kalkylblad)"
       >
         <UploadCloud size={20} color={C.muted} />
         <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginTop: 4 }}>
           {file ? <><FileCheck2 size={13} style={{ verticalAlign: 'middle' }} /> {file.name}</> : 'Dra underlaget hit eller klicka (PDF, bild, kalkylblad)'}
         </div>
-        <input ref={fileInput} type="file" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) setFile(f); e.target.value = ''; }} />
-      </div>
+      </UI.DropZone>
 
       {role !== 'internt' && (
         <>

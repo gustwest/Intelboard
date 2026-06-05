@@ -6,7 +6,7 @@
 // (graphColors + statusColors) — använd dessa primitiver istället för att
 // kopiera inline-stilar.
 
-import { CSSProperties, ReactNode, useEffect, useRef } from 'react';
+import { CSSProperties, ReactNode, useEffect, useRef, useState } from 'react';
 import { Save, X, Loader2, Check, Play } from 'lucide-react';
 import { graphColors as C, statusColors, surfaces } from '../GraphPageShell';
 
@@ -395,6 +395,63 @@ export function JobRunButton({
       <Icon size={12} color={iconColor} style={status === 'running' ? { animation: 'ui-spin 0.8s linear infinite' } : undefined} />
       {status === 'running' ? runningLabel : label}
     </button>
+  );
+}
+
+// ── DropZone ─────────────────────────────────────────────────────────────────
+// Tillgänglig fil-uppladdningszon: drag-and-drop + klick/Enter/Space → filväljare.
+// Äger dragOver-state, dold <input type=file> och a11y (role=button, tabIndex,
+// aria-label, tangentbord). Ersätter 3 klickbara <div>-ar utan a11y.
+// onFile(file) anropas vid släpp ELLER val; input nollställs efter varje val.
+export function DropZone({
+  onFile, accept, disabled, ariaLabel = 'Ladda upp fil — släpp en fil här eller tryck för att välja',
+  padding = '18px 16px', restBg = '#f7f8f9', children, style,
+}: {
+  onFile: (file: File) => void;
+  accept?: string;
+  disabled?: boolean;
+  ariaLabel?: string;
+  padding?: string;
+  restBg?: string;
+  children?: ReactNode;
+  style?: CSSProperties;
+}) {
+  const [dragOver, setDragOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const openPicker = () => { if (!disabled) inputRef.current?.click(); };
+  return (
+    <div
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-label={ariaLabel}
+      aria-disabled={disabled || undefined}
+      onClick={openPicker}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker(); } }}
+      onDragOver={(e) => { e.preventDefault(); if (!disabled) setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        if (disabled) return;
+        const f = e.dataTransfer.files?.[0];
+        if (f) onFile(f);
+      }}
+      style={{
+        background: dragOver ? 'rgba(159,81,182,0.08)' : restBg,
+        border: `2px dashed ${dragOver ? C.accent : C.border}`,
+        borderRadius: 10, padding, textAlign: 'center',
+        cursor: disabled ? 'wait' : 'pointer', transition: 'all 0.15s', outline: 'none', ...style,
+      }}
+    >
+      {children}
+      <input
+        ref={inputRef}
+        type="file"
+        accept={accept}
+        style={{ display: 'none' }}
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ''; }}
+      />
+    </div>
   );
 }
 

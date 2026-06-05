@@ -8,7 +8,7 @@
  * upp slår på linkedin_capacity-connectorn för kunden. Talar med /api/linkedin/* +
  * /api/connectors/{clientId}.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Network, UploadCloud, CheckCircle2, AlertCircle, FileCheck2, X, BellRing } from 'lucide-react';
 import { graphColors as C } from './GraphPageShell';
 import { graphFetch } from '../_lib/api';
@@ -31,10 +31,8 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
   const [skills, setSkills] = useState('');
   const [quarter, setQuarter] = useState('');
   const [followers, setFollowers] = useState('');
-  const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -85,7 +83,6 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
       setSkills('');
       setQuarter('');
       setFollowers('');
-      if (fileInput.current) fileInput.current.value = '';
       load();
     } catch (e) {
       setBanner({ tone: 'error', text: e instanceof Error ? e.message : String(e) });
@@ -126,17 +123,17 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
       )}
 
       {/* drag-drop-zon */}
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) setFile(f); }}
-        onClick={() => !busy && fileInput.current?.click()}
-        style={{ background: dragOver ? 'rgba(159,81,182,0.08)' : '#f7f8f9', border: `2px dashed ${dragOver ? C.accent : C.border}`, borderRadius: 10, padding: '18px 16px', textAlign: 'center', cursor: busy ? 'wait' : 'pointer', transition: 'all 0.15s', marginBottom: 10 }}
+      <UI.DropZone
+        onFile={setFile}
+        accept=".png,.jpg,.jpeg,.csv,.xlsx,.xls,.pdf"
+        disabled={busy}
+        style={{ marginBottom: 10 }}
+        ariaLabel="Ladda upp skärmklipp eller export — dra hit eller tryck för att välja"
       >
         {file ? (
           <div style={{ fontSize: 12, color: C.text, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             <FileCheck2 size={16} color={C.accent} /> {file.name}
-            <button onClick={(e) => { e.stopPropagation(); setFile(null); if (fileInput.current) fileInput.current.value = ''; }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: C.muted, display: 'inline-flex' }}>
+            <button onClick={(e) => { e.stopPropagation(); setFile(null); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: C.muted, display: 'inline-flex' }}>
               <X size={14} />
             </button>
           </div>
@@ -146,9 +143,7 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
             <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginTop: 4 }}>Dra skärmklipp/export hit eller klicka för att välja</div>
           </>
         )}
-        <input ref={fileInput} type="file" accept=".png,.jpg,.jpeg,.csv,.xlsx,.xls,.pdf" style={{ display: 'none' }}
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) setFile(f); }} />
-      </div>
+      </UI.DropZone>
 
       <textarea value={skills} onChange={(e) => setSkills(e.target.value)} rows={2}
         placeholder="Aggregerade kompetenser (valfritt): AWS, Kubernetes, ESG …"

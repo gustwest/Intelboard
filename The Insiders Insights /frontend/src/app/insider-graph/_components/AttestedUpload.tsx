@@ -11,7 +11,7 @@
  * Återanvändbar: används på kunddetalj-sidan (löpande) och kan droppas in i
  * onboarding-flödet (vid uppsättning). Talar med /api/attested/* (routers/attested.py).
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { UploadCloud, FileCheck2, RefreshCw, PlusCircle, CheckCircle2, AlertCircle, Trash2 } from 'lucide-react';
 import { graphColors as C } from './GraphPageShell';
 import * as UI from './ui';
@@ -107,14 +107,12 @@ function SourceUploader({ clientId, source, onDone }: { clientId: string; source
   const today = new Date().toISOString().slice(0, 10);
   const [attestedAt, setAttestedAt] = useState(today);
   const [url, setUrl] = useState('');
-  const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<UploadResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [including, setIncluding] = useState(false);
   const [showSamples, setShowSamples] = useState(false);
   const [clearing, setClearing] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
 
   const replace = source.mode === 'replace';
   const fileHint = FILE_HINTS[source.key] || DEFAULT_FILE_HINT;
@@ -252,43 +250,18 @@ function SourceUploader({ clientId, source, onDone }: { clientId: string; source
       </div>
 
       {/* drag-drop / klick */}
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-          const f = e.dataTransfer.files?.[0];
-          if (f) upload(f);
-        }}
-        onClick={() => !busy && fileInput.current?.click()}
-        style={{
-          background: dragOver ? 'rgba(159,81,182,0.08)' : '#f7f8f9',
-          border: `2px dashed ${dragOver ? C.accent : C.border}`,
-          borderRadius: 10,
-          padding: '18px 16px',
-          textAlign: 'center',
-          cursor: busy ? 'wait' : 'pointer',
-          transition: 'all 0.15s',
-          opacity: busy ? 0.6 : 1,
-        }}
+      <UI.DropZone
+        onFile={upload}
+        accept={fileHint.accept}
+        disabled={busy}
+        style={{ opacity: busy ? 0.6 : 1 }}
+        ariaLabel="Ladda upp attesterad data — dra hit eller tryck för att välja"
       >
         <UploadCloud size={22} color={C.muted} />
         <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginTop: 4 }}>
           {busy ? 'Laddar upp…' : fileHint.label}
         </div>
-        <input
-          ref={fileInput}
-          type="file"
-          accept={fileHint.accept}
-          style={{ display: 'none' }}
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) upload(f);
-            e.target.value = '';
-          }}
-        />
-      </div>
+      </UI.DropZone>
 
       {replace && (
         <div style={{ fontSize: 11, color: '#b45309', marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
