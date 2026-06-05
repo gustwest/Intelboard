@@ -234,6 +234,66 @@ export function FieldLabel({
   );
 }
 
+// ── Chevron ──────────────────────────────────────────────────────────────────
+// Konsekvent expand/collapse-pil (▶ → roterar 90° vid open). aria-hidden —
+// tillgänglighetstillståndet bärs av aria-expanded på toggle-elementet.
+export function Chevron({ open, size = 10, color }: { open: boolean; size?: number; color?: string }) {
+  return (
+    <span
+      aria-hidden
+      style={{
+        fontSize: size, color: color ?? C.muted, lineHeight: 1, display: 'inline-block',
+        transition: 'transform 0.2s', transform: open ? 'rotate(90deg)' : 'none',
+      }}
+    >
+      ▶
+    </span>
+  );
+}
+
+// ── toggleProps ──────────────────────────────────────────────────────────────
+// Tillgänglighets-props för att retrofitta ett klickbart expand/collapse-element
+// (ersätter klickbara <div> utan tangentbord/ARIA). Sprid på elementet:
+//   <div {...toggleProps(open, onToggle)} style={…}>…</div>
+// Ger role=button, tabIndex, aria-expanded och Enter/Space-hantering.
+export function toggleProps(open: boolean, onToggle?: () => void) {
+  return {
+    role: 'button' as const,
+    tabIndex: 0,
+    'aria-expanded': open,
+    onClick: onToggle,
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onToggle?.();
+      }
+    },
+  };
+}
+
+// ── Collapsible ──────────────────────────────────────────────────────────────
+// Kontrollerad disclosure: tillgänglig header (chevron + valfritt innehåll) +
+// body som visas när open. Ägaren håller open-state och skickar onToggle.
+export function Collapsible({
+  open, onToggle, header, children, gap = 8, headerStyle,
+}: {
+  open: boolean; onToggle?: () => void; header: ReactNode; children?: ReactNode;
+  gap?: number; headerStyle?: CSSProperties;
+}) {
+  return (
+    <div>
+      <div
+        {...toggleProps(open, onToggle)}
+        style={{ display: 'flex', alignItems: 'center', gap, cursor: 'pointer', userSelect: 'none', ...headerStyle }}
+      >
+        <Chevron open={open} />
+        {header}
+      </div>
+      {open && children}
+    </div>
+  );
+}
+
 // ── SaveButton ───────────────────────────────────────────────────────────────
 // Dirty-state spara-knapp: tonad accent när dirty, dämpad/inaktiv annars.
 // 5+ inline-kopior i editorerna med identisk logik.

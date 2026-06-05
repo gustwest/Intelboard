@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Radar, RefreshCw, Play, Loader2, Check, X, Pause, CalendarClock } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
+import * as UI from '../_components/ui';
 import { graphFetch, GRAPH_API } from '../_lib/api';
 import { useJobRuns, fmtRelative } from '../_lib/jobRuns';
 import {
@@ -907,19 +908,13 @@ function SectionHead({ title, hint, collapsible, open, onToggle, badge }: {
   onToggle?: () => void;
   badge?: string;
 }) {
+  const interactive = collapsible
+    ? { ...UI.toggleProps(!!open, onToggle), style: { marginBottom: 14, cursor: 'pointer', userSelect: 'none' } as React.CSSProperties }
+    : { style: { marginBottom: 14 } as React.CSSProperties };
   return (
-    <div
-      style={{
-        marginBottom: 14,
-        cursor: collapsible ? 'pointer' : 'default',
-        userSelect: collapsible ? 'none' : 'auto',
-      }}
-      onClick={collapsible ? onToggle : undefined}
-    >
+    <div {...interactive}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        {collapsible && (
-          <span style={{ fontSize: 10, color: C.muted, transition: 'transform 0.2s', display: 'inline-block', transform: open ? 'rotate(90deg)' : 'none' }}>▶</span>
-        )}
+        {collapsible && <UI.Chevron open={!!open} />}
         <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: 0, letterSpacing: '-0.005em' }}>{title}</h2>
         {badge && (
           <span style={{ fontSize: 10, fontWeight: 600, color: S.inProgress.fg, background: S.inProgress.bg, border: `1px solid ${S.inProgress.border}`, borderRadius: 5, padding: '2px 7px', letterSpacing: '0.04em' }}>{badge}</span>
@@ -1248,6 +1243,7 @@ function CategoryRow({ cat, row, competitors, clientSoV, trend }: {
   return (
     <>
       <div
+        {...(canExpand ? UI.toggleProps(open, () => setOpen((o) => !o)) : {})}
         style={{
           ...catGridTrend,
           padding: '8px 0',
@@ -1256,11 +1252,10 @@ function CategoryRow({ cat, row, competitors, clientSoV, trend }: {
           alignItems: 'center',
           cursor: canExpand ? 'pointer' : 'default',
         }}
-        onClick={() => canExpand && setOpen((o) => !o)}
         title={canExpand ? 'Klicka för att se vilka konkurrenter AI nämner i den här kategorin' : 'Konkurrent-data fylls vid nästa polling-körning'}
       >
         <span style={{ color: C.text, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          {canExpand && <span style={{ fontSize: 9, color: C.muted, transition: 'transform 0.2s', display: 'inline-block', transform: open ? 'rotate(90deg)' : 'none' }}>▶</span>}
+          {canExpand && <UI.Chevron open={open} size={9} />}
           {CATEGORY_SV[cat] || cat}
         </span>
         <span style={{ color: C.text }}>{Math.round(row.share_of_voice * 100)}%</span>
@@ -1710,7 +1705,7 @@ function RecipeRow({
   return (
     <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 12px' }}>
       <div
-        onClick={() => setOpen((o) => !o)}
+        {...UI.toggleProps(open, () => setOpen((o) => !o))}
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, cursor: 'pointer' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -1721,7 +1716,7 @@ function RecipeRow({
           <span style={{ fontSize: 11, color: C.muted }}>·</span>
           <span style={{ fontSize: 11, color: C.dim }}>{KNOWLEDGE_SOURCE_LABEL_SHORT[skel.knowledge_source_target] || skel.knowledge_source_target}</span>
         </div>
-        <span style={{ fontSize: 11, color: C.dim }}>{open ? '▾' : '▸'}</span>
+        <UI.Chevron open={open} size={11} color={C.dim} />
       </div>
       {open && (
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${C.border}` }}>

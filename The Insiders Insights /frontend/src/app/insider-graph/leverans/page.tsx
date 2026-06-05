@@ -359,6 +359,7 @@ export default function LeveransPage() {
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 22px', marginBottom: 16 }}>
         <button
           onClick={() => setShowOutput((v) => !v)}
+          aria-expanded={showOutput}
           style={{
             display: 'flex',
             alignItems: 'center',

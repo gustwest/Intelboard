@@ -419,7 +419,10 @@ export default function OutputQualityDetailPage() {
                         return (
                           <Row key={key}>
                             <tr style={{ borderTop: `1px solid ${C.border}`, cursor: 'pointer' }}
-                                onClick={() => setExpanded((p) => ({ ...p, [key]: !isOpen }))}>
+                                tabIndex={0}
+                                aria-expanded={isOpen}
+                                onClick={() => setExpanded((p) => ({ ...p, [key]: !isOpen }))}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded((p) => ({ ...p, [key]: !isOpen })); } }}>
                               <td style={td}>{isOpen ? <ChevronDown size={14} color={C.muted} /> : <ChevronRight size={14} color={C.muted} />}</td>
                               <td style={td}>
                                 <div style={{ color: C.text }}>{c.statement_preview}</div>
