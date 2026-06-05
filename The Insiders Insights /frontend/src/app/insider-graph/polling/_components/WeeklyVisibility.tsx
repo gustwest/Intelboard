@@ -15,6 +15,8 @@ import {
   aggregateEnginesBySource,
   sentimentLabel,
   pct,
+  detectModelBreaks,
+  describeModelBreak,
 } from '../_shared';
 import { SectionHead, Stat, Sparkline } from './common';
 
@@ -60,20 +62,49 @@ export function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
         {latest.models_used?.length ? ` · ${latest.models_used.join(', ')}` : ''}
       </div>
 
-      {sovSeries.length > 1 && (
-        <div>
-          <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 8 }}>Share of Voice över tid</div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 90, borderBottom: `1px solid ${C.border}`, paddingBottom: 4 }}>
-            {sovSeries.map((w) => (
-              <div key={w.week_id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1, maxWidth: 48 }}>
-                <span style={{ fontSize: 10, color: C.muted }}>{Math.round(w.share_of_voice * 100)}</span>
-                <div style={{ width: '100%', maxWidth: 28, height: `${Math.max(3, w.share_of_voice * 72)}px`, background: C.accent, borderRadius: '4px 4px 0 0', opacity: 0.85 }} />
-                <span style={{ fontSize: 9, color: C.dim, fontFamily: 'ui-monospace, monospace' }}>{w.week_id.slice(5)}</span>
-              </div>
-            ))}
+      {sovSeries.length > 1 && (() => {
+        // Kalibreringsbrytningar härledda ur models_used-diff. beforeIndex pekar på
+        // veckan EFTER bytet — vi ritar en lodrät markör i gapet före den stapeln.
+        const breaks = detectModelBreaks(sovSeries);
+        const breakByIndex = new Map(breaks.map((b) => [b.beforeIndex, b]));
+        return (
+          <div>
+            <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>Share of Voice över tid</span>
+              {breaks.length > 0 && (
+                <span style={{ fontSize: 10, color: C.dim, fontWeight: 500 }}>
+                  ⋮ = modellbyte (ej jämförbart över linjen)
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 90, borderBottom: `1px solid ${C.border}`, paddingBottom: 4 }}>
+              {sovSeries.map((w, i) => {
+                const brk = breakByIndex.get(i);
+                return (
+                  <div key={w.week_id} style={{ display: 'flex', alignItems: 'flex-end', flex: 1, maxWidth: brk ? 60 : 48 }}>
+                    {brk && (
+                      <div
+                        title={describeModelBreak(brk)}
+                        style={{
+                          alignSelf: 'stretch', width: 0, marginRight: 8, borderLeft: `2px dashed ${C.accent}`,
+                          position: 'relative', cursor: 'help', opacity: 0.7,
+                        }}
+                      >
+                        <span style={{ position: 'absolute', top: -2, left: -6, fontSize: 11, color: C.accent }}>⋮</span>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1, maxWidth: 48 }}>
+                      <span style={{ fontSize: 10, color: C.muted }}>{Math.round(w.share_of_voice * 100)}</span>
+                      <div style={{ width: '100%', maxWidth: 28, height: `${Math.max(3, w.share_of_voice * 72)}px`, background: C.accent, borderRadius: '4px 4px 0 0', opacity: 0.85 }} />
+                      <span style={{ fontSize: 9, color: C.dim, fontFamily: 'ui-monospace, monospace' }}>{w.week_id.slice(5)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {cats.length > 0 && (
         <Block label="Per kategori — senaste veckan + trend" summary={`${cats.length} ${cats.length === 1 ? 'kategori' : 'kategorier'}`} defaultOpen>

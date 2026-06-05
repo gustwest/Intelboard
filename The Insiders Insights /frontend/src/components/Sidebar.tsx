@@ -20,6 +20,7 @@ import {
   Gauge,
   DollarSign,
   Bell,
+  Cpu,
 } from 'lucide-react';
 import ProductSwitcher, { activeProductId } from './ProductSwitcher';
 import { graphFetch } from '@/app/insider-graph/_lib/api';
@@ -65,6 +66,7 @@ const GRAPH_GROUPS: NavGroup[] = [
       { href: '/insider-graph/polling', label: 'AI-synlighet', icon: Radar, badge: 'risk' },
       { href: '/insider-graph/output-quality', label: 'Output-kvalitet (connector)', icon: Gauge },
       { href: '/insider-graph/costs', label: 'Kostnader', icon: DollarSign },
+      { href: '/insider-graph/model-health', label: 'Modell-hälsa', icon: Cpu },
       { href: '/insider-graph/alerts', label: 'Drift-larm', icon: Bell },
     ],
   },

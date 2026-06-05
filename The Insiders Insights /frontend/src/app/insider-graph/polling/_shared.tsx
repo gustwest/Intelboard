@@ -211,6 +211,51 @@ export const CATEGORY_SV: Record<string, string> = {
   hr: 'HR',
 };
 
+// --- Kalibreringsbrytning (modellbyte mellan veckor) -----------------------
+// När probe-motorerna byts (t.ex. gpt-4o → gpt-4.1, eller nya motorer tillkommer)
+// blir share-of-voice INTE jämförbart över bytet — det är olika mätinstrument.
+// Vi härleder bytet direkt ur `models_used` (datan bär sin egen proveniens), så
+// detekteringen funkar för historiska byten utan beroende på change-event-loggen.
+
+export type ModelBreak = {
+  /** Index i den kronologiska serien för veckan EFTER bytet (där linjen ritas före). */
+  beforeIndex: number;
+  added: string[];
+  removed: string[];
+};
+
+/** Returnerar visningsnamn för ett model-id (samma mapping som motorerna). */
+function engineLabel(id: string): string {
+  return ENGINE_SV[id] || id;
+}
+
+/** Detektera modellbyten i en kronologisk (äldst→nyast) serie veckor. En brytning
+ *  uppstår där veckans `models_used` skiljer sig från föregående veckas. */
+export function detectModelBreaks(chronoWeeks: PollingWeek[]): ModelBreak[] {
+  const breaks: ModelBreak[] = [];
+  for (let i = 1; i < chronoWeeks.length; i++) {
+    const prev = chronoWeeks[i - 1].models_used;
+    const curr = chronoWeeks[i].models_used;
+    if (!prev || !curr) continue; // saknad proveniens → kan inte avgöra, hoppa
+    const prevSet = new Set(prev);
+    const currSet = new Set(curr);
+    const added = curr.filter((m) => !prevSet.has(m));
+    const removed = prev.filter((m) => !currSet.has(m));
+    if (added.length || removed.length) {
+      breaks.push({ beforeIndex: i, added, removed });
+    }
+  }
+  return breaks;
+}
+
+/** Mänsklig sammanfattning av ett byte för tooltip. */
+export function describeModelBreak(b: ModelBreak): string {
+  const parts: string[] = [];
+  if (b.added.length) parts.push(`+ ${b.added.map(engineLabel).join(', ')}`);
+  if (b.removed.length) parts.push(`− ${b.removed.map(engineLabel).join(', ')}`);
+  return `Modellbyte: ${parts.join('  ')}. Jämför inte Share of Voice rakt över denna linje — det är olika mätinstrument.`;
+}
+
 // --- Schemalagda körningar (speglar routers/schedules.py) ---
 
 export type ScheduleRow = {
