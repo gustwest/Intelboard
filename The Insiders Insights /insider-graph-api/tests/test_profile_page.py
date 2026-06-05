@@ -178,6 +178,56 @@ class StructureAndFreshnessTest(unittest.TestCase):
         self.assertIn("mars 2024", render_profile_html("acme"))
 
 
+class FaqPersonaLogoTest(unittest.TestCase):
+    def test_faq_covers_extended_predicates(self):
+        """A6: fler predikat blir källförsedda Q&A (FAQ som evidensbärare)."""
+        fakefs.reset(
+            client={"company_name": "Acme AB"},
+            claims={"s1": {"claim_kind": "property", "subject_ref": "org",
+                           "predicate": "slogan", "value": "Människor först",
+                           "source": [{"kind": "manual"}], "included_in_output": True}},
+        )
+        html = render_profile_html("acme")
+        self.assertIn("Vad står Acme AB för?", html)
+        self.assertIn("Människor först", html)
+
+    def test_persona_sections_in_html(self):
+        """A7: persona-taggade claims renderas som egna sektioner i HTML (ej bara llms.txt)."""
+        fakefs.reset(
+            client={"company_name": "Acme AB", "website": "https://acme.se"},
+            company_items={
+                "bv1": {"schema_type": "Organization", "url": "https://www.allabolag.se/5566778899",
+                        "published_at": datetime(2024, 3, 1, tzinfo=timezone.utc),
+                        "included_in_output": True, "extra": {"name": "Allabolag"}}
+            },
+            claims={"c1": {"claim_kind": "narrative", "subject_ref": "org",
+                           "statement": "Snabb leverans till kunder", "audience": ["customer"],
+                           "source": [{"kind": "item", "item_id": "bv1"}], "included_in_output": True}},
+        )
+        html = render_profile_html("acme")
+        self.assertIn('class="audience"', html)
+        self.assertIn("För kund", html)
+        audience = html.split('class="audience"', 1)[1]
+        self.assertIn("Snabb leverans till kunder", audience)
+
+    def test_no_persona_sections_when_evergreen(self):
+        """A7: utan persona-taggar renderas inga audience-sektioner."""
+        _setup()
+        self.assertNotIn('class="audience"', render_profile_html("acme"))
+
+    def test_logo_rendered_when_set(self):
+        """A9: logotyp visas bredvid H1 när logo_url finns."""
+        fakefs.reset(client={"company_name": "Acme AB", "logo_url": "https://acme.se/logo.svg"})
+        html = render_profile_html("acme")
+        self.assertIn('class="logo"', html)
+        self.assertIn("https://acme.se/logo.svg", html)
+
+    def test_no_logo_img_without_url(self):
+        """A9: ingen img när logo saknas (rent fallback)."""
+        _setup()
+        self.assertNotIn('class="logo"', render_profile_html("acme"))
+
+
 class LlmsTxtTest(unittest.TestCase):
     def test_structure_and_facts(self):
         _setup()

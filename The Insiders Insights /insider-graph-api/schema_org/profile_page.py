@@ -21,6 +21,10 @@ _FACT_LABELS = {
     "address": "Säte",
     "knowsAbout": "Verksamhet",
     "numberOfEmployees": "Antal anställda",
+    "slogan": "Motto",
+    "memberOf": "Medlem i",
+    "hasCredential": "Certifieringar",
+    "jobBenefits": "Förmåner",
 }
 
 _MONTHS_SV = [
@@ -132,6 +136,49 @@ def _fact_value_text(value) -> str:
     return ", ".join(str(v) for v in value) if isinstance(value, list) else str(value)
 
 
+def _audience_sections_html(model: RenderModel, by_number) -> str:
+    """A7: persona-sektioner i HTML — spegling av llms.txt:s `_audience_sections`.
+
+    Grupperar persona-taggade facts + prose under "För {persona}"-rubriker med synlig
+    källattribution (A2). Samma medvetna redundans (en claim taggad för flera personor
+    visas under varje). Tom sträng om inga persona-taggade claims (allt evergreen)."""
+    from services import persona_registry as pr
+
+    # persona_id → lista av (dedup-nyckel, html-fragment).
+    by_persona: dict[str, list[tuple[str, str]]] = {}
+    for f in model.facts:
+        for pid in getattr(f, "audience", None) or []:
+            label = _FACT_LABELS.get(f.predicate, f.predicate)
+            item = f"{html.escape(label)}: {html.escape(_fact_value_text(f.value))}{_evidence(f, by_number)}"
+            by_persona.setdefault(pid, []).append((f"{label}:{_fact_value_text(f.value)}", item))
+    for p in model.prose:
+        for pid in getattr(p, "audience", None) or []:
+            item = f"{html.escape(p.statement.rstrip('.'))}{_evidence(p, by_number)}"
+            by_persona.setdefault(pid, []).append((p.statement.strip(), item))
+
+    if not by_persona:
+        return ""
+
+    out: list[str] = []
+    for persona in pr.all_personas():  # registry-ordning för stabil rendering
+        entries = by_persona.get(persona.id)
+        if not entries:
+            continue
+        seen: set[str] = set()
+        lis: list[str] = []
+        for key, item in entries:
+            k = key.strip().lower()
+            if k and k not in seen:
+                seen.add(k)
+                lis.append(f"<li>{item}</li>")
+        if lis:
+            out.append(
+                f'<section class="audience"><h2>För {html.escape(persona.label_sv.lower())}</h2>'
+                f'<ul>{"".join(lis)}</ul></section>'
+            )
+    return "\n".join(out)
+
+
 def _render(model: RenderModel, graph: dict) -> str:
     name = html.escape(model.company_name or model.client_id)
     jsonld = json.dumps(graph, ensure_ascii=False, default=str)
@@ -159,6 +206,11 @@ def _render(model: RenderModel, graph: dict) -> str:
     faq_html = _faq_section(model)
     roles_html = _roles_section(model)
     trust = _trust_line(model)
+    # A7: persona-sektioner även i HTML (fanns bara i llms.txt) — Googlebot/människor
+    # ser samma målgruppsstruktur som AI-crawlers. A9: logotyp ur Organization-noden.
+    audience_html = _audience_sections_html(model, by_number)
+    logo_url = (graph.get("@graph") or [{}])[0].get("logo")
+    logo_html = f'<img class="logo" src="{html.escape(str(logo_url))}" alt="{name}">' if logo_url else ""
 
     return f"""<!doctype html>
 <html lang="sv">
@@ -179,6 +231,11 @@ def _render(model: RenderModel, graph: dict) -> str:
          margin: 0 auto; padding: 2rem 1.25rem; color: #1a1a1a; line-height: 1.6; }}
   h1 {{ font-size: 1.6rem; margin-bottom: .25rem; }}
   h2 {{ font-size: 1.05rem; margin: 2rem 0 .4rem; }}
+  .brand {{ display: flex; align-items: center; gap: .75rem; margin-bottom: .25rem; }}
+  .brand h1 {{ margin-bottom: 0; }}
+  .logo {{ max-height: 44px; max-width: 140px; object-fit: contain; }}
+  .audience ul {{ margin: .3rem 0; padding-left: 1.2rem; }}
+  .audience li {{ margin: .25rem 0; }}
   .lead {{ font-size: 1.08rem; color: #222; margin: .3rem 0 .6rem; }}
   .about p {{ margin: .5rem 0; }}
   .trust {{ color: #555; font-size: .85rem; margin-bottom: 1.5rem; }}
@@ -201,11 +258,12 @@ def _render(model: RenderModel, graph: dict) -> str:
 </style>
 </head>
 <body>
-<h1>{name}</h1>
+<header class="brand">{logo_html}<h1>{name}</h1></header>
 {lead_html}
 <p class="trust">{trust}</p>
 {facts_section}
 {about_section}
+{audience_html}
 {roles_html}
 {faq_html}
 <section class="sources">

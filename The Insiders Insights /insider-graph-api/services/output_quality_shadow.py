@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import firestore_client as fs
-from services import audience_personas
+from services import audience_personas, readability
 from services.output_quality import (
     AudiencePriority,
     PersonaTarget,
@@ -55,8 +55,12 @@ def run_shadow(client_id: str, source: str = "compile_schema") -> dict[str, Any]
     )
     response = score_bundle(request)
 
+    # A8: provisorisk, icke-blockerande läsbarhetssignal över de publicerade
+    # narrativ-påståendena. Endast trendning — påverkar aldrig leverans eller score.
+    read = readability.summarize([c.statement for c in claims if c.statement])
+
     log_id = _build_log_id(source)
-    _persist_log(client_id, log_id, source, request, response, claim_meta)
+    _persist_log(client_id, log_id, source, request, response, claim_meta, read)
 
     return {
         "log_id": log_id,
@@ -65,6 +69,7 @@ def run_shadow(client_id: str, source: str = "compile_schema") -> dict[str, Any]
         "claim_count": len(claims),
         "flag_count": len(response.bundle_flags),
         "llm_unavailable": bool(response.metadata.get("llm_unavailable")),
+        "low_readability": bool(read and read.get("low_readability")),
     }
 
 
@@ -198,6 +203,7 @@ def _persist_log(
     request: RubricRequest,
     response: Any,
     claim_meta: list[dict[str, Any]],
+    readability_summary: dict | None = None,
 ) -> None:
     """Skriv loggen. Per-claim-detaljer + per-connector-räkningar lagras tillsammans
     så connector-score-vyn (steg 5) kan aggregera utan att fan-out:a till varje claim-doc."""
@@ -211,6 +217,8 @@ def _persist_log(
         "claim_count": len(request.claims),
         "audience_count": len(request.audience_priorities),
         "metadata": response.metadata,
+        "readability": readability_summary,       # A8: provisorisk, icke-blockerande
+
         "per_claim": [c.model_dump() for c in response.per_claim],
         "bundle_flags": [f.model_dump() for f in response.bundle_flags],
         "top_improvements": response.top_improvements,

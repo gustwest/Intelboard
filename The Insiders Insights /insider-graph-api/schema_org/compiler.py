@@ -458,14 +458,21 @@ def compile_client(client_id: str) -> dict[str, Any]:
 
 
 # predikat → (frågemall, svarsmall). {name} = bolaget, {value} = (sammanslaget) värde.
+# A6: FAQ-formatet är i sig ingen citeringsspak (deep research) — men en bra BÄRARE
+# av tät, källförsedd text. Svaren ärver claimets footnotes (build_faq), så varje
+# Q&A är källbelagt. Vi täcker fler predikat → fler svar-formade, citerbara fakta.
 _FAQ_TEMPLATES: dict[str, tuple[str, str]] = {
     "foundingDate": ("När grundades {name}?", "{name} grundades {value}."),
     "address": ("Var har {name} sitt säte?", "{name} har sitt säte i {value}."),
     "knowsAbout": ("Vad är {name} verksamt inom?", "{name} är verksamt inom {value}."),
     "numberOfEmployees": ("Hur många anställda har {name}?", "{name} har {value} anställda."),
     "jobBenefits": ("Vilka förmåner erbjuder {name}?", "{name} erbjuder {value}."),
+    "slogan": ("Vad står {name} för?", "{name} står för: {value}."),
+    "memberOf": ("Vilka avtal eller branschorgan är {name} anslutet till?", "{name} är anslutet till {value}."),
+    "hasCredential": ("Vilka certifieringar eller utmärkelser har {name}?", "{name} har {value}."),
 }
-_FAQ_ORDER = ["foundingDate", "address", "knowsAbout", "numberOfEmployees", "jobBenefits"]
+_FAQ_ORDER = ["foundingDate", "address", "knowsAbout", "numberOfEmployees",
+              "jobBenefits", "slogan", "memberOf", "hasCredential"]
 
 
 def build_faq(model: RenderModel) -> list[FaqEntry]:

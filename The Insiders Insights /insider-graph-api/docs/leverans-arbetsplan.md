@@ -93,7 +93,8 @@ Alla ändringar i `schema_org/profile_page.py` (`_render`/`render_llms_txt`) + `
 - `compiler.py` `compile_client`: lägg `dateModified` på Organization (= `model.last_updated`, rad 243 finns redan) och ev. `datePublished` per Claim-nod ur källans datum. Säkerställ att JSON-LD-datumen matchar det HTML visar (researchens krav).
 **Acceptans:** fakta visar källdatum när det finns; `dateModified` i grafen = synligt "senast uppdaterad"; ingen layout-regression.
 
-### A6 — FAQ som bärare av tät, källförsedd text (**M**, omformulerad)
+### A6 — FAQ som bärare av tät, källförsedd text (**M**, omformulerad) — ✅ KLAR
+> Gjort: `_FAQ_TEMPLATES`/`_FAQ_ORDER` utökade med `slogan`/`memberOf`/`hasCredential` (källförsedda via befintliga footnotes → `Answer.citation`); svenska faktaetiketter för de nya predikaten. Test: `tests/test_profile_page.py`.
 **Mål:** FAQ-formatet är inte spaken — men en bra behållare för evidens. Utöka `build_faq` och fyll svaren med källa+siffra/citat.
 **Ändringar (`compiler.py` `build_faq`, 428–455):**
 - Idag: 5 hårdkodade predikat (`_FAQ_TEMPLATES`/`_FAQ_ORDER`, 418–425) + "Vad gör {name}?". Utöka med fler predikat (t.ex. `jobBenefits` finns redan; lägg `memberOf`, `hasCredential`, `slogan`, ESG/culture-teman) och persona-relevanta frågor ur `audience`-taggade claims.
@@ -101,17 +102,20 @@ Alla ändringar i `schema_org/profile_page.py` (`_render`/`render_llms_txt`) + `
 - Lokalisera frågemallarna via A1.
 **Acceptans:** FAQ täcker fler teman; varje svar källförsett; `FAQPage` matchar HTML. Lägre prio än A2–A5.
 
-### A7 — Persona-sektioner i HTML (**S–M**)
+### A7 — Persona-sektioner i HTML (**S–M**) — ✅ KLAR
+> Gjort: `_audience_sections_html` speglar llms.txt:s persona-gruppering till HTML (`<section class="audience"><h2>För {persona}</h2>`) med synlig källattribution (A2). Test: `tests/test_profile_page.py`.
 **Mål:** spegla `_audience_sections` (idag bara i `render_llms_txt`, 88–126) i den människo/Googlebot-vända HTML:en.
 **Ändringar:** ny `_audience_sections_html()` i `profile_page.py` som renderar samma persona-grupperade claims som `<section><h2>För {persona}</h2>...`, anropad i `_render`. Återanvänd `persona_registry`-ordning + dedup-logiken.
 **Acceptans:** HTML visar persona-rubricerade sektioner motsvarande llms.txt.
 
-### A8 — Fluency / låg perplexitet (**S**, mät i C2)
+### A8 — Fluency / låg perplexitet (**S**, mät i C2) — ✅ KLAR (lätt version)
+> Gjort: `services/readability.py` — deterministisk, språkagnostisk meningslängds-proxy, loggad icke-blockerande i shadow-rubric:en (`output_quality_shadow`). Ingen tung perplexitetsmodell (engelsk-biased fynd) — trösklarna är provisoriska och kalibreras mot C2-utfallet. Test: `tests/test_readability.py`.
 **Mål:** klar, konventionell prosa höjer AIO-citering.
 **Ändringar:** granska LLM-prosa-generatorn (claim→mening) för jargong/stilistiskt udda formulering; ev. lägg en läsbarhets-/perplexitetscheck i output-quality-loopen (`services/output_quality.py`). *OBS: perplexitetsfyndet mätt på engelska — verifiera för svenska i C2 innan tung investering.*
 **Acceptans:** prosa-output konsekvent klar; ev. läsbarhetsflagga i rubric:en.
 
-### A9 — Logo + visuell trovärdighet (**S**, människo-förtroende ej GEO)
+### A9 — Logo + visuell trovärdighet (**S**, människo-förtroende ej GEO) — ✅ KLAR
+> Gjort: logotyp ur Organization-noden renderas i `<header class="brand">` bredvid H1 (ren CSS, noll JS, rent fallback utan logo). Test: `tests/test_profile_page.py`.
 **Mål:** `logo_url` (finns i identitets-snutten) saknas på profilsidan.
 **Ändringar (`profile_page.py` `_render`):** rendera `<img>` med `data.get("logo_url")` bredvid H1 + minimal brand-touch i inline-CSS. Noll JS. Fallback rent när loggan saknas.
 **Acceptans:** logga visas när satt; rent fallback; fortfarande ingen JS.
