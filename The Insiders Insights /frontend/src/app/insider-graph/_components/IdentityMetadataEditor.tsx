@@ -13,6 +13,10 @@ type ClientIdentity = {
   org_number: string | null;
   org_number_source: 'manual' | 'gleif' | 'website' | 'auto' | null;
   org_number_set_at: string | null;
+  // Leverans (Spår B/C): kundkontakt för utskick + profilsidans språk.
+  contact_email: string | null;
+  contact_name: string | null;
+  language: string;
 };
 
 type EnrichResponse = {
@@ -34,6 +38,9 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
   const [identity, setIdentity] = useState<ClientIdentity | null>(null);
   const [logoUrl, setLogoUrl] = useState('');
   const [orgNumber, setOrgNumber] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [contactName, setContactName] = useState('');
+  const [language, setLanguage] = useState('sv');
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [fetching, setFetching] = useState(false);
@@ -46,6 +53,9 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
     setIdentity(d);
     setLogoUrl(d.logo_url || '');
     setOrgNumber(d.org_number || '');
+    setContactEmail(d.contact_email || '');
+    setContactName(d.contact_name || '');
+    setLanguage(d.language || 'sv');
     setLoaded(true);
     setDirty(false);
   }
@@ -64,7 +74,13 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
       await graphFetch(`/api/clients/${clientId}/config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ logo_url: logoUrl, org_number: orgNumber }),
+        body: JSON.stringify({
+          logo_url: logoUrl,
+          org_number: orgNumber,
+          contact_email: contactEmail,
+          contact_name: contactName,
+          language,
+        }),
       });
       await load();
       setMsg({ tone: 'ok', text: 'Sparat' });
@@ -182,6 +198,47 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
                 Normaliseras till NNNNNN-NNNN. Lyfts som identifier (PropertyValue, propertyID=&quot;SE-orgnr&quot;).
               </p>
             </div>
+          </div>
+
+          {/* Leverans: kundkontakt (utskick) + profilsidans språk (Spår B/C) */}
+          <div style={{ borderTop: `1px solid ${C.border}`, margin: '18px 0 14px' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 4 }}>
+            Kundkontakt &amp; språk (leverans)
+          </div>
+          <p style={{ fontSize: 11, color: C.dim, margin: '0 0 14px' }}>
+            Mottagare för installationskit och månadsmejl. Felnotiser går aldrig hit — de hanteras internt av oss.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, alignItems: 'start' }}>
+            <div>
+              <UI.FieldLabel>Kontakt-e-post</UI.FieldLabel>
+              <UI.Input
+                type="email"
+                value={contactEmail}
+                onChange={(e) => { setContactEmail(e.target.value); setDirty(true); }}
+                placeholder="vd@kund.se"
+                style={{ width: '100%' }}
+              />
+            </div>
+            <div>
+              <UI.FieldLabel>Kontaktnamn</UI.FieldLabel>
+              <UI.Input
+                value={contactName}
+                onChange={(e) => { setContactName(e.target.value); setDirty(true); }}
+                placeholder="Anna Andersson"
+                style={{ width: '100%' }}
+              />
+            </div>
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <UI.FieldLabel>Profilsidans språk</UI.FieldLabel>
+            <UI.SegmentedToggle
+              value={language}
+              onChange={(v: string) => { setLanguage(v); setDirty(true); }}
+              options={[{ value: 'sv', label: 'Svenska' }, { value: 'en', label: 'Engelska' }]}
+            />
+            <p style={{ fontSize: 10, color: C.dim, margin: '6px 0 0' }}>
+              Styr etiketter/rubriker på profilsidan + inLanguage i JSON-LD. Default svenska.
+            </p>
           </div>
         </>
       )}

@@ -42,8 +42,10 @@ def render_llms_txt(client_id: str) -> str:
     name = model.company_name or model.client_id
 
     lines = [f"# {name}", ""]
-    if model.description:
-        lines += [f"> {model.description}", ""]
+    # Front-loadad ledmening (A3) som summering överst; faller tillbaka på prosan.
+    summary = model.lead or model.description
+    if summary:
+        lines += [f"> {summary}", ""]
     lines += [f"AI-profil verifierad av Geogiraph. {_trust_line(model)}.", ""]
 
     if model.facts:
@@ -134,7 +136,10 @@ def _render(model: RenderModel, graph: dict) -> str:
     name = html.escape(model.company_name or model.client_id)
     jsonld = json.dumps(graph, ensure_ascii=False, default=str)
     canonical = html.escape(model.base)
-    desc = html.escape((model.description or f"AI-profil för {model.company_name or model.client_id}.")[:300])
+    # Front-loadad ledmening (A3) i meta/OG: citerbar, självständig — inte en
+    # trunkerad prosa-dump. Faller tillbaka på description, sedan generisk text.
+    desc = html.escape((model.lead or model.description or f"AI-profil för {model.company_name or model.client_id}.")[:300])
+    lead_html = f'<p class="lead">{html.escape(model.lead)}</p>' if model.lead else ""
 
     # Källobjekt per fotnotsnummer → synlig inline-attribution vid varje påstående (A2).
     by_number = {s.number: s for s in model.sources}
@@ -163,6 +168,7 @@ def _render(model: RenderModel, graph: dict) -> str:
   body {{ font-family: -apple-system, system-ui, sans-serif; max-width: 720px;
          margin: 0 auto; padding: 2rem 1.25rem; color: #1a1a1a; line-height: 1.6; }}
   h1 {{ font-size: 1.6rem; margin-bottom: .25rem; }}
+  .lead {{ font-size: 1.08rem; color: #222; margin: .3rem 0 .6rem; }}
   .trust {{ color: #555; font-size: .85rem; margin-bottom: 1.5rem; }}
   .facts {{ border: 1px solid #e5e5e5; border-radius: 10px; padding: .5rem 1rem; margin: 1.25rem 0; }}
   .facts dl {{ display: grid; grid-template-columns: 11rem 1fr; gap: .35rem 1rem; margin: .5rem 0; }}
@@ -184,6 +190,7 @@ def _render(model: RenderModel, graph: dict) -> str:
 </head>
 <body>
 <h1>{name}</h1>
+{lead_html}
 <p class="trust">{trust}</p>
 
 <section class="facts">

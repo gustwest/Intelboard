@@ -145,6 +145,11 @@ class RenderModel:
     description: str | None
     last_updated: str | None
     job_postings: list[JobPosting] = field(default_factory=list)
+    # Front-loadad, självständig ledmening (A3): "{namn} är verksamt inom … med säte
+    # i … grundat …". Citerbar sammanfattning som motorerna lyfter ordagrant; renderas
+    # överst på profilsidan (position bias) + som Organization.description. None om
+    # varken verksamhets-fakta eller prosa finns att bygga den ur.
+    lead: str | None = None
 
 
 def build_render_model(client_id: str) -> RenderModel:
@@ -259,7 +264,33 @@ def build_render_model(client_id: str) -> RenderModel:
         description=description,
         last_updated=last_updated,
         job_postings=_gather_job_postings(client_id, base),
+        lead=_build_lead(data.get("company_name") or client_id, facts, prose),
     )
+
+
+def _build_lead(name: str, facts: list[Fact], prose: list[Prose]) -> str | None:
+    """Front-loadad, självständig ledmening (A3) ur strukturerade fakta.
+
+    Bygger "{namn} är verksamt inom {knowsAbout} med säte i {address}, grundat
+    {foundingDate}." av de fakta som finns. Kräver knowsAbout som verb-ankare för
+    grammatisk korrekthet — saknas det faller vi tillbaka på starkaste prosan (redan
+    sorterad starkast först). None om varken finns. OBS: svenska hårdkodat tills A1
+    i18n-refaktorn — då flyttas mallen till språkordboken."""
+    by_pred: dict[str, Any] = {}
+    for f in facts:
+        by_pred.setdefault(f.predicate, f.value)
+
+    def _txt(v: Any) -> str:
+        return ", ".join(str(x) for x in v) if isinstance(v, list) else str(v)
+
+    if "knowsAbout" in by_pred:
+        lead = f"{name} är verksamt inom {_txt(by_pred['knowsAbout'])}"
+        if "address" in by_pred:
+            lead += f" med säte i {_txt(by_pred['address'])}"
+        if "foundingDate" in by_pred:
+            lead += f", grundat {_txt(by_pred['foundingDate'])}"
+        return lead + "."
+    return (prose[0].statement.rstrip(".") + ".") if prose else None
 
 
 def _gather_job_postings(client_id: str, base: str) -> list[JobPosting]:
@@ -324,6 +355,9 @@ def compile_client(client_id: str) -> dict[str, Any]:
             _apply_property(organization, "memberOf", {"@type": "Organization", "name": fact.value})
         else:
             _apply_property(organization, fact.predicate, fact.value)
+    # Organization.description = aggregerad narrativ-prosa (rik, maskinläsbar). Den
+    # front-loadade ledmeningen (A3) används för synlig ingress + meta/OG + llms-
+    # summering på profilsidan, inte här — så JSON-LD-description behåller all prosa.
     if model.description:
         organization["description"] = model.description
     if model.same_as:

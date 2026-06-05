@@ -29,8 +29,9 @@
 
 ---
 
-## Förberedelse P0 — datamodell (enabler, **S**) — ✅ BACKEND KLAR (branch `leverans-a2-p0`)
-> Backend gjort: `contact_email`/`contact_name`/`language` i `ClientConfigUpdate` + validering (e-post, språk-enum sv|en) + eko i `get_client` (default `sv`). Test: `tests/test_clients_contact_language.py`. **Kvar:** frontend-input i kund-kortet.
+## Förberedelse P0 — datamodell (enabler, **S**) — ✅ KLAR
+> Backend: `contact_email`/`contact_name`/`language` i `ClientConfigUpdate` + validering (e-post, språk-enum sv|en) + eko i `get_client` (default `sv`). Test: `tests/test_clients_contact_language.py`.
+> Frontend: kontakt-e-post + kontaktnamn + språk-toggle (sv/en) i `IdentityMetadataEditor.tsx` (samma `PUT /config`). Typkollar rent.
 
 
 Två nya fält på kund-doc. Filer: `routers/clients.py` (`ClientConfigUpdate` + `update_client_config` + `get_client`-svaret), frontend kund-kort (`IdentityMetadataEditor`/`MeasurementConfigEditor`).
@@ -68,7 +69,8 @@ Alla ändringar i `schema_org/profile_page.py` (`_render`/`render_llms_txt`) + `
 **Acceptans:** varje faktapåstående visar sin källa (namn+datum, och citat/siffra när det finns) synligt utan att scrolla till listan; JSON-LD `isBasedOn` oförändrad.
 **Not:** detta är primärt presentations-omarbetning av befintlig data — ingen ny pipeline.
 
-### A3 — Front-loadad, citerbar ingress (**S–M**)
+### A3 — Front-loadad, citerbar ingress (**S–M**) — ✅ KLAR
+> Gjort: `RenderModel.lead` + `_build_lead` (compiler.py) bygger "{namn} är verksamt inom … med säte i … grundat …" ur fakta, faller tillbaka på starkaste prosan. Renderas synligt överst (`<p class="lead">`) före faktapanelen, + meta/OG-description + llms.txt-summering. JSON-LD `Organization.description` lämnades som aggregerad prosa (rikt, inget tappat). Test: `tests/test_profile_page.py` (LeadIngressTest).
 **Mål:** led med en självständig, ordagrant citerbar mening + nyckelfakta överst (position bias).
 **Ändringar:**
 - `compiler.py`: idag byggs `description` som hopslagning av all prosa (241). Lägg en härledd **lead-mening** "[Bolag] är [knowsAbout/verksamhet] i [address] som [förstärkt prosa]" ur befintliga fakta (foundingDate/address/knowsAbout) + starkaste prosan. Exponera som eget fält på `RenderModel` (t.ex. `lead`).

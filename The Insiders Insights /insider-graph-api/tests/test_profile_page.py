@@ -3,6 +3,7 @@ import unittest
 from datetime import datetime, timezone
 
 import fakefs  # installerar fake firestore_client — måste importeras först
+from schema_org.compiler import build_render_model
 from schema_org.profile_page import render_llms_txt, render_profile_html
 
 
@@ -87,6 +88,48 @@ class ProfileHtmlTest(unittest.TestCase):
         _setup()
         html = render_profile_html("acme")
         self.assertIn("#src-1", html)
+
+
+class LeadIngressTest(unittest.TestCase):
+    def test_ingress_rendered_before_facts(self):
+        """A3: ledmeningen front-loadas — renderas före faktapanelen."""
+        _setup()
+        html = render_profile_html("acme")
+        self.assertIn('class="lead"', html)
+        self.assertLess(html.index('class="lead"'), html.index('class="facts"'))
+
+    def test_templated_lead_from_facts(self):
+        """A3: med verksamhet/säte/grundande byggs en självständig ledmening."""
+        fakefs.reset(
+            client={"company_name": "Acme AB", "website": "https://acme.se"},
+            company_items={
+                "bv1": {
+                    "schema_type": "Organization",
+                    "url": "https://www.allabolag.se/5566778899",
+                    "published_at": datetime(2024, 3, 1, tzinfo=timezone.utc),
+                    "included_in_output": True,
+                    "extra": {"name": "Acme AB", "founded": "2014"},
+                }
+            },
+            claims={
+                "k1": {"claim_kind": "property", "subject_ref": "org", "predicate": "knowsAbout",
+                       "value": ["Inbyggda system", "Fordonsindustri"],
+                       "source": [{"kind": "manual"}], "included_in_output": True},
+                "a1": {"claim_kind": "property", "subject_ref": "org", "predicate": "address",
+                       "value": "Göteborg", "source": [{"kind": "manual"}], "included_in_output": True},
+            },
+        )
+        model = build_render_model("acme")
+        self.assertIsNotNone(model.lead)
+        self.assertTrue(model.lead.startswith("Acme AB är verksamt inom"))
+        self.assertIn("med säte i Göteborg", model.lead)
+        self.assertIn("grundat 2014", model.lead)
+
+    def test_lead_falls_back_to_prose_without_facts(self):
+        """A3: utan verksamhets-fakta används starkaste prosan som ingress."""
+        _setup()  # ingen knowsAbout → prosa-fallback
+        model = build_render_model("acme")
+        self.assertEqual(model.lead, "Hjälper fordonstillverkare med inbyggda system.")
 
 
 class LlmsTxtTest(unittest.TestCase):
