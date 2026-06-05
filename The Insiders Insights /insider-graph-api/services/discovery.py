@@ -55,6 +55,8 @@ def onboard_client(req: OnboardRequest) -> OnboardResponse:
         "logo_url": logo_url,
         "company_linkedin_url": req.company_linkedin_url,
         "active_connectors": list(req.active_connectors or ["website"]),
+        # Konkurrenter (GEO-riskloop §5.1) — strippa + dedupa; svaga ledtrådar.
+        "competitors": [c.strip() for c in (req.competitors or []) if c and c.strip()],
         "tier": req.tier,
         "profile_base_url": profile_base_url,
         "settings": settings,

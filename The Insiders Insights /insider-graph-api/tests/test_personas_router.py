@@ -67,5 +67,35 @@ class ClientPersonaConfigTest(unittest.TestCase):
         self.assertEqual(set(stored), set(pr.default_persona_ids()))
 
 
+class ClientCompetitorsTest(unittest.TestCase):
+    """GEO-riskloop §5.1: competitors sätts/läses på befintlig kund."""
+
+    def test_set_competitors_strips_and_dedupes(self):
+        fakefs.reset(client={"company_name": "Acme AB"})
+        payload = clients_router.ClientConfigUpdate(
+            competitors=[" Globex ", "Globex", "Initech", ""],
+        )
+        clients_router.update_client_config("acme", payload)
+        self.assertEqual(fakefs.STATE["client"]["competitors"], ["Globex", "Initech"])
+
+    def test_empty_list_clears_competitors(self):
+        fakefs.reset(client={"company_name": "Acme AB", "competitors": ["Globex"]})
+        clients_router.update_client_config("acme", clients_router.ClientConfigUpdate(competitors=[]))
+        self.assertEqual(fakefs.STATE["client"]["competitors"], [])
+
+    def test_none_leaves_competitors_untouched(self):
+        fakefs.reset(client={"company_name": "Acme AB", "competitors": ["Globex"]})
+        clients_router.update_client_config("acme", clients_router.ClientConfigUpdate(industry="tech"))
+        self.assertEqual(fakefs.STATE["client"]["competitors"], ["Globex"])
+
+    def test_get_client_returns_competitors(self):
+        fakefs.reset(client={"company_name": "Acme AB", "competitors": ["Globex"]})
+        self.assertEqual(clients_router.get_client("acme")["competitors"], ["Globex"])
+
+    def test_get_client_defaults_empty(self):
+        fakefs.reset(client={"company_name": "Acme AB"})
+        self.assertEqual(clients_router.get_client("acme")["competitors"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

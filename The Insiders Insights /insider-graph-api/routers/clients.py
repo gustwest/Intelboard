@@ -58,6 +58,10 @@ class ClientConfigUpdate(BaseModel):
     # auto-extraherade värden (ops-redigering är sanning).
     logo_url: str | None = None
     org_number: str | None = None
+    # Konkurrenter (GEO-riskloop §5.1): SVAGA ledtrådar till frågegenereringen +
+    # disambiguering. Risk_detector läser client.get("competitors"); prompten
+    # överviktar dem aldrig (härleder landskapet självständigt). Tom lista = rensa.
+    competitors: list[str] | None = None
 
 
 @router.get("")
@@ -129,6 +133,8 @@ def get_client(client_id: str) -> dict[str, Any]:
         "service_area": data.get("service_area"),
         "risk_personas": data.get("risk_personas") or list(MEASUREMENT_PERSONAS),
         "polling_questions": data.get("polling_questions") or {},
+        # Konkurrenter (GEO-riskloop §5.1 svaga ledtrådar). [] om aldrig satt.
+        "competitors": data.get("competitors") or [],
         # Output-kvalitets-personor (audience_priorities). Sätt av användaren eller
         # härlett via /derive-personas. None om aldrig satt (UI visar tom-state).
         "audience_priorities": data.get("audience_priorities"),
@@ -197,6 +203,17 @@ def update_client_config(client_id: str, payload: ClientConfigUpdate) -> dict[st
         update["org_number"] = org_nr
         update["org_number_source"] = "manual" if org_nr else None
         update["org_number_set_at"] = now_iso if org_nr else None
+
+    if payload.competitors is not None:
+        # Strippa, dedupa (bevara ordning), släng tomma. Tom lista = rensa fältet.
+        seen: set[str] = set()
+        cleaned_comp: list[str] = []
+        for c in payload.competitors:
+            name = (c or "").strip()
+            if name and name.lower() not in seen:
+                seen.add(name.lower())
+                cleaned_comp.append(name)
+        update["competitors"] = cleaned_comp
 
     if update:
         ref.update(update)

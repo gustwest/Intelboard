@@ -39,6 +39,9 @@ class OnboardRequest(BaseModel):
     # Auto-extraherbart via website-connectorns og:image — manuell input vinner alltid.
     logo_url: str | None = None
     active_connectors: list[str] | None = None
+    # Konkurrenter (GEO-riskloop §5.1) — svaga ledtrådar till frågegenerering +
+    # disambiguering. Löpande uppdaterbara via PUT /api/clients/{id}/config.
+    competitors: list[str] = Field(default_factory=list)
     employees: list[EmployeeInput] = Field(default_factory=list)
     # Connector-params som matar respektive connectors fetch(). Lagras under
     # client.settings (website, rss_feeds).
