@@ -228,6 +228,61 @@ class FaqPersonaLogoTest(unittest.TestCase):
         self.assertNotIn('class="logo"', render_profile_html("acme"))
 
 
+class LanguageTest(unittest.TestCase):
+    """A1: språk väljs per kund via client.language; sv är default + oförändrat."""
+
+    def _setup_lang(self, lang):
+        fakefs.reset(
+            client={"company_name": "Acme AB", "website": "https://acme.se", "language": lang},
+            company_items={
+                "bv1": {"schema_type": "Organization", "url": "https://www.allabolag.se/x",
+                        "published_at": datetime(2024, 3, 1, tzinfo=timezone.utc),
+                        "included_in_output": True, "extra": {"name": "Allabolag", "founded": "2014"}}
+            },
+            claims={
+                "k1": {"claim_kind": "property", "subject_ref": "org", "predicate": "knowsAbout",
+                       "value": ["Embedded systems"], "source": [{"kind": "item", "item_id": "bv1"}],
+                       "included_in_output": True},
+                "c1": {"claim_kind": "narrative", "subject_ref": "org",
+                       "statement": "Builds embedded systems for vehicles",
+                       "source": [{"kind": "item", "item_id": "bv1"}], "included_in_output": True},
+            },
+        )
+
+    def test_english_client_renders_english(self):
+        self._setup_lang("en")
+        html = render_profile_html("acme")
+        self.assertIn('<html lang="en">', html)
+        self.assertIn("<h2>Facts</h2>", html)
+        self.assertIn("<h2>About Acme AB</h2>", html)
+        self.assertIn("Compiled from 1 source", html)      # trust-rad
+        self.assertIn("March 2024", html)                  # månad på engelska
+        self.assertIn("AI profile verified by Geogiraph.", html)  # footer
+        self.assertIn("What does Acme AB do?", html)        # FAQ-intro
+        self.assertNotIn("Vanliga frågor", html)            # ingen svenska kvar
+        self.assertNotIn("mars 2024", html)
+
+    def test_inlanguage_in_faq_node(self):
+        self._setup_lang("en")
+        graph = compile_client("acme")["@graph"]
+        faq = next(n for n in graph if n.get("@type") == "FAQPage")
+        self.assertEqual(faq["inLanguage"], "en")
+
+    def test_swedish_is_default_and_unchanged(self):
+        self._setup_lang("sv")
+        html = render_profile_html("acme")
+        self.assertIn('<html lang="sv">', html)
+        self.assertIn("<h2>Fakta</h2>", html)
+        self.assertIn("Sammanställd från 1 källa", html)
+        self.assertIn("mars 2024", html)
+
+    def test_unknown_language_falls_back_to_swedish(self):
+        self._setup_lang("xx")
+        html = render_profile_html("acme")
+        self.assertIn('<html lang="sv">', html)
+        self.assertIn("<h2>Fakta</h2>", html)
+
+
 class LlmsTxtTest(unittest.TestCase):
     def test_structure_and_facts(self):
         _setup()

@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterator
 
 import firestore_client as fs
+from schema_org import i18n
 from schema_org.claims import (
     culture_claims_from_esg,
     derive_culture_claims,
@@ -33,6 +34,8 @@ from schema_org.claims import (
 from schema_org.urls import canonical_url, external_same_as
 from schemas import Claim, ClaimSource
 
+# Default-etiketter (sv) — i18n.strings(language) väljer rätt språk per kund (A1).
+# Behålls som konstanter för bakåtkompatibilitet; värdena = sv-strängtabellen.
 DEFAULT_MANUAL_LABEL = "uppgift från bolaget"
 DEFAULT_ATTESTED_LABEL = "verifierad av Geogiraph"
 ATTESTED_PUBLISHER = "Geogiraph"
@@ -145,6 +148,10 @@ class RenderModel:
     description: str | None
     last_updated: str | None
     job_postings: list[JobPosting] = field(default_factory=list)
+    # Profilsidans språk (A1, BCP 47). Default sv. Väljer strängtabell + sätts som
+    # html lang / inLanguage. Bärs på modellen så både compiler och profile_page
+    # läser SAMMA språk.
+    language: str = i18n.DEFAULT_LANG
     # Front-loadad, självständig ledmening (A3): "{namn} är verksamt inom … med säte
     # i … grundat …". Citerbar sammanfattning som motorerna lyfter ordagrant; renderas
     # överst på profilsidan (position bias) + som Organization.description. None om
@@ -158,6 +165,8 @@ def build_render_model(client_id: str) -> RenderModel:
         raise KeyError(f"client not found: {client_id}")
 
     data = client.to_dict() or {}
+    language = data.get("language") or i18n.DEFAULT_LANG
+    _loc = i18n.strings(language)
     base = canonical_url(client_id, data.get("profile_base_url"))
     org_id = f"{base}#org"
 
@@ -180,7 +189,7 @@ def build_render_model(client_id: str) -> RenderModel:
     def resolve(src: ClaimSource) -> tuple[int | None, str | None]:
         """→ (fotnotsnummer för item-/attesterad källa, etikett för manuell källa)."""
         if src.kind == "manual":
-            return None, (src.label or DEFAULT_MANUAL_LABEL)
+            return None, (src.label or _loc["manual_label"])
         if src.kind == "attested":
             # Attesterad källa: en riktig, numrerad källnod byggd ur ClaimSource-fälten
             # (inte ur ett raw_item). Bär label + datum; sdPublisher=Geogiraph i grafen.
@@ -193,7 +202,7 @@ def build_render_model(client_id: str) -> RenderModel:
                     sid=f"{base}#src-att-{digest}",
                     url=src.url,
                     date=src.attested_at,
-                    name=src.label or DEFAULT_ATTESTED_LABEL,
+                    name=src.label or _loc["attested_label"],
                     schema_type="Dataset",
                     attested=True,
                 )
@@ -264,18 +273,18 @@ def build_render_model(client_id: str) -> RenderModel:
         description=description,
         last_updated=last_updated,
         job_postings=_gather_job_postings(client_id, base),
-        lead=_build_lead(data.get("company_name") or client_id, facts, prose),
+        language=language,
+        lead=_build_lead(data.get("company_name") or client_id, facts, prose, language),
     )
 
 
-def _build_lead(name: str, facts: list[Fact], prose: list[Prose]) -> str | None:
+def _build_lead(name: str, facts: list[Fact], prose: list[Prose], lang: str) -> str | None:
     """Front-loadad, självständig ledmening (A3) ur strukturerade fakta.
 
     Bygger "{namn} är verksamt inom {knowsAbout} med säte i {address}, grundat
     {foundingDate}." av de fakta som finns. Kräver knowsAbout som verb-ankare för
     grammatisk korrekthet — saknas det faller vi tillbaka på starkaste prosan (redan
-    sorterad starkast först). None om varken finns. OBS: svenska hårdkodat tills A1
-    i18n-refaktorn — då flyttas mallen till språkordboken."""
+    sorterad starkast först). None om varken finns. Mallen väljs per språk (A1)."""
     by_pred: dict[str, Any] = {}
     for f in facts:
         by_pred.setdefault(f.predicate, f.value)
@@ -283,12 +292,13 @@ def _build_lead(name: str, facts: list[Fact], prose: list[Prose]) -> str | None:
     def _txt(v: Any) -> str:
         return ", ".join(str(x) for x in v) if isinstance(v, list) else str(v)
 
+    loc = i18n.strings(lang)
     if "knowsAbout" in by_pred:
-        lead = f"{name} är verksamt inom {_txt(by_pred['knowsAbout'])}"
+        lead = loc["lead_activity"].format(name=name, value=_txt(by_pred["knowsAbout"]))
         if "address" in by_pred:
-            lead += f" med säte i {_txt(by_pred['address'])}"
+            lead += loc["lead_location"].format(value=_txt(by_pred["address"]))
         if "foundingDate" in by_pred:
-            lead += f", grundat {_txt(by_pred['foundingDate'])}"
+            lead += loc["lead_founded"].format(value=_txt(by_pred["foundingDate"]))
         return lead + "."
     return (prose[0].statement.rstrip(".") + ".") if prose else None
 
@@ -431,7 +441,8 @@ def compile_client(client_id: str) -> dict[str, Any]:
             if cites:
                 answer["citation"] = cites if len(cites) > 1 else cites[0]
             main_entity.append({"@type": "Question", "name": entry.question, "acceptedAnswer": answer})
-        faq_nodes.append({"@type": "FAQPage", "@id": f"{model.base}#faq", "mainEntity": main_entity})
+        faq_nodes.append({"@type": "FAQPage", "@id": f"{model.base}#faq",
+                          "inLanguage": model.language, "mainEntity": main_entity})
 
     job_nodes: list[dict[str, Any]] = []
     for jp in model.job_postings:
@@ -457,32 +468,24 @@ def compile_client(client_id: str) -> dict[str, Any]:
     return {"@context": "https://schema.org", "@graph": graph}
 
 
-# predikat → (frågemall, svarsmall). {name} = bolaget, {value} = (sammanslaget) värde.
-# A6: FAQ-formatet är i sig ingen citeringsspak (deep research) — men en bra BÄRARE
-# av tät, källförsedd text. Svaren ärver claimets footnotes (build_faq), så varje
-# Q&A är källbelagt. Vi täcker fler predikat → fler svar-formade, citerbara fakta.
-_FAQ_TEMPLATES: dict[str, tuple[str, str]] = {
-    "foundingDate": ("När grundades {name}?", "{name} grundades {value}."),
-    "address": ("Var har {name} sitt säte?", "{name} har sitt säte i {value}."),
-    "knowsAbout": ("Vad är {name} verksamt inom?", "{name} är verksamt inom {value}."),
-    "numberOfEmployees": ("Hur många anställda har {name}?", "{name} har {value} anställda."),
-    "jobBenefits": ("Vilka förmåner erbjuder {name}?", "{name} erbjuder {value}."),
-    "slogan": ("Vad står {name} för?", "{name} står för: {value}."),
-    "memberOf": ("Vilka avtal eller branschorgan är {name} anslutet till?", "{name} är anslutet till {value}."),
-    "hasCredential": ("Vilka certifieringar eller utmärkelser har {name}?", "{name} har {value}."),
-}
+# Predikat-ordning i FAQ (språkneutral). Frågemallarna bor i i18n.strings(lang)["faq"]
+# (A1). A6: FAQ-formatet är i sig ingen citeringsspak (deep research) — men en bra
+# BÄRARE av tät, källförsedd text. Svaren ärver claimets footnotes så varje Q&A är källbelagt.
 _FAQ_ORDER = ["foundingDate", "address", "knowsAbout", "numberOfEmployees",
               "jobBenefits", "slogan", "memberOf", "hasCredential"]
 
 
 def build_faq(model: RenderModel) -> list[FaqEntry]:
-    """Deterministiska Q&A ur claims — källförsedda (footnotes följer faktan/prosan)."""
+    """Deterministiska Q&A ur claims — källförsedda (footnotes följer faktan/prosan).
+    Frågemallar väljs per kundens språk (A1)."""
+    loc = i18n.strings(model.language)
+    faq_tmpl = loc["faq"]
     name = model.company_name or model.client_id
     entries: list[FaqEntry] = []
 
     if model.description:
         prose_fns = sorted({n for p in model.prose for n in p.footnotes})
-        entries.append(FaqEntry(f"Vad gör {name}?", model.description, prose_fns))
+        entries.append(FaqEntry(loc["faq_intro_q"].format(name=name), model.description, prose_fns))
 
     grouped: dict[str, dict[str, list]] = {}
     for fact in model.facts:
@@ -495,9 +498,9 @@ def build_faq(model: RenderModel) -> list[FaqEntry]:
                 g["footnotes"].append(n)
 
     for predicate in _FAQ_ORDER:
-        if predicate not in grouped or predicate not in _FAQ_TEMPLATES:
+        if predicate not in grouped or predicate not in faq_tmpl:
             continue
-        q_tmpl, a_tmpl = _FAQ_TEMPLATES[predicate]
+        q_tmpl, a_tmpl = faq_tmpl[predicate]
         value = ", ".join(str(v) for v in grouped[predicate]["values"])
         entries.append(
             FaqEntry(q_tmpl.format(name=name), a_tmpl.format(name=name, value=value), sorted(grouped[predicate]["footnotes"]))

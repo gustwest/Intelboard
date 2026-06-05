@@ -13,24 +13,8 @@ import html
 import json
 from datetime import datetime
 
+from schema_org import i18n
 from schema_org.compiler import RenderModel, build_faq, build_render_model, compile_client
-
-# schema.org-predikat → svensk etikett i faktapanelen.
-_FACT_LABELS = {
-    "foundingDate": "Grundat",
-    "address": "Säte",
-    "knowsAbout": "Verksamhet",
-    "numberOfEmployees": "Antal anställda",
-    "slogan": "Motto",
-    "memberOf": "Medlem i",
-    "hasCredential": "Certifieringar",
-    "jobBenefits": "Förmåner",
-}
-
-_MONTHS_SV = [
-    "januari", "februari", "mars", "april", "maj", "juni",
-    "juli", "augusti", "september", "oktober", "november", "december",
-]
 
 
 def render_profile_html(client_id: str) -> str:
@@ -43,6 +27,7 @@ def render_llms_txt(client_id: str) -> str:
     """Markdown-summering enligt llms.txt-konventionen — en ren, faktatät vy som
     AI-crawlers kan läsa direkt. Allt härlett ur samma claims (källförsett)."""
     model = build_render_model(client_id)
+    loc = i18n.strings(model.language)
     name = model.company_name or model.client_id
 
     lines = [f"# {name}", ""]
@@ -50,21 +35,21 @@ def render_llms_txt(client_id: str) -> str:
     summary = model.lead or model.description
     if summary:
         lines += [f"> {summary}", ""]
-    lines += [f"AI-profil verifierad av Geogiraph. {_trust_line(model)}.", ""]
+    lines += [f"{loc['verified_by']}. {_trust_line(model)}.", ""]
 
     if model.facts:
-        lines.append("## Fakta")
+        lines.append(loc["llms_facts"])
         for f in model.facts:
-            label = _FACT_LABELS.get(f.predicate, f.predicate)
+            label = loc["fact_labels"].get(f.predicate, f.predicate)
             value = ", ".join(str(v) for v in f.value) if isinstance(f.value, list) else str(f.value)
             lines.append(f"- {label}: {value}")
         lines.append("")
 
     if model.job_postings:
-        lines.append("## Aktuella roller")
+        lines.append(loc["llms_roles"])
         for jp in model.job_postings:
             skills = f" — {', '.join(jp.skills)}" if jp.skills else ""
-            lines.append(f"- {jp.title or 'Roll'}{skills}")
+            lines.append(f"- {jp.title or loc['role_fallback']}{skills}")
         lines.append("")
 
     # Persona-sektioner (Fas 2.1f): gruppera persona-taggade claims under tydliga
@@ -75,15 +60,15 @@ def render_llms_txt(client_id: str) -> str:
 
     faq = build_faq(model)
     if faq:
-        lines.append("## Frågor & svar")
+        lines.append(loc["llms_faq"])
         for e in faq:
             lines += [f"### {e.question}", e.answer, ""]
 
     if model.sources:
-        lines.append("## Källor")
+        lines.append(loc["llms_sources"])
         for s in model.sources:
-            label = s.name or s.url or f"Källa {s.number}"
-            date = f" ({_fmt_date(s.date)})" if s.date else ""
+            label = s.name or s.url or loc["source_fallback"].format(n=s.number)
+            date = f" ({_fmt_date(s.date, loc)})" if s.date else ""
             link = f"[{label}]({s.url})" if s.url else label
             lines.append(f"- {link}{date}")
         lines.append("")
@@ -101,6 +86,7 @@ def _audience_sections(model: RenderModel) -> list[str]:
     """
     from services import persona_registry as pr
 
+    loc = i18n.strings(model.language)
     # Persona-id → lista av claim-texter (facts + prose) taggade för den personan.
     by_persona: dict[str, list[str]] = {}
     for f in model.facts:
@@ -120,7 +106,7 @@ def _audience_sections(model: RenderModel) -> list[str]:
         texts = by_persona.get(persona.id)
         if not texts:
             continue
-        out.append(f"## För {persona.label_sv.lower()}")
+        out.append("## " + loc["audience_heading"].format(persona=persona.label_sv.lower()))
         # Dedup inom sektionen (samma claim kan ha mergeats in flera gånger).
         seen: set[str] = set()
         for t in texts:
@@ -144,16 +130,17 @@ def _audience_sections_html(model: RenderModel, by_number) -> str:
     visas under varje). Tom sträng om inga persona-taggade claims (allt evergreen)."""
     from services import persona_registry as pr
 
+    loc = i18n.strings(model.language)
     # persona_id → lista av (dedup-nyckel, html-fragment).
     by_persona: dict[str, list[tuple[str, str]]] = {}
     for f in model.facts:
         for pid in getattr(f, "audience", None) or []:
-            label = _FACT_LABELS.get(f.predicate, f.predicate)
-            item = f"{html.escape(label)}: {html.escape(_fact_value_text(f.value))}{_evidence(f, by_number)}"
+            label = loc["fact_labels"].get(f.predicate, f.predicate)
+            item = f"{html.escape(label)}: {html.escape(_fact_value_text(f.value))}{_evidence(f, by_number, loc)}"
             by_persona.setdefault(pid, []).append((f"{label}:{_fact_value_text(f.value)}", item))
     for p in model.prose:
         for pid in getattr(p, "audience", None) or []:
-            item = f"{html.escape(p.statement.rstrip('.'))}{_evidence(p, by_number)}"
+            item = f"{html.escape(p.statement.rstrip('.'))}{_evidence(p, by_number, loc)}"
             by_persona.setdefault(pid, []).append((p.statement.strip(), item))
 
     if not by_persona:
@@ -172,37 +159,40 @@ def _audience_sections_html(model: RenderModel, by_number) -> str:
                 seen.add(k)
                 lis.append(f"<li>{item}</li>")
         if lis:
+            heading = html.escape(loc["audience_heading"].format(persona=persona.label_sv.lower()))
             out.append(
-                f'<section class="audience"><h2>För {html.escape(persona.label_sv.lower())}</h2>'
+                f'<section class="audience"><h2>{heading}</h2>'
                 f'<ul>{"".join(lis)}</ul></section>'
             )
     return "\n".join(out)
 
 
 def _render(model: RenderModel, graph: dict) -> str:
+    loc = i18n.strings(model.language)
     name = html.escape(model.company_name or model.client_id)
     jsonld = json.dumps(graph, ensure_ascii=False, default=str)
     canonical = html.escape(model.base)
     # Front-loadad ledmening (A3) i meta/OG: citerbar, självständig — inte en
     # trunkerad prosa-dump. Faller tillbaka på description, sedan generisk text.
-    desc = html.escape((model.lead or model.description or f"AI-profil för {model.company_name or model.client_id}.")[:300])
+    fallback_desc = loc["desc_fallback"].format(name=model.company_name or model.client_id)
+    desc = html.escape((model.lead or model.description or fallback_desc)[:300])
     lead_html = f'<p class="lead">{html.escape(model.lead)}</p>' if model.lead else ""
 
     # Källobjekt per fotnotsnummer → synlig inline-attribution vid varje påstående (A2).
     by_number = {s.number: s for s in model.sources}
     # A4: faktapanel + "Om"-sektion med egna rubriker; prosan bryts i flera stycken
     # (ett per claim) i stället för en namnlös klump — bättre densitet + chunking.
-    facts_rows = "\n".join(_fact_row(f, by_number) for f in model.facts)
+    facts_rows = "\n".join(_fact_row(f, by_number, loc) for f in model.facts)
     facts_section = (
-        f'<h2>Fakta</h2>\n<section class="facts">\n<dl>\n{facts_rows}\n</dl>\n</section>'
+        f'<h2>{loc["heading_facts"]}</h2>\n<section class="facts">\n<dl>\n{facts_rows}\n</dl>\n</section>'
         if model.facts else ""
     )
-    about_paras = "\n".join(f"<p>{_prose_paragraph(p, by_number)}</p>" for p in model.prose)
+    about_paras = "\n".join(f"<p>{_prose_paragraph(p, by_number, loc)}</p>" for p in model.prose)
     about_section = (
-        f'<h2>Om {name}</h2>\n<section class="about">\n{about_paras}\n</section>'
+        f'<h2>{loc["heading_about"].format(name=name)}</h2>\n<section class="about">\n{about_paras}\n</section>'
         if model.prose else ""
     )
-    sources_html = "\n".join(_source_item(s) for s in model.sources)
+    sources_html = "\n".join(_source_item(s, loc) for s in model.sources)
     faq_html = _faq_section(model)
     roles_html = _roles_section(model)
     trust = _trust_line(model)
@@ -213,16 +203,16 @@ def _render(model: RenderModel, graph: dict) -> str:
     logo_html = f'<img class="logo" src="{html.escape(str(logo_url))}" alt="{name}">' if logo_url else ""
 
     return f"""<!doctype html>
-<html lang="sv">
+<html lang="{loc['html_lang']}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{name} — AI-profil</title>
+<title>{name} — {loc['title_suffix']}</title>
 <meta name="description" content="{desc}">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="{canonical}">
 <meta property="og:type" content="profile">
-<meta property="og:title" content="{name} — AI-profil">
+<meta property="og:title" content="{name} — {loc['title_suffix']}">
 <meta property="og:description" content="{desc}">
 <meta property="og:url" content="{canonical}">
 <script type="application/ld+json">{jsonld}</script>
@@ -267,13 +257,13 @@ def _render(model: RenderModel, graph: dict) -> str:
 {roles_html}
 {faq_html}
 <section class="sources">
-<h2>Källor</h2>
+<h2>{loc['heading_sources']}</h2>
 <ol>
 {sources_html}
 </ol>
 </section>
 
-<footer>AI-Profil verifierad av Geogiraph.</footer>
+<footer>{loc['footer']}</footer>
 </body>
 </html>
 """
@@ -283,55 +273,58 @@ def _roles_section(model: RenderModel) -> str:
     """Aktiva platsannonser — synlig spegling av JobPosting-noderna i grafen."""
     if not model.job_postings:
         return ""
+    loc = i18n.strings(model.language)
     rows = "".join(
-        f"<li>{html.escape(jp.title or 'Roll')}"
+        f"<li>{html.escape(jp.title or loc['role_fallback'])}"
         + (f' — <span class="roleskills">{html.escape(", ".join(jp.skills))}</span>' if jp.skills else "")
         + "</li>"
         for jp in model.job_postings
     )
-    return f'<section class="roles"><h2>Aktuella roller</h2><ul>{rows}</ul></section>'
+    return f'<section class="roles"><h2>{loc["heading_roles"]}</h2><ul>{rows}</ul></section>'
 
 
 def _faq_section(model: RenderModel) -> str:
     faq = build_faq(model)
     if not faq:
         return ""
+    loc = i18n.strings(model.language)
     rows = "".join(
         f'<div class="qa"><dt>{html.escape(e.question)}</dt>'
-        f'<dd>{html.escape(e.answer)}{_footnote_marks(e.footnotes)}</dd></div>'
+        f'<dd>{html.escape(e.answer)}{_footnote_marks(e.footnotes, loc)}</dd></div>'
         for e in faq
     )
-    return f'<section class="faq"><h2>Vanliga frågor</h2><dl>{rows}</dl></section>'
+    return f'<section class="faq"><h2>{loc["heading_faq"]}</h2><dl>{rows}</dl></section>'
 
 
-def _footnote_marks(footnotes) -> str:
-    return "".join(f'<sup><a href="#src-{n}" title="Källa {n}">[{n}]</a></sup>' for n in footnotes)
+def _footnote_marks(footnotes, loc) -> str:
+    return "".join(
+        f'<sup><a href="#src-{n}" title="{loc["source_fallback"].format(n=n)}">[{n}]</a></sup>'
+        for n in footnotes
+    )
 
 
-def _fact_row(fact, by_number) -> str:
-    label = html.escape(_FACT_LABELS.get(fact.predicate, fact.predicate))
+def _fact_row(fact, by_number, loc) -> str:
+    label = html.escape(loc["fact_labels"].get(fact.predicate, fact.predicate))
     value = fact.value
     text = ", ".join(str(v) for v in value) if isinstance(value, list) else str(value)
-    return f"  <dt>{label}</dt><dd>{html.escape(text)}{_evidence(fact, by_number)}</dd>"
+    return f"  <dt>{label}</dt><dd>{html.escape(text)}{_evidence(fact, by_number, loc)}</dd>"
 
 
-def _prose_paragraph(prose, by_number) -> str:
+def _prose_paragraph(prose, by_number, loc) -> str:
     """Ett narrativ-claim som eget stycke (A4) med synlig bevisning (A2)."""
     sentence = html.escape(prose.statement.rstrip("."))
-    return f"{sentence}{_evidence(prose, by_number)}."
+    return f"{sentence}{_evidence(prose, by_number, loc)}."
 
 
-def _evidence(entry, by_number) -> str:
+def _evidence(entry, by_number, loc) -> str:
     """Synlig bevisning vid ett påstående (A2): superscript-fotnot + inline källa
     (namn, datum, ev. ordagrant citat) + neutral etikett för manuell källa.
 
     Inbäddade citat/källor är den starkaste citeringsspaken (deep research 2026-06-05),
     så vi lyfter källan ur fotnotslistan i botten till synligt läge vid faktan. Fotnoten
     behålls som kompakt ankare till bibliografin."""
-    out = ""
-    for n in entry.footnotes:
-        out += f'<sup><a href="#src-{n}" title="Källa {n}">[{n}]</a></sup>'
-    inline = _inline_sources(entry.footnotes, by_number)
+    out = _footnote_marks(entry.footnotes, loc)
+    inline = _inline_sources(entry.footnotes, by_number, loc)
     if inline:
         out += inline
     if entry.manual_label:
@@ -339,7 +332,7 @@ def _evidence(entry, by_number) -> str:
     return out
 
 
-def _inline_sources(footnotes, by_number) -> str:
+def _inline_sources(footnotes, by_number, loc) -> str:
     """Bygg synlig källattribution (namn · datum · ev. citat) för en lista fotnoter.
     Tom sträng om ingen av fotnoterna har en (länkbar) källa."""
     parts: list[str] = []
@@ -351,8 +344,8 @@ def _inline_sources(footnotes, by_number) -> str:
         if s.name:
             bits.append(html.escape(s.name))
         if s.date:
-            bits.append(_fmt_date(s.date))
-        label = ", ".join(bits) or f"Källa {n}"
+            bits.append(_fmt_date(s.date, loc))
+        label = ", ".join(bits) or loc["source_fallback"].format(n=n)
         # Bara namn+datum inline — alltid korrekt för varje claim som citerar källan.
         # Källans ordagranna utdrag (excerpt) är KÄLLnivå, inte claim-nivå: det visas i
         # bibliografin (_source_item), inte här, så det aldrig felaktigt antyds styrka
@@ -363,9 +356,9 @@ def _inline_sources(footnotes, by_number) -> str:
     return f'<span class="cite"> — {" · ".join(parts)}</span>'
 
 
-def _source_item(source) -> str:
-    label = html.escape(source.name or source.url or f"Källa {source.number}")
-    date = f" · {_fmt_date(source.date)}" if source.date else ""
+def _source_item(source, loc) -> str:
+    label = html.escape(source.name or source.url or loc["source_fallback"].format(n=source.number))
+    date = f" · {_fmt_date(source.date, loc)}" if source.date else ""
     inner = f'<a href="{html.escape(source.url)}">{label}</a>' if source.url else label
     # Ordagrant utdrag ur källan (A2) — korrekt attribuerat på KÄLLnivå i bibliografin.
     quote = ""
@@ -375,18 +368,20 @@ def _source_item(source) -> str:
 
 
 def _trust_line(model: RenderModel) -> str:
+    loc = i18n.strings(model.language)
     n = len(model.sources)
-    parts = [f"Sammanställd från {n} {'källa' if n == 1 else 'källor'}"]
+    compiled = loc["trust_compiled_one"] if n == 1 else loc["trust_compiled_many"].format(n=n)
+    parts = [compiled]
     if model.last_updated:
-        parts.append(f"senast uppdaterad {_fmt_date(model.last_updated)}")
+        parts.append(loc["trust_updated"].format(date=_fmt_date(model.last_updated, loc)))
     return " · ".join(parts)
 
 
-def _fmt_date(iso: str | None) -> str:
+def _fmt_date(iso: str | None, loc) -> str:
     if not iso:
         return ""
     try:
         dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-        return f"{_MONTHS_SV[dt.month - 1]} {dt.year}"
+        return f"{loc['months'][dt.month - 1]} {dt.year}"
     except (ValueError, TypeError):
         return iso[:10]

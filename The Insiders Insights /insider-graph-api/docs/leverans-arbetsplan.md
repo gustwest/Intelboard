@@ -47,7 +47,8 @@ Två nya fält på kund-doc. Filer: `routers/clients.py` (`ClientConfigUpdate` +
 
 Alla ändringar i `schema_org/profile_page.py` (`_render`/`render_llms_txt`) + `schema_org/compiler.py` (render-modell, `build_faq`). Render-modellen (`RenderModel`, `Fact`, `Prose`, `Source`) har redan fälten vi behöver: `footnotes`, `manual_label`, `audience`, `assurance_level`, `Source.date/url/name/number`.
 
-### A1 — Språk-refaktor (grund, **M**)
+### A1 — Språk-refaktor (grund, **M**) — ✅ KLAR
+> Gjort: `schema_org/i18n.py` (sv + en strängtabeller: faktaetiketter, månader, sektionsrubriker, trust-rad, footer, manuell/attesterad etikett, ledmening, FAQ-mallar, llms-rubriker). `RenderModel.language` (ur client.language, default sv); compiler + profile_page + llms.txt väljer strängar via `i18n.strings(language)`; `<html lang>` + `inLanguage` på FAQPage. **Invariant: sv byte-identiskt** (befintliga tester låser sv-strängarna, alla gröna). Test: `tests/test_profile_page.py` (LanguageTest). För skarp en-utgåva återstår C3-beslut; persona-etiketter översätts ej (label_sv, bara "För/For"-prefix lokaliserat).
 **Mål:** avhårdkoda språk; möjliggör en/parallellspråk utan att röra logik.
 **Ändringar:**
 - Extrahera alla svenska strängar i `profile_page.py` till en språkordbok-modul (t.ex. `schema_org/i18n.py`): `_FACT_LABELS` (rad 19–24), `_MONTHS_SV` (26–29), footer "AI-Profil verifierad av Geogiraph" (202), sektionsrubriker "Källor"/"Vanliga frågor"/"Aktuella roller", `_trust_line`-text (266–271). Även `DEFAULT_MANUAL_LABEL`/`DEFAULT_ATTESTED_LABEL` i `compiler.py` (36–37).
