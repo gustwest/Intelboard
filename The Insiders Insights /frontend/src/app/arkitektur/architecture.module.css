@@ -363,6 +363,52 @@
   padding: 8px 12px;
 }
 
+/* Fas-rubrik i loopen (Etablering / Den slutna loopen) */
+.loopPhase {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  margin: 18px 0 8px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--lc, var(--brand-accent));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--lc, var(--brand-accent)) 8%, transparent);
+}
+.loopPhase:first-child {
+  margin-top: 0;
+}
+.loopPhaseOnce {
+  --lc: var(--brand-purple);
+}
+.loopPhaseRecurring {
+  --lc: var(--brand-success);
+}
+.loopPhaseTitle {
+  font-weight: 700;
+  font-size: 0.8125rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lc, var(--brand-accent));
+}
+.loopPhaseBadge {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--lc, var(--brand-accent));
+  background: color-mix(in srgb, var(--lc, var(--brand-accent)) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--lc, var(--brand-accent)) 40%, transparent);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.loopPhaseTagline {
+  flex-basis: 100%;
+  font-size: 0.75rem;
+  color: var(--brand-muted);
+}
+
 /* Två spår-lanes i diagrammet */
 .lanes {
   display: flex;

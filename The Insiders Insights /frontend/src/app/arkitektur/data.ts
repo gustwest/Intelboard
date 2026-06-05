@@ -75,9 +75,12 @@ export type Interaction = {
   detail: string;
 };
 
+export type LoopPhase = 'Etablering' | 'Loop';
+
 export type LoopStep = {
   id: string;
   num: number;
+  phase: LoopPhase; // Etablering = engång vid onboarding · Loop = återkommande
   actor: 'System' | 'Operatör' | 'Extern';
   color: string; // CSS-klass: nodeGreen | nodeOrange | nodePurple | nodeBlue | nodeCyan
   label: string;
@@ -88,6 +91,19 @@ export type LoopStep = {
     where: string; // var det syns / vilken fil
     output: string; // vad det producerar / nästa steg
   };
+};
+
+export const LOOP_PHASES: Record<LoopPhase, { title: string; tagline: string; oneTime: boolean }> = {
+  Etablering: {
+    title: 'Etablering',
+    tagline: 'Engång per kund — vid onboarding byggs grafen och publiceras första gången.',
+    oneTime: true,
+  },
+  Loop: {
+    title: 'Den slutna loopen',
+    tagline: 'Återkommande — mät gapet, föreslå recept, publicera, leverera, mät igen.',
+    oneTime: false,
+  },
 };
 
 export type ModuleNode = {
@@ -636,16 +652,87 @@ export const DIAGRAM_INTERACTIONS: Interaction[] = [
 ];
 
 /* ------------------------------------------------------------------ */
-/* Den slutna loopen — Geogiraphs mät → recept → leverera → mät-cykel  */
+/* Kundresan — onboarding → etablerad graf → den slutna loopen          */
 /* ------------------------------------------------------------------ */
-// Renderas som en numrerad cykel i Loop-fliken. Steg 8 sluter tillbaka
-// till steg 1. Kärnprincip (se ADR-008): systemet MÄTER, FÖRESLÅR och
-// VERIFIERAR automatiskt, men operatören GODKÄNNER och PUBLICERAR det
-// faktiska innehållet — inga claims fabriceras för att täcka ett gap.
+// Renderas som en numrerad cykel i Loop-fliken, indelad i två faser:
+//   • ETABLERING (steg 1–4): engång per kund. Onboarding bygger grafen,
+//     samlar in, extraherar claims och gör den FÖRSTA leveransen till CDN.
+//   • LOOP (steg 5–12): återkommande. Steg 12 sluter tillbaka till steg 5
+//     (nästa mätning) — INTE till onboarding, som bara körs en gång.
+// Kärnprincip (se ADR-008): systemet MÄTER, FÖRESLÅR och VERIFIERAR
+// automatiskt, men operatören GODKÄNNER och PUBLICERAR det faktiska
+// innehållet — inga claims fabriceras för att täcka ett gap.
 export const CLOSED_LOOP_STEPS: LoopStep[] = [
+  /* ---- Fas: Etablering (engång vid onboarding) ---- */
+  {
+    id: 'onboard',
+    num: 1,
+    phase: 'Etablering',
+    actor: 'Operatör',
+    color: 'nodePurple',
+    label: 'Onboarda kund',
+    sub: 'POST /api/onboard',
+    detail: {
+      what:
+        'Operatören registrerar kunden: bolag + nyckelpersoner blir noder i Firestore, ICP/persona-hierarki sätts och relevanta connectors (LinkedIn, RSS, webbsajt, jobbflöde, GLEIF) aktiveras. Onboarding kickar igång den första insamlingen.',
+      who: 'Människa fyller i; systemet skapar noder och schemalägger första scrapen automatiskt.',
+      where: 'frontend insider-graph/kunder · routers/onboard.py · services/discovery.py · services/ingest.py',
+      output: 'En kund med noder + aktiva connectors → första insamlingen startar.',
+    },
+  },
+  {
+    id: 'collect',
+    num: 2,
+    phase: 'Etablering',
+    actor: 'System',
+    color: 'nodeOrange',
+    label: 'Samla in källor',
+    sub: 'scrape_* → raw_items',
+    detail: {
+      what:
+        'Connectors skrapar bolagsnivå + webbsajt (Bright Data för LinkedIn, trafilatura för webb, RSS/jobbflöden/GLEIF). Cadence-skydd och relevansfilter håller bruset nere.',
+      who: 'Automatiskt. Schemalagda Cloud Run Jobs (scrape-active/episodic/website).',
+      where: 'jobs/scrape_*.py · services/web_crawl.py · services/brightdata.py',
+      output: 'Rå fritext i raw_items — råmaterialet för claims.',
+    },
+  },
+  {
+    id: 'extract-bootstrap',
+    num: 3,
+    phase: 'Etablering',
+    actor: 'System',
+    color: 'nodeBlue',
+    label: 'Extrahera claims',
+    sub: 'extract_claims + källgrind',
+    detail: {
+      what:
+        'Generator + validator (Vertex AI EU) gör fritext → narrativa claims med provenience. Källgrinden validerar deterministiskt (citerade spann + numerisk närvaro) så inget hittas på; låg confidence skickas till granskning.',
+      who: 'Automatiskt med människa i loopen: ops godkänner låg-confidence-claims innan de når output.',
+      where: 'jobs/extract_all_claims.py · services/claim_extraction.py · services/claim_grounding.py · routers/review.py',
+      output: 'Validerade claims redo att kompileras.',
+    },
+  },
+  {
+    id: 'first-delivery',
+    num: 4,
+    phase: 'Etablering',
+    actor: 'System',
+    color: 'nodeCyan',
+    label: 'Första leveransen',
+    sub: 'compile_schema → JSON-LD på CDN',
+    detail: {
+      what:
+        'Validerade claims kompileras till schema.org JSON-LD (Organization-rot, Person/Event/JobPosting, Claim→isBasedOn→källa) och publiceras som kunskapsgraf + profilsida + badge på CDN. Kunden injicerar identitets-snippet via GTM en gång.',
+      who: 'Automatiskt. Compile-jobbet pushar till GCS/CDN; GTM-snippet är kundens enda engångssteg.',
+      where: 'jobs/compile_all_schemas.py · schema_org/compiler.py · routers/delivery.py · schema_org/profile_page.py · badge.py',
+      output: 'Publik kunskapsgraf live — probe-motorerna har nu något att läsa. Grafen är etablerad; loopen kan börja.',
+    },
+  },
+  /* ---- Fas: Den slutna loopen (återkommande) ---- */
   {
     id: 'measure-gap',
-    num: 1,
+    num: 5,
+    phase: 'Loop',
     actor: 'System',
     color: 'nodeGreen',
     label: 'Mät gapet',
@@ -660,7 +747,8 @@ export const CLOSED_LOOP_STEPS: LoopStep[] = [
   },
   {
     id: 'generate-recipe',
-    num: 2,
+    num: 6,
+    phase: 'Loop',
     actor: 'System',
     color: 'nodeOrange',
     label: 'Generera recept',
@@ -675,7 +763,8 @@ export const CLOSED_LOOP_STEPS: LoopStep[] = [
   },
   {
     id: 'surface-cockpit',
-    num: 3,
+    num: 7,
+    phase: 'Loop',
     actor: 'Operatör',
     color: 'nodePurple',
     label: 'Förslag i cockpit',
@@ -690,7 +779,8 @@ export const CLOSED_LOOP_STEPS: LoopStep[] = [
   },
   {
     id: 'approve',
-    num: 4,
+    num: 8,
+    phase: 'Loop',
     actor: 'Operatör',
     color: 'nodeCyan',
     label: 'Godkänn',
@@ -704,7 +794,8 @@ export const CLOSED_LOOP_STEPS: LoopStep[] = [
   },
   {
     id: 'publish-external',
-    num: 5,
+    num: 9,
+    phase: 'Loop',
     actor: 'Extern',
     color: 'nodeCyan',
     label: 'Publicera externt',
@@ -719,7 +810,8 @@ export const CLOSED_LOOP_STEPS: LoopStep[] = [
   },
   {
     id: 'mark-acted',
-    num: 6,
+    num: 10,
+    phase: 'Loop',
     actor: 'Operatör',
     color: 'nodeBlue',
     label: 'Markera "acted"',
@@ -734,7 +826,8 @@ export const CLOSED_LOOP_STEPS: LoopStep[] = [
   },
   {
     id: 'harvest-deliver',
-    num: 7,
+    num: 11,
+    phase: 'Loop',
     actor: 'System',
     color: 'nodeBlue',
     label: 'Skörda claims + leverera',
@@ -749,7 +842,8 @@ export const CLOSED_LOOP_STEPS: LoopStep[] = [
   },
   {
     id: 'verify-intervention',
-    num: 8,
+    num: 12,
+    phase: 'Loop',
     actor: 'System',
     color: 'nodeGreen',
     label: 'Mät igen + verifiera',
@@ -757,9 +851,9 @@ export const CLOSED_LOOP_STEPS: LoopStep[] = [
     detail: {
       what:
         'Efter nästa trust_gap-mätning klassas interventionen mot baseline: resolved_full / resolved_partial / regressed / no_change_yet. Vid stängning byggs en closure (valence_delta, demonstrated_delta, days_to_close) och receptet auto-verifieras.',
-      who: 'Automatiskt. Sluter loopen tillbaka till steg 1 för nästa mätning.',
+      who: 'Automatiskt. Sluter loopen tillbaka till steg 5 (nästa mätning) — onboarding körs aldrig om.',
       where: 'services/interventions.py · verify_open() · _classify()',
-      output: '↩ Tillbaka till steg 1 — kausalt spår: "stängde på N dagar".',
+      output: '↩ Tillbaka till steg 5 — kausalt spår: "stängde på N dagar".',
     },
   },
 ];
