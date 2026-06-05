@@ -360,6 +360,11 @@ def compile_client(client_id: str) -> dict[str, Any]:
     # summering på profilsidan, inte här — så JSON-LD-description behåller all prosa.
     if model.description:
         organization["description"] = model.description
+    # Färskhetssignal (A5): dateModified = senaste källdatum, samma värde som den
+    # synliga trust-raden ("senast uppdaterad …") — JSON-LD-färskheten matchar det
+    # människor ser. Motorerna väger in recency; matchande datum bygger förtroende.
+    if model.last_updated:
+        organization["dateModified"] = model.last_updated
     if model.same_as:
         organization["sameAs"] = model.same_as
     if model.sources:

@@ -143,8 +143,18 @@ def _render(model: RenderModel, graph: dict) -> str:
 
     # Källobjekt per fotnotsnummer → synlig inline-attribution vid varje påstående (A2).
     by_number = {s.number: s for s in model.sources}
-    facts_html = "\n".join(_fact_row(f, by_number) for f in model.facts)
-    prose_html = "".join(_prose_sentence(p, by_number) for p in model.prose).strip()
+    # A4: faktapanel + "Om"-sektion med egna rubriker; prosan bryts i flera stycken
+    # (ett per claim) i stället för en namnlös klump — bättre densitet + chunking.
+    facts_rows = "\n".join(_fact_row(f, by_number) for f in model.facts)
+    facts_section = (
+        f'<h2>Fakta</h2>\n<section class="facts">\n<dl>\n{facts_rows}\n</dl>\n</section>'
+        if model.facts else ""
+    )
+    about_paras = "\n".join(f"<p>{_prose_paragraph(p, by_number)}</p>" for p in model.prose)
+    about_section = (
+        f'<h2>Om {name}</h2>\n<section class="about">\n{about_paras}\n</section>'
+        if model.prose else ""
+    )
     sources_html = "\n".join(_source_item(s) for s in model.sources)
     faq_html = _faq_section(model)
     roles_html = _roles_section(model)
@@ -168,7 +178,9 @@ def _render(model: RenderModel, graph: dict) -> str:
   body {{ font-family: -apple-system, system-ui, sans-serif; max-width: 720px;
          margin: 0 auto; padding: 2rem 1.25rem; color: #1a1a1a; line-height: 1.6; }}
   h1 {{ font-size: 1.6rem; margin-bottom: .25rem; }}
+  h2 {{ font-size: 1.05rem; margin: 2rem 0 .4rem; }}
   .lead {{ font-size: 1.08rem; color: #222; margin: .3rem 0 .6rem; }}
+  .about p {{ margin: .5rem 0; }}
   .trust {{ color: #555; font-size: .85rem; margin-bottom: 1.5rem; }}
   .facts {{ border: 1px solid #e5e5e5; border-radius: 10px; padding: .5rem 1rem; margin: 1.25rem 0; }}
   .facts dl {{ display: grid; grid-template-columns: 11rem 1fr; gap: .35rem 1rem; margin: .5rem 0; }}
@@ -192,20 +204,12 @@ def _render(model: RenderModel, graph: dict) -> str:
 <h1>{name}</h1>
 {lead_html}
 <p class="trust">{trust}</p>
-
-<section class="facts">
-<dl>
-{facts_html}
-</dl>
-</section>
-
-<section class="about">
-<p>{prose_html}</p>
-</section>
+{facts_section}
+{about_section}
 {roles_html}
 {faq_html}
 <section class="sources">
-<h2 style="font-size:1rem">Källor</h2>
+<h2>Källor</h2>
 <ol>
 {sources_html}
 </ol>
@@ -227,7 +231,7 @@ def _roles_section(model: RenderModel) -> str:
         + "</li>"
         for jp in model.job_postings
     )
-    return f'<section class="roles"><h2 style="font-size:1rem">Aktuella roller</h2><ul>{rows}</ul></section>'
+    return f'<section class="roles"><h2>Aktuella roller</h2><ul>{rows}</ul></section>'
 
 
 def _faq_section(model: RenderModel) -> str:
@@ -239,7 +243,7 @@ def _faq_section(model: RenderModel) -> str:
         f'<dd>{html.escape(e.answer)}{_footnote_marks(e.footnotes)}</dd></div>'
         for e in faq
     )
-    return f'<section class="faq"><h2 style="font-size:1rem">Vanliga frågor</h2><dl>{rows}</dl></section>'
+    return f'<section class="faq"><h2>Vanliga frågor</h2><dl>{rows}</dl></section>'
 
 
 def _footnote_marks(footnotes) -> str:
@@ -253,9 +257,10 @@ def _fact_row(fact, by_number) -> str:
     return f"  <dt>{label}</dt><dd>{html.escape(text)}{_evidence(fact, by_number)}</dd>"
 
 
-def _prose_sentence(prose, by_number) -> str:
+def _prose_paragraph(prose, by_number) -> str:
+    """Ett narrativ-claim som eget stycke (A4) med synlig bevisning (A2)."""
     sentence = html.escape(prose.statement.rstrip("."))
-    return f"{sentence}{_evidence(prose, by_number)}. "
+    return f"{sentence}{_evidence(prose, by_number)}."
 
 
 def _evidence(entry, by_number) -> str:

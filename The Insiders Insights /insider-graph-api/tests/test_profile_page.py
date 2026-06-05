@@ -3,7 +3,7 @@ import unittest
 from datetime import datetime, timezone
 
 import fakefs  # installerar fake firestore_client — måste importeras först
-from schema_org.compiler import build_render_model
+from schema_org.compiler import build_render_model, compile_client
 from schema_org.profile_page import render_llms_txt, render_profile_html
 
 
@@ -130,6 +130,52 @@ class LeadIngressTest(unittest.TestCase):
         _setup()  # ingen knowsAbout → prosa-fallback
         model = build_render_model("acme")
         self.assertEqual(model.lead, "Hjälper fordonstillverkare med inbyggda system.")
+
+
+class StructureAndFreshnessTest(unittest.TestCase):
+    def test_section_headings_present(self):
+        """A4: faktapanel + om-sektion har egna rubriker (ren hierarki för chunking)."""
+        _setup()
+        html = render_profile_html("acme")
+        self.assertIn("<h2>Fakta</h2>", html)
+        self.assertIn("<h2>Om Acme AB</h2>", html)
+
+    def test_prose_split_into_paragraphs(self):
+        """A4: varje narrativ-claim blir ett eget <p> i om-sektionen, inte en klump."""
+        fakefs.reset(
+            client={"company_name": "Acme AB", "website": "https://acme.se"},
+            company_items={
+                "bv1": {
+                    "schema_type": "Organization",
+                    "url": "https://www.allabolag.se/5566778899",
+                    "published_at": datetime(2024, 3, 1, tzinfo=timezone.utc),
+                    "included_in_output": True,
+                    "extra": {"name": "Allabolag"},
+                }
+            },
+            claims={
+                "c1": {"claim_kind": "narrative", "subject_ref": "org",
+                       "statement": "Hjälper fordonstillverkare med inbyggda system",
+                       "source": [{"kind": "item", "item_id": "bv1"}], "included_in_output": True},
+                "c2": {"claim_kind": "narrative", "subject_ref": "org",
+                       "statement": "Utsedd till årets leverantör 2023",
+                       "source": [{"kind": "item", "item_id": "bv1"}], "included_in_output": True},
+            },
+        )
+        html = render_profile_html("acme")
+        about = html.split('class="about"', 1)[1].split("</section>", 1)[0]
+        self.assertEqual(about.count("<p>"), 2)
+        self.assertIn("Hjälper fordonstillverkare", about)
+        self.assertIn("årets leverantör", about)
+
+    def test_date_modified_matches_last_source_date(self):
+        """A5: Organization.dateModified = senaste källdatum (matchar trust-raden)."""
+        _setup()
+        graph = compile_client("acme")["@graph"]
+        org = graph[0]
+        self.assertEqual(org["dateModified"], "2024-03-01T00:00:00+00:00")
+        # Synliga trust-raden visar samma datum mänskligt formaterat.
+        self.assertIn("mars 2024", render_profile_html("acme"))
 
 
 class LlmsTxtTest(unittest.TestCase):

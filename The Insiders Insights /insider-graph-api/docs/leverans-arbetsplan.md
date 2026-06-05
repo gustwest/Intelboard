@@ -77,14 +77,16 @@ Alla ändringar i `schema_org/profile_page.py` (`_render`/`render_llms_txt`) + `
 - `profile_page.py` `_render`: rendera `lead` som synlig ingress direkt efter `<h1>` (före facts-panelen) och använd den som JSON-LD `description`.
 **Acceptans:** sidan inleds med en kvotbar mening + nyckelfakta; samma mening är `description` i grafen.
 
-### A4 — Densitet, rubrikhierarki & "om"-sektion (**M**)
+### A4 — Densitet, rubrikhierarki & "om"-sektion (**M**) — ✅ KLAR
+> Gjort: ren H1/H2-hierarki (global `h2`-stil), egna rubriker `<h2>Fakta</h2>` + `<h2>Om {namn}</h2>`, och prosan bryts i ett `<p>` per claim (`_prose_paragraph`) i stället för en namnlös klump. Tomma sektioner utelämnas. Test: `tests/test_profile_page.py` (StructureAndFreshnessTest).
 **Mål:** ren H1/H2/H3, beskrivande rubriker, tät fler-styckes-prosa (tunna sidor förlorar).
 **Ändringar (`profile_page.py` `_render`, 190–192):**
 - "Om"-prosan ligger idag i ett enda namnlöst `<p>`. Ge `<h2>Om {namn}</h2>` (lokaliserad via A1) och bryt `model.prose` i flera `<p>` (ett per prose-entry, fotnoter bevarade) i stället för `"".join(...).strip()` till en klump.
 - Säkerställ konsekvent rubrikordning: H1 (namn) → ingress (A3) → fakta → Om → roller → FAQ → källor. Ge varje `<section>` en `<h2>`.
 **Acceptans:** tydlig H1/H2-hierarki; "om" har `<h2>` + flera stycken; fotnoter/inline-evidens (A2) bevarade.
 
-### A5 — Färskhetssignaler (**S–M**)
+### A5 — Färskhetssignaler (**S–M**) — ✅ KLAR
+> Gjort: `Organization.dateModified` = senaste källdatum (`model.last_updated`) i `compile_client` — matchar den synliga trust-raden ("senast uppdaterad …"). Per-claim-datum är redan synligt inline via A2. Test: `tests/test_profile_page.py` (date_modified_matches_last_source_date).
 **Mål:** per-claim/per-källa-datum synligt + JSON-LD-datum som matchar synligt innehåll.
 **Ändringar:**
 - `profile_page.py`: visa källdatum inline (delvis täckt av A2) och behåll global trust-rad.
