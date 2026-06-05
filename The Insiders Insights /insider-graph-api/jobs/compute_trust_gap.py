@@ -19,6 +19,7 @@ import firestore_client as fs
 from jobs._run_tracker import record_run
 from schema_org import humanization_config as hc
 from schema_org.claims import iter_culture_claims
+from services import engine_baselines
 
 log = logging.getLogger(__name__)
 
@@ -52,6 +53,31 @@ def _read_perceived(client_id: str) -> dict[str, Any]:
     return (snap.to_dict() or {}).get("dimensions") or {}
 
 
+def _eligible_engines(by_engine: dict[str, Any]) -> list[str]:
+    """Motorer som uttalat sig (valens satt + salience ≥ golvet) på en dimension."""
+    return [
+        engine
+        for engine, stats in by_engine.items()
+        if (stats or {}).get("valence") is not None
+        and (stats or {}).get("salience", 0.0) >= hc.SALIENCE_FLOOR
+    ]
+
+
+def _calibrated_valence(valence: float, by_engine: dict[str, Any], engine_bias: dict[str, float]) -> float:
+    """Centrera toppnivå-valensen mot panel-snittet (Fas 2.2 per-engine-baselines).
+
+    Drar bort snitt-biasen för de motorer som faktiskt bidrog. När hela panelen
+    bidrar är snitt-biasen ≈ 0 (no-op); när bara en rosig motor "ser" bolaget tas
+    just den motorns leniency bort så credibility_gap inte blåses upp av en motor."""
+    if not engine_bias:
+        return round(valence, 3)
+    present = [engine_bias[e] for e in _eligible_engines(by_engine) if e in engine_bias]
+    if not present:
+        return round(valence, 3)
+    mean_bias = sum(present) / len(present)
+    return round(min(1.0, max(0.0, valence - mean_bias)), 3)
+
+
 def _evidence_ref(claim: Any, weight: float) -> dict[str, Any]:
     src = (claim.source or [None])[0]
     return {
@@ -68,6 +94,7 @@ def _detect_flags(
     dimension: str,
     entry: dict[str, Any],
     prior_entry: dict[str, Any] | None = None,
+    engine_bias: dict[str, float] | None = None,
 ) -> list[dict[str, Any]]:
     """Detektera alla applicerbara gap-typer för en dimension (spec §10 punkt 4).
 
@@ -131,9 +158,12 @@ def _detect_flags(
             })
 
     # 4. contradiction — probe-motorerna är oense. Kräver ≥2 motorer ovan salience-golvet.
+    # Valenserna centreras mot per-motor-baslinjen (Fas 2.2) så att en motors
+    # systematiska leniency inte blåser upp spreaden till ett falskt larm.
+    bias = engine_bias or {}
     by_engine = perceived.get("by_engine") or {}
     eligible = [
-        (engine, (stats or {}).get("valence"))
+        (engine, round((stats or {}).get("valence") - bias.get(engine, 0.0), 3))
         for engine, stats in by_engine.items()
         if (stats or {}).get("valence") is not None
         and (stats or {}).get("salience", 0.0) >= hc.SALIENCE_FLOOR
@@ -251,6 +281,7 @@ def compute(client_id: str) -> dict[str, Any]:
 
     claims = list(iter_culture_claims(client_id))
     perceived_all = _read_perceived(client_id)
+    engine_bias = engine_baselines.biases(engine_baselines.load(client_id))
     prior = _read_prior_snapshot(client_id)
     prior_dims = (prior or {}).get("dimensions") or {}
     prior_date = (prior or {}).get("date")
@@ -287,8 +318,12 @@ def compute(client_id: str) -> dict[str, Any]:
             entry["perceived"] = perceived
             valence = perceived.get("valence")
             if valence is not None:
-                cred = round(valence - evidence, 3)
-                entry["credibility_gap"] = cred
+                # credibility_gap mot per-motor-kalibrerad valens (Fas 2.2). Rå valens
+                # bevaras i perceived; calibrated lyfts in synligt när den skiljer sig.
+                cal = _calibrated_valence(valence, perceived.get("by_engine") or {}, engine_bias)
+                if cal != round(valence, 3):
+                    perceived["valence_calibrated"] = cal
+                entry["credibility_gap"] = round(cal - evidence, 3)
         else:
             # Låg/ingen salience: "ännu inte synlig" — räkna ej valens/gap på tomhet (§8 steg 5).
             entry["perceived"] = {"status": "not_visible", **(perceived or {})}
@@ -296,7 +331,7 @@ def compute(client_id: str) -> dict[str, Any]:
         prior_entry = prior_dims.get(d)
         if prior_entry and prior_date:
             prior_entry = {**prior_entry, "_snapshot_date": prior_date}
-        flags.extend(_detect_flags(d, entry, prior_entry))
+        flags.extend(_detect_flags(d, entry, prior_entry, engine_bias))
 
         dimensions[d] = entry
 

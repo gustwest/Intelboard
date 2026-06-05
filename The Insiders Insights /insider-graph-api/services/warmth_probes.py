@@ -398,4 +398,14 @@ def run_for_client(
         "värme-probes skrivna för %s (%d motorer × %d personor)",
         client_id, len(engines), len(active_personas),
     )
+
+    # Per-engine-baslinjer (Fas 2.2): EWMA-uppdatera motorernas leniency-snitt ur
+    # den färska (råa) mätningen. Best-effort — får aldrig fälla probe-skrivningen.
+    try:
+        from services import engine_baselines
+
+        engine_baselines.update_from_dimensions(client_id, doc["dimensions"])
+    except Exception as exc:  # noqa: BLE001
+        log.warning("engine-baseline-uppdatering misslyckades (icke-fatal) för %s: %s", client_id, exc)
+
     return doc
