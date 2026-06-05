@@ -300,32 +300,23 @@ export default function GraphReviewPage() {
           ))}
         </select>
 
-        <div style={{ display: 'inline-flex', border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', marginLeft: 'auto' }}>
-          {([['claims', 'Claims'], ['items', 'Mail-items'], ['linkedin', 'LinkedIn']] as [Tab, string][]).map(([v, label]) => {
+        <UI.SegmentedToggle
+          value={tab}
+          onChange={setTab}
+          style={{ marginLeft: 'auto' }}
+          options={([['claims', 'Claims'], ['items', 'Mail-items'], ['linkedin', 'LinkedIn']] as [Tab, string][]).map(([v, label]) => {
             const n = tabCount(v);
-            return (
-              <button
-                key={v}
-                onClick={() => setTab(v)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '7px 14px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  border: 'none',
-                  cursor: 'pointer',
-                  background: tab === v ? 'rgba(159,81,182,0.18)' : '#eef0f1',
-                  color: tab === v ? C.accent : C.text,
-                }}
-              >
-                {label}
-                {n > 0 && <UI.Pill style={{ minWidth: 0, fontSize: 10 }}>{n}</UI.Pill>}
-              </button>
-            );
+            return {
+              value: v,
+              label: (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  {label}
+                  {n > 0 && <UI.Pill style={{ minWidth: 0, fontSize: 10 }}>{n}</UI.Pill>}
+                </span>
+              ),
+            };
           })}
-        </div>
+        />
       </div>
 
       {error && (

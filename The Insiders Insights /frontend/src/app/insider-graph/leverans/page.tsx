@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Rocket, Copy, Check, ExternalLink, ChevronDown, ChevronRight, Play, Loader2, X, Clock } from 'lucide-react';
+import { Rocket, Copy, Check, ExternalLink, ChevronDown, ChevronRight, X, Clock } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import * as UI from '../_components/ui';
 import { graphFetch } from '../_lib/api';
@@ -227,25 +227,17 @@ export default function LeveransPage() {
             )}
           </span>
         </div>
-        {(() => {
-          const st = jobActive['compile'] || 'idle';
-          const Icon = st === 'running' ? Loader2 : st === 'success' ? Check : st === 'failed' ? X : Play;
-          const color = st === 'failed' ? '#dc2626' : st === 'success' ? '#16a34a' : C.accent;
-          return (
-            <button
-              onClick={async () => {
-                if (!selected) return;
-                await runJob('compile', `/api/jobs/compile/${selected}`, 'compile_schema');
-                setRefreshTick((t) => t + 1);
-              }}
-              disabled={!selected || st === 'running'}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'rgba(159,81,182,0.18)', color: C.accent, border: '1px solid rgba(159,81,182,0.3)', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: !selected || st === 'running' ? 'not-allowed' : 'pointer' }}
-            >
-              <Icon size={13} color={color} style={st === 'running' ? { animation: 'spin 0.8s linear infinite' } : undefined} />
-              {st === 'running' ? 'Kompilerar…' : 'Kompilera om'}
-            </button>
-          );
-        })()}
+        <UI.JobRunButton
+          status={jobActive['compile'] || 'idle'}
+          label="Kompilera om"
+          runningLabel="Kompilerar…"
+          primary
+          onClick={async () => {
+            if (!selected) return;
+            await runJob('compile', `/api/jobs/compile/${selected}`, 'compile_schema');
+            setRefreshTick((t) => t + 1);
+          }}
+        />
       </UI.Card>
 
       {/* Officiell data som ingår */}
@@ -432,25 +424,11 @@ function Control({ label, children }: { label: string; children: React.ReactNode
 
 function Toggle<T extends string>({ value, setValue, options }: { value: T; setValue: (v: T) => void; options: [T, string][] }) {
   return (
-    <div style={{ display: 'inline-flex', border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }}>
-      {options.map(([v, label]) => (
-        <button
-          key={v}
-          onClick={() => setValue(v)}
-          style={{
-            padding: '7px 12px',
-            fontSize: 12,
-            fontWeight: 600,
-            border: 'none',
-            cursor: 'pointer',
-            background: value === v ? 'rgba(159,81,182,0.18)' : '#eef0f1',
-            color: value === v ? C.accent : C.text,
-          }}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
+    <UI.SegmentedToggle
+      value={value}
+      onChange={setValue}
+      options={options.map(([v, label]) => ({ value: v, label }))}
+    />
   );
 }
 

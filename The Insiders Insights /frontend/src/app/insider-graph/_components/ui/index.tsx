@@ -6,8 +6,8 @@
 // (graphColors + statusColors) — använd dessa primitiver istället för att
 // kopiera inline-stilar.
 
-import { CSSProperties, ReactNode } from 'react';
-import { Save } from 'lucide-react';
+import { CSSProperties, ReactNode, useEffect, useRef } from 'react';
+import { Save, X, Loader2, Check, Play } from 'lucide-react';
 import { graphColors as C, statusColors, surfaces } from '../GraphPageShell';
 
 type StatusTone = 'ok' | 'warn' | 'err' | 'info';
@@ -323,5 +323,149 @@ export function SaveButton({
     >
       <Save size={12} /> {saving ? savingLabel : label}
     </button>
+  );
+}
+
+// ── SegmentedToggle ──────────────────────────────────────────────────────────
+// Vald = tonad accent, övriga dämpade. 6 inline-kopior (olika selected-opacitet
+// 0.08–0.18 → standardiserad till 0.16 här).
+export function SegmentedToggle<T extends string>({
+  options, value, onChange, style,
+}: {
+  options: { value: T; label: ReactNode }[];
+  value: T;
+  onChange: (v: T) => void;
+  style?: CSSProperties;
+}) {
+  return (
+    <div role="tablist" style={{ display: 'inline-flex', gap: 4, ...style }}>
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <button
+            key={o.value}
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(o.value)}
+            style={{
+              padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              background: active ? 'rgba(159,81,182,0.16)' : 'transparent',
+              color: active ? C.accent : C.muted,
+              border: `1px solid ${active ? 'rgba(159,81,182,0.3)' : C.border}`,
+            }}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── JobRunButton ─────────────────────────────────────────────────────────────
+// Kör-knapp med tillståndsmaskin idle/running/success/failed (Play/Loader2/
+// Check/X). 3 identiska inline-kopior. Självförsörjande spin-keyframe.
+export function JobRunButton({
+  status, onClick, label, runningLabel = 'Kör…', primary, title, style,
+}: {
+  status: 'idle' | 'running' | 'success' | 'failed';
+  onClick?: () => void;
+  label: string;
+  runningLabel?: string;
+  primary?: boolean;
+  title?: string;
+  style?: CSSProperties;
+}) {
+  const Icon = status === 'running' ? Loader2 : status === 'success' ? Check : status === 'failed' ? X : Play;
+  const iconColor = primary ? '#fff' : status === 'success' ? statusColors.ok.fg : status === 'failed' ? statusColors.err.fg : undefined;
+  const variant: CSSProperties = primary
+    ? { background: C.accent, color: '#fff', border: `1px solid ${C.accent}` }
+    : { background: 'transparent', color: C.text, border: `1px solid ${C.border}` };
+  return (
+    <button
+      onClick={onClick}
+      disabled={status === 'running'}
+      title={title}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8,
+        fontSize: 12, fontWeight: 600, cursor: status === 'running' ? 'wait' : 'pointer', ...variant, ...style,
+      }}
+    >
+      <style>{'@keyframes ui-spin{to{transform:rotate(360deg)}}'}</style>
+      <Icon size={12} color={iconColor} style={status === 'running' ? { animation: 'ui-spin 0.8s linear infinite' } : undefined} />
+      {status === 'running' ? runningLabel : label}
+    </button>
+  );
+}
+
+// ── Modal ────────────────────────────────────────────────────────────────────
+// Tillgänglig dialog: overlay + centrerad panel, role=dialog/aria-modal,
+// Esc-stängning, fokusfälla och fokus-återställning. Ersätter 4 inline-kopior
+// som saknade all a11y.
+export function Modal({
+  open, onClose, title, children, width = '100%', maxWidth = 820, overlayOpacity = 0.7, panelStyle,
+}: {
+  open: boolean; onClose?: () => void; title?: ReactNode; children?: ReactNode;
+  width?: number | string; maxWidth?: number; overlayOpacity?: number; panelStyle?: CSSProperties;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const prevFocus = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    prevFocus.current = document.activeElement as HTMLElement | null;
+    panelRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose?.(); return; }
+      if (e.key === 'Tab' && panelRef.current) {
+        const f = panelRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        );
+        if (f.length === 0) return;
+        const first = f[0], last = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      prevFocus.current?.focus?.();
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+  return (
+    <div
+      onClick={onClose}
+      role="presentation"
+      style={{
+        position: 'fixed', inset: 0, background: `rgba(0,0,0,${overlayOpacity})`, backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 24,
+      }}
+    >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={typeof title === 'string' ? title : undefined}
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: '#ffffff', border: `1px solid ${C.border}`, borderRadius: 14, width, maxWidth,
+          maxHeight: '90vh', overflowY: 'auto', padding: 28, outline: 'none', ...panelStyle,
+        }}
+      >
+        {title && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 600, color: C.text, margin: 0 }}>{title}</h2>
+            <button onClick={onClose} aria-label="Stäng" style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer', display: 'flex' }}>
+              <X size={20} />
+            </button>
+          </div>
+        )}
+        {children}
+      </div>
+    </div>
   );
 }

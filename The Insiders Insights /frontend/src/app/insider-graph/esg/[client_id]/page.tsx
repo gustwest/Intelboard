@@ -444,12 +444,7 @@ function MetricsFormModal({ clientId, finding, onClose, onSubmitted }: { clientI
   }
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 200, padding: 24, overflowY: 'auto' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14, width: '100%', maxWidth: 560, padding: 24, margin: 'auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0, color: C.text }}>Borde svaret varit annorlunda?</h2>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer' }}><X size={18} /></button>
-        </div>
+    <UI.Modal open onClose={onClose} title="Borde svaret varit annorlunda?" maxWidth={560}>
         <p style={{ fontSize: 12, color: C.muted, margin: '0 0 16px', lineHeight: 1.5 }}>
           Fyll i verifierade ESG-data. Det blir källförsedda korrigeringar som AI-motorerna kan ta in.
           Fas 1 är obligatorisk; Fas 2 och 3 är frivilliga.
@@ -523,8 +518,7 @@ function MetricsFormModal({ clientId, finding, onClose, onSubmitted }: { clientI
             {submitting ? 'Skickar…' : 'Skicka in'}
           </button>
         </div>
-      </div>
-    </div>
+    </UI.Modal>
   );
 }
 

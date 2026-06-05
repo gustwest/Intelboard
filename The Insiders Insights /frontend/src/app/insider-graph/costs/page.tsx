@@ -107,24 +107,14 @@ export default function CostsPage() {
       subtitle="Intern uppskattning från token-mätare × publika listpriser. Cloud Billing är fortfarande sanningen men ger inte den här drilldown:en."
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
-        {(['today', '7d', '30d', 'mtd'] as const).map((p) => (
-          <button
-            key={p}
-            onClick={() => setPeriod(p)}
-            style={{
-              padding: '6px 12px',
-              fontSize: 12,
-              borderRadius: 6,
-              border: `1px solid ${period === p ? C.accent : C.border}`,
-              background: period === p ? 'rgba(159,81,182,0.08)' : C.card,
-              color: period === p ? C.accent : C.text,
-              cursor: 'pointer',
-              fontWeight: period === p ? 600 : 400,
-            }}
-          >
-            {p === 'today' ? 'Idag' : p === 'mtd' ? 'Hittills denna månad' : `Senaste ${p === '7d' ? '7' : '30'}d`}
-          </button>
-        ))}
+        <UI.SegmentedToggle
+          value={period}
+          onChange={setPeriod}
+          options={(['today', '7d', '30d', 'mtd'] as const).map((p) => ({
+            value: p,
+            label: p === 'today' ? 'Idag' : p === 'mtd' ? 'Hittills denna månad' : `Senaste ${p === '7d' ? '7' : '30'}d`,
+          }))}
+        />
         <button
           onClick={load}
           disabled={loading}

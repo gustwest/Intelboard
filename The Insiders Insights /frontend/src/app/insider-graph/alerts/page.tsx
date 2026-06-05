@@ -132,25 +132,14 @@ export default function AlertsPage() {
       <SetupBanner setup={setup} busy={busySetup} onAck={ackBudget} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-        {(['open', 'acked', 'resolved', 'all'] as const).map((s) => (
-          <button
-            key={s}
-            onClick={() => setFilter(s)}
-            style={{
-              padding: '6px 12px',
-              fontSize: 12,
-              borderRadius: 6,
-              border: `1px solid ${filter === s ? C.accent : C.border}`,
-              background: filter === s ? 'rgba(159,81,182,0.08)' : C.card,
-              color: filter === s ? C.accent : C.text,
-              cursor: 'pointer',
-              fontWeight: filter === s ? 600 : 400,
-            }}
-          >
-            {labelForStatus(s)}
-            {counts && counts[s] !== undefined && ` (${counts[s]})`}
-          </button>
-        ))}
+        <UI.SegmentedToggle
+          value={filter}
+          onChange={setFilter}
+          options={(['open', 'acked', 'resolved', 'all'] as const).map((s) => ({
+            value: s,
+            label: `${labelForStatus(s)}${counts && counts[s] !== undefined ? ` (${counts[s]})` : ''}`,
+          }))}
+        />
         <button
           onClick={load}
           title="Ladda om"

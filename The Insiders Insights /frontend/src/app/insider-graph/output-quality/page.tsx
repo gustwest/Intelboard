@@ -62,26 +62,11 @@ export default function OutputQualityPage() {
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {WINDOW_OPTIONS.map((d) => {
-            const active = days === d;
-            return (
-              <button
-                key={d}
-                onClick={() => setDays(d)}
-                style={{
-                  padding: '6px 12px', borderRadius: 7, fontSize: 12, fontWeight: 600,
-                  background: active ? 'rgba(159,81,182,0.16)' : 'transparent',
-                  color: active ? C.accent : C.muted,
-                  border: `1px solid ${active ? 'rgba(159,81,182,0.4)' : C.border}`,
-                  cursor: 'pointer',
-                }}
-              >
-                {d} d
-              </button>
-            );
-          })}
-        </div>
+        <UI.SegmentedToggle
+          value={String(days)}
+          onChange={(v) => setDays(Number(v))}
+          options={WINDOW_OPTIONS.map((d) => ({ value: String(d), label: `${d} d` }))}
+        />
         <button
           onClick={load}
           disabled={loading}

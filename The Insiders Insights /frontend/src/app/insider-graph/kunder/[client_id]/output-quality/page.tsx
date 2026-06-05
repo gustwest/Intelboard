@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Gauge, ArrowLeft, Sparkles, ChevronRight, ChevronDown, Filter, Check, Loader2, Combine, X, AlertCircle } from 'lucide-react';
+import { Gauge, ArrowLeft, Sparkles, ChevronRight, ChevronDown, Filter, Check, Loader2, Combine, AlertCircle } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../../../_components/GraphPageShell';
 import { graphFetch } from '../../../_lib/api';
 import {
@@ -554,24 +554,17 @@ export default function OutputQualityDetailPage() {
       </div>
 
       {aggModal && (
-        <div
-          onClick={() => !aggModal.applying && setAggModal(null)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 24 }}
+        <UI.Modal
+          open={!!aggModal}
+          onClose={() => !aggModal.applying && setAggModal(null)}
+          overlayOpacity={0.6}
+          maxWidth={600}
+          title={
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Combine size={18} color={C.accent} /> Aggregera dimension: <code style={{ background: '#eef0f1', padding: '2px 6px', borderRadius: 4, fontSize: 13 }}>{aggModal.dimension}</code>
+            </span>
+          }
         >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14, width: '100%', maxWidth: 600, padding: 24, maxHeight: '85vh', overflowY: 'auto' }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Combine size={18} color={C.accent} /> Aggregera dimension: <code style={{ background: '#eef0f1', padding: '2px 6px', borderRadius: 4, fontSize: 13 }}>{aggModal.dimension}</code>
-              </h2>
-              <button onClick={() => !aggModal.applying && setAggModal(null)} disabled={aggModal.applying}
-                style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer' }}>
-                <X size={18} />
-              </button>
-            </div>
-
             <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, margin: '0 0 16px' }}>
               {aggModal.claim_ids.length} atomära claims i dimensionen kommer ersättas med 1–2 syntetiserade narratives.
               Originalen behålls i Firestore som evidens men flaggas som <code style={{ fontSize: 11 }}>aggregated</code> och dyker inte upp i nästa JSON-LD/profilsida.
@@ -632,8 +625,7 @@ export default function OutputQualityDetailPage() {
                 </button>
               )}
             </div>
-          </div>
-        </div>
+        </UI.Modal>
       )}
     </GraphPageShell>
   );

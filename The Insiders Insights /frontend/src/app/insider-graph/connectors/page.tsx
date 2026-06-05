@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plug, Play, Loader2, Check, X, Clock } from 'lucide-react';
+import { Plug, Check, X, Clock } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import * as UI from '../_components/ui';
 import { graphFetch } from '../_lib/api';
@@ -66,9 +66,6 @@ export default function GraphConnectorsPage() {
   const usageCount = (id: string) => clients.filter((c) => (c.active_connectors || []).includes(id)).length;
 
   function renderJobBtn(j: { label: string; key: string; path: string; type: string }) {
-    const st = jobActive[j.key] || 'idle';
-    const Icon = st === 'running' ? Loader2 : st === 'success' ? Check : st === 'failed' ? X : Play;
-    const color = st === 'failed' ? '#dc2626' : st === 'success' ? '#16a34a' : undefined;
     const run = latest(j.type);
     return (
       <div key={j.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 14px', border: `1px solid ${C.border}`, borderRadius: 10 }}>
@@ -81,14 +78,12 @@ export default function GraphConnectorsPage() {
             ) : 'aldrig körd'}
           </div>
         </div>
-        <button
+        <UI.JobRunButton
+          status={jobActive[j.key] || 'idle'}
+          label="Kör"
           onClick={() => runJob(j.key, j.path, j.type)}
-          disabled={st === 'running'}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: st === 'running' ? 'wait' : 'pointer', flexShrink: 0 }}
-        >
-          <Icon size={12} color={color} style={st === 'running' ? { animation: 'spin 0.8s linear infinite' } : undefined} />
-          {st === 'running' ? 'Kör…' : 'Kör'}
-        </button>
+          style={{ flexShrink: 0 }}
+        />
       </div>
     );
   }

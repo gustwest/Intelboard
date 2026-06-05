@@ -487,40 +487,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.7)',
-        backdropFilter: 'blur(4px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 200,
-        padding: 24,
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          background: '#ffffff',
-          border: `1px solid ${C.border}`,
-          borderRadius: 14,
-          width: '100%',
-          maxWidth: 820,
-          maxHeight: '90vh',
-          overflowY: 'auto',
-          padding: 28,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 600, color: C.text, margin: 0 }}>Onboarda ny Graph-kund</h2>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer' }}>
-            <X size={20} />
-          </button>
-        </div>
-
+    <UI.Modal open onClose={onClose} title="Onboarda ny Graph-kund" maxWidth={820}>
         {/* Stegindikator — speglar vad som är ifyllt (formuläret är en enda sida) */}
         {(() => {
           const steps = [
@@ -562,26 +529,15 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
           <label style={{ fontSize: 11, color: '#6a7e8a', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
             Hosting-tier
           </label>
-          <div style={{ display: 'inline-flex', border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', marginTop: 6, marginLeft: 12, verticalAlign: 'middle' }}>
-            {([['default', 'Default (geogiraph)'], ['premium', 'Premium (egen domän)']] as ['default' | 'premium', string][]).map(([v, label]) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setTier(v)}
-                style={{
-                  padding: '7px 14px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  border: 'none',
-                  cursor: 'pointer',
-                  background: tier === v ? 'rgba(159,81,182,0.18)' : '#eef0f1',
-                  color: tier === v ? C.accent : C.text,
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <UI.SegmentedToggle
+            value={tier}
+            onChange={setTier}
+            style={{ marginTop: 6, marginLeft: 12, verticalAlign: 'middle' }}
+            options={([['default', 'Default (geogiraph)'], ['premium', 'Premium (egen domän)']] as ['default' | 'premium', string][]).map(([v, label]) => ({
+              value: v,
+              label,
+            }))}
+          />
           {tier === 'premium' && (
             <div style={{ marginTop: 12 }}>
               <Field
@@ -684,8 +640,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
         </div>
 
         {result && <Banner tone={result.ok ? 'success' : 'error'}>{result.message}</Banner>}
-      </div>
-    </div>
+    </UI.Modal>
   );
 }
 

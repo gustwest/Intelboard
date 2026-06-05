@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Users, ArrowLeft, Trash2, X, AlertCircle, ExternalLink, Play, Loader2, Check, Clock } from 'lucide-react';
+import { Users, ArrowLeft, Trash2, AlertCircle, ExternalLink, Check, Clock } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../../_components/GraphPageShell';
 import AttestedUpload from '../../_components/AttestedUpload';
 import JobFeedsEditor from '../../_components/JobFeedsEditor';
@@ -68,24 +68,7 @@ export default function ClientDetailPage() {
     jobType: string,
     opts: { primary?: boolean; title?: string; runningLabel?: string } = {},
   ) {
-    const st = jobActive[key] || 'idle';
-    const Icon = st === 'running' ? Loader2 : st === 'success' ? Check : Play;
-    const primary = opts.primary ?? false;
-    const iconColor = primary ? '#fff' : st === 'success' ? '#16a34a' : undefined;
-    const variant = primary
-      ? { background: C.accent, color: '#fff', border: `1px solid ${C.accent}` }
-      : { background: 'transparent', color: C.text, border: `1px solid ${C.border}` };
-    return (
-      <button
-        onClick={async () => { await runJob(key, path, jobType); setPipelineKey((k) => k + 1); }}
-        disabled={st === 'running'}
-        title={opts.title}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: st === 'running' ? 'wait' : 'pointer', ...variant }}
-      >
-        <Icon size={12} color={iconColor} style={st === 'running' ? { animation: 'spin 0.8s linear infinite' } : undefined} />
-        {st === 'running' ? (opts.runningLabel ?? 'Kör…') : label}
-      </button>
-    );
+    return <UI.JobRunButton status={jobActive[key] || 'idle'} label={label} runningLabel={opts.runningLabel ?? 'Kör…'} primary={opts.primary} title={opts.title} onClick={async () => { await runJob(key, path, jobType); setPipelineKey((k) => k + 1); }} />;
   }
 
   const load = useCallback(async () => {
@@ -372,22 +355,16 @@ function ConfirmDeleteModal({
   const [typed, setTyped] = useState('');
   const match = typed.trim() === expected.trim();
   return (
-    <div
-      onClick={onCancel}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 24 }}
+    <UI.Modal
+      open
+      onClose={onCancel}
+      maxWidth={460}
+      title={
+        <span style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <AlertCircle size={18} /> {title}
+        </span>
+      }
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{ background: '#ffffff', border: `1px solid ${C.border}`, borderRadius: 14, width: '100%', maxWidth: 460, padding: 24 }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600, color: '#ef4444', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <AlertCircle size={18} /> {title}
-          </h2>
-          <button onClick={onCancel} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer' }}>
-            <X size={18} />
-          </button>
-        </div>
         <p style={{ fontSize: 12, color: C.text, lineHeight: 1.6, margin: '0 0 14px' }}>{description}</p>
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>
           Skriv <strong style={{ color: C.text }}>{expected}</strong> för att bekräfta:
@@ -422,8 +399,7 @@ function ConfirmDeleteModal({
             {busy ? 'Raderar…' : 'Radera permanent'}
           </button>
         </div>
-      </div>
-    </div>
+    </UI.Modal>
   );
 }
 
