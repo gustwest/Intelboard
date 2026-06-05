@@ -12,8 +12,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 
 import firestore_client as fs
-from services import trust_gap_report
-from services.monthly_report import render_report_html
+from services import notifications, trust_gap_report
+from services.monthly_report import render_customer_email, render_report_html
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -53,6 +53,20 @@ def get_report(client_id: str, month: str) -> dict[str, Any]:
 @router.get("/{client_id}/{month}/html", response_class=HTMLResponse)
 def get_report_html(client_id: str, month: str) -> HTMLResponse:
     return HTMLResponse(render_report_html(_load(client_id, month)))
+
+
+@router.post("/{client_id}/{month}/send-customer-email")
+def send_customer_report(client_id: str, month: str) -> dict[str, Any]:
+    """Mejla en kund-säker månadssammanfattning till kundkontakten (B2). Self-no-op
+    om kontakt/SendGrid saknas. Endast ofarliga fält (beslutssäkerhet/trend/styrkor/
+    förbättringar) — aldrig motor-citat, harm-koder eller det interna utkastet."""
+    report = _load(client_id, month)
+    data = fs.client_doc(client_id).get().to_dict() or {}
+    subject, html_body, text_body = render_customer_email(report)
+    result = notifications.send_customer_email(
+        data.get("contact_email"), subject, html_body, text_body,
+    )
+    return {"client_id": client_id, "month": month, **result}
 
 
 def _load(client_id: str, month: str) -> dict[str, Any]:

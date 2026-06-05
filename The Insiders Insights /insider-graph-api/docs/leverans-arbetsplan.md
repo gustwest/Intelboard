@@ -144,7 +144,9 @@ Princip: felnotiser internt (ops); kundyta = friktionsfri engångsöverlämning 
 - Frontend: knapp "Skicka installationskit" i Leverans-fliken (`frontend/.../leverans/page.tsx`).
 **Acceptans:** kit innehåller fungerande snutt+badge+instruktion; skickas till kundkontakt; self-no-op utan kontakt/SendGrid. Test i `tests/test_delivery.py`.
 
-### B2 — Månatligt kund-mejl ur rapportmotorn (#2, **M**, återanvänder infra)
+### B2 — Månatligt kund-mejl ur rapportmotorn (#2, **M**, återanvänder infra) — ✅ KLAR (kod; schemaläggning = ops-steg kvar)
+> Gjort: `monthly_report.render_customer_email(model)` destillerar BARA ofarliga fält (beslutssäkerhet/verdict/trend/styrkor/förbättringar) — inga motor-citat/harm-koder/narrativ-utkast/humaniserings-detaljer (enhetstest verifierar att inget läcker); jobb `jobs/customer_report_email.py`; manuell endpoint `POST /api/reports/{id}/{month}/send-customer-email`. Test: `tests/test_customer_report_email.py`.
+> **Kvar (ops):** registrera jobbet som Cloud Run Job + Cloud Scheduler (cloudbuild.yaml-loopen + gcloud-create) så det körs månatligt efter `monthly_report`. Manuell send funkar redan.
 **Mål:** destillera månadsrapporten till kundvänd sammanfattning. **Återanvänd INTE det interna utkastet** (`render_report_html` har banner "Internt utkast", engine-excerpts, harm-koder, `draft_narrative`) — bygg en kund-säker vy ur de ofarliga fälten i `build_report_model`: `verdict`, `decision_confidence` (stage + score + next_step), `trend` (serie + delta + resolved), `strengths`, `improvement_opportunities`. Uteslut `detected`/`actions`/`engine_excerpt`/`draft_narrative`/`humanization`-detaljer.
 **Ändringar:**
 - Ny `services/monthly_report.render_customer_email(model)` → HTML (kort, ledningsgrupps-vänlig, ingen jargong/kausalitet — samma ton som narrativ-systemprompten 340–355).
