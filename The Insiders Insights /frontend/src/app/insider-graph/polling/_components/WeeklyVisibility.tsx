@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, ReactNode } from 'react';
 import { graphColors as C } from '../../_components/GraphPageShell';
 import * as UI from '../../_components/ui';
 import {
@@ -61,7 +61,7 @@ export function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
       </div>
 
       {sovSeries.length > 1 && (
-        <div style={{ marginBottom: cats.length ? 18 : 0 }}>
+        <div>
           <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 8 }}>Share of Voice över tid</div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 90, borderBottom: `1px solid ${C.border}`, paddingBottom: 4 }}>
             {sovSeries.map((w) => (
@@ -76,8 +76,7 @@ export function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
       )}
 
       {cats.length > 0 && (
-        <div style={{ marginBottom: engineEntries.length ? 18 : 0 }}>
-          <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 8 }}>Per kategori — senaste veckan + trend</div>
+        <Block label="Per kategori — senaste veckan + trend" summary={`${cats.length} ${cats.length === 1 ? 'kategori' : 'kategorier'}`} defaultOpen>
           <div style={{ ...catGridTrend, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 8, marginBottom: 6 }}>
             <span>Kategori</span>
             <span>SoV</span>
@@ -95,22 +94,19 @@ export function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
               trend={catTrend[cat]}
             />
           ))}
-        </div>
+        </Block>
       )}
 
       {engineEntries.length > 0 && (() => {
         const training = aggregateEnginesBySource(engineEntries, 'training');
         const webRag = aggregateEnginesBySource(engineEntries, 'web_rag');
         return (
-          <div>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8, gap: 12 }}>
-              <div style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>Per AI-motor — senaste veckan + trend</div>
-              <span
-                title="Bas-kunskap (RLHF-tränade modeller) och Live-signal (web-RAG som Perplexity) har fundamentalt olika fördelningar och frågedjup. De medeltalas aldrig — endast jämförs sida vid sida."
-                style={{ fontSize: 10, color: C.dim, fontStyle: 'italic' }}
-              >
-                Bas-kunskap vs Live-signal — aldrig medeltala
-              </span>
+          <Block label="Per AI-motor — senaste veckan + trend" summary="Bas-kunskap vs Live-signal" defaultOpen={false}>
+            <div
+              title="Bas-kunskap (RLHF-tränade modeller) och Live-signal (web-RAG som Perplexity) har fundamentalt olika fördelningar och frågedjup. De medeltalas aldrig — endast jämförs sida vid sida."
+              style={{ fontSize: 10, color: C.dim, fontStyle: 'italic', marginBottom: 8 }}
+            >
+              Bas-kunskap och Live-signal har olika fördelningar — de medeltalas aldrig, bara jämförs sida vid sida.
             </div>
             {training.engines.length > 0 && (
               <EnginesBySourceSection
@@ -128,9 +124,30 @@ export function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
                 trend={engineTrend}
               />
             )}
-          </div>
+          </Block>
         );
       })()}
+    </div>
+  );
+}
+
+// Kollapsbar sub-sektion inom kortet — segmenterar dataväggen och låter de tunga
+// tabellerna fällas in. Tillgänglig via toggleProps (tangentbord + aria-expanded).
+function Block({
+  label, summary, defaultOpen = true, children,
+}: { label: string; summary?: ReactNode; defaultOpen?: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div style={{ marginTop: 18, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+      <div
+        {...UI.toggleProps(open, () => setOpen((o) => !o))}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none', marginBottom: open ? 8 : 0 }}
+      >
+        <UI.Chevron open={open} size={9} />
+        <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>{label}</span>
+        {summary && <span style={{ fontSize: 11, color: C.dim, marginLeft: 'auto' }}>{summary}</span>}
+      </div>
+      {open && children}
     </div>
   );
 }
