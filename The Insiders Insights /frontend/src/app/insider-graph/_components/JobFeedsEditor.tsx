@@ -22,6 +22,8 @@ export default function JobFeedsEditor({ clientId }: { clientId: string }) {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [banner, setBanner] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
+  UI.useUnsavedWarning(dirty);
+  UI.useAutoDismiss(banner?.tone === 'ok', () => setBanner(null));
 
   const load = useCallback(async () => {
     try {

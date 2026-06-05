@@ -45,6 +45,8 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
   const [deriving, setDeriving] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error' | 'info'; text: string } | null>(null);
   const [derivedPreview, setDerivedPreview] = useState<AudiencePriority[] | null>(null);
+  UI.useUnsavedWarning(dirty);
+  UI.useAutoDismiss(msg?.tone === 'ok', () => setMsg(null));
 
   useEffect(() => {
     let cancelled = false;

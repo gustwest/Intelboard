@@ -47,6 +47,8 @@ export default function PersonaPaletteEditor({ clientId }: { clientId: string })
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
+  UI.useUnsavedWarning(dirty);
+  UI.useAutoDismiss(msg?.tone === 'ok', () => setMsg(null));
 
   useEffect(() => {
     let cancelled = false;

@@ -38,6 +38,8 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
   const [saving, setSaving] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error' | 'info'; text: string } | null>(null);
+  UI.useUnsavedWarning(dirty);
+  UI.useAutoDismiss(msg?.tone === 'ok', () => setMsg(null));
 
   async function load() {
     const d = await graphFetch<ClientIdentity>(`/api/clients/${clientId}`);

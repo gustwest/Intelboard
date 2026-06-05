@@ -328,19 +328,44 @@ export function Collapsible({
   );
 }
 
+// ── Form-UX-hooks ────────────────────────────────────────────────────────────
+// Varnar om osparade ändringar vid sidstängning/omladdning medan dirty=true.
+export function useUnsavedWarning(dirty: boolean) {
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
+}
+
+// Avfärdar en notis automatiskt efter ms när `active` blir sant (t.ex. "Sparat").
+// Re-armas bara när active växlar — onDismiss-identitet ignoreras (ref).
+export function useAutoDismiss(active: boolean, onDismiss: () => void, ms = 4000) {
+  const cb = useRef(onDismiss);
+  useEffect(() => { cb.current = onDismiss; });
+  useEffect(() => {
+    if (!active) return;
+    const id = setTimeout(() => cb.current(), ms);
+    return () => clearTimeout(id);
+  }, [active, ms]);
+}
+
 // ── SaveButton ───────────────────────────────────────────────────────────────
 // Dirty-state spara-knapp: tonad accent när dirty, dämpad/inaktiv annars.
-// 5+ inline-kopior i editorerna med identisk logik.
+// 5+ inline-kopior i editorerna med identisk logik. disabledReason visas som
+// title-tooltip när knappen är inaktiv (synligt skäl, default "inga ändringar").
 export function SaveButton({
-  dirty, saving, onClick, label = 'Spara', savingLabel = 'Sparar…', style,
+  dirty, saving, onClick, label = 'Spara', savingLabel = 'Sparar…', disabledReason, style,
 }: {
   dirty: boolean; saving?: boolean; onClick?: () => void;
-  label?: string; savingLabel?: string; style?: CSSProperties;
+  label?: string; savingLabel?: string; disabledReason?: string; style?: CSSProperties;
 }) {
   return (
     <button
       onClick={onClick}
       disabled={!dirty || saving}
+      title={!dirty && !saving ? (disabledReason ?? 'Inga ändringar att spara') : undefined}
       style={{
         display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px',
         background: dirty ? 'rgba(159,81,182,0.18)' : 'transparent',
