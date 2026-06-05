@@ -41,6 +41,7 @@ import firestore_client as fs
 from schema_org.claims import derive_property_claims
 from services import audience_personas
 from services import llm as llm_factory
+from services import probe_guard
 
 log = logging.getLogger(__name__)
 
@@ -240,7 +241,7 @@ def run_for_client(client_id: str) -> RiskRunResult | None:
         return None
 
     context = build_context(client_id, client)
-    questions = _load_approved_questions(client_id)
+    questions = _load_approved_questions(client_id, context.company_name)
     if not questions:
         log.info("risk loop %s: inga godkända frågor — generera + granska först", client_id)
         return RiskRunResult(client_id, 0, [])
@@ -286,10 +287,19 @@ def _persist_run_summary(client_id: str, answers_by_persona: dict[str, int], fin
     )
 
 
-def _load_approved_questions(client_id: str) -> list[Question]:
+def _load_approved_questions(client_id: str, company_name: str = "") -> list[Question]:
     out: list[Question] = []
     for _qid, q in fs.iter_risk_questions(client_id):
         if q.get("status") != "approved" or not q.get("text"):
+            continue
+        # Subjekt-grind (försvar): hoppa över en godkänd fråga som tilltalar bolaget i
+        # andra person utan att namnge det — annars tror motorn att "du" är den själv.
+        if probe_guard.addresses_subject_in_second_person(q["text"], company_name):
+            log.warning(
+                "risk loop %s: hoppar över subjekt-osäker fråga (andra person utan "
+                "bolagsnamn): %s",
+                client_id, q["text"][:120],
+            )
             continue
         out.append(
             Question(
@@ -415,7 +425,7 @@ def _generation_prompt(
     few_shots = _FEW_SHOTS[persona].format(
         company=company,
         competitor=(competitors[0] if competitors else "en konkurrent"),
-        use_case="ert huvudsakliga behov",
+        use_case="sitt huvudsakliga behov",
         category="kategorin",
         market="marknaden",
         industry="branschen",
@@ -450,6 +460,9 @@ affär/karriär/kapital står på spel. Du nöjer dig inte med ytliga frågor.
 
 # Regler
 - Naturligt formulerade, i personans egen röst — ALDRIG ledande.
+- Nämn ALLTID {company} vid namn och i TREDJE person. Tilltala ALDRIG bolaget som
+  "du/ni/ert/din/er" — en verklig {persona} frågar *om* {company}, inte *till* bolaget.
+  (Annars tror probe-motorn att "du" är den själv och svarar t.ex. "jag har inga kunder".)
 - Täck riskytan brett: #1 förväxling, #2 inaktuellt negativ, #3 hallucinerat negativ,
   #4 konkurrentförskjutning, #5 skadlig tystnad, #6 negativ inramning.
 - Blanda direkta, jämförande och öppna frågor; variera registret (även korta/trubbiga).
@@ -521,8 +534,10 @@ def classify(llm, question: Question, answer: str, context: Context) -> RiskFind
 _FOLLOW_UP_SYSTEM = """En {persona} fick ett tunt, undvikande eller möjligen förväxlat
 svar om {company} och vill ställa EN enda skarp följdfråga för att reda ut det — t.ex.
 om motorn blandar ihop bolaget med ett annat (#1) eller utelämnar det där det borde
-nämnas (#5). Skriv följdfrågan i personans egen röst, kort och icke-ledande. Hitta
-ALDRIG på fakta. Returnera ENDAST JSON: {{"follow_up":"frågan"}}"""
+nämnas (#5). Skriv följdfrågan i personans egen röst, kort och icke-ledande. Nämn
+{company} vid namn i TREDJE person — tilltala ALDRIG bolaget som "du/ni/ert" (annars
+tror motorn att "du" är den själv). Hitta ALDRIG på fakta. Returnera ENDAST JSON:
+{{"follow_up":"frågan"}}"""
 
 
 def _should_follow_up(cls: RiskFinding | None) -> bool:

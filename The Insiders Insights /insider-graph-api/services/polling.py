@@ -30,6 +30,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 import firestore_client as fs
 from config import settings
 from services import llm as llm_factory
+from services import probe_guard
 
 # Konkurrent-extraktion via judge-LLM (gemini). Kan stängas av om gRPC-klienten hänger
 # i prod — fältet category_competitors blir tomt men polling-jobbet fortsätter.
@@ -180,9 +181,20 @@ def run_for_client(client_id: str) -> PollingResult | None:
 def _build_questions(client: dict[str, Any]) -> list[tuple[str, str]]:
     custom = client.get("polling_questions")
     if isinstance(custom, dict) and custom:
+        company_name = client.get("company_name") or ""
         out = []
         for category, qs in custom.items():
             for q in qs:
+                # Subjekt-grind: flagga (men behåll — kund-författat) frågor som tilltalar
+                # bolaget i andra person utan att namnge det. Motorn kan då svara om sig
+                # själv i stället för mätobjektet. Vi droppar inte kundens egna frågor;
+                # varningen surfar i ops-loggen så formuleringen kan rättas.
+                if probe_guard.addresses_subject_in_second_person(q, company_name):
+                    log.warning(
+                        "polling: kund-fråga är subjekt-osäker (andra person utan "
+                        "bolagsnamn) — motorn kan svara om sig själv: %r",
+                        q,
+                    )
                 out.append((category, q))
         return out
 

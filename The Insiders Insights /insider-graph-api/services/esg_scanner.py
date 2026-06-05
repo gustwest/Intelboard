@@ -40,6 +40,7 @@ from google.cloud import firestore
 import firestore_client as fs
 from services import esrs_mapping
 from services import llm as llm_factory
+from services import probe_guard
 from services.risk_detector import build_context, Context, _ask  # delad kontext + motoranrop
 
 log = logging.getLogger(__name__)
@@ -296,6 +297,11 @@ def generate_expansions(llm, pillar: str, context: Context, industry: str) -> li
             q.lint_status = "rewritten"
         else:
             q.lint_status = "clean" if verdicts else "unchecked"
+        # Subjekt-grind: en fråga som tilltalar bolaget i andra person utan att namnge
+        # det får motorn att tro "du" = den själv → släpps (samma princip som ledande).
+        if probe_guard.addresses_subject_in_second_person(q.text, context.company_name):
+            log.info("ESG-subjekt-grind: släpper fråga (andra person utan bolagsnamn): %s", q.text[:80])
+            continue
         cleaned.append(q)
     return cleaned
 
@@ -361,7 +367,10 @@ Fokusera expansionen {_PILLAR_EXPANSION_THEME[pillar]}.
 - NEUTRALA och ÖPPNA — ALDRIG ledande: inga laddade/värderande ord, inga presuppositioner (anta
   inte att något redan är sant), ingen styrning mot ett förutbestämt svar, inga ja/nej-fällor där
   nyans krävs. Fråga "Vad redovisar X om …?" snarare än "Varför är X dåliga på …?".
-- Konkreta och mätbara; använd bolagsnamnet; realistiska att ställa en publik AI-assistent.
+- Konkreta och mätbara; realistiska att ställa en publik AI-assistent.
+- Namnge ALLTID bolaget vid namn och i TREDJE person. Tilltala ALDRIG bolaget som
+  "du/ni/ert/din" — fråga *om* bolaget, inte *till* det (annars tror motorn att "du"
+  är den själv och svarar bredvid mätobjektet).
 - ALDRIG hitta på fakta om bolaget. Generera på både svenska och engelska.
 
 # Exempel på önskad nivå och NEUTRAL stil (härma stilen, inte ordagrant)
