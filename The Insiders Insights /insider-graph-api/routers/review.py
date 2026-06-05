@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 import firestore_client as fs
 from schemas import LinkedInStatus
+from services import audience_personas
 
 router = APIRouter(prefix="/api/review", tags=["review"])
 
@@ -203,7 +204,9 @@ class RiskQuestionAction(BaseModel):
 class CustomRiskQuestion(BaseModel):
     """Ops-skapad fråga som inte kommer från LLM-generationen. Hamnar direkt som
     `approved` (review-grinden är onödig — ops själv lade in den)."""
-    persona: Literal["buyer", "candidate", "investor"]
+    # Plain str (inte Literal) så gammalt id (buyer/candidate) tas emot och
+    # normaliseras i handlern under övergången; valideras mot CANONICAL där.
+    persona: str
     text: str
     type: Literal["open", "comparative"] = "open"
     track: Literal["A", "B"] = "A"
@@ -223,16 +226,19 @@ def create_custom_risk_question(client_id: str, q: CustomRiskQuestion) -> dict[s
     text = q.text.strip()
     if not text:
         raise HTTPException(422, "text krävs")
+    persona = audience_personas.normalize(q.persona)
+    if persona not in audience_personas.CANONICAL:
+        raise HTTPException(422, f"okänd persona: {q.persona}")
 
     # Samma id-pattern som services/risk_detector._persist_question — stabilt över tid.
-    qid = "q-" + hashlib.sha1(f"{q.persona}|{q.track}|{text}".encode("utf-8")).hexdigest()[:16]
+    qid = "q-" + hashlib.sha1(f"{persona}|{q.track}|{text}".encode("utf-8")).hexdigest()[:16]
     ref = fs.risk_question_doc(client_id, qid)
     if ref.get().exists:
         raise HTTPException(409, "frågan finns redan (identisk persona+track+text)")
 
     ref.set(
         {
-            "persona": q.persona,
+            "persona": persona,
             "track": q.track,
             "text": text,
             "language": q.language,
@@ -246,7 +252,7 @@ def create_custom_risk_question(client_id: str, q: CustomRiskQuestion) -> dict[s
             "reviewed_at": firestore.SERVER_TIMESTAMP,
         }
     )
-    return {"status": "ok", "id": qid, "persona": q.persona, "text": text}
+    return {"status": "ok", "id": qid, "persona": persona, "text": text}
 
 
 @router.post("/{client_id}/risk-questions/{question_id}")

@@ -20,13 +20,13 @@ class ParseQuestionsTest(unittest.TestCase):
                 {"text": "Q3?", "track": "X", "language": "de"},  # ogiltiga → defaults
             ]
         }
-        qs = rd._parse_questions(data, "buyer")
+        qs = rd._parse_questions(data, "customer")
         self.assertEqual(len(qs), 2)
         self.assertEqual(qs[0].track, "B")
         self.assertEqual(qs[0].language, "en")
         self.assertEqual(qs[0].harm_modes, ["#4"])      # ogiltig harm-mode filtrerad
         self.assertEqual(qs[0].type, "comparative")
-        self.assertEqual(qs[0].persona, "buyer")
+        self.assertEqual(qs[0].persona, "customer")
         self.assertEqual(qs[1].track, "A")              # ogiltig → default
         self.assertEqual(qs[1].language, "sv")
         self.assertEqual(qs[1].type, "open")
@@ -96,7 +96,7 @@ class RunForClientTest(unittest.TestCase):
         # Frågor finns men väntar på review → körs aldrig skarpt (§5.1).
         fakefs.reset(
             client={"company_name": "Acme AB"},
-            risk_questions={"q1": _approved_q("buyer", "A", "Har Acme tvister?", status="open")},
+            risk_questions={"q1": _approved_q("customer", "A", "Har Acme tvister?", status="open")},
         )
         rd.llm_factory.make_validator = lambda: object()
         rd._build_engines = lambda: {"gpt-4o": object()}
@@ -108,9 +108,9 @@ class RunForClientTest(unittest.TestCase):
         fakefs.reset(
             client={"company_name": "Acme AB", "competitors": ["Beta"]},
             risk_questions={
-                "qh": _approved_q("buyer", "A", "Har Acme tvister?"),
-                "qo": _approved_q("buyer", "B", "Vilka leverantörer finns?"),
-                "qp": _approved_q("buyer", "A", "Ej godkänd", status="open"),  # skippas
+                "qh": _approved_q("customer", "A", "Har Acme tvister?"),
+                "qo": _approved_q("customer", "B", "Vilka leverantörer finns?"),
+                "qp": _approved_q("customer", "A", "Ej godkänd", status="open"),  # skippas
             },
         )
         rd.llm_factory.make_validator = lambda: object()
@@ -120,8 +120,8 @@ class RunForClientTest(unittest.TestCase):
 
         def fake_classify(llm, q, ans, ctx):
             if "tvister" in q.text:
-                return RiskFinding("buyer", "A", q.text, "", "#3", "high", "none", "påhittat")
-            return RiskFinding("buyer", "B", q.text, "", "ok", "", "", "")
+                return RiskFinding("customer", "A", q.text, "", "#3", "high", "none", "påhittat")
+            return RiskFinding("customer", "B", q.text, "", "ok", "", "", "")
 
         rd.classify = fake_classify
         result = rd.run_for_client("acme")
@@ -138,17 +138,17 @@ class RunForClientTest(unittest.TestCase):
 
     def test_run_marks_clean_on_safe_answer(self):
         # En godkänd fråga som tidigare gav ett fynd svarar nu "ok" → ren-streak byggs.
-        fid = rd._finding_id("buyer", "Har Acme tvister?", "gpt-4o")
+        fid = rd._finding_id("customer", "Har Acme tvister?", "gpt-4o")
         fakefs.reset(
             client={"company_name": "Acme AB"},
-            risk_questions={"qh": _approved_q("buyer", "A", "Har Acme tvister?")},
-            risk_findings={fid: {"status": "open", "clean_streak": 0, "persona": "buyer"}},
+            risk_questions={"qh": _approved_q("customer", "A", "Har Acme tvister?")},
+            risk_findings={fid: {"status": "open", "clean_streak": 0, "persona": "customer"}},
         )
         rd.llm_factory.make_validator = lambda: object()
         rd._build_engines = lambda: {"gpt-4o": object()}
         rd._ask = lambda q, llm: "svar"
         rd._should_follow_up = lambda cls: False
-        rd.classify = lambda *a: RiskFinding("buyer", "A", "Har Acme tvister?", "", "ok", "", "", "")
+        rd.classify = lambda *a: RiskFinding("customer", "A", "Har Acme tvister?", "", "ok", "", "", "")
         rd.run_for_client("acme")
         self.assertEqual(fakefs.STATE["risk_findings"][fid]["clean_streak"], 1)
         self.assertEqual(fakefs.STATE["risk_findings"][fid]["status"], "open")  # 1 < tröskel
@@ -212,7 +212,7 @@ class GenerateAndStoreTest(unittest.TestCase):
         rd.llm_factory.make_validator = lambda: object()
         rd._find_homonyms = lambda name, lei: []
         rd.generate_questions = lambda llm, persona, *a: (
-            [Question(persona, "A", f"Fråga för {persona}?", "sv")] if persona == "buyer" else []
+            [Question(persona, "A", f"Fråga för {persona}?", "sv")] if persona == "customer" else []
         )
         out = rd.generate_and_store_questions("acme")
         self.assertEqual(out["generated"], 1)

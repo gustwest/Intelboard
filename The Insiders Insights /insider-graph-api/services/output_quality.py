@@ -28,8 +28,9 @@ import logging
 from collections import Counter
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
+from services import audience_personas
 from services.llm import invoke_json, make_validator
 
 log = logging.getLogger(__name__)
@@ -53,7 +54,7 @@ MAX_PER_DIMENSION_HINT = 3         # >3 claims med samma dimension_hint = redund
 SOFT_VOLUME_CAP = 15               # mjuk gräns; över = flagga, inte block
 LLM_BATCH_HARD_CAP = 80            # över detta skickar vi i flera batchar
 
-AUDIENCE_TYPES = ("customer", "candidate", "investor")
+AUDIENCE_TYPES = audience_personas.CANONICAL  # customer / employee / investor
 
 
 # --- Models: input ---
@@ -75,10 +76,17 @@ class AudiencePriority(BaseModel):
     Audiences som saknas eller har weight=0 betyder att kunden inte
     prioriterar dem (se [[project_icp_multi_audience]])."""
 
-    audience_type: Literal["customer", "candidate", "investor"]
+    audience_type: Literal["customer", "employee", "investor"]
     weight: float = Field(default=1.0, ge=0.0)
     personas: list[PersonaTarget] = Field(default_factory=list)
     narrative_axes: list[str] = Field(default_factory=list)
+
+    @field_validator("audience_type", mode="before")
+    @classmethod
+    def _normalize_audience(cls, v: object) -> object:
+        # Gammalt id (candidate) → kanoniskt (employee), före Literal-validering.
+        # Täcker både inkommande API-anrop och lagrad client.audience_priorities.
+        return audience_personas.normalize(v) if isinstance(v, str) else v
 
 
 class RubricClaim(BaseModel):
@@ -233,7 +241,7 @@ def _build_system_prompt() -> str:
         "1. Klassificera dimension_hint som en av: geography, industry, seniority, "
         "function, company_size, certification, customer_logo, culture, financial, "
         "narrative, other.\n"
-        "2. Identifiera best_audience: customer / candidate / investor / none. Det är "
+        "2. Identifiera best_audience: customer / employee / investor / none. Det är "
         "den audience-typ som claimet bäst landar hos givet bolagets prioriteringar.\n"
         "3. Poängsätt på sex dimensioner (0–5):\n"
         f"{dimensions_desc}\n"
@@ -320,7 +328,8 @@ def _build_claim_score(claim: RubricClaim, item: dict[str, Any]) -> ClaimScore:
         score=round(score, 2),
         dimensions=cleaned,
         dimension_hint=item.get("dimension_hint"),
-        best_audience=item.get("best_audience"),
+        # Normalisera ev. gammalt audience-id (candidate) → kanoniskt (employee).
+        best_audience=audience_personas.normalize(item.get("best_audience")),
         action=action,
         reasons=list(item.get("reasons") or []),
         suggestion=item.get("suggestion"),

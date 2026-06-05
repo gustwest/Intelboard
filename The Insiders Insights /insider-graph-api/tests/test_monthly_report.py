@@ -19,7 +19,7 @@ def _findings():
         "f1": {"persona": "investor", "track": "A", "question": "Tvister kring Acme?",
                "engine": "gpt-4o", "harm": "#3", "severity": "high",
                "engine_excerpt": "påhittat", "status": "open"},
-        "f2": {"persona": "buyer", "track": "A", "question": "Stabilt bolag?",
+        "f2": {"persona": "customer", "track": "A", "question": "Stabilt bolag?",
                "engine": "gemini", "harm": "#5", "severity": "medium",
                "engine_excerpt": "vet ej", "status": "open", "via_follow_up": True},
         "f3": {"persona": "investor", "track": "A", "question": "Gammalt varsel?",
@@ -32,7 +32,7 @@ def _setup(**over):
     base = dict(
         client={"company_name": "Acme AB"},
         risk_findings=_findings(),
-        risk_run_summary={"answers_by_persona": {"investor": 10, "buyer": 5}, "total_answers": 15},
+        risk_run_summary={"answers_by_persona": {"investor": 10, "customer": 5}, "total_answers": 15},
         polling_results={"2026-W20": {"parity_index": 0.8}, "2026-W21": {"parity_index": 0.9}},
     )
     base.update(over)
@@ -51,10 +51,10 @@ class BuildModelTest(unittest.TestCase):
         # investor: open #3 high (vikt 3) / 10 svar = 0.3 (actioned räknas ej i exposure)
         self.assertEqual(exp["per_persona"]["investor"]["weighted"], 3)
         self.assertEqual(exp["per_persona"]["investor"]["score"], 0.3)
-        # buyer: open #5 medium (vikt 2) / 5 = 0.4
-        self.assertEqual(exp["per_persona"]["buyer"]["score"], 0.4)
-        # candidate: inga svar → score None
-        self.assertIsNone(exp["per_persona"]["candidate"]["score"])
+        # customer: open #5 medium (vikt 2) / 5 = 0.4
+        self.assertEqual(exp["per_persona"]["customer"]["score"], 0.4)
+        # employee: inga svar → score None
+        self.assertIsNone(exp["per_persona"]["employee"]["score"])
         # totalt: vikt 5 / 15 svar
         self.assertEqual(exp["total"]["weighted"], 5)
         self.assertEqual(exp["total"]["score"], 0.333)
@@ -90,7 +90,7 @@ class BuildModelTest(unittest.TestCase):
 
     def test_resolved_counted_and_listed(self):
         findings = _findings()
-        findings["f4"] = {"persona": "buyer", "track": "A", "question": "Löst fråga?",
+        findings["f4"] = {"persona": "customer", "track": "A", "question": "Löst fråga?",
                           "engine": "gpt-4o", "harm": "#3", "severity": "high", "status": "resolved"}
         _setup(risk_findings=findings)
         m = mr.build_report_model("acme", "2026-05")
@@ -103,7 +103,7 @@ class BuildModelTest(unittest.TestCase):
         _setup()
         m = mr.build_report_model("acme", "2026-05")
         conf = m["decision_confidence"]
-        # Bara 2 av 3 personas mätta (investor+buyer) → täckningstak 74, kan ej nå toppen.
+        # Bara 2 av 3 personas mätta (investor+customer) → täckningstak 74, kan ej nå toppen.
         self.assertEqual(conf["score"], 74)
         self.assertEqual(conf["stage"], "God grund")
         self.assertIn("13 av 15", m["verdict"])
@@ -118,7 +118,7 @@ class BuildModelTest(unittest.TestCase):
     def test_ceiling_never_reaches_100(self):
         # Perfekt utfall, alla personas täckta, noll fynd → ändå inte 100 (toppen öppen).
         _setup(risk_findings={}, risk_run_summary={
-            "answers_by_persona": {"buyer": 4, "candidate": 4, "investor": 4}, "total_answers": 12})
+            "answers_by_persona": {"customer": 4, "employee": 4, "investor": 4}, "total_answers": 12})
         conf = mr.build_report_model("acme", "2026-05")["decision_confidence"]
         self.assertEqual(conf["score"], 95)            # CONFIDENCE_CEILING, ej 100
         self.assertEqual(conf["stage"], "Mycket stark")
@@ -141,7 +141,7 @@ class BuildModelTest(unittest.TestCase):
 
     def test_improvements_never_empty_even_when_clean(self):
         _setup(risk_findings={}, risk_run_summary={
-            "answers_by_persona": {"buyer": 4, "candidate": 4, "investor": 4}, "total_answers": 12})
+            "answers_by_persona": {"customer": 4, "employee": 4, "investor": 4}, "total_answers": 12})
         m = mr.build_report_model("acme", "2026-05")
         self.assertTrue(m["improvement_opportunities"])  # invariant: aldrig tom
         self.assertTrue(any("bevakning" in i for i in m["improvement_opportunities"]))
@@ -206,7 +206,7 @@ class RenderHtmlTest(unittest.TestCase):
 
     def test_html_shows_resolved_and_series(self):
         findings = _findings()
-        findings["f4"] = {"persona": "buyer", "track": "A", "question": "Löst fråga?",
+        findings["f4"] = {"persona": "customer", "track": "A", "question": "Löst fråga?",
                           "engine": "gpt-4o", "harm": "#3", "severity": "high", "status": "resolved"}
         _setup(risk_findings=findings, monthly_reports={"2026-04": {"decision_confidence": {"score": 60}}})
         html_out = mr.render_report_html(mr.build_report_model("acme", "2026-05"))

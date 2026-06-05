@@ -16,7 +16,7 @@ import ttl_cache
 from config import settings
 from routers.inbox import _count_client  # samma "väntar på människa"-räkning som inkorgen
 from schema_org import urls
-from services import blob_storage, persona_derivation, persona_registry
+from services import audience_personas, blob_storage, persona_derivation, persona_registry
 from services.discovery import _normalize_org_number
 from services.identity_enrichment import apply_identity_metadata
 from services.output_quality import AudiencePriority
@@ -25,8 +25,9 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/clients", tags=["clients"])
 
-# Mätkonfiguration — håll i synk med services/polling.py + services/risk_detector.py.
-MEASUREMENT_PERSONAS = ("buyer", "candidate", "investor")
+# Mätkonfiguration — kanonisk persona-vokabulär (services/audience_personas.py),
+# delad med risk_detector + monthly_report + output_quality.
+MEASUREMENT_PERSONAS = audience_personas.CANONICAL  # customer / employee / investor
 POLLING_CATEGORIES = ("affar", "finans", "innovation", "hr")
 
 
@@ -160,11 +161,13 @@ def update_client_config(client_id: str, payload: ClientConfigUpdate) -> dict[st
             update[field] = val.strip()
 
     if payload.risk_personas is not None:
-        unknown = [p for p in payload.risk_personas if p not in MEASUREMENT_PERSONAS]
+        # Normalisera ev. gammalt id (buyer/candidate) → kanoniskt före validering.
+        incoming = [audience_personas.normalize(p) for p in payload.risk_personas]
+        unknown = [p for p in incoming if p not in MEASUREMENT_PERSONAS]
         if unknown:
             raise HTTPException(400, f"unknown personas: {unknown}")
         # Bevara kanonisk ordning, dedupa.
-        update["risk_personas"] = [p for p in MEASUREMENT_PERSONAS if p in payload.risk_personas]
+        update["risk_personas"] = [p for p in MEASUREMENT_PERSONAS if p in incoming]
 
     if payload.polling_questions is not None:
         cleaned: dict[str, list[str]] = {}

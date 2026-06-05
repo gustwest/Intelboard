@@ -29,6 +29,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 import firestore_client as fs
+from services import audience_personas
 from services.llm import invoke_json, make_validator
 from services.output_quality import AudiencePriority, PersonaTarget
 
@@ -168,10 +169,10 @@ def _build_system_prompt() -> str:
         "de vill bli citerade av i AI-motorer.\n\n"
         "Det finns tre möjliga audience-typer (välj 1–3 baserat på vad datan visar):\n"
         "- customer: prospekt/köpare av tjänsten\n"
-        "- candidate: talanger bolaget vill rekrytera (employer brand)\n"
+        "- employee: talanger bolaget vill rekrytera + befintlig personal (employer brand)\n"
         "- investor: kapital/börspublik (oftast bara för noterade eller growth-stage)\n\n"
         "För VARJE audience-typ bolaget verkar prioritera, ange:\n"
-        "- audience_type: 'customer' | 'candidate' | 'investor'\n"
+        "- audience_type: 'customer' | 'employee' | 'investor'\n"
         "- weight: 0.0–1.0 (relativ prioritet — summan av alla weights ska vara ~1.0)\n"
         "- personas: 1–3 specifika personor med role, industry (om relevant), "
         "company_size (om relevant), description (en mening)\n"
@@ -230,8 +231,8 @@ def _parse_llm_output(raw: dict[str, Any]) -> list[AudiencePriority]:
     for it in items:
         if not isinstance(it, dict):
             continue
-        audience_type = it.get("audience_type")
-        if audience_type not in ("customer", "candidate", "investor"):
+        audience_type = audience_personas.normalize(it.get("audience_type"))
+        if audience_type not in audience_personas.CANONICAL:
             continue
         try:
             weight = float(it.get("weight", 0.0))

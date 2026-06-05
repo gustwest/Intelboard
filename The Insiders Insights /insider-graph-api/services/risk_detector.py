@@ -39,11 +39,12 @@ from google.cloud import firestore
 
 import firestore_client as fs
 from schema_org.claims import derive_property_claims
+from services import audience_personas
 from services import llm as llm_factory
 
 log = logging.getLogger(__name__)
 
-ALL_PERSONAS = ("buyer", "candidate", "investor")
+ALL_PERSONAS = audience_personas.CANONICAL  # customer / employee / investor
 HARM_MODES = {"#1", "#2", "#3", "#4", "#5", "#6"}
 MAX_QUESTIONS_PER_PERSONA = 12  # skydd mot runaway-generering
 
@@ -91,22 +92,22 @@ RESOLVED_AFTER_CLEAN_RUNS = 2
 # --- Persona-linser + few-shots (docs/hallucination-loop-spec.md §5.1) --------
 
 _PERSONA_EXPERT = {
-    "buyer": "senior B2B-inköpare som utvärderar {company} som leverantör för ett verkligt behov",
-    "candidate": "eftertraktad yrkesperson som väger ett jobberbjudande hos {company}",
+    "customer": "senior B2B-inköpare som utvärderar {company} som leverantör för ett verkligt behov",
+    "employee": "eftertraktad yrkesperson som väger ett jobberbjudande hos {company}",
     "investor": "investerings-/DD-analytiker som granskar {company}",
 }
 
 _PERSONA_CRITERIA = {
-    "buyer": "trovärdighet, fit för use case, leveransspår/referenser, finansiell "
+    "customer": "trovärdighet, fit för use case, leveransspår/referenser, finansiell "
     "uthållighet, pris/affärsmodell, alternativ, röda flaggor",
-    "candidate": "stabilitet/tillväxt vs varsel, kultur/arbetsgivarrykte, ledningens "
+    "employee": "stabilitet/tillväxt vs varsel, kultur/arbetsgivarrykte, ledningens "
     "trovärdighet, finansiell hälsa, CV-värde",
     "investor": "exakt legal entitet & ägande (förväxlingsrisk), finansiell soliditet, "
     "tvister/sanktioner, ledningens track record, marknadsposition",
 }
 
 _FEW_SHOTS = {
-    "buyer": """Spår A (om {company}):
+    "customer": """Spår A (om {company}):
 - "Sammanställ publika kundomdömen, forum och tech-bloggar om {company}. Vad är kunderna mest nöjda med, och vanligaste klagomålen?"
 - "Har {company} varit involverade i kända dataläckor, rättsliga tvister eller publika systemhaverier de senaste åren?"
 - "{company} eller {competitor} för {use_case} — vilken bör jag välja?"
@@ -115,7 +116,7 @@ Spår B (om branschen):
 - "Vilka är de ledande leverantörerna av {category} i {market}?"
 - "Jag ska köpa in {category}. Vilka är de viktigaste tekniska kraven i kravspecen?"
 - "Vad är standardprissättningen i branschen, och vilka dolda kostnader missar man?\"""",
-    "candidate": """Spår A (om {company}):
+    "employee": """Spår A (om {company}):
 - "Vad säger Glassdoor, Reddit och branschnyheter om arbetskultur och ledarskap på {company}?"
 - "Hur ser personalomsättning och finansiell trend ut för {company}? Stabil arbetsplats?"
 - "Växer {company} eller har de varslat nyligen?"
@@ -292,7 +293,8 @@ def _load_approved_questions(client_id: str) -> list[Question]:
             continue
         out.append(
             Question(
-                persona=q.get("persona", ""),
+                # Normalisera ev. gammalt id (buyer/candidate) → kanoniskt.
+                persona=audience_personas.normalize(q.get("persona")) or "",
                 track=q.get("track") if q.get("track") in ("A", "B") else "A",
                 text=q["text"],
                 language=q.get("language") if q.get("language") in ("sv", "en") else "sv",
@@ -313,7 +315,9 @@ def _context_hash(context: Context) -> str:
 def _active_personas(client: dict) -> tuple[str, ...]:
     configured = client.get("risk_personas")
     if isinstance(configured, list) and configured:
-        return tuple(p for p in configured if p in ALL_PERSONAS) or ALL_PERSONAS
+        # Normalisera ev. gammalt id (buyer/candidate) → kanoniskt före filtrering.
+        norm = [audience_personas.normalize(p) for p in configured]
+        return tuple(p for p in norm if p in ALL_PERSONAS) or ALL_PERSONAS
     return ALL_PERSONAS
 
 

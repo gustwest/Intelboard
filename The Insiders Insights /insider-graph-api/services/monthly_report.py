@@ -19,6 +19,7 @@ from typing import Any
 from google.cloud import firestore
 
 import firestore_client as fs
+from services import audience_personas
 from services import llm as llm_factory
 from services import trust_gap_report
 
@@ -35,8 +36,8 @@ GEO_STAGES = [(0, "Tidigt läge"), (40, "På väg"), (60, "God grund"), (75, "St
 CONFIDENCE_CEILING = 95
 # Tunn mätning ≠ stark: utan svar från alla tre personas kan man inte nå över "God grund".
 COVERAGE_CEILING = 74
-PERSONAS = ("buyer", "candidate", "investor")
-PERSONA_SV = {"buyer": "Köpare", "candidate": "Kandidat", "investor": "Investerare"}
+PERSONAS = audience_personas.CANONICAL  # customer / employee / investor
+PERSONA_SV = audience_personas.LABEL_SV
 HARM_SV = {
     "#1": "Förväxling", "#2": "Inaktuellt negativ", "#3": "Hallucinerat negativ",
     "#4": "Konkurrentförskjutning", "#5": "Skadlig tystnad", "#6": "Negativ inramning",
@@ -63,14 +64,17 @@ def build_report_model(client_id: str, month: str | None = None) -> dict[str, An
     client = snap.to_dict() or {}
     month = month or current_month()
 
-    findings = list(fs.iter_risk_findings(client_id))
-    open_f = [d for _i, d in findings if d.get("status") in (None, "open")]
-    actioned_f = [d for _i, d in findings if d.get("status") == "actioned"]
-    resolved_f = [d for _i, d in findings if d.get("status") == "resolved"]
+    findings = [d for _i, d in fs.iter_risk_findings(client_id)]
+    # Normalisera ev. gammalt persona-id (buyer/candidate) på findings → kanoniskt.
+    for d in findings:
+        d["persona"] = audience_personas.normalize(d.get("persona"))
+    open_f = [d for d in findings if d.get("status") in (None, "open")]
+    actioned_f = [d for d in findings if d.get("status") == "actioned"]
+    resolved_f = [d for d in findings if d.get("status") == "resolved"]
 
     summary_snap = fs.risk_run_summary_doc(client_id).get()
     summary = summary_snap.to_dict() if summary_snap.exists else {}
-    answers_by_persona = (summary or {}).get("answers_by_persona") or {}
+    answers_by_persona = audience_personas.normalize_keys((summary or {}).get("answers_by_persona"))
 
     risk_exposure = _exposure(open_f, answers_by_persona)
     detected = sorted(

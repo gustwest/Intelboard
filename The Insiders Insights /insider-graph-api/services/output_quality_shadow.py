@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import firestore_client as fs
+from services import audience_personas
 from services.output_quality import (
     AudiencePriority,
     PersonaTarget,
@@ -149,8 +150,8 @@ def _parse_audience_priorities(raw: Any) -> list[AudiencePriority]:
     for item in raw:
         if not isinstance(item, dict):
             continue
-        audience_type = item.get("audience_type")
-        if audience_type not in ("customer", "candidate", "investor"):
+        audience_type = audience_personas.normalize(item.get("audience_type"))
+        if audience_type not in audience_personas.CANONICAL:
             continue
         try:
             weight = float(item.get("weight", 0.0))
