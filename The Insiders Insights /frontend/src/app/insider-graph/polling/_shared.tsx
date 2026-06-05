@@ -509,6 +509,7 @@ export function signedDelta(v: number | null | undefined): string {
 // --- Sticky kontextrad + hero -------------------------------------------------
 
 export type Hero = {
+  label: string;   // metrikens namn (alltid satt) — gör hero-talet självförklarande
   primary: string;
   unit?: string;
   delta?: string;
@@ -529,20 +530,22 @@ export function buildHero(report: Report | null, riskQuestions: RiskQuestionsRes
       deltaStr = delta > 0 ? `↑${delta} sedan föregående månad` : delta < 0 ? `↓${Math.abs(delta)} sedan föregående månad` : 'oförändrat sedan föregående månad';
     }
     return {
+      label: 'Beslutssäkerhet',
       primary: String(conf.score),
       unit: '/ 100',
       delta: deltaStr,
       deltaTone,
       stage: conf.stage,
-      tagline: 'Beslutssäkerhet — hur säkert AI-motorerna svarar om er på beslutskritiska frågor.',
+      tagline: 'Hur säkert AI-motorerna svarar om er på beslutskritiska frågor.',
     };
   }
   // Fallback 1: godkända frågor finns men ingen rapport än → loopen rullar.
   const approved = riskQuestions?.counts.approved ?? 0;
   if (approved > 0) {
     return {
+      label: 'Risk-frågor i mätning',
       primary: String(approved),
-      unit: 'frågor mäts',
+      unit: approved === 1 ? 'fråga' : 'frågor',
       stage: 'Loopen rullar',
       tagline: 'Beslutssäkerhet beräknas vid första månadsrapporten — frågorna mäts varje vecka under tiden.',
     };
@@ -551,13 +554,14 @@ export function buildHero(report: Report | null, riskQuestions: RiskQuestionsRes
   const latestWeek = polling?.[0];
   if (latestWeek?.share_of_voice != null) {
     return {
+      label: 'Share of Voice',
       primary: `${Math.round(latestWeek.share_of_voice * 100)}%`,
-      unit: 'Share of Voice',
       stage: 'Tidigt läge',
       tagline: 'Beslutssäkerhet kräver godkända frågor + första månadsrapporten. Tills dess: rå synlighet.',
     };
   }
   return {
+    label: 'AI-synlighet',
     primary: '—',
     stage: 'Loopen är inte aktiv',
     tagline: 'Starta loopen: kör polling, generera frågor, godkänn, mät.',
