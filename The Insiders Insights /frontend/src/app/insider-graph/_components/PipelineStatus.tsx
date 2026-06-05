@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Check } from 'lucide-react';
+import { Check, AlertTriangle } from 'lucide-react';
 import { graphColors as C } from './GraphPageShell';
 import { graphFetch } from '../_lib/api';
 
@@ -19,6 +19,13 @@ const STATE_COLOR: Record<PipelineStep['state'], string> = {
   done: '#22c55e',
   attention: '#f59e0b',
   todo: C.dim,
+};
+
+// Icke-färg-kanal (skärmläsare/färgblind) för pipeline-stegens tillstånd.
+const STATE_LABEL: Record<PipelineStep['state'], string> = {
+  done: 'klar',
+  attention: 'kräver åtgärd',
+  todo: 'ej påbörjad',
 };
 
 function fmt(at?: string | null): string | null {
@@ -77,7 +84,9 @@ export default function PipelineStatus({
           {steps.map((s) => (
             <span
               key={s.key}
-              title={`${s.label}${s.detail ? ` — ${s.detail}` : ''}`}
+              role="img"
+              aria-label={`${s.label}: ${STATE_LABEL[s.state]}${s.detail ? ` — ${s.detail}` : ''}`}
+              title={`${s.label} — ${STATE_LABEL[s.state]}${s.detail ? ` — ${s.detail}` : ''}`}
               style={{
                 width: 8,
                 height: 8,
@@ -88,7 +97,8 @@ export default function PipelineStatus({
             />
           ))}
         </div>
-        <span style={{ fontSize: 11, color: hasAttention ? '#d97706' : '#16a34a', fontWeight: 600 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: hasAttention ? '#d97706' : '#16a34a', fontWeight: 600 }}>
+          {hasAttention ? <AlertTriangle size={11} /> : <Check size={11} />}
           {text}
         </span>
       </div>
@@ -132,6 +142,8 @@ export default function PipelineStatus({
               />
             )}
             <span
+              role="img"
+              aria-label={`${s.label}: ${STATE_LABEL[s.state]}`}
               style={{
                 position: 'relative',
                 width: 18,

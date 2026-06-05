@@ -147,8 +147,17 @@ export default function OutputQualityPanel({ clientId }: { clientId: string }) {
       {/* Per-connector mini-tabell — visar vilken connector som drar ner */}
       {connectorRows.length > 0 && (
         <div>
-          <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
-            Per connector
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Per connector
+            </div>
+            <div style={{ display: 'flex', gap: 10, fontSize: 10, color: C.muted }}>
+              {([['publish', '#22c55e'], ['transform', '#f59e0b'], ['drop', '#ef4444']] as const).map(([lbl, col]) => (
+                <span key={lbl} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 2, background: col, display: 'inline-block' }} />{lbl}
+                </span>
+              ))}
+            </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {connectorRows.map((c) => {
@@ -160,7 +169,11 @@ export default function OutputQualityPanel({ clientId }: { clientId: string }) {
                 <div key={c.name} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'center', fontSize: 12 }}>
                   <div style={{ fontFamily: 'ui-monospace, monospace', color: C.text }}>{c.name}</div>
                   <ScoreBadge score={c.avg_score} size="sm" />
-                  <div style={{ display: 'flex', width: 100, height: 6, borderRadius: 3, overflow: 'hidden', background: '#eef0f1' }}>
+                  <div
+                    role="img"
+                    aria-label={`Åtgärdsfördelning: publish ${publishPct.toFixed(0)}%, transform ${transformPct.toFixed(0)}%, drop ${dropPct.toFixed(0)}%`}
+                    style={{ display: 'flex', width: 100, height: 6, borderRadius: 3, overflow: 'hidden', background: '#eef0f1' }}
+                  >
                     {publishPct > 0 && <div style={{ width: `${publishPct}%`, background: '#22c55e' }} title={`publish ${publishPct.toFixed(0)}%`} />}
                     {transformPct > 0 && <div style={{ width: `${transformPct}%`, background: '#f59e0b' }} title={`transform ${transformPct.toFixed(0)}%`} />}
                     {dropPct > 0 && <div style={{ width: `${dropPct}%`, background: '#ef4444' }} title={`drop ${dropPct.toFixed(0)}%`} />}
