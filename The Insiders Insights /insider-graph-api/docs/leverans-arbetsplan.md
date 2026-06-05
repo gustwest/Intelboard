@@ -128,13 +128,15 @@ Alla ändringar i `schema_org/profile_page.py` (`_render`/`render_llms_txt`) + `
 
 Princip: felnotiser internt (ops); kundyta = friktionsfri engångsöverlämning + löpande värdeuppdatering. Ingen login.
 
-### Förarbete B0 — utöka notis-sömmen (**S**)
+### Förarbete B0 — utöka notis-sömmen (**S**) — ✅ KLAR
+> Gjort: `_deliver` tar nu `html=None` (sätter `html_content`); ny `send_customer_email` (kundvänd väg, self-no-op vid saknad konfig/kontakt). Kvartals-påminnelsen oförändrad. Test: `tests/test_notifications.py`.
 `services/notifications.py` `_deliver` skickar idag bara `plain_text_content` till `ops_notify_email`. Utöka:
 - `_deliver(to_email, subject, body, html=None)` → sätt `html_content` när `html` ges (SendGrid `Mail` stödjer det).
 - Behåll self-no-op/felsäkerhet (saknad nyckel/avsändare → logga, fäll aldrig jobb).
 **Acceptans:** kan skicka HTML-mejl till godtycklig mottagare; befintlig kvartals-påminnelse oförändrad.
 
-### B1 — Auto-genererat installationskit (#1, **M**)
+### B1 — Auto-genererat installationskit (#1, **M**) — ✅ KLAR
+> Gjort: `schema_org/install_kit.py` (render HTML-sida + e-postvariant ur snutt+badge+profil-länk, utskrivbar PDF, badge respekterar kundens `language`); endpoints `GET /api/delivery/{id}/install-kit` (HTML) + `POST .../install-kit/send` (mejlar kundkontakten via `send_customer_email`); frontend "Förhandsgranska/Skicka installationskit"-knappar i leverans-fliken. Self-no-op utan kontakt. Test: `tests/test_install_kit.py`.
 **Mål:** ett klick → kunden får snutt + badge + instruktion.
 **Ändringar:**
 - Ny renderare `schema_org/install_kit.py`: bygg en ren HTML-sida (+ utskrivbar/PDF via print-CSS som månadsrapporten, 514–524) som samlar `render_identity_snippet` (delivery.py), badge-snippet (`schema_org/badge.py`), `profile_url`, och steg-för-steg "klistra här". Lokaliserad via A1.

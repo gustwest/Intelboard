@@ -47,6 +47,30 @@ class NotificationsTest(unittest.TestCase):
         result = n.send_quarterly_reminder("acme", {"company_name": "Acme AB"}, "msg")
         self.assertEqual(result, {"sent": False, "reason": "send_failed"})
 
+    # --- send_customer_email (Spår B: kundvänt utskick) ---
+
+    def test_customer_email_noop_unconfigured(self):
+        n.settings.sendgrid_api_key = ""
+        result = n.send_customer_email("vd@acme.se", "sub", "<b>h</b>", "t")
+        self.assertEqual(result["reason"], "not_configured")
+
+    def test_customer_email_noop_without_contact(self):
+        self._configure()
+        result = n.send_customer_email(None, "sub", "<b>h</b>", "t")
+        self.assertEqual(result["reason"], "no_contact")
+
+    def test_customer_email_sends_html_to_contact(self):
+        self._configure()
+        sent: list = []
+        n._deliver = lambda to, subject, body, html=None: sent.append((to, body, html))
+        result = n.send_customer_email("vd@acme.se", "sub", "<b>h</b>", "ren text")
+        self.assertTrue(result["sent"])
+        self.assertEqual(result["to"], "vd@acme.se")
+        to, body, html = sent[0]
+        self.assertEqual(to, "vd@acme.se")
+        self.assertEqual(body, "ren text")   # plain-text fallback
+        self.assertEqual(html, "<b>h</b>")   # html-variant
+
 
 if __name__ == "__main__":
     unittest.main()

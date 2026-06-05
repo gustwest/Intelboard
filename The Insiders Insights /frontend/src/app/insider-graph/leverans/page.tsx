@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Rocket, Copy, Check, ExternalLink, ChevronDown, ChevronRight, X, Clock } from 'lucide-react';
+import { Rocket, Copy, Check, ExternalLink, ChevronDown, ChevronRight, X, Clock, Send, Eye } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import * as UI from '../_components/ui';
-import { graphFetch } from '../_lib/api';
+import { graphFetch, graphFetchBlob } from '../_lib/api';
 import { useJobRuns, fmtRelative } from '../_lib/jobRuns';
 
 type Client = {
@@ -164,6 +164,44 @@ export default function LeveransPage() {
     setTimeout(() => setCopied(null), 1500);
   }, []);
 
+  // Överlämning (B1): skicka installationskit till kundkontakten + förhandsgranska.
+  const [kitMsg, setKitMsg] = useState<{ tone: 'ok' | 'err' | 'info'; text: string } | null>(null);
+  const [kitBusy, setKitBusy] = useState<'send' | 'preview' | null>(null);
+
+  const sendKit = useCallback(async () => {
+    if (!selected) return;
+    setKitBusy('send');
+    setKitMsg(null);
+    try {
+      const r = await graphFetch<{ sent: boolean; reason?: string; to?: string }>(
+        `/api/delivery/${selected}/install-kit/send`,
+        { method: 'POST' },
+      );
+      if (r.sent) setKitMsg({ tone: 'ok', text: `Installationskit skickat till ${r.to}` });
+      else if (r.reason === 'no_contact')
+        setKitMsg({ tone: 'info', text: 'Ingen kontakt-e-post satt på kunden — lägg till den på kundkortet (Identitetsmetadata) först.' });
+      else setKitMsg({ tone: 'info', text: `Inte skickat (${r.reason}).` });
+    } catch (e) {
+      setKitMsg({ tone: 'err', text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setKitBusy(null);
+    }
+  }, [selected]);
+
+  const previewKit = useCallback(async () => {
+    if (!selected) return;
+    setKitBusy('preview');
+    setKitMsg(null);
+    try {
+      const blob = await graphFetchBlob(`/api/delivery/${selected}/install-kit`);
+      window.open(URL.createObjectURL(blob), '_blank', 'noopener');
+    } catch (e) {
+      setKitMsg({ tone: 'err', text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setKitBusy(null);
+    }
+  }, [selected]);
+
   const profileUrl = delivery?.compiled_url || delivery?.profile_url || null;
   const isCompiled = Boolean(delivery?.compiled_url);
 
@@ -238,6 +276,27 @@ export default function LeveransPage() {
             setRefreshTick((t) => t + 1);
           }}
         />
+      </UI.Card>
+
+      {/* Överlämning (B1): installationskit till kundkontakten */}
+      <UI.Card padding="18px 22px" style={{ marginBottom: 16 }} title="Överlämning" hint="Skicka ett färdigt installationskit (snutt + badge + profil-länk) till kundens kontaktperson. Mejlas till kontakt-e-posten satt på kundkortet.">
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={previewKit} disabled={!selected || kitBusy !== null} style={btnStyle}>
+            <Eye size={14} /> {kitBusy === 'preview' ? 'Öppnar…' : 'Förhandsgranska kit'}
+          </button>
+          <button
+            onClick={sendKit}
+            disabled={!selected || kitBusy !== null}
+            style={{ ...btnStyle, background: 'rgba(159,81,182,0.18)', color: C.accent, border: `1px solid rgba(159,81,182,0.3)` }}
+          >
+            <Send size={14} /> {kitBusy === 'send' ? 'Skickar…' : 'Skicka installationskit'}
+          </button>
+        </div>
+        {kitMsg && (
+          <UI.StatusBanner tone={kitMsg.tone === 'ok' ? 'ok' : kitMsg.tone === 'err' ? 'err' : 'info'} style={{ marginTop: 12, marginBottom: 0 }}>
+            {kitMsg.text}
+          </UI.StatusBanner>
+        )}
       </UI.Card>
 
       {/* Officiell data som ingår */}
