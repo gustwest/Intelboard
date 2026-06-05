@@ -35,7 +35,7 @@ steps:
       - '-c'
       - |
         IMAGE=europe-north1-docker.pkg.dev/$PROJECT_ID/insider-graph-repo/insider-graph-api:$COMMIT_SHA
-        for JOB in scrape-active scrape-website extract-all-claims compile-all-schemas polling-weekly xml-sync sunset-skills quarterly-linkedin-todo compute-trust-gap trust-gap-report warmth-probes risk-detect-all monthly-report-all model-drift-scan model-availability-check; do
+        for JOB in scrape-active scrape-website extract-all-claims compile-all-schemas polling-weekly xml-sync sunset-skills quarterly-linkedin-todo compute-trust-gap trust-gap-report warmth-probes risk-detect-all monthly-report-all customer-report-email-all model-drift-scan model-availability-check; do
           gcloud run jobs update $$JOB --image=$$IMAGE --region=europe-north1 || \
             echo "job $$JOB not yet created — run scripts/bootstrap.sh first"
         done

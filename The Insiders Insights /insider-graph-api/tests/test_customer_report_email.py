@@ -82,5 +82,42 @@ class CustomerEmailSendTest(unittest.TestCase):
         self.assertEqual(result["reason"], "no_contact")
 
 
+class CustomerEmailJobTest(unittest.TestCase):
+    def setUp(self):
+        self._orig = (settings.sendgrid_api_key, settings.notify_from_email, notifications._deliver)
+        settings.sendgrid_api_key = "SG.x"
+        settings.notify_from_email = "noreply@geogiraph.com"
+
+    def tearDown(self):
+        settings.sendgrid_api_key, settings.notify_from_email, notifications._deliver = self._orig
+
+    def test_per_client_job_sends(self):
+        from jobs import customer_report_email as job
+        fakefs.reset(
+            client={"company_name": "Acme AB", "contact_email": "vd@acme.se"},
+            monthly_reports={"2026-05": MODEL},
+        )
+        notifications._deliver = lambda to, subject, body, html=None: None
+        result = job.run("acme", "2026-05")
+        self.assertTrue(result["sent"])
+        self.assertEqual(result["month"], "2026-05")
+
+    def test_per_client_job_noop_without_report(self):
+        from jobs import customer_report_email as job
+        fakefs.reset(client={"company_name": "Acme AB", "contact_email": "vd@acme.se"}, monthly_reports={})
+        result = job.run("acme", "2026-05")
+        self.assertFalse(result["sent"])
+        self.assertEqual(result["reason"], "no_report")
+
+    def test_fanout_job_runs(self):
+        from jobs import customer_report_email_all as fanout
+        fakefs.reset(
+            client={"company_name": "Acme AB", "contact_email": "vd@acme.se"},
+            monthly_reports={monthly_report.current_month(): MODEL},
+        )
+        notifications._deliver = lambda to, subject, body, html=None: None
+        fanout.run()  # ska inte kasta; fan-out över alla kunder
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -9,7 +9,8 @@
 #   - IAM-bindningar (Firestore, GCS, Secret Manager)
 #   - Cloud Run Jobs (scrape-active, scrape-website, extract-all-claims,
 #     compile-all-schemas, polling-weekly, xml-sync, sunset-skills, quarterly-linkedin-todo,
-#     compute-trust-gap, trust-gap-report, warmth-probes, risk-detect-all, monthly-report-all)
+#     compute-trust-gap, trust-gap-report, warmth-probes, risk-detect-all, monthly-report-all,
+#     customer-report-email-all)
 #   - Cloud Scheduler-triggers för jobben
 #   - Eventarc-trigger för compile_schema vid Firestore-skrivningar
 #
@@ -278,6 +279,9 @@ create_or_update_job trust-gap-report         jobs.trust_gap_report        1 1 6
 create_or_update_job warmth-probes            jobs.warmth_probes           5 5 3600s
 create_or_update_job risk-detect-all          jobs.risk_detect_all         5 5 3600s
 create_or_update_job monthly-report-all       jobs.monthly_report_all      1 1 1800s
+# Spår B2: kund-säkert månadsmejl till varje kunds kontakt (self-no-op utan
+# SendGrid-konfig/kontakt). Körs efter monthly-report-all så rapporten finns.
+create_or_update_job customer-report-email-all jobs.customer_report_email_all 1 1 1800s
 # Modell-drift: greppar repot + jämför services/model_registry mot latest_known.
 # Lätt jobb (ren IO + ett par regex-pass) → seriellt + kort timeout.
 create_or_update_job model-drift-scan         jobs.model_drift_scan        1 1 600s
@@ -337,6 +341,8 @@ schedule_job trust-gap-report-monthly "0 8 1 * *"   trust-gap-report
 # (efter månadens sista veckovisa risk-detect, så snapshotet speglar färska findings).
 schedule_job risk-detect-weekly-tue   "0 7 * * 2"   risk-detect-all
 schedule_job monthly-report-monthly   "0 7 1 * *"   monthly-report-all
+# Kund-mejlet 1:a kl 07:30 — efter att månadsrapporterna byggts (07:00) så underlaget finns.
+schedule_job customer-report-email-monthly "30 7 1 * *" customer-report-email-all
 # Modell-drift veckovis måndagar 02:30 — innan resten av pipen drar igång, så
 # inboxen är färsk när dagen börjar. Mild policy: bara flagga, aldrig blockera.
 schedule_job model-drift-weekly       "30 2 * * 1"  model-drift-scan
