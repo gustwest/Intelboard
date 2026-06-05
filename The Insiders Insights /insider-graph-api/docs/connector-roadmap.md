@@ -20,15 +20,20 @@ Legend: ⬜ ej påbörjad · 🟡 pågår · ✅ klar (alla DoD-punkter i §3 bo
 | # | Connector | Kärna | Status |
 |---|-----------|-------|--------|
 | — | linkedin / rss / website / gleif | (redan i drift) | ✅ |
-| 1 | **GEO-riskloop** | Sondera beslutskritiska persona-frågor → skadeklassa svar → källförsedda korrigeringar + månadsrapport med Risk Exposure-trend ([spec](hallucination-loop-spec.md)) | 🟡 skiva 1–4 byggda; resonemangsmodeller via Vertex EU, probe-motorer första-parts; kvar före skarp drift: ops-config (GCP_PROJECT) + verifiering mot skarp källa |
+| 1 | **GEO-riskloop** | Sondera beslutskritiska persona-frågor → skadeklassa svar → källförsedda korrigeringar + månadsrapport med Risk Exposure-trend ([spec](hallucination-loop-spec.md)) | 🟡 skiva 1–4 byggda + driftsatta (jobb + scheduler tis/1:a); ops-config (GCP_PROJECT/VERTEX_LOCATION) verifierat satt i prod; `competitors`-fält klart (2026-06-05). **Kvar:** skarp e2e-verifiering (körs schemalagt tis 07:00) |
 | 2 | Auktoritativa attesteringar | VIES (moms), EUIPO/PRV (varumärke), patent, offentlig upphandling, ISO, utmärkelser | ⬜ |
-| 3 | Wikidata/KG-förankring | sameAs-berikning + motsägelsedetektering mot Wikidata/OpenCorporates/Crunchbase | ⬜ |
+| 3 | Wikidata/KG-förankring | sameAs-berikning + motsägelsedetektering mot Wikidata/OpenCorporates/Crunchbase | 🟡 Wikipedia/Wikidata-connectorn byggd + skarp-verifierad (sameAs + property-claims via exakt Q-id); **kvar:** motsägelsedetektering mot Wikidata/OpenCorporates/Crunchbase |
 | 4 | Erbjudande-katalog | Product/Service/Offer-noder länkade till Organization | ⬜ |
 | 5 | Talat ord | Transkribera poddar/webinars/tal → narrative-claims på Person-noder | ⬜ |
-| 6 | Kund-attesterings-liggare | Månatligt strukturerat utskick → `kind="attested"`-fakta med `attested_at` | ⬜ |
+| 6 | Kund-attesterings-liggare | Månatligt strukturerat utskick → `kind="attested"`-fakta med `attested_at` | 🟡 attested-ingest-ramverket + Glassdoor-recensioner (verifierad kultur, third_party_reviewed) byggt; **kvar:** generisk månads-liggare/utskick |
 
 Sekvenseringsprincip: värde × hävstång på befintlig infra ÷ insats. #1 och #2 bygger på
 det vi redan har (polling, claims, registry-mönstret) och är mest differentierande.
+
+**Avvikelse från ren sekvens (2026-06-05):** Glassdoor (attesterad kultur, rad #6) och
+Wikipedia/Wikidata (sameAs-delen av rad #3) byggdes som "Spår B" vid sidan av #1 för att
+ge connector-bredd snabbt. Rad #1 GEO-riskloopen är fortsatt huvudspåret och närmast
+skarp drift.
 
 ## 3. Definition of Done — checklista per connector
 
