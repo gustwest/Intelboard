@@ -484,6 +484,38 @@ export function DropZone({
   );
 }
 
+// ── Skeleton ─────────────────────────────────────────────────────────────────
+// Laddnings-platshållare med shimmer. Används istället för "render inget medan
+// null", så sidan inte poppar in sektion för sektion.
+const shimmerStyle: CSSProperties = {
+  borderRadius: 6,
+  background: '#eaedf0',
+  backgroundImage: 'linear-gradient(90deg, rgba(255,255,255,0) 0, rgba(255,255,255,0.65) 50%, rgba(255,255,255,0) 100%)',
+  backgroundSize: '200% 100%',
+  animation: 'ui-shimmer 1.4s ease-in-out infinite',
+};
+
+export function Skeleton({ height = 12, width = '100%', style }: { height?: number | string; width?: number | string; style?: CSSProperties }) {
+  return <div aria-hidden style={{ ...shimmerStyle, height, width, ...style }} />;
+}
+
+// Kort-format laddnings-platshållare (rubrikrad + N textrader).
+export function SkeletonCard({ lines = 3, style }: { lines?: number; style?: CSSProperties }) {
+  return (
+    <div
+      aria-busy="true"
+      aria-label="Laddar…"
+      style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 22px', marginBottom: 16, ...style }}
+    >
+      <style>{'@keyframes ui-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}'}</style>
+      <div style={{ ...shimmerStyle, height: 14, width: '38%', marginBottom: 14 }} />
+      {Array.from({ length: lines }).map((_, i) => (
+        <div key={i} style={{ ...shimmerStyle, height: 11, width: i === lines - 1 ? '64%' : '100%', marginBottom: 8 }} />
+      ))}
+    </div>
+  );
+}
+
 // ── Modal ────────────────────────────────────────────────────────────────────
 // Tillgänglig dialog: overlay + centrerad panel, role=dialog/aria-modal,
 // Esc-stängning, fokusfälla och fokus-återställning. Ersätter 4 inline-kopior

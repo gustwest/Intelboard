@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Radar, Loader2, Check, X, Play } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
+import * as UI from '../_components/ui';
 import { graphFetch } from '../_lib/api';
 import { useJobRuns } from '../_lib/jobRuns';
 import {
@@ -52,6 +53,7 @@ export default function GraphRiskLoopPage() {
   const [pollingQuestions, setPollingQuestions] = useState<PollingQuestionsResp | null>(null);
   const [mode, setMode] = useState<ViewMode>('ops');
   const [error, setError] = useState<string | null>(null);
+  const [softError, setSoftError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const { latest, runs: jobRuns, active: jobActive, trigger: runJob } = useJobRuns(selected);
 
@@ -79,6 +81,10 @@ export default function GraphRiskLoopPage() {
       })
       .catch((e) => setError(e.message));
   }, []);
+
+  // Nollställ mjuk-fel-notisen vid varje ny laddningscykel; tysta delhämtnings-
+  // fel nedan sätter den igen om något faktiskt misslyckas.
+  useEffect(() => { setSoftError(null); }, [selected, refreshTick]);
 
   // Persist kund-val + läge.
   useEffect(() => {
@@ -163,7 +169,7 @@ export default function GraphRiskLoopPage() {
     let cancelled = false;
     graphFetch<{ weeks: PollingWeek[] }>(`/api/polling/${selected}`)
       .then((d) => !cancelled && setPolling(d.weeks))
-      .catch(() => !cancelled && setPolling([]));
+      .catch(() => { if (!cancelled) { setPolling([]); setSoftError('Vissa data kunde inte laddas — visar det som finns just nu.'); } });
     return () => {
       cancelled = true;
     };
@@ -175,7 +181,7 @@ export default function GraphRiskLoopPage() {
     let cancelled = false;
     graphFetch<Humanization>(`/api/reports/${selected}/humanization`)
       .then((d) => !cancelled && setHumanization(d))
-      .catch(() => !cancelled && setHumanization(null));
+      .catch(() => { if (!cancelled) { setHumanization(null); setSoftError('Vissa data kunde inte laddas — visar det som finns just nu.'); } });
     return () => {
       cancelled = true;
     };
@@ -187,7 +193,7 @@ export default function GraphRiskLoopPage() {
     let cancelled = false;
     graphFetch<RecipesResp>(`/api/recipes/${selected}`)
       .then((d) => !cancelled && setRecipes(d))
-      .catch(() => !cancelled && setRecipes(null));
+      .catch(() => { if (!cancelled) { setRecipes(null); setSoftError('Vissa data kunde inte laddas — visar det som finns just nu.'); } });
     return () => {
       cancelled = true;
     };
@@ -228,7 +234,7 @@ export default function GraphRiskLoopPage() {
     let cancelled = false;
     graphFetch<RiskTimelineResp>(`/api/review/${selected}/risks/timeline`)
       .then((d) => !cancelled && setRiskTimeline(d))
-      .catch(() => !cancelled && setRiskTimeline(null));
+      .catch(() => { if (!cancelled) { setRiskTimeline(null); setSoftError('Vissa data kunde inte laddas — visar det som finns just nu.'); } });
     return () => {
       cancelled = true;
     };
@@ -240,7 +246,7 @@ export default function GraphRiskLoopPage() {
     let cancelled = false;
     graphFetch<RiskQuestionsResp>(`/api/review/${selected}/risk-questions?status=all`)
       .then((d) => !cancelled && setRiskQuestions(d))
-      .catch(() => !cancelled && setRiskQuestions(null));
+      .catch(() => { if (!cancelled) { setRiskQuestions(null); setSoftError('Vissa data kunde inte laddas — visar det som finns just nu.'); } });
     return () => {
       cancelled = true;
     };
@@ -252,7 +258,7 @@ export default function GraphRiskLoopPage() {
     let cancelled = false;
     graphFetch<PollingQuestionsResp>(`/api/polling/${selected}/questions`)
       .then((d) => !cancelled && setPollingQuestions(d))
-      .catch(() => !cancelled && setPollingQuestions(null));
+      .catch(() => { if (!cancelled) { setPollingQuestions(null); setSoftError('Vissa data kunde inte laddas — visar det som finns just nu.'); } });
     return () => {
       cancelled = true;
     };
@@ -299,6 +305,10 @@ export default function GraphRiskLoopPage() {
   const conf = report?.decision_confidence ?? null;
   const exposure = report?.risk_exposure ?? null;
 
+  // Första laddningen för vald kund: inget per-kund-data har kommit än → visa
+  // skelett istället för att sektionerna poppar in en och en.
+  const initialLoading = !!selected && polling === null && riskTimeline === null && humanization === null && riskQuestions === null;
+
   return (
     <GraphPageShell
       title="AI-synlighet"
@@ -337,6 +347,20 @@ export default function GraphRiskLoopPage() {
       )}
 
       {error && <div style={errorStyle}>{error}</div>}
+
+      {/* Tysta delhämtnings-fel ytlggörs som icke-blockerande notis (ej hela sidan) */}
+      {softError && !error && (
+        <UI.StatusBanner tone="warn" style={{ marginBottom: 16 }}>{softError}</UI.StatusBanner>
+      )}
+
+      {/* Initial laddning — skelett istället för tom yta som poppar in sektionsvis */}
+      {initialLoading && (
+        <>
+          <UI.SkeletonCard lines={3} />
+          <UI.SkeletonCard lines={5} />
+          <UI.SkeletonCard lines={3} />
+        </>
+      )}
 
       {/* Schemalagda körningar — endast ops-läge (admin-info) */}
       {mode === 'ops' && schedules?.available && schedules.schedules.length > 0 && (
