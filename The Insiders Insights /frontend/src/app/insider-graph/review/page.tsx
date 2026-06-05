@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Inbox, Check, X, Mail, Calendar, Award, FileText, AlertCircle, Quote, Network } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
+import * as UI from '../_components/ui';
 import { graphFetch, graphFetchBlob } from '../_lib/api';
 
 type Client = { client_id: string; company_name: string | null };
@@ -320,11 +321,7 @@ export default function GraphReviewPage() {
                 }}
               >
                 {label}
-                {n > 0 && (
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 8, background: tab === v ? 'rgba(159,81,182,0.25)' : 'rgba(0,0,0,0.08)', color: tab === v ? C.accent : C.muted }}>
-                    {n}
-                  </span>
-                )}
+                {n > 0 && <UI.Pill style={{ minWidth: 0, fontSize: 10 }}>{n}</UI.Pill>}
               </button>
             );
           })}
@@ -332,10 +329,9 @@ export default function GraphReviewPage() {
       </div>
 
       {error && (
-        <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '12px 16px', color: '#b91c1c', fontSize: 12, marginBottom: 16, display: 'flex', gap: 8 }}>
-          <AlertCircle size={14} />
-          <span>{error}</span>
-        </div>
+        <UI.StatusBanner tone="err" icon={<AlertCircle size={14} />} style={{ marginBottom: 16 }}>
+          {error}
+        </UI.StatusBanner>
       )}
 
       {tab === 'items' ? renderItems() : tab === 'linkedin' ? renderLinkedIn() : renderClaims()}
@@ -352,7 +348,7 @@ export default function GraphReviewPage() {
         {(snap) => {
           const skillText = skillEdits[snap.id] ?? snap.skills.join(', ');
           return (
-            <div key={snap.id} style={{ ...cardStyle, opacity: busyId === snap.id ? 0.5 : 1 }}>
+            <UI.Card key={snap.id} padding="18px 22px" style={{ opacity: busyId === snap.id ? 0.5 : 1 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 12 }}>
                 <div style={{ display: 'flex', gap: 12, flex: 1, minWidth: 0 }}>
                   <IconBox><Network size={16} /></IconBox>
@@ -402,7 +398,7 @@ export default function GraphReviewPage() {
                   fontFamily: 'inherit',
                 }}
               />
-            </div>
+            </UI.Card>
           );
         }}
       </GroupedList>
@@ -418,7 +414,7 @@ export default function GraphReviewPage() {
         {(item) => {
           const Icon = TYPE_ICON[item.schema_type] || FileText;
           return (
-            <div key={item.id} style={{ ...cardStyle, opacity: busyId === item.id ? 0.5 : 1 }}>
+            <UI.Card key={item.id} padding="18px 22px" style={{ opacity: busyId === item.id ? 0.5 : 1 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 12 }}>
                 <div style={{ display: 'flex', gap: 12, flex: 1, minWidth: 0 }}>
                   <IconBox><Icon size={16} /></IconBox>
@@ -440,7 +436,7 @@ export default function GraphReviewPage() {
                 </div>
               )}
               {item.content && <div style={contentStyle}>{item.content}</div>}
-            </div>
+            </UI.Card>
           );
         }}
       </GroupedList>
@@ -461,7 +457,7 @@ export default function GraphReviewPage() {
           const validatedTs = claim.validated_at ?? approvedAt ?? null;
           const validatedBy = claim.validated_by ?? (approvedAt ? 'granskare (manuellt godkänd)' : null);
           return (
-            <div key={claim.id} style={{ ...cardStyle, opacity: busyId === claim.id ? 0.5 : 1 }}>
+            <UI.Card key={claim.id} padding="18px 22px" style={{ opacity: busyId === claim.id ? 0.5 : 1 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 12 }}>
                 <div style={{ display: 'flex', gap: 12, flex: 1, minWidth: 0 }}>
                   <IconBox><Quote size={16} /></IconBox>
@@ -505,7 +501,7 @@ export default function GraphReviewPage() {
                   }}
                 />
               )}
-            </div>
+            </UI.Card>
           );
         }}
       </GroupedList>
@@ -541,24 +537,26 @@ function ClientGroupHeader({ name, count }: { name: string; count: number }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 2px 4px' }}>
       <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{name}</span>
-      <span style={{ fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 10, background: 'rgba(159,81,182,0.15)', color: C.accent }}>
-        {count}
-      </span>
+      <UI.Pill style={{ minWidth: 0, fontSize: 11 }}>{count}</UI.Pill>
     </div>
   );
 }
 
 function Loading() {
-  return <div style={{ ...cardStyle, padding: 48, textAlign: 'center', color: C.muted, fontSize: 13 }}>Laddar…</div>;
+  return (
+    <UI.Card padding="48px 24px" style={{ textAlign: 'center', color: C.muted, fontSize: 13 }}>
+      Laddar…
+    </UI.Card>
+  );
 }
 
 function Empty({ hint }: { hint: string }) {
   return (
-    <div style={{ ...cardStyle, padding: '48px 24px', textAlign: 'center' }}>
-      <Inbox size={32} color={C.dim} style={{ marginBottom: 12 }} />
-      <div style={{ fontSize: 14, color: C.text, fontWeight: 600 }}>Inget att granska</div>
-      <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>{hint}</div>
-    </div>
+    <UI.Card padding="48px 24px">
+      <UI.Empty icon={<Inbox size={32} color={C.dim} />} hint={hint} style={{ padding: 0 }}>
+        Inget att granska
+      </UI.Empty>
+    </UI.Card>
   );
 }
 
@@ -573,9 +571,7 @@ function IconBox({ children }: { children: React.ReactNode }) {
 function Actions({ confidence, busy, onApprove, onReject }: { confidence: number | null; busy: boolean; onApprove: () => void; onReject: () => void }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-      <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 4, background: 'rgba(245,158,11,0.15)', color: '#b45309', fontWeight: 600 }}>
-        conf {confidence != null ? confidence.toFixed(2) : '?'}
-      </span>
+      <UI.Badge tone="warn">conf {confidence != null ? confidence.toFixed(2) : '?'}</UI.Badge>
       <button onClick={onApprove} disabled={busy} title="Godkänn" style={approveBtn}>
         <Check size={12} /> Godkänn
       </button>
@@ -594,13 +590,6 @@ const selectStyle: React.CSSProperties = {
   borderRadius: 8,
   fontSize: 13,
   outline: 'none',
-};
-
-const cardStyle: React.CSSProperties = {
-  background: C.card,
-  border: `1px solid ${C.border}`,
-  borderRadius: 12,
-  padding: '18px 22px',
 };
 
 const contentStyle: React.CSSProperties = {

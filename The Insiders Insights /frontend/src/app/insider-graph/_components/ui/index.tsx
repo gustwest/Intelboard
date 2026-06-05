@@ -150,11 +150,16 @@ export function StatusBanner({
 }
 
 // ── Empty ──────────────────────────────────────────────────────────────────
-// Tomtillstånd (centrerad dämpad text). 6 inline-kopior.
-export function Empty({ children, style }: { children: ReactNode; style?: CSSProperties }) {
+// Tomtillstånd (centrerad dämpad text) med valfri ikon ovanför + hint under.
+// 6 inline-kopior med 3 signaturer (text / children / icon+hint).
+export function Empty({
+  icon, children, hint, style,
+}: { icon?: ReactNode; children: ReactNode; hint?: ReactNode; style?: CSSProperties }) {
   return (
-    <div style={{ fontSize: 12, color: C.muted, padding: '16px 4px', textAlign: 'center', ...style }}>
-      {children}
+    <div style={{ padding: '16px 4px', textAlign: 'center', color: C.muted, ...style }}>
+      {icon && <div style={{ marginBottom: 6, display: 'flex', justifyContent: 'center', color: C.dim }}>{icon}</div>}
+      <div style={{ fontSize: 12 }}>{children}</div>
+      {hint && <div style={{ fontSize: 11, color: C.dim, marginTop: 4 }}>{hint}</div>}
     </div>
   );
 }

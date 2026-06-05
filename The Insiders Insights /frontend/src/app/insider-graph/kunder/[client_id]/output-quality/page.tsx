@@ -10,6 +10,7 @@ import {
   VerdictBadge, ScoreBadge, ActionPill, BundleFlagChip, AudiencePill, HintChip, ShadowGateBadge,
   type ClaimAction,
 } from '../../../_components/OutputQualityBits';
+import * as UI from '../../../_components/ui';
 
 type LogSummary = {
   log_id: string; logged_at: string | null; source: string | null;
@@ -208,21 +209,19 @@ export default function OutputQualityDetailPage() {
       </Link>
 
       {error && (
-        <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', color: '#b91c1c', fontSize: 12, marginBottom: 16 }}>
-          {error}
-        </div>
+        <UI.StatusBanner tone="err" style={{ marginBottom: 16 }}>{error}</UI.StatusBanner>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 16, alignItems: 'start' }}>
         {/* Logg-väljare */}
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 8, position: 'sticky', top: 16, maxHeight: 'calc(100vh - 100px)', overflowY: 'auto' }}>
+        <UI.Card padding="8px" style={{ position: 'sticky', top: 16, maxHeight: 'calc(100vh - 100px)', overflowY: 'auto' }}>
           <div style={{ padding: '8px 10px', fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
             Senaste loggar
           </div>
           {logs === null ? (
-            <div style={{ padding: 12, fontSize: 12, color: C.muted }}>Laddar…</div>
+            <UI.Empty>Laddar…</UI.Empty>
           ) : logs.length === 0 ? (
-            <div style={{ padding: 12, fontSize: 12, color: C.muted }}>Inga loggar än.</div>
+            <UI.Empty>Inga loggar än.</UI.Empty>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {logs.map((log) => {
@@ -253,18 +252,18 @@ export default function OutputQualityDetailPage() {
               })}
             </div>
           )}
-        </div>
+        </UI.Card>
 
         {/* Detalj */}
         <div>
           {!selectedId || !detail ? (
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 32, textAlign: 'center', color: C.muted, fontSize: 13 }}>
+            <UI.Card padding="32px" style={{ textAlign: 'center', color: C.muted, fontSize: 13 }}>
               {detailLoading ? 'Laddar…' : 'Välj en logg i listan.'}
-            </div>
+            </UI.Card>
           ) : (
             <>
               {/* Header */}
-              <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px', marginBottom: 16 }}>
+              <UI.Card padding="20px 24px" style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
                   <ScoreBadge score={detail.bundle_score} size="lg" />
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -287,9 +286,9 @@ export default function OutputQualityDetailPage() {
                 </div>
 
                 {detail.llm_unavailable && (
-                  <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 6, padding: '8px 12px', fontSize: 11, color: '#92400e', marginBottom: 12 }}>
+                  <UI.StatusBanner tone="warn" style={{ marginBottom: 12 }}>
                     Validator-LLM:n var otillgänglig — poängen är inte att lita på.
-                  </div>
+                  </UI.StatusBanner>
                 )}
 
                 {detail.bundle_flags.length > 0 && (
@@ -333,11 +332,11 @@ export default function OutputQualityDetailPage() {
                     </ul>
                   </div>
                 )}
-              </div>
+              </UI.Card>
 
               {/* Per-connector */}
               {detail.per_connector && Object.keys(detail.per_connector).length > 0 && (
-                <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>
+                <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 12 }}>Per connector</div>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead>
@@ -380,12 +379,12 @@ export default function OutputQualityDetailPage() {
                         })}
                     </tbody>
                   </table>
-                </div>
+                </UI.Card>
               )}
 
               {/* Per-claim-tabell (endast för compile_schema-loggar) */}
               {perClaim.length > 0 && (
-                <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
+                <UI.Card padding="18px 20px">
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
                       Per claim ({filtered.length} av {perClaim.length})
@@ -516,12 +515,12 @@ export default function OutputQualityDetailPage() {
                       })}
                     </tbody>
                   </table>
-                </div>
+                </UI.Card>
               )}
 
               {/* Gate-loggar: per-action-tabell istället för per_claim (gaten har inte full per_claim) */}
               {detail.actions && detail.actions.length > 0 && (
-                <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
+                <UI.Card padding="18px 20px">
                   <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 12 }}>Gate-åtgärder ({detail.actions.length})</div>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead>
@@ -547,7 +546,7 @@ export default function OutputQualityDetailPage() {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </UI.Card>
               )}
             </>
           )}

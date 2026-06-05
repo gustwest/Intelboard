@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Users, Plus, X, AlertCircle, CheckCircle2, ExternalLink, RefreshCw, Search, Check } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import PipelineStatus, { type PipelineStep } from '../_components/PipelineStatus';
+import * as UI from '../_components/ui';
 import { graphFetch } from '../_lib/api';
 
 type ConnectorField = {
@@ -120,12 +121,9 @@ export default function GraphKunderPage() {
       icon={<Users size={22} />}
       subtitle="geogiraph-kunder är samma bolag som i The Insiders. Här onboardas medarbetare och datakällor."
     >
-      <div
+      <UI.Card
+        padding="20px 24px"
         style={{
-          background: C.card,
-          border: `1px solid ${C.border}`,
-          borderRadius: 12,
-          padding: '20px 24px',
           marginBottom: 16,
           display: 'flex',
           alignItems: 'center',
@@ -178,44 +176,26 @@ export default function GraphKunderPage() {
             <Plus size={14} /> Ny kund
           </button>
         </div>
-      </div>
+      </UI.Card>
 
       {loadError && (
-        <div
-          style={{
-            background: 'rgba(239,68,68,0.1)',
-            border: '1px solid rgba(239,68,68,0.3)',
-            borderRadius: 8,
-            padding: '12px 16px',
-            color: '#fca5a5',
-            fontSize: 12,
-            marginBottom: 16,
-          }}
-        >
+        <UI.StatusBanner tone="err" style={{ marginBottom: 16 }}>
           Kunde inte hämta kunder: {loadError}
-        </div>
+        </UI.StatusBanner>
       )}
 
       {clients === null ? (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 48, textAlign: 'center', color: C.muted, fontSize: 13 }}>
+        <UI.Card padding="48px" style={{ textAlign: 'center', color: C.muted, fontSize: 13 }}>
           Laddar…
-        </div>
+        </UI.Card>
       ) : clients.length === 0 ? (
-        <div
-          style={{
-            background: C.card,
-            border: `1px solid ${C.border}`,
-            borderRadius: 12,
-            padding: '48px 24px',
-            textAlign: 'center',
-          }}
-        >
+        <UI.Card padding="48px 24px" style={{ textAlign: 'center' }}>
           <Users size={32} color={C.dim} style={{ marginBottom: 12 }} />
           <div style={{ fontSize: 14, color: C.text, fontWeight: 600 }}>Inga Graph-kunder ännu</div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 6, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto' }}>
             Klicka på <strong>Ny kund</strong> för att onboarda din första kund.
           </div>
-        </div>
+        </UI.Card>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
           {clients.map((c) => (
@@ -268,12 +248,9 @@ function ClientCard({ client, counts }: { client: Client; counts?: InboxCounts }
       href={`/insider-graph/kunder/${client.client_id}`}
       style={{ textDecoration: 'none', color: 'inherit' }}
     >
-      <div
+      <UI.Card
+        padding="18px 20px"
         style={{
-          background: C.card,
-          border: `1px solid ${C.border}`,
-          borderRadius: 12,
-          padding: '18px 20px',
           cursor: 'pointer',
           transition: 'border-color 0.15s',
         }}
@@ -334,8 +311,8 @@ function ClientCard({ client, counts }: { client: Client; counts?: InboxCounts }
         </div>
 
         <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
-          {client.tier === 'premium' && <Badge color={C.accent} label="premium" />}
-          <Badge color={C.muted} label={`${client.employee_count} medarbetare`} />
+          {client.tier === 'premium' && <UI.Badge tone="accent">premium</UI.Badge>}
+          <UI.Badge tone="neutral">{`${client.employee_count} medarbetare`}</UI.Badge>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 14, fontSize: 11, color: C.muted }}>
@@ -351,7 +328,7 @@ function ClientCard({ client, counts }: { client: Client; counts?: InboxCounts }
         <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
           <PipelineStatus compact steps={compactSteps(client, split.review)} caption={compactCaption(client, split.review)} />
         </div>
-      </div>
+      </UI.Card>
     </Link>
   );
 }
@@ -394,26 +371,6 @@ function PendingChip({
     >
       {label}
     </button>
-  );
-}
-
-function Badge({ color, label }: { color: string; label: string }) {
-  return (
-    <span
-      style={{
-        display: 'inline-block',
-        fontSize: 10,
-        padding: '2px 8px',
-        borderRadius: 4,
-        background: `${color}22`,
-        color,
-        fontWeight: 600,
-        textTransform: 'uppercase',
-        letterSpacing: '0.06em',
-      }}
-    >
-      {label}
-    </span>
   );
 }
 
@@ -1104,14 +1061,14 @@ function LeiSearchField({
 }
 
 function Banner({ tone, children }: { tone: 'error' | 'success'; children: React.ReactNode }) {
-  const bg = tone === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)';
-  const border = tone === 'error' ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)';
-  const color = tone === 'error' ? '#fca5a5' : '#86efac';
   const Icon = tone === 'success' ? CheckCircle2 : AlertCircle;
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 14px', background: bg, border: `1px solid ${border}`, borderRadius: 8, color, fontSize: 12, marginBottom: 12, lineHeight: 1.55 }}>
-      <Icon size={14} style={{ marginTop: 2, flexShrink: 0 }} />
-      <span>{children}</span>
-    </div>
+    <UI.StatusBanner
+      tone={tone === 'success' ? 'ok' : 'err'}
+      icon={<Icon size={14} style={{ flexShrink: 0 }} />}
+      style={{ marginBottom: 12 }}
+    >
+      {children}
+    </UI.StatusBanner>
   );
 }

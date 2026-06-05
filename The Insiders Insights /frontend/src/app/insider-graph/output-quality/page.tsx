@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Gauge, TrendingDown, AlertTriangle, RefreshCw, Sparkles, ShieldCheck } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import { graphFetch } from '../_lib/api';
+import * as UI from '../_components/ui';
 
 type ConnectorScore = {
   connector: string;
@@ -92,9 +93,7 @@ export default function OutputQualityPage() {
       </div>
 
       {error && (
-        <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', color: '#b91c1c', fontSize: 12, marginBottom: 16 }}>
-          {error}
-        </div>
+        <UI.StatusBanner tone="err" style={{ marginBottom: 16 }}>{error}</UI.StatusBanner>
       )}
 
       {/* Förklaring */}
@@ -109,13 +108,13 @@ export default function OutputQualityPage() {
       </div>
 
       {loading && !data ? (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 32, textAlign: 'center', color: C.muted, fontSize: 13 }}>
+        <UI.Card padding="32px" style={{ textAlign: 'center', color: C.muted, fontSize: 13 }}>
           Laddar…
-        </div>
+        </UI.Card>
       ) : data && data.connectors.length === 0 ? (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 32, textAlign: 'center', color: C.muted, fontSize: 13 }}>
+        <UI.Card padding="32px" style={{ textAlign: 'center', color: C.muted, fontSize: 13 }}>
           Inga output_quality_logs ännu i fönstret ({days} dagar). Kör en kompilering på minst en kund.
-        </div>
+        </UI.Card>
       ) : data ? (
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 11, color: C.muted }}>
@@ -123,7 +122,7 @@ export default function OutputQualityPage() {
             <span>{data.connectors.length} connectors</span>
           </div>
 
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+          <UI.Card padding="0" style={{ overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: '#f1f3f5' }}>
@@ -172,20 +171,20 @@ export default function OutputQualityPage() {
                     </Td>
                     <Td>
                       {c.connector === 'linkedin_capacity' ? (
-                        <Pill icon={<ShieldCheck size={11} />} color="#16a34a" bg="rgba(34,197,94,0.12)">Active gate</Pill>
+                        <UI.Badge tone="ok" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}><ShieldCheck size={11} /> Active gate</UI.Badge>
                       ) : c.promotion_candidate ? (
-                        <Pill icon={<TrendingDown size={11} />} color={C.accent} bg="rgba(159,81,182,0.16)">Promotion-kandidat</Pill>
+                        <UI.Badge tone="accent" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}><TrendingDown size={11} /> Promotion-kandidat</UI.Badge>
                       ) : c.redundant_flag_count > 0 ? (
-                        <Pill icon={<AlertTriangle size={11} />} color="#d97706" bg="rgba(245,158,11,0.16)">Redundans</Pill>
+                        <UI.Badge tone="warn" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}><AlertTriangle size={11} /> Redundans</UI.Badge>
                       ) : (
-                        <Pill color={C.muted} bg="transparent">Shadow</Pill>
+                        <UI.Badge tone="neutral" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>Shadow</UI.Badge>
                       )}
                     </Td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          </UI.Card>
         </>
       ) : null}
     </GraphPageShell>
@@ -198,14 +197,6 @@ function ScoreBadge({ score }: { score: number }) {
   return (
     <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 999, background: bg, color, fontFamily: 'ui-monospace, monospace', fontSize: 12, fontWeight: 600 }}>
       {score.toFixed(2)}
-    </span>
-  );
-}
-
-function Pill({ children, icon, color, bg }: { children: React.ReactNode; icon?: React.ReactNode; color: string; bg: string }) {
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 999, background: bg, color, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>
-      {icon} {children}
     </span>
   );
 }

@@ -17,6 +17,7 @@ import IdentityMetadataEditor from '../../_components/IdentityMetadataEditor';
 import AudiencePrioritiesEditor from '../../_components/AudiencePrioritiesEditor';
 import PersonaPaletteEditor from '../../_components/PersonaPaletteEditor';
 import OutputQualityPanel from '../../_components/OutputQualityPanel';
+import * as UI from '../../_components/ui';
 import { graphFetch } from '../../_lib/api';
 import { useJobRuns, fmtRelative } from '../../_lib/jobRuns';
 
@@ -155,19 +156,19 @@ export default function ClientDetailPage() {
       </Link>
 
       {error && (
-        <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '12px 16px', color: '#fca5a5', fontSize: 12, marginBottom: 16 }}>
+        <UI.StatusBanner tone="err" style={{ marginBottom: 16 }}>
           {error}
-        </div>
+        </UI.StatusBanner>
       )}
 
       {client === null ? (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 48, textAlign: 'center', color: C.muted, fontSize: 13 }}>
+        <UI.Card padding="48px" style={{ textAlign: 'center', color: C.muted, fontSize: 13 }}>
           Laddar…
-        </div>
+        </UI.Card>
       ) : (
         <>
           {/* Pipeline-status — var står kunden, vad är nästa steg + per-kund-jobb */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px', marginBottom: 16 }}>
+          <UI.Card padding="20px 24px" style={{ marginBottom: 16 }}>
             <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -198,10 +199,10 @@ export default function ClientDetailPage() {
                 );
               })}
             </div>
-          </div>
+          </UI.Card>
 
           {/* Företagsöversikt */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>
+          <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: C.muted }}>
               <Row label="client_id" value={client.client_id} mono />
               <Row label="Tier" value={client.tier} />
@@ -215,7 +216,7 @@ export default function ClientDetailPage() {
                 </div>
               )}
             </div>
-          </div>
+          </UI.Card>
 
           {/* Connectors — vilka datakällor den här kunden hämtar från */}
           <ConnectorsEditor clientId={clientId} />
@@ -251,12 +252,12 @@ export default function ClientDetailPage() {
           <LinkedInCapacityUpload clientId={clientId} />
 
           {/* Medarbetare */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>
+          <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 14 }}>
               Medarbetare ({client.employees.length})
             </div>
             {client.employees.length === 0 ? (
-              <div style={{ fontSize: 12, color: C.muted }}>Inga medarbetare.</div>
+              <UI.Empty>Inga medarbetare.</UI.Empty>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {client.employees.map((emp) => (
@@ -276,11 +277,7 @@ export default function ClientDetailPage() {
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: C.text, display: 'flex', alignItems: 'center', gap: 8 }}>
                         {emp.name || emp.employee_id}
-                        {emp.opted_out && (
-                          <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 3, background: 'rgba(239,68,68,0.15)', color: '#ef4444', fontWeight: 600, textTransform: 'uppercase' }}>
-                            opt-out
-                          </span>
-                        )}
+                        {emp.opted_out && <UI.Badge tone="err">opt-out</UI.Badge>}
                       </div>
                       <div style={{ fontSize: 11, color: C.muted, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {emp.title || '—'}
@@ -321,10 +318,10 @@ export default function ClientDetailPage() {
                 ))}
               </div>
             )}
-          </div>
+          </UI.Card>
 
           {/* Farozon */}
-          <div style={{ border: '1px solid rgba(239,68,68,0.3)', borderRadius: 12, padding: '18px 20px', background: 'rgba(239,68,68,0.04)' }}>
+          <UI.Card padding="18px 20px" style={{ border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.04)' }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#ef4444', marginBottom: 6 }}>Radera kund</div>
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 14, lineHeight: 1.5 }}>
               Tar bort kunden med alla medarbetare, connectors, insamlad data och claims. Går inte att ångra.
@@ -335,7 +332,7 @@ export default function ClientDetailPage() {
             >
               <Trash2 size={14} /> Radera kund
             </button>
-          </div>
+          </UI.Card>
         </>
       )}
 

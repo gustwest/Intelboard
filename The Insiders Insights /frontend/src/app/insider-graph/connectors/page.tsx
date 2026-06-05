@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Plug, Play, Loader2, Check, X, Clock } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
+import * as UI from '../_components/ui';
 import { graphFetch } from '../_lib/api';
 import { useJobRuns, fmtRelative } from '../_lib/jobRuns';
 
@@ -101,16 +102,19 @@ export default function GraphConnectorsPage() {
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
 
       {/* Globala jobb */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 22px', marginBottom: 16 }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: '0 0 4px' }}>Globala körningar</h2>
-        <p style={{ fontSize: 12, color: C.muted, margin: '0 0 14px' }}>Batch-jobb som körs för alla kunder. Schemaläggs via Cloud Scheduler — kör en runda direkt här.</p>
+      <UI.Card
+        padding="18px 22px"
+        style={{ marginBottom: 16 }}
+        title="Globala körningar"
+        hint="Batch-jobb som körs för alla kunder. Schemaläggs via Cloud Scheduler — kör en runda direkt här."
+      >
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
           {GLOBAL_JOBS.map(renderJobBtn)}
         </div>
-      </div>
+      </UI.Card>
 
       {/* Katalog */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+      <UI.Card padding="0" style={{ overflow: 'hidden' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr 1fr 1.6fr 1fr', gap: 12, padding: '12px 20px', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.muted, borderBottom: `1px solid ${C.border}`, fontWeight: 600 }}>
           <span>Connector</span><span>Metod</span><span>Frekvens</span><span>Tier</span><span>Output</span><span style={{ textAlign: 'right' }}>Används av</span>
         </div>
@@ -126,7 +130,7 @@ export default function GraphConnectorsPage() {
               <span style={{ color: C.muted }}>{c.fetch_method}</span>
               <span style={{ color: C.muted }}>{c.frequency}</span>
               <span>
-                <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 4, background: c.tier === 'standard' ? 'rgba(45,212,191,0.12)' : 'rgba(96,165,250,0.12)', color: c.tier === 'standard' ? '#2dd4bf' : '#60a5fa', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{c.tier}</span>
+                <UI.Badge tone={c.tier === 'standard' ? 'ok' : 'info'}>{c.tier}</UI.Badge>
               </span>
               <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                 {c.output_types.map((o) => (
@@ -139,7 +143,7 @@ export default function GraphConnectorsPage() {
             </div>
           );
         })}
-      </div>
+      </UI.Card>
     </GraphPageShell>
   );
 }

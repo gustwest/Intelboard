@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Bell, CheckCircle2, AlertTriangle, AlertOctagon, Info, RefreshCw, Settings, ExternalLink, Check } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
+import * as UI from '../_components/ui';
 import { graphFetch } from '../_lib/api';
 
 type SetupStatus = {
@@ -174,29 +175,10 @@ export default function AlertsPage() {
       <style>{`@keyframes spin { to { transform: rotate(360deg) } } .spin { animation: spin 0.8s linear infinite; transform-origin: center }`}</style>
 
       {error && (
-        <div
-          style={{
-            padding: '10px 14px',
-            background: 'rgba(239,68,68,0.08)',
-            border: '1px solid rgba(239,68,68,0.25)',
-            borderRadius: 8,
-            color: '#b91c1c',
-            fontSize: 13,
-            marginBottom: 16,
-          }}
-        >
-          {error}
-        </div>
+        <UI.StatusBanner tone="err" style={{ marginBottom: 16 }}>{error}</UI.StatusBanner>
       )}
 
-      <div
-        style={{
-          background: C.card,
-          border: `1px solid ${C.border}`,
-          borderRadius: 12,
-          padding: alerts && alerts.length > 0 ? 0 : '32px 22px',
-        }}
-      >
+      <UI.Card padding={alerts && alerts.length > 0 ? '0' : '32px 22px'}>
         {alerts === null ? (
           <Empty text="Laddar…" />
         ) : alerts.length === 0 ? (
@@ -214,7 +196,7 @@ export default function AlertsPage() {
             ))}
           </div>
         )}
-      </div>
+      </UI.Card>
     </GraphPageShell>
   );
 }
@@ -242,20 +224,9 @@ function AlertRow({
       <div style={{ flexShrink: 0, marginTop: 2 }}>{sev.icon}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: 600,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              padding: '2px 6px',
-              borderRadius: 4,
-              background: sev.bg,
-              color: sev.fg,
-            }}
-          >
+          <UI.Badge tone={alert.severity === 'critical' ? 'err' : alert.severity === 'warning' ? 'warn' : 'info'}>
             {alert.severity}
-          </span>
+          </UI.Badge>
           <span style={{ fontSize: 11, color: C.dim }}>{KIND_LABEL[alert.kind] || alert.kind}</span>
           {alert.status === 'acked' && (
             <span style={{ fontSize: 11, color: '#6366f1' }}>
@@ -382,10 +353,9 @@ function countByStatus(alerts: Alert[] | null): Record<string, number> | null {
 
 function Empty({ text }: { text: string }) {
   return (
-    <div style={{ fontSize: 13, color: C.muted, padding: '24px 4px', textAlign: 'center' }}>
-      <CheckCircle2 size={20} color={C.dim} style={{ marginBottom: 8 }} />
-      <div>{text}</div>
-    </div>
+    <UI.Empty icon={<CheckCircle2 size={20} />} style={{ padding: '24px 4px' }}>
+      {text}
+    </UI.Empty>
   );
 }
 

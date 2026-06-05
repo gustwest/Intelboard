@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Leaf, ArrowLeft, Check, X } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../../_components/GraphPageShell';
+import * as UI from '../../_components/ui';
 import { graphFetch } from '../../_lib/api';
 
 // --- Typer (speglar routers/esg.py) ------------------------------------------
@@ -233,19 +234,18 @@ export default function ESGWorkspacePage() {
 // --- Småkomponenter ----------------------------------------------------------
 function Card({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>
+    <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
       {title && <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 14 }}>{title}</div>}
       {children}
-    </div>
+    </UI.Card>
   );
 }
 
 function Box({ tone, children }: { tone: 'ok' | 'error'; children: React.ReactNode }) {
-  const ok = tone === 'ok';
   return (
-    <div style={{ background: ok ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${ok ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, color: ok ? '#16a34a' : '#ef4444', borderRadius: 8, padding: '10px 14px', fontSize: 12, marginBottom: 16 }}>
+    <UI.StatusBanner tone={tone === 'ok' ? 'ok' : 'err'} style={{ marginBottom: 16 }}>
       {children}
-    </div>
+    </UI.StatusBanner>
   );
 }
 
@@ -281,15 +281,17 @@ function Action({ label, loading, onClick, subtle }: { label: string; loading: b
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: 12, color: C.muted }}>{children}</div>;
+  return <UI.Empty style={{ padding: 0, textAlign: 'left' }}>{children}</UI.Empty>;
 }
 
 function Pill({ text, color }: { text: string; color: string }) {
-  return (
-    <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 3, background: `${color}22`, color, fontWeight: 600, textTransform: 'uppercase' }}>
-      {text}
-    </span>
-  );
+  // Mappa de tidigare hårdkodade färgerna till UI.Badge-toner (status-normalisering).
+  const tone =
+    color === '#ef4444' ? 'err'
+    : color === '#f59e0b' ? 'warn'
+    : color === C.muted ? 'neutral'
+    : 'accent';
+  return <UI.Badge tone={tone}>{text}</UI.Badge>;
 }
 
 function QuestionRow({ q, busy, onDecide }: { q: Question; busy: boolean; onDecide: (q: Question, d: 'approve' | 'reject', text?: string) => void }) {

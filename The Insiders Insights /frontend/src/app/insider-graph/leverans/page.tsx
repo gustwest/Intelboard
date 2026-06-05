@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Rocket, Copy, Check, ExternalLink, ChevronDown, ChevronRight, Play, Loader2, X, Clock } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
+import * as UI from '../_components/ui';
 import { graphFetch } from '../_lib/api';
 import { useJobRuns, fmtRelative } from '../_lib/jobRuns';
 
@@ -195,7 +196,7 @@ export default function LeveransPage() {
       </div>
 
       {/* Leveransstatus */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 22px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+      <UI.Card padding="16px 22px" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
         <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', fontSize: 12 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: C.muted }}>
@@ -245,11 +246,11 @@ export default function LeveransPage() {
             </button>
           );
         })()}
-      </div>
+      </UI.Card>
 
       {/* Officiell data som ingår */}
       {attested && attested.some((a) => a.included > 0 || a.staged > 0) && (
-        <Card title="Officiell data i leveransen" hint="Attesterad LinkedIn-data som ingår i grafen. Staged data bekräftas på kundkortet under Officiell data.">
+        <UI.Card padding="18px 22px" style={{ marginBottom: 16 }} title="Officiell data i leveransen" hint="Attesterad LinkedIn-data som ingår i grafen. Staged data bekräftas på kundkortet under Officiell data.">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {attested.filter((a) => a.included > 0 || a.staged > 0).map((a) => (
               <div key={a.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, fontSize: 13 }}>
@@ -269,11 +270,11 @@ export default function LeveransPage() {
               </div>
             ))}
           </div>
-        </Card>
+        </UI.Card>
       )}
 
       {/* 1. Profilsida */}
-      <Card title="Profilsida" hint="Den kanoniska sanningskällan AI-motorerna läser. Länken badgen pekar på.">
+      <UI.Card padding="18px 22px" style={{ marginBottom: 16 }} title="Profilsida" hint="Den kanoniska sanningskällan AI-motorerna läser. Länken badgen pekar på.">
         {!isCompiled && (
           <p style={{ fontSize: 12, color: '#b45309', margin: '0 0 10px' }}>
             Ännu inte kompilerad — kör compile-schema för att publicera sidan. URL:en nedan är den planerade adressen.
@@ -293,10 +294,12 @@ export default function LeveransPage() {
             </button>
           </div>
         </Row>
-      </Card>
+      </UI.Card>
 
       {/* 2. Identitets-snutt */}
-      <Card
+      <UI.Card
+        padding="18px 22px"
+        style={{ marginBottom: 16 }}
         title="JSON-LD identitets-snutt"
         hint="Klistras in i kundens <head> EN gång — stabil, ändras aldrig. Statisk (ingen JS) så AI-crawlers läser den. Pekar på profilsidan som kanonisk."
         action={
@@ -306,10 +309,10 @@ export default function LeveransPage() {
         }
       >
         <pre style={preStyle}>{delivery?.identity_snippet || '…'}</pre>
-      </Card>
+      </UI.Card>
 
       {/* 3. Badge */}
-      <Card title="Verifierings-badge" hint="Diskret komponent på kundens sajt som länkar till profilsidan.">
+      <UI.Card padding="18px 22px" style={{ marginBottom: 16 }} title="Verifierings-badge" hint="Diskret komponent på kundens sajt som länkar till profilsidan.">
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16 }}>
           <Control label="Tema">
             <Toggle value={theme} setValue={setTheme} options={[['light', 'Ljust'], ['dark', 'Mörkt']]} />
@@ -353,10 +356,10 @@ export default function LeveransPage() {
           {badge && <CopyBtn label="snippet" copied={copied === 'badge'} onClick={() => copy(badge.snippet, 'badge')} />}
         </Row>
         <pre style={{ ...preStyle, marginTop: 10 }}>{badge?.snippet || '…'}</pre>
-      </Card>
+      </UI.Card>
 
       {/* 4. Full kompilerad JSON-LD-graf (QA — hopfällbar) */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 22px', marginBottom: 16 }}>
+      <UI.Card padding="18px 22px" style={{ marginBottom: 16 }}>
         <button
           onClick={() => setShowOutput((v) => !v)}
           aria-expanded={showOutput}
@@ -394,38 +397,25 @@ export default function LeveransPage() {
               {fullJson ? `Aktuell JSON-LD för ${selectedClient?.company_name || selected}` : 'Exempel-output (ej kompilerad)'}
             </div>
             {outputError && (
-              <div style={{ ...errorStyle, marginTop: 0, marginBottom: 8 }}>
+              <UI.StatusBanner tone="err" style={{ marginTop: 0, marginBottom: 8 }}>
                 Kunde inte hämta kompilerad JSON-LD från CDN: {outputError}. Visar exempel-output.
-              </div>
+              </UI.StatusBanner>
             )}
             <pre style={{ ...preStyle, maxHeight: 480, whiteSpace: 'pre', wordBreak: 'normal' }}>
               {fullJson || JSON.stringify(SAMPLE_JSON, null, 2)}
             </pre>
           </div>
         )}
-      </div>
+      </UI.Card>
 
       {error && (
-        <div style={errorStyle}>{error}</div>
+        <UI.StatusBanner tone="err" style={{ marginTop: 16 }}>{error}</UI.StatusBanner>
       )}
     </GraphPageShell>
   );
 }
 
 /* --- små presentationskomponenter --- */
-
-function Card({ title, hint, action, children }: { title: string; hint?: string; action?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 22px', marginBottom: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: hint ? 4 : 12 }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: 0 }}>{title}</h2>
-        {action}
-      </div>
-      {hint && <p style={{ fontSize: 12, color: C.muted, margin: '0 0 12px', lineHeight: 1.5 }}>{hint}</p>}
-      {children}
-    </div>
-  );
-}
 
 function Row({ children }: { children: React.ReactNode }) {
   return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>{children}</div>;
@@ -538,14 +528,4 @@ const btnStyle: React.CSSProperties = {
   fontWeight: 600,
   cursor: 'pointer',
   textDecoration: 'none',
-};
-
-const errorStyle: React.CSSProperties = {
-  marginTop: 16,
-  background: 'rgba(239,68,68,0.1)',
-  border: '1px solid rgba(239,68,68,0.3)',
-  borderRadius: 8,
-  padding: '12px 16px',
-  color: '#b91c1c',
-  fontSize: 12,
 };
