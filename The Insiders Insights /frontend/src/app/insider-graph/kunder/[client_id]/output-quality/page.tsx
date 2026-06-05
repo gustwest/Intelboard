@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import Link from 'next/link';
-import { Gauge, ArrowLeft, Sparkles, ChevronRight, ChevronDown, Filter, Check, Loader2, Combine, AlertCircle } from 'lucide-react';
+import { Gauge, Sparkles, ChevronRight, ChevronDown, Filter, Check, Loader2, Combine, AlertCircle } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../../../_components/GraphPageShell';
 import { graphFetch } from '../../../_lib/api';
 import {
@@ -196,17 +195,18 @@ export default function OutputQualityDetailPage() {
 
   return (
     <GraphPageShell
-      title="Output-kvalitet"
+      title="Output-kvalitet — per kund"
       icon={<Gauge size={22} />}
       subtitle={`Rubric-loggar för ${clientId}`}
     >
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-      <Link
-        href={`/insider-graph/kunder/${clientId}`}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: C.muted, fontSize: 12, fontWeight: 600, textDecoration: 'none', marginBottom: 16 }}
-      >
-        <ArrowLeft size={14} /> Tillbaka till kundkortet
-      </Link>
+      <UI.Breadcrumb
+        items={[
+          { label: 'Kunder', href: '/insider-graph/kunder' },
+          { label: clientId, href: `/insider-graph/kunder/${clientId}` },
+          { label: 'Output-kvalitet' },
+        ]}
+      />
 
       {error && (
         <UI.StatusBanner tone="err" style={{ marginBottom: 16 }}>{error}</UI.StatusBanner>

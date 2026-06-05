@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Users, ArrowLeft, Trash2, AlertCircle, ExternalLink, Check, Clock } from 'lucide-react';
+import { Users, Trash2, AlertCircle, ExternalLink, Check, Clock } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../../_components/GraphPageShell';
 import AttestedUpload from '../../_components/AttestedUpload';
 import JobFeedsEditor from '../../_components/JobFeedsEditor';
@@ -131,12 +130,12 @@ export default function ClientDetailPage() {
       icon={<Users size={22} />}
       subtitle="Hantera medarbetare, opt-out och radering för den här kunden."
     >
-      <Link
-        href="/insider-graph/kunder"
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: C.muted, fontSize: 12, fontWeight: 600, textDecoration: 'none', marginBottom: 16 }}
-      >
-        <ArrowLeft size={14} /> Alla kunder
-      </Link>
+      <UI.Breadcrumb
+        items={[
+          { label: 'Kunder', href: '/insider-graph/kunder' },
+          { label: client?.company_name || clientId },
+        ]}
+      />
 
       {error && (
         <UI.StatusBanner tone="err" style={{ marginBottom: 16 }}>

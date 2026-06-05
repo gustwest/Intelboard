@@ -466,11 +466,14 @@ export default function GraphRiskLoopPage() {
   const { latest, runs: jobRuns, active: jobActive, trigger: runJob } = useJobRuns(selected);
 
   // Återställ sparat kund-val + läge innan första render (en gång).
+  // ?client=<id>-deep-link har företräde över sparat val (enhetlig konvention
+  // med /review?client=…), så att t.ex. risk-chippen på kundkortet landar rätt.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const m = window.localStorage.getItem(LS_MODE);
     if (m === 'ops' || m === 'customer') setMode(m);
-    const c = window.localStorage.getItem(LS_CLIENT);
+    const qsClient = new URLSearchParams(window.location.search).get('client');
+    const c = qsClient || window.localStorage.getItem(LS_CLIENT);
     if (c) setSelected(c);
   }, []);
 

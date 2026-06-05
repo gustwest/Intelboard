@@ -7,6 +7,7 @@
 // kopiera inline-stilar.
 
 import { CSSProperties, ReactNode, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { Save, X, Loader2, Check, Play } from 'lucide-react';
 import { graphColors as C, statusColors, surfaces } from '../GraphPageShell';
 
@@ -14,6 +15,34 @@ type StatusTone = 'ok' | 'warn' | 'err' | 'info';
 
 const accentTone = { fg: C.accent, bg: 'rgba(159,81,182,0.15)', border: 'rgba(159,81,182,0.3)' };
 const neutralTone = { fg: C.muted, bg: 'rgba(0,0,0,0.05)', border: C.border };
+
+// ── Breadcrumb ───────────────────────────────────────────────────────────────
+// Brödsmulor (nav) — ersätter copy-paste:ade tillbaka-länkar. Sista posten är
+// nuvarande sida (aria-current=page, ej länk); övriga med href blir länkar.
+export function Breadcrumb({
+  items, style,
+}: { items: { label: ReactNode; href?: string }[]; style?: CSSProperties }) {
+  return (
+    <nav
+      aria-label="Brödsmulor"
+      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, marginBottom: 16, flexWrap: 'wrap', ...style }}
+    >
+      {items.map((it, i) => {
+        const last = i === items.length - 1;
+        return (
+          <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            {it.href && !last ? (
+              <Link href={it.href} style={{ color: C.muted, textDecoration: 'none' }}>{it.label}</Link>
+            ) : (
+              <span aria-current={last ? 'page' : undefined} style={{ color: last ? C.text : C.muted }}>{it.label}</span>
+            )}
+            {!last && <span aria-hidden style={{ color: C.dim }}>›</span>}
+          </span>
+        );
+      })}
+    </nav>
+  );
+}
 
 // ── Eyebrow ────────────────────────────────────────────────────────────────
 // Versal mikro-etikett (sektionsögonbryn / formulärlabel). ~25+ inline-kopior.

@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import Link from 'next/link';
-import { Leaf, ArrowLeft, Check, X } from 'lucide-react';
+import { Leaf, Check, X } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../../_components/GraphPageShell';
 import * as UI from '../../_components/ui';
 import { graphFetch } from '../../_lib/api';
@@ -121,12 +120,13 @@ export default function ESGWorkspacePage() {
       subtitle={`AI-synlighet — blind nollmätning av hållbarhetsryktet i AI-motorer. Kund: ${clientId}`}
       badge="AI-synlighet"
     >
-      <Link
-        href={`/insider-graph/kunder/${clientId}`}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: C.muted, fontSize: 12, fontWeight: 600, textDecoration: 'none', marginBottom: 16 }}
-      >
-        <ArrowLeft size={14} /> Tillbaka till kunden
-      </Link>
+      <UI.Breadcrumb
+        items={[
+          { label: 'Kunder', href: '/insider-graph/kunder' },
+          { label: clientId, href: `/insider-graph/kunder/${clientId}` },
+          { label: 'ESG' },
+        ]}
+      />
 
       {error && <Box tone="error">{error}</Box>}
       {banner && <Box tone={banner.tone}>{banner.text}</Box>}

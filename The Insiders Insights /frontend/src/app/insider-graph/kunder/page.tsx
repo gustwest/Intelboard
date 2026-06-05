@@ -290,7 +290,7 @@ function ClientCard({ client, counts }: { client: Client; counts?: InboxCounts }
                 color={C.accent}
                 bg="rgba(159,81,182,0.15)"
                 border="rgba(159,81,182,0.3)"
-                onClick={(e) => go(e, '/insider-graph/polling')}
+                onClick={(e) => go(e, `/insider-graph/polling?client=${encodeURIComponent(client.client_id)}`)}
               />
             )}
             {client.cdn_url && (

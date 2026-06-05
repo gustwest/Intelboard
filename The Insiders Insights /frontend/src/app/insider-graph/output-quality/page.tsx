@@ -55,7 +55,7 @@ export default function OutputQualityPage() {
 
   return (
     <GraphPageShell
-      title="Output-kvalitet"
+      title="Output-kvalitet — per connector"
       icon={<Gauge size={22} />}
       subtitle="Rubric-poäng per connector — driver promotion-beslut shadow → active gate."
     >
