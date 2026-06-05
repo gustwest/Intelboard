@@ -187,8 +187,8 @@ class ShadowLoggingTest(unittest.TestCase):
             {"audience_type": "candidate", "weight": -0.2,
              "personas": [{"role": "Eng"}, {}]},
         ])
-        # candidate normaliseras till kanoniskt employee vid parse (alias-städning).
-        self.assertEqual([p.audience_type for p in parsed], ["customer", "employee"])
+        # candidate normaliseras till kanoniskt talent vid parse (alias-städning).
+        self.assertEqual([p.audience_type for p in parsed], ["customer", "talent"])
         self.assertEqual(parsed[0].weight, 1.0)
         self.assertEqual(parsed[1].weight, 0.0)
         self.assertEqual(len(parsed[1].personas), 1)

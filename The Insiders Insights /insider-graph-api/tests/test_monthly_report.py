@@ -54,7 +54,7 @@ class BuildModelTest(unittest.TestCase):
         # customer: open #5 medium (vikt 2) / 5 = 0.4
         self.assertEqual(exp["per_persona"]["customer"]["score"], 0.4)
         # employee: inga svar → score None
-        self.assertIsNone(exp["per_persona"]["employee"]["score"])
+        self.assertIsNone(exp["per_persona"]["talent"]["score"])
         # totalt: vikt 5 / 15 svar
         self.assertEqual(exp["total"]["weighted"], 5)
         self.assertEqual(exp["total"]["score"], 0.333)
@@ -118,7 +118,7 @@ class BuildModelTest(unittest.TestCase):
     def test_ceiling_never_reaches_100(self):
         # Perfekt utfall, alla personas täckta, noll fynd → ändå inte 100 (toppen öppen).
         _setup(risk_findings={}, risk_run_summary={
-            "answers_by_persona": {"customer": 4, "employee": 4, "investor": 4}, "total_answers": 12})
+            "answers_by_persona": {"customer": 4, "talent": 4, "investor": 4}, "total_answers": 12})
         conf = mr.build_report_model("acme", "2026-05")["decision_confidence"]
         self.assertEqual(conf["score"], 95)            # CONFIDENCE_CEILING, ej 100
         self.assertEqual(conf["stage"], "Mycket stark")
@@ -141,7 +141,7 @@ class BuildModelTest(unittest.TestCase):
 
     def test_improvements_never_empty_even_when_clean(self):
         _setup(risk_findings={}, risk_run_summary={
-            "answers_by_persona": {"customer": 4, "employee": 4, "investor": 4}, "total_answers": 12})
+            "answers_by_persona": {"customer": 4, "talent": 4, "investor": 4}, "total_answers": 12})
         m = mr.build_report_model("acme", "2026-05")
         self.assertTrue(m["improvement_opportunities"])  # invariant: aldrig tom
         self.assertTrue(any("bevakning" in i for i in m["improvement_opportunities"]))

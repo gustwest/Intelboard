@@ -9,10 +9,10 @@ import { graphFetch } from '../_lib/api';
 // Audience-typer — håll i synk med services/output_quality.py (AUDIENCE_TYPES)
 const AUDIENCE_LABELS: Record<string, { label: string; emoji: string; hint: string }> = {
   customer: { label: 'Kunder', emoji: '🛒', hint: 'Köpare/prospekt av tjänsten' },
-  employee: { label: 'Kandidater', emoji: '🎯', hint: 'Talanger ni vill rekrytera (employer brand)' },
+  talent: { label: 'Talang', emoji: '🎯', hint: 'Talanger ni vill rekrytera + befintlig personal (employer brand)' },
   investor: { label: 'Investerare', emoji: '💰', hint: 'Kapital eller börspublik' },
 };
-const ORDER: ('customer' | 'employee' | 'investor')[] = ['customer', 'employee', 'investor'];
+const ORDER: ('customer' | 'talent' | 'investor')[] = ['customer', 'talent', 'investor'];
 
 type Persona = {
   role: string;
@@ -22,7 +22,7 @@ type Persona = {
 };
 
 type AudiencePriority = {
-  audience_type: 'customer' | 'employee' | 'investor';
+  audience_type: 'customer' | 'talent' | 'investor';
   weight: number;
   personas: Persona[];
   narrative_axes: string[];
@@ -67,7 +67,7 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
     setDirty(true);
   }
 
-  function addAudience(type: 'customer' | 'employee' | 'investor') {
+  function addAudience(type: 'customer' | 'talent' | 'investor') {
     if (priorities.some((p) => p.audience_type === type)) return;
     setPriorities((arr) => [...arr, { audience_type: type, weight: 0.5, personas: [], narrative_axes: [] }]);
     setDirty(true);

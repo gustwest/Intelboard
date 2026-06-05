@@ -8,8 +8,8 @@ import { graphFetch } from '../_lib/api';
 
 // Håll i synk med backend: routers/clients.py (MEASUREMENT_PERSONAS, POLLING_CATEGORIES).
 const PERSONAS: { id: string; label: string }[] = [
-  { id: 'customer', label: 'Köpare' },
-  { id: 'employee', label: 'Kandidat' },
+  { id: 'customer', label: 'Kund' },
+  { id: 'talent', label: 'Talang' },
   { id: 'investor', label: 'Investerare' },
 ];
 const CATEGORIES: { id: string; label: string }[] = [

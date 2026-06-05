@@ -370,9 +370,9 @@ _REGISTRY: tuple[CanonicalPersona, ...] = (
         is_default=True,
     ),
     CanonicalPersona(
-        id="employee",
-        label_sv="Anställd & kandidat",
-        description_sv="Nuvarande personal och potentiella sökande.",
+        id="talent",
+        label_sv="Talang",
+        description_sv="Talang-/employer-brand-målgruppen: nuvarande personal och potentiella sökande.",
         schema_audience_type="Employee",
         probe_templates=_EMPLOYEE_PROBES,
         default_channels=(_CH_GLASSDOOR, _CH_LINKEDIN, _CH_WEBSITE, _CH_ATTESTED),
@@ -465,11 +465,11 @@ _BY_ID: dict[str, CanonicalPersona] = {p.id: p for p in _REGISTRY}
 # Inte alla — då blir audience-fältet bara brus och retrieval-relevansen försvinner.
 # Justera när vi ser i UI:t att signal-densiteten är fel.
 DIMENSION_PERSONA_RELEVANCE: dict[str, frozenset[str]] = {
-    "inclusion": frozenset({"employee", "customer", "student", "patient", "citizen"}),
-    "wellbeing": frozenset({"employee", "patient", "student", "investor"}),  # investor → HR-risk
+    "inclusion": frozenset({"talent", "customer", "student", "patient", "citizen"}),
+    "wellbeing": frozenset({"talent", "patient", "student", "investor"}),  # investor → HR-risk
     "transparency": frozenset({"investor", "regulator", "media", "customer", "partner"}),
     "ethics": frozenset({"investor", "regulator", "media", "customer", "partner", "donor"}),
-    "development": frozenset({"employee", "student", "investor", "partner"}),
+    "development": frozenset({"talent", "student", "investor", "partner"}),
     "community": frozenset({"citizen", "donor", "customer", "media"}),
 }
 

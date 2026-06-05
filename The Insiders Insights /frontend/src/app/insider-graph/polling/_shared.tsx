@@ -62,13 +62,12 @@ export function aggregateEnginesBySource(
 // --- Riskloopens render-modell (speglar services/monthly_report.py) ---
 
 // Kanonisk vokabulär (delad med backend services/audience_personas.py).
-// Etiketterna behålls beslutskontext-anpassade (Köpare/Kandidat) även om id:t
-// är customer/employee — samma målgrupp, risk-lins.
-export type Persona = 'customer' | 'employee' | 'investor';
+// "talent" = talang-/employer-brand-målgruppen (prospekt + befintlig personal).
+export type Persona = 'customer' | 'talent' | 'investor';
 
 export const PERSONA_SV: Record<string, string> = {
-  customer: 'Köpare',
-  employee: 'Kandidat',
+  customer: 'Kund',
+  talent: 'Talang',
   investor: 'Investerare',
 };
 
@@ -463,7 +462,7 @@ export type RecipesResp = {
   counts: Record<RecipeStatus, number>;
 };
 
-export const PERSONAS: Persona[] = ['customer', 'employee', 'investor'];
+export const PERSONAS: Persona[] = ['customer', 'talent', 'investor'];
 
 // Konsekvent status-palett: röd = öppen/risk, gul = väntar handling, grön = löst, lila = pågående,
 // blå = info, grå = neutral. Används överallt där status visas (badges, dots, banderoller).

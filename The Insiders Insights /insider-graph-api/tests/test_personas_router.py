@@ -11,7 +11,7 @@ class RegistryEndpointTest(unittest.TestCase):
     def test_returns_full_palette(self):
         out = personas_router.get_registry()
         self.assertEqual(len(out["personas"]), 10)
-        self.assertEqual(set(out["defaults"]), {"customer", "employee", "investor"})
+        self.assertEqual(set(out["defaults"]), {"customer", "talent", "investor"})
         self.assertEqual(out["max_active"], pr.MAX_ACTIVE_PERSONAS_PER_CLIENT)
 
     def test_personas_have_templates_for_ui(self):

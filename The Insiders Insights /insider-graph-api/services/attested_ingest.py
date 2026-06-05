@@ -454,7 +454,7 @@ def _glassdoor_claim(ctx: BuildCtx, dim: str, category: str, rating: float, coun
         facet="culture",
         warmth_mode="demonstrated",
         dimension=dim,
-        audience=["employee"],  # Glassdoor = employee-genererad evidens
+        audience=["talent"],  # Glassdoor = talang-/medarbetar-genererad evidens
     )
     return ("claim", claim_id, claim.model_dump())
 

@@ -3,7 +3,7 @@
 Verifierar att exporterade Glassdoor-betyg blir:
   * demonstrated culture-claims (facet=culture, warmth_mode=demonstrated, rätt dimension)
   * med assurance_level=third_party_reviewed (väger 0.7 i compute_trust_gap)
-  * audience=["employee"] (employee-genererad evidens)
+  * audience=["talent"] (employee-genererad evidens)
   * staged (included_in_output=False) tills ops bekräftar
   * betyg ≥3,5 → proof; <3,5 → markerat raw_item (ej proof, sanning utan smink)
 """
@@ -52,7 +52,7 @@ class ClaimShapeTest(unittest.TestCase):
         self.assertEqual(payload["facet"], "culture")
         self.assertEqual(payload["warmth_mode"], "demonstrated")
         self.assertEqual(payload["dimension"], "wellbeing")
-        self.assertEqual(payload["audience"], ["employee"])
+        self.assertEqual(payload["audience"], ["talent"])
         self.assertFalse(payload["included_in_output"])  # staged
         # Källan bär third_party_reviewed → väger 0.7 i trust_gap
         self.assertEqual(payload["source"][0]["assurance_level"], "third_party_reviewed")

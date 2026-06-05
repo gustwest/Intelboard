@@ -23,7 +23,7 @@ class PaletteIntegrityTest(unittest.TestCase):
 
     def test_three_defaults(self):
         defaults = pr.default_persona_ids()
-        self.assertEqual(set(defaults), {"customer", "employee", "investor"})
+        self.assertEqual(set(defaults), {"customer", "talent", "investor"})
 
     def test_no_duplicate_ids(self):
         ids = [p.id for p in pr.all_personas()]
@@ -89,14 +89,14 @@ class ActiveSetValidationTest(unittest.TestCase):
         self.assertEqual(out, list(pr.default_persona_ids()))
 
     def test_dedupes(self):
-        out = pr.validate_active_set(["customer", "customer", "employee"])
+        out = pr.validate_active_set(["customer", "customer", "talent"])
         self.assertEqual(out.count("customer"), 1)
 
     def test_drops_unknown(self):
-        out = pr.validate_active_set(["customer", "weird", "employee"])
+        out = pr.validate_active_set(["customer", "weird", "talent"])
         self.assertNotIn("weird", out)
         self.assertIn("customer", out)
-        self.assertIn("employee", out)
+        self.assertIn("talent", out)
 
     def test_caps_at_max_active(self):
         # Skicka in fler än MAX — sanering ska kapa till exakt MAX.
@@ -107,8 +107,8 @@ class ActiveSetValidationTest(unittest.TestCase):
 
     def test_ordered_by_registry(self):
         # UI-stabilitet: returnen sorteras i registry-ordning oavsett input-ordning.
-        out = pr.validate_active_set(["investor", "customer", "employee"])
-        self.assertEqual(out, ["customer", "employee", "investor"])
+        out = pr.validate_active_set(["investor", "customer", "talent"])
+        self.assertEqual(out, ["customer", "talent", "investor"])
 
 
 class SerializationTest(unittest.TestCase):

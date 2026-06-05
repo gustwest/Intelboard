@@ -76,7 +76,7 @@ class AudiencePriority(BaseModel):
     Audiences som saknas eller har weight=0 betyder att kunden inte
     prioriterar dem (se [[project_icp_multi_audience]])."""
 
-    audience_type: Literal["customer", "employee", "investor"]
+    audience_type: Literal["customer", "talent", "investor"]
     weight: float = Field(default=1.0, ge=0.0)
     personas: list[PersonaTarget] = Field(default_factory=list)
     narrative_axes: list[str] = Field(default_factory=list)

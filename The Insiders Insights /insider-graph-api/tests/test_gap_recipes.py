@@ -108,14 +108,14 @@ class PersonaMismatchRecipeTest(unittest.TestCase):
     def test_produces_skeleton_targeting_coolest_persona(self):
         skel = gr.build_recipe_skeleton(_flag(
             "persona_mismatch", dimension="wellbeing",
-            warmest_persona="customer", coolest_persona="employee",
+            warmest_persona="customer", coolest_persona="talent",
             warmest_valence=0.8, coolest_valence=0.3, spread=0.5,
         ))
         self.assertIsNotNone(skel)
         self.assertEqual(skel.gap_type, "persona_mismatch")
         self.assertEqual(skel.action_type, gr.ACTION_PUBLISH_PROOF)
         # Receptet ska sikta på den coolaste personan (employee), inte den varma.
-        self.assertEqual(skel.target_personas, ("employee",))
+        self.assertEqual(skel.target_personas, ("talent",))
         # Impact mäts som persona-valens-spread.
         self.assertEqual(skel.expected_impact_metric, gr.METRIC_VALENCE_BY_PERSONA)
 
@@ -123,7 +123,7 @@ class PersonaMismatchRecipeTest(unittest.TestCase):
         # employee → default_channels innehåller Glassdoor + LinkedIn (kandidat-ytor)
         skel = gr.build_recipe_skeleton(_flag(
             "persona_mismatch", dimension="wellbeing",
-            warmest_persona="customer", coolest_persona="employee",
+            warmest_persona="customer", coolest_persona="talent",
         ))
         self.assertIn(gr.CHANNEL_GLASSDOOR, skel.target_channels)
         self.assertIn(gr.CHANNEL_LINKEDIN, skel.target_channels)
@@ -141,10 +141,10 @@ class PersonaMismatchRecipeTest(unittest.TestCase):
         # Klartexten ska bära mänskliga persona-labels, inte råa id:n.
         skel = gr.build_recipe_skeleton(_flag(
             "persona_mismatch", dimension="wellbeing",
-            warmest_persona="customer", coolest_persona="employee",
+            warmest_persona="customer", coolest_persona="talent",
         ))
         self.assertIn("Kund", skel.why_template)              # customer.label_sv
-        self.assertIn("Anställd & kandidat", skel.why_template)  # employee.label_sv
+        self.assertIn("Talang", skel.why_template)  # employee.label_sv
 
     def test_unknown_coolest_persona_falls_back_gracefully(self):
         # Okänd persona → fallback-kanaler, inget krasch.
@@ -189,7 +189,7 @@ class BatchTest(unittest.TestCase):
     def test_persona_mismatch_now_included_in_batch(self):
         # Fas 2.1e: persona_mismatch är inte längre stubbad — tas med i batchen.
         flags = [
-            _flag("persona_mismatch", warmest_persona="customer", coolest_persona="employee"),
+            _flag("persona_mismatch", warmest_persona="customer", coolest_persona="talent"),
             _flag("competitive_displacement"),  # fortfarande stubbad
         ]
         skeletons = gr.build_recipe_skeletons(flags)

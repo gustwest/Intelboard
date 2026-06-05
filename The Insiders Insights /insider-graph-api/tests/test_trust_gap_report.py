@@ -139,7 +139,7 @@ class TrustGapReportTest(unittest.TestCase):
                 {"wellbeing": {"declared": 1.0, "demonstrated": 0.5, "score": 0.65}},
                 flags=[{
                     "kind": "persona_mismatch", "dimension": "wellbeing",
-                    "warmest_persona": "customer", "coolest_persona": "employee",
+                    "warmest_persona": "customer", "coolest_persona": "talent",
                     "spread": 0.5,
                 }],
             ),
@@ -148,7 +148,7 @@ class TrustGapReportTest(unittest.TestCase):
         flags_text = " ".join(model["opportunities_and_risks"])
         # Svenska labels, inte råa id:n eller fallback-text
         self.assertIn("kund", flags_text.lower())
-        self.assertIn("anställd & kandidat", flags_text.lower())
+        self.assertIn("talang", flags_text.lower())
         self.assertNotIn("flagga av typ", flags_text)
         # Och den ska finnas i den rankade handlingslistan
         ranked = model["ranked_actions"]

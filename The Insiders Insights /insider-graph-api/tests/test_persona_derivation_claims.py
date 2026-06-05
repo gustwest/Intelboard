@@ -41,7 +41,7 @@ class DeriveClaimAudienceTest(unittest.TestCase):
         # Inga aktiva-begränsningar → alla relevant-personor från mappningen
         out = pd.derive_claim_audience(_claim(dimension="wellbeing"), active_personas=None)
         # wellbeing → employee, patient, student, investor
-        self.assertIn("employee", out)
+        self.assertIn("talent", out)
         self.assertIn("investor", out)
         # Och INTE personor som inte är relevanta för wellbeing
         self.assertNotIn("donor", out)
@@ -58,9 +58,9 @@ class DeriveClaimAudienceTest(unittest.TestCase):
         # (customer finns inte i wellbeing's relevans-set).
         out = pd.derive_claim_audience(
             _claim(dimension="wellbeing"),
-            active_personas=["customer", "employee"],
+            active_personas=["customer", "talent"],
         )
-        self.assertEqual(out, ["employee"])
+        self.assertEqual(out, ["talent"])
 
     def test_empty_active_personas_returns_empty(self):
         # Tom aktiv-lista → vi har ingen att tagga med → evergreen
@@ -93,7 +93,7 @@ class DeriveClaimAudienceTest(unittest.TestCase):
 
     def test_inclusion_dimension(self):
         out = pd.derive_claim_audience(_claim(dimension="inclusion"), active_personas=None)
-        self.assertIn("employee", out)
+        self.assertIn("talent", out)
         self.assertIn("customer", out)
 
 
@@ -154,9 +154,9 @@ class ClaimSchemaAudienceFieldTest(unittest.TestCase):
         c = Claim(
             claim_kind="narrative", statement="test",
             source=[ClaimSource(kind="manual", label="x")],
-            audience=["customer", "employee"],
+            audience=["customer", "talent"],
         )
-        self.assertEqual(c.audience, ["customer", "employee"])
+        self.assertEqual(c.audience, ["customer", "talent"])
 
     def test_serializes_to_dict_with_audience(self):
         from schemas import Claim, ClaimSource

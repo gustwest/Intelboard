@@ -60,7 +60,7 @@ class AudienceMarkupTest(unittest.TestCase):
             self.assertNotIn("audience", n)
 
     def test_single_persona_emits_audience_object(self):
-        _setup({"c1": _claim("Tar in 50% traineer per år", audience=["employee"])})
+        _setup({"c1": _claim("Tar in 50% traineer per år", audience=["talent"])})
         nodes = _claim_nodes(compile_client("acme"))
         target = next(n for n in nodes if "traineer" in n["text"])
         self.assertIn("audience", target)
@@ -68,7 +68,7 @@ class AudienceMarkupTest(unittest.TestCase):
         # Singel-persona → ett objekt (inte lista)
         self.assertEqual(aud["@type"], "Audience")
         self.assertEqual(aud["audienceType"], "Employee")  # employee.schema_audience_type
-        self.assertEqual(aud["name"], "Anställd & kandidat")
+        self.assertEqual(aud["name"], "Talang")
 
     def test_multi_persona_emits_list(self):
         _setup({"c1": _claim("Stark ESG-profil", audience=["investor", "regulator"])})
@@ -103,13 +103,13 @@ class LlmsTxtSectionsTest(unittest.TestCase):
 
     def test_persona_sections_rendered(self):
         _setup({
-            "c1": _claim("Tar in 50% traineer per år", audience=["employee"]),
+            "c1": _claim("Tar in 50% traineer per år", audience=["talent"]),
             "c2": _claim("Stark finansiell tillväxt", audience=["investor"]),
             "c3": _claim("Hjälper fordonstillverkare", audience=[]),  # evergreen
         })
         txt = render_llms_txt("acme")
         # Persona-sektioner ska finnas med svensk rubrik
-        self.assertIn("## för anställd & kandidat", txt.lower())
+        self.assertIn("## för talang", txt.lower())
         self.assertIn("## för investerare", txt.lower())
         # Persona-taggade claims hamnar under rätt rubrik
         self.assertIn("traineer", txt)

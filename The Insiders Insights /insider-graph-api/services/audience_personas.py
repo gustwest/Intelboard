@@ -13,15 +13,18 @@ olika målgrupper. Den här modulen äger bara id-vokabulären + bakåtkompat.
 from __future__ import annotations
 
 # De tre kärn-målgrupperna, i kanonisk ordning. En delmängd av warmth-paletten.
-CANONICAL: tuple[str, ...] = ("customer", "employee", "investor")
+# "talent" = talang-/employer-brand-målgruppen: BÅDE prospektiva kandidater och
+# befintlig personal (samma audience, olika livscykelfas — jfr customer = köpare +
+# befintlig kund). Neutralt id som inte gynnar någon fas.
+CANONICAL: tuple[str, ...] = ("customer", "talent", "investor")
 
 # Bakåtkompat: gammalt id → kanoniskt. Tillämpas vid läsning/ingest så att gammal
 # Firestore-data och äldre API-anrop fortsätter funka under avvecklingen.
-_ALIASES = {"buyer": "customer", "candidate": "employee"}
+# buyer→customer; candidate/employee→talent (talang-axeln, båda livscykelfaserna).
+_ALIASES = {"buyer": "customer", "candidate": "talent", "employee": "talent"}
 
-# Svenska etiketter (kontextoberoende default). Riskrapporten får överstyra med
-# beslutskontext-ord ("Köpare"/"Kandidat") om det läser bättre där.
-LABEL_SV = {"customer": "Kund", "employee": "Medarbetare", "investor": "Investerare"}
+# Svenska etiketter — kanoniska, används överallt.
+LABEL_SV = {"customer": "Kund", "talent": "Talang", "investor": "Investerare"}
 
 
 def normalize(persona: str | None) -> str | None:

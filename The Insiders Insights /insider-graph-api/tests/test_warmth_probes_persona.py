@@ -75,7 +75,7 @@ def _setup_client(personas=None):
 class RunForClientShapeTest(unittest.TestCase):
 
     def test_returns_doc_with_personas_axis(self):
-        _setup_client(personas=["customer", "employee"])
+        _setup_client(personas=["customer", "talent"])
         engines = {"gemini": _FakeEngine("gemini"), "chatgpt": _FakeEngine("chatgpt")}
         judge = _FakeJudge()
         doc = wp.run_for_client("acme", engines=engines, judge=judge)
@@ -85,7 +85,7 @@ class RunForClientShapeTest(unittest.TestCase):
         self.assertIn("dimensions", doc)
         self.assertIn("measurement", doc)
         # Mätningens metadata listar vilka personor som kördes
-        self.assertEqual(doc["measurement"]["personas"], ["customer", "employee"])
+        self.assertEqual(doc["measurement"]["personas"], ["customer", "talent"])
         # Varje dimension har BÅDE toppnivå-aggregat och per_persona-axel
         for dim in hc.DIMENSIONS:
             self.assertIn(dim, doc["dimensions"])
@@ -97,13 +97,13 @@ class RunForClientShapeTest(unittest.TestCase):
             self.assertIn("by_engine", entry)
             # Ny axel
             self.assertIn("per_persona", entry)
-            self.assertEqual(set(entry["per_persona"].keys()), {"customer", "employee"})
+            self.assertEqual(set(entry["per_persona"].keys()), {"customer", "talent"})
 
     def test_persona_specific_questions_are_sent(self):
         # Verifiera att frågorna som faktiskt skickas till motorn kommer från
         # persona_registry — inte från en hårdkodad lista. Customer-frågorna ska
         # innehålla "potentiell kund", employee-frågorna "potentiell anställd".
-        _setup_client(personas=["customer", "employee"])
+        _setup_client(personas=["customer", "talent"])
         engine = _FakeEngine("gemini")
         engines = {"gemini": engine}
         judge = _FakeJudge()
@@ -118,7 +118,7 @@ class RunForClientShapeTest(unittest.TestCase):
     def test_anchor_question_runs_once_per_engine(self):
         # Ankaren körs en gång per motor (delas mellan personor), inte en gång per
         # (motor × persona). Annars sprängs cost-budgeten i onödan.
-        _setup_client(personas=["customer", "employee", "investor"])
+        _setup_client(personas=["customer", "talent", "investor"])
         e = _FakeEngine("gemini")
         wp.run_for_client("acme", engines={"gemini": e}, judge=_FakeJudge())
         anchor_count = sum(1 for q in e.received_questions if "huvudkontor" in q)
@@ -141,7 +141,7 @@ class CallCountTest(unittest.TestCase):
     (engines × canary-suite). Annars är vi inte 5x-säkra mot dagens flöde i tier-modellen."""
 
     def test_call_count_matches_formula(self):
-        _setup_client(personas=["customer", "employee"])
+        _setup_client(personas=["customer", "talent"])
         e1 = _FakeEngine("gemini")
         e2 = _FakeEngine("chatgpt")
         engines = {"gemini": e1, "chatgpt": e2}
@@ -159,7 +159,7 @@ class CallCountTest(unittest.TestCase):
         wp.run_for_client("acme", engines={"gemini": e}, judge=_FakeJudge())
         with_one = len(e.received_questions)
 
-        _setup_client(personas=["customer", "employee", "investor"])
+        _setup_client(personas=["customer", "talent", "investor"])
         e2 = _FakeEngine("gemini")
         wp.run_for_client("acme", engines={"gemini": e2}, judge=_FakeJudge())
         with_three = len(e2.received_questions)
@@ -188,7 +188,7 @@ class AggregationCorrectnessTest(unittest.TestCase):
     def test_toplevel_aggregate_pools_personas(self):
         # Med två personor som ger olika valens på samma dim ska toppnivå-aggregatet
         # ligga mellan deras värden (snitt).
-        _setup_client(personas=["customer", "employee"])
+        _setup_client(personas=["customer", "talent"])
         # Customer-judge ger högt valence, employee-judge ger lågt — på SAMMA dim.
         # Domaren ser dock dim, inte persona, så vi måste forcera olika svar via
         # response_text per engine. Enklare: testa shape-invariant utan att försöka
@@ -202,13 +202,13 @@ class AggregationCorrectnessTest(unittest.TestCase):
         )
         ethics = doc["dimensions"]["ethics"]
         # Båda personor ska finnas i per_persona-axeln
-        self.assertEqual(set(ethics["per_persona"].keys()), {"customer", "employee"})
+        self.assertEqual(set(ethics["per_persona"].keys()), {"customer", "talent"})
         # Toppnivå-valence ska ligga nära 0.8 (båda personor får samma judge-verdict)
         self.assertAlmostEqual(ethics["valence"], 0.8, places=2)
 
     def test_engine_failure_falls_back_to_none_for_that_pair(self):
         # Om EN persona × dim failar på EN motor ska resten fortsätta
-        _setup_client(personas=["customer", "employee"])
+        _setup_client(personas=["customer", "talent"])
         good_engine = _FakeEngine("good")
         flaky_engine = _FakeEngine("flaky")
         # Patch:a flaky-engine att kasta efter sin första invoke (ankarn lyckas)

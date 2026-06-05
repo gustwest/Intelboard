@@ -353,7 +353,7 @@ class GapTaxonomyPersonaMismatchTest(unittest.TestCase):
             perceived={"wellbeing": {
                 "salience": 0.7, "valence": 0.55, "confidence": 0.7,
                 "per_persona": {
-                    "employee": {"salience": 0.7, "valence": 0.3, "confidence": 0.7},
+                    "talent": {"salience": 0.7, "valence": 0.3, "confidence": 0.7},
                     "customer": {"salience": 0.7, "valence": 0.8, "confidence": 0.7},
                 },
             }},
@@ -363,7 +363,7 @@ class GapTaxonomyPersonaMismatchTest(unittest.TestCase):
         self.assertEqual(len(pm), 1)
         self.assertEqual(pm[0]["dimension"], "wellbeing")
         self.assertEqual(pm[0]["warmest_persona"], "customer")
-        self.assertEqual(pm[0]["coolest_persona"], "employee")
+        self.assertEqual(pm[0]["coolest_persona"], "talent")
         self.assertAlmostEqual(pm[0]["spread"], 0.5)
         self.assertAlmostEqual(pm[0]["warmest_valence"], 0.8)
         self.assertAlmostEqual(pm[0]["coolest_valence"], 0.3)
@@ -375,7 +375,7 @@ class GapTaxonomyPersonaMismatchTest(unittest.TestCase):
             perceived={"wellbeing": {
                 "salience": 0.7, "valence": 0.55, "confidence": 0.7,
                 "per_persona": {
-                    "employee": {"salience": 0.7, "valence": 0.45},
+                    "talent": {"salience": 0.7, "valence": 0.45},
                     "customer": {"salience": 0.7, "valence": 0.65},
                 },
             }},
@@ -391,7 +391,7 @@ class GapTaxonomyPersonaMismatchTest(unittest.TestCase):
             perceived={"wellbeing": {
                 "salience": 0.7, "valence": 0.7, "confidence": 0.7,
                 "per_persona": {
-                    "employee": {"salience": 0.05, "valence": 0.2},  # under floor
+                    "talent": {"salience": 0.05, "valence": 0.2},  # under floor
                     "customer": {"salience": 0.7, "valence": 0.8},
                 },
             }},
@@ -471,7 +471,7 @@ class VarianceGatingTest(unittest.TestCase):
                 "salience": 0.7, "valence": 0.55, "confidence": 0.7,
                 "valence_variance": 0.5,  # instabilt
                 "per_persona": {
-                    "employee": {"salience": 0.7, "valence": 0.3},
+                    "talent": {"salience": 0.7, "valence": 0.3},
                     "customer": {"salience": 0.7, "valence": 0.8},
                 },
             }},

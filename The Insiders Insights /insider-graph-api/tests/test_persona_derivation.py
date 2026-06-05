@@ -82,8 +82,8 @@ class DerivationLlmAvailable(unittest.TestCase):
         self.assertEqual(len(result.audience_priorities), 2)
         self.assertEqual(result.audience_priorities[0].audience_type, "customer")
         self.assertEqual(result.audience_priorities[0].personas[0].role, "CXO")
-        # LLM gav "candidate" → normaliseras till kanoniskt "employee".
-        self.assertEqual(result.audience_priorities[1].audience_type, "employee")
+        # LLM gav "candidate" → normaliseras till kanoniskt "talent".
+        self.assertEqual(result.audience_priorities[1].audience_type, "talent")
         self.assertEqual(result.source_counts, {"website": 1, "jobfeed": 1})
 
     def test_filters_unknown_audience_type(self):

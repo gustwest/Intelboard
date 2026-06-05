@@ -348,7 +348,7 @@ export function ApprovedQuestionsPanel({ questions, clientId, mode, onChanged }:
         mode === 'customer' ? (
           // Kund-läge: bara kategori-summering, ingen rad-för-rad-text
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-            {(['customer', 'employee', 'investor'] as const).map((p) => {
+            {(['customer', 'talent', 'investor'] as const).map((p) => {
               const n = byPersona.get(p) || 0;
               return (
                 <div key={p} style={{ padding: '12px 14px', background: 'rgba(159,81,182,0.04)', border: `1px solid ${S.inProgress.border}`, borderRadius: 8 }}>
@@ -449,7 +449,7 @@ export function CustomQuestionModal({ clientId, onClose, onCreated }: {
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [persona, setPersona] = useState<'customer' | 'employee' | 'investor'>('customer');
+  const [persona, setPersona] = useState<'customer' | 'talent' | 'investor'>('customer');
   const [type, setType] = useState<'open' | 'comparative'>('open');
   const [text, setText] = useState('');
   const [language, setLanguage] = useState<'sv' | 'en'>('sv');
@@ -503,7 +503,7 @@ export function CustomQuestionModal({ clientId, onClose, onCreated }: {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <FormRow label="Persona — vem ställer frågan">
             <div style={{ display: 'flex', gap: 6 }}>
-              {(['customer', 'employee', 'investor'] as const).map((p) => (
+              {(['customer', 'talent', 'investor'] as const).map((p) => (
                 <button
                   key={p}
                   onClick={() => setPersona(p)}

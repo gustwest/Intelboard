@@ -83,7 +83,7 @@ export function AudiencePill({ audience }: { audience: string | null | undefined
   }
   const map: Record<string, { label: string; color: string; bg: string }> = {
     customer: { label: '🛒 customer', color: C.accent, bg: 'rgba(159,81,182,0.14)' },
-    employee: { label: '🎯 employee', color: '#0ea5e9', bg: 'rgba(14,165,233,0.14)' },
+    talent: { label: '🎯 talent', color: '#0ea5e9', bg: 'rgba(14,165,233,0.14)' },
     investor: { label: '💰 investor', color: '#16a34a', bg: 'rgba(34,197,94,0.14)' },
   };
   const m = map[audience] || { label: audience, color: C.text, bg: 'transparent' };

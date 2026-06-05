@@ -7,11 +7,13 @@ from services import audience_personas as ap
 
 class NormalizeTest(unittest.TestCase):
     def test_canonical_set(self):
-        self.assertEqual(ap.CANONICAL, ("customer", "employee", "investor"))
+        self.assertEqual(ap.CANONICAL, ("customer", "talent", "investor"))
 
     def test_old_ids_map_to_canonical(self):
         self.assertEqual(ap.normalize("buyer"), "customer")
-        self.assertEqual(ap.normalize("candidate"), "employee")
+        # Båda talang-livscykelfaserna → talent.
+        self.assertEqual(ap.normalize("candidate"), "talent")
+        self.assertEqual(ap.normalize("employee"), "talent")
 
     def test_canonical_passes_through(self):
         for p in ap.CANONICAL:

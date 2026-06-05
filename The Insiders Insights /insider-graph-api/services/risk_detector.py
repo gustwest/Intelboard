@@ -94,14 +94,14 @@ RESOLVED_AFTER_CLEAN_RUNS = 2
 
 _PERSONA_EXPERT = {
     "customer": "senior B2B-inköpare som utvärderar {company} som leverantör för ett verkligt behov",
-    "employee": "eftertraktad yrkesperson som väger ett jobberbjudande hos {company}",
+    "talent": "eftertraktad yrkesperson som väger ett jobberbjudande hos {company}",
     "investor": "investerings-/DD-analytiker som granskar {company}",
 }
 
 _PERSONA_CRITERIA = {
     "customer": "trovärdighet, fit för use case, leveransspår/referenser, finansiell "
     "uthållighet, pris/affärsmodell, alternativ, röda flaggor",
-    "employee": "stabilitet/tillväxt vs varsel, kultur/arbetsgivarrykte, ledningens "
+    "talent": "stabilitet/tillväxt vs varsel, kultur/arbetsgivarrykte, ledningens "
     "trovärdighet, finansiell hälsa, CV-värde",
     "investor": "exakt legal entitet & ägande (förväxlingsrisk), finansiell soliditet, "
     "tvister/sanktioner, ledningens track record, marknadsposition",
@@ -117,7 +117,7 @@ Spår B (om branschen):
 - "Vilka är de ledande leverantörerna av {category} i {market}?"
 - "Jag ska köpa in {category}. Vilka är de viktigaste tekniska kraven i kravspecen?"
 - "Vad är standardprissättningen i branschen, och vilka dolda kostnader missar man?\"""",
-    "employee": """Spår A (om {company}):
+    "talent": """Spår A (om {company}):
 - "Vad säger Glassdoor, Reddit och branschnyheter om arbetskultur och ledarskap på {company}?"
 - "Hur ser personalomsättning och finansiell trend ut för {company}? Stabil arbetsplats?"
 - "Växer {company} eller har de varslat nyligen?"
