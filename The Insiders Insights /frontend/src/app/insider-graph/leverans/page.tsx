@@ -71,6 +71,23 @@ type Delivery = {
 
 type Badge = { snippet: string; preview: string };
 
+// P2 — leverans-hälsa (services/delivery_health.py)
+type Health = {
+  verdict: 'live' | 'stale' | 'mismatch' | 'missing';
+  reachable: boolean;
+  has_jsonld: boolean;
+  identity_match: boolean;
+  fresh: boolean;
+  url: string;
+};
+
+const HEALTH_SV: Record<Health['verdict'], { label: string; tone: 'ok' | 'warn' | 'err' }> = {
+  live: { label: 'live', tone: 'ok' },
+  stale: { label: 'live, saknar datum', tone: 'warn' },
+  mismatch: { label: 'fel entitet i JSON-LD', tone: 'warn' },
+  missing: { label: 'ej hittad', tone: 'err' },
+};
+
 type Theme = 'light' | 'dark';
 type Variant = 'footer' | 'pill';
 type DeliveryMode = 'static' | 'js';
@@ -84,6 +101,8 @@ export default function LeveransPage() {
   const [copied, setCopied] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const [attested, setAttested] = useState<{ key: string; label: string; included: number; staged: number }[] | null>(null);
+  const [health, setHealth] = useState<Health | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
   const { latest, active: jobActive, trigger: runJob } = useJobRuns(selected);
 
   // Badge-kontroller
@@ -113,6 +132,20 @@ export default function LeveransPage() {
     graphFetch<Delivery>(`/api/delivery/${selected}`)
       .then(setDelivery)
       .catch((e) => setError(e.message));
+  }, [selected, refreshTick]);
+
+  // P2 — verifiera att profilsidan faktiskt är live (gör en serverside-fetch, kan ta
+  // några sekunder). Egen felhantering så ett nät-fel inte förorenar huvud-baner.
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
+    setHealthLoading(true);
+    setHealth(null);
+    graphFetch<Health>(`/api/delivery/${selected}/health`)
+      .then((d) => { if (!cancelled) setHealth(d); })
+      .catch(() => { if (!cancelled) setHealth(null); })
+      .finally(() => { if (!cancelled) setHealthLoading(false); });
+    return () => { cancelled = true; };
   }, [selected, refreshTick]);
 
   // Officiell (attesterad) data — vad som ingår i leveransen.
@@ -262,6 +295,34 @@ export default function LeveransPage() {
               <><X size={12} color="#dc2626" /> <span style={{ color: '#dc2626' }}>nås ej</span></>
             ) : (
               <span style={{ color: C.dim }}>kontrollerar…</span>
+            )}
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: C.muted }} title="P2 — hämtar profilsidan och verifierar att JSON-LD för rätt entitet är publicerad och färsk.">
+            <strong style={{ color: C.text, fontWeight: 600 }}>Live:</strong>
+            {healthLoading ? (
+              <span style={{ color: C.dim }}>verifierar…</span>
+            ) : !health ? (
+              <span style={{ color: C.dim }}>—</span>
+            ) : (
+              <>
+                {health.verdict === 'live' ? (
+                  <Check size={12} color="#16a34a" />
+                ) : health.verdict === 'missing' ? (
+                  <X size={12} color="#dc2626" />
+                ) : null}
+                <span
+                  style={{
+                    color:
+                      HEALTH_SV[health.verdict].tone === 'ok'
+                        ? '#16a34a'
+                        : HEALTH_SV[health.verdict].tone === 'warn'
+                        ? '#b45309'
+                        : '#dc2626',
+                  }}
+                >
+                  {HEALTH_SV[health.verdict].label}
+                </span>
+              </>
             )}
           </span>
         </div>

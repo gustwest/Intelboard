@@ -11,7 +11,7 @@ import firestore_client as fs
 from schema_org.badge import profile_url
 from schema_org.delivery import render_identity_snippet
 from schema_org.install_kit import render_install_kit, render_install_kit_email
-from services import notifications
+from services import delivery_health, notifications
 
 router = APIRouter(prefix="/api/delivery", tags=["delivery"])
 
@@ -28,6 +28,17 @@ def get_delivery(client_id: str) -> dict[str, str | None]:
         "compiled_url": data.get("profile_url"),  # satt av compile-schema vid uppladdning
         "identity_snippet": render_identity_snippet(client_id),
     }
+
+
+@router.get("/{client_id}/health")
+def get_delivery_health(client_id: str) -> dict[str, object]:
+    """P2 — verifiera att kundens profilsida faktiskt är live (200 + JSON-LD för rätt
+    entitet + färsk). Ops-kontroll så vi inte påstår 'stängt gap' mot en sida som
+    aldrig publicerades. Best-effort: nätverksfel → verdict 'missing'."""
+    snap = fs.client_doc(client_id).get()
+    if not snap.exists:
+        raise HTTPException(404, f"client not found: {client_id}")
+    return delivery_health.check_live(client_id, snap.to_dict() or {})
 
 
 @router.get("/{client_id}/install-kit", response_class=HTMLResponse)
