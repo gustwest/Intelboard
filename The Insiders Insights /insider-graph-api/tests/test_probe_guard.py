@@ -9,6 +9,28 @@ import unittest
 from services import probe_guard as pg
 
 
+class TextMentionsTest(unittest.TestCase):
+    def test_full_name_word_boundary(self):
+        self.assertTrue(pg.text_mentions("Vi rekommenderar Acme AB starkt.", "Acme AB"))
+
+    def test_distinctive_token_matches_legal_form_variant(self):
+        # Kund "Acme AB" men motorn skrev bara "Acme" → ska räknas som omnämnande.
+        self.assertTrue(pg.text_mentions("Acme är ett bra val.", "Acme AB", split_tokens=True))
+
+    def test_no_substring_false_positive(self):
+        # "Volvo" får INTE träffa "Volvocars" (annan entitet) med ordgränser.
+        self.assertFalse(pg.text_mentions("Volvocars lanserar en ny modell.", "Volvo", split_tokens=True))
+
+    def test_person_name_requires_full_match(self):
+        # Personnamn matchas på helt namn, inte token (annars matchar "Anna" vem som helst).
+        self.assertTrue(pg.text_mentions("Kontakta Anna Svensson.", "Anna Svensson"))
+        self.assertFalse(pg.text_mentions("Anna Lindgren ringde.", "Anna Svensson"))
+
+    def test_empty_inputs(self):
+        self.assertFalse(pg.text_mentions("", "Acme"))
+        self.assertFalse(pg.text_mentions("text", ""))
+
+
 class AddressesSubjectInSecondPersonTest(unittest.TestCase):
     def test_flags_second_person_without_company(self):
         # Det klassiska felfallet: "You claim to…" utan att namnge bolaget.

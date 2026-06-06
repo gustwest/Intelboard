@@ -47,6 +47,31 @@ def _names_company(text_lower: str, company_name: str) -> bool:
     return False
 
 
+def text_mentions(text: str, name: str, *, split_tokens: bool = False) -> bool:
+    """Ordgräns-matchning av ett entitetsnamn i text (P8 — hårdare mention-detektering).
+
+    Ersätter rå delsträngsmatchning som både gav falska positiva ("Volvo" träffade
+    "Volvocars") och falska negativa (kund "Acme AB" syntes inte när motorn skrev
+    bara "Acme"). Med ordgränser träffar vi hela namnet ELLER — när `split_tokens`
+    är på — ett distinktivt token ur namnet (≥3 tecken, ej bolagsform).
+
+    `split_tokens=True` för BOLAG (så "Acme" matchar "Acme AB"); AV för PERSONNAMN
+    (annars skulle ett vanligt förnamn som "Anna" matcha vem som helst)."""
+    if not text or not name:
+        return False
+    low = text.lower()
+    nm = name.strip().lower()
+    if not nm:
+        return False
+    if re.search(rf"\b{re.escape(nm)}\b", low):
+        return True
+    if split_tokens:
+        for tok in re.split(r"\W+", nm):
+            if len(tok) >= 3 and tok not in _LEGAL_FORMS and re.search(rf"\b{re.escape(tok)}\b", low):
+                return True
+    return False
+
+
 def addresses_subject_in_second_person(text: str, company_name: str) -> bool:
     """True om frågan riskerar att probe-motorn tolkar tilltalet som sig själv:
     andrapersons-pronomen finns MEN bolaget namnges inte. Namnges bolaget → ofarligt."""

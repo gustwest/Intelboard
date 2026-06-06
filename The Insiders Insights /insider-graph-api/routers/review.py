@@ -46,6 +46,11 @@ def list_risk_findings(client_id: str) -> dict[str, Any]:
                 "severity": data.get("severity"),
                 "sourcing": data.get("sourcing"),
                 "engine_excerpt": data.get("engine_excerpt"),
+                # P6: hur konsekvent skadan uppträder över sampling-körningarna (k/N).
+                # 5/5 = robust skada; 1/5 = intermittent (fortfarande verklig — en
+                # användare kan träffa just det draget — men lägre prioritet).
+                "detection_rate": data.get("detection_rate"),
+                "n_runs": data.get("n_runs"),
                 "detected_at": _iso(data.get("detected_at")),
             }
         )
@@ -74,6 +79,8 @@ def list_risk_timeline(client_id: str) -> dict[str, Any]:
                 "harm": data.get("harm"),
                 "severity": data.get("severity"),
                 "engine_excerpt": data.get("engine_excerpt"),
+                "detection_rate": data.get("detection_rate"),  # P6: k/N konsistens
+                "n_runs": data.get("n_runs"),
                 "status": data.get("status") or "open",
                 "detected_at": _iso(data.get("detected_at")),
                 "action_at": _iso(data.get("action_at")),

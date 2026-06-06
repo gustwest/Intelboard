@@ -13,8 +13,15 @@ from __future__ import annotations
 import html
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Any
+
+# P1: minsta beslutssäkerhets-delta som renderas som ▲/▼ — under detta visas "oförändrad"
+# (brusband). Default 1 = oförändrat beteende; höj i ops när poängens run-to-run-varians
+# är uppmätt (noise-floor-experimentet). Till skillnad från SoV (binomialt SE, P0) saknar
+# beslutssäkerhets-poängen ännu en mätt varians, så detta är en konfigurerbar tröskel.
+MONTHLY_TREND_MIN_DELTA = int(os.environ.get("MONTHLY_TREND_MIN_DELTA", "1"))
 
 from google.cloud import firestore
 
@@ -453,8 +460,9 @@ def render_report_html(report: dict[str, Any]) -> str:
     if trend.get("previous_month"):
         d = trend.get("delta")
         arrow = "→ oförändrad"
-        if d is not None:
-            arrow = f"▲ +{d} (förbättrad)" if d > 0 else (f"▼ {d} (försämrad)" if d < 0 else "→ oförändrad")
+        # P1: rendera pil bara när deltan når brusbandet (annars läses brus som rörelse).
+        if d is not None and abs(d) >= MONTHLY_TREND_MIN_DELTA:
+            arrow = f"▲ +{d} (förbättrad)" if d > 0 else f"▼ {d} (försämrad)"
         series_txt = " → ".join(
             f"{html.escape(s['month'])}: {_fmt_int(s.get('score'))}" for s in (trend.get("series") or [])
         )

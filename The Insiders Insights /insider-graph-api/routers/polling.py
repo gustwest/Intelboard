@@ -15,6 +15,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 import firestore_client as fs
 from services import llm as llm_factory
+from services.polling import sov_change_significance
 
 router = APIRouter(prefix="/api/polling", tags=["polling"])
 
@@ -146,6 +147,7 @@ def list_results(client_id: str, limit: int = 12) -> dict[str, Any]:
                 "sov_se": data.get("sov_se"),
                 "sov_ci95": data.get("sov_ci95"),
                 "runs_per_query": data.get("runs_per_query"),
+                "sov_by_source": data.get("sov_by_source"),
                 "sentiment_score": data.get("sentiment_score"),
                 "parity_index": data.get("parity_index"),
                 "category_results": data.get("category_results"),
@@ -157,6 +159,18 @@ def list_results(client_id: str, limit: int = 12) -> dict[str, Any]:
             }
         )
     weeks.sort(key=lambda w: w["week_id"], reverse=True)
+    # P1: avgör om varje veckas SoV-förändring är statistiskt åtskild från run-to-run-brus
+    # (difference-of-proportions mot föregående vecka, via P0:s standardfel). UI:t ska
+    # grå-tona ▲/▼ när sov_trend.significant är False — annars läses brus som rörelse.
+    for i, w in enumerate(weeks):
+        prev = weeks[i + 1] if i + 1 < len(weeks) else None
+        w["sov_trend"] = (
+            sov_change_significance(
+                w.get("share_of_voice"), w.get("sov_se"),
+                prev.get("share_of_voice"), prev.get("sov_se"),
+            )
+            if prev else {"delta": None, "significant": False, "z": None}
+        )
     return {"client_id": client_id, "weeks": weeks[:limit]}
 
 

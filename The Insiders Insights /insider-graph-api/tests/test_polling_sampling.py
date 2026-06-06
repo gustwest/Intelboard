@@ -87,5 +87,49 @@ class AggregateSamplingTest(unittest.TestCase):
         self.assertEqual(comp[0]["share"], 1.0)  # 1 par, Beta i det → 1/1, ej 1/5
 
 
+class SourceSplitTest(unittest.TestCase):
+    """P2: SoV separeras per knowledge_source (training vs web_rag), aldrig poolat till ETT tal."""
+
+    def _ans(self, model, run_idx, mentioned):
+        return QuestionAnswer(category="affar", question="Q?", model=model,
+                              answer="x" if run_idx == 0 else "", mentioned=mentioned, run_idx=run_idx)
+
+    def test_training_and_web_rag_kept_separate(self):
+        answers = [
+            self._ans("gpt-4o", 0, True), self._ans("gpt-4o", 1, False),   # training: 1/2
+            self._ans("sonar", 0, True), self._ans("sonar", 1, True),       # web_rag: 2/2
+        ]
+        res = polling._aggregate("acme", "Acme", answers, {}, runs=2)
+        self.assertAlmostEqual(res.sov_by_source["training"]["share_of_voice"], 0.5)
+        self.assertAlmostEqual(res.sov_by_source["web_rag"]["share_of_voice"], 1.0)
+        self.assertEqual(res.sov_by_source["web_rag"]["engines"], ["sonar"])
+        # Det poolade talet finns kvar för trend-kontinuitet (3/4), men ska inte vara headline.
+        self.assertAlmostEqual(res.share_of_voice, 0.75)
+
+
+class TrendSignificanceTest(unittest.TestCase):
+    """P1: SoV-förändring grindas mot run-to-run-brus (difference-of-proportions)."""
+
+    def test_large_delta_is_significant(self):
+        r = polling.sov_change_significance(0.8, 0.05, 0.2, 0.05)
+        self.assertTrue(r["significant"])
+        self.assertAlmostEqual(r["delta"], 0.6)
+
+    def test_small_delta_within_noise_is_not(self):
+        r = polling.sov_change_significance(0.52, 0.2, 0.48, 0.2)
+        self.assertFalse(r["significant"])
+
+    def test_missing_previous_week(self):
+        r = polling.sov_change_significance(0.5, 0.1, None, None)
+        self.assertFalse(r["significant"])
+        self.assertIsNone(r["delta"])
+
+    def test_pre_p0_history_without_se_is_not_significant(self):
+        # Historik utan uppmätt SE → kan inte skiljas från brus, ingen falsk pil.
+        r = polling.sov_change_significance(0.9, 0.0, 0.1, 0.0)
+        self.assertFalse(r["significant"])
+        self.assertIsNone(r["z"])
+
+
 if __name__ == "__main__":
     unittest.main()

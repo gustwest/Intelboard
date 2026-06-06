@@ -30,6 +30,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 import firestore_client as fs
 from config import settings
 from services import llm as llm_factory
+from services import model_registry
 from services import probe_guard
 
 # Konkurrent-extraktion via judge-LLM (gemini). Kan stängas av om gRPC-klienten hänger
@@ -62,6 +63,28 @@ def _runs_per_query() -> int:
     except ValueError:
         return 7
     return max(1, min(7, n))
+
+
+def sov_change_significance(
+    curr_sov: float | None, curr_se: float | None,
+    prev_sov: float | None, prev_se: float | None,
+    z_crit: float = 1.96,
+) -> dict[str, Any]:
+    """Är veckans SoV-förändring verklig signal eller run-to-run-brus? (P1 — brusband.)
+
+    Skillnad mellan två andelar: SE_diff = sqrt(se_curr² + se_prev²), z = Δ/SE_diff.
+    `significant` är True bara om |z| ≥ z_crit (default 1.96 ≈ 95 %). Cockpiten ska
+    grå-tona ▲/▼ när detta är False — annars tolkas brus som rörelse (forskningen:
+    enpunktsdeltan är meningslösa utan brusband). Saknas data → significant=False."""
+    if curr_sov is None or prev_sov is None:
+        return {"delta": None, "significant": False, "z": None}
+    delta = curr_sov - prev_sov
+    se_diff = ((curr_se or 0.0) ** 2 + (prev_se or 0.0) ** 2) ** 0.5
+    if se_diff <= 0:
+        # Ingen uppmätt varians (t.ex. historik före P0) → kan inte skilja från brus.
+        return {"delta": round(delta, 4), "significant": False, "z": None}
+    z = delta / se_diff
+    return {"delta": round(delta, 4), "significant": abs(z) >= z_crit, "z": round(z, 2)}
 
 
 def _proportion_se(successes: int, n: int) -> float:
@@ -165,6 +188,10 @@ class PollingResult:
     sov_se: float = 0.0
     sov_ci95: float = 0.0
     runs_per_query: int = 1
+    # P2 — SoV uppdelat per knowledge_source (training = "AI Base Knowledge",
+    # web_rag = "AI Live Signal"). De mäter olika fördelningar och får aldrig
+    # medeltalas; det poolade share_of_voice ovan behålls bara för trend-kontinuitet.
+    sov_by_source: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 def run_for_client(client_id: str) -> PollingResult | None:
@@ -362,23 +389,19 @@ def _ask(question: str, llm: Any) -> str:
 
 
 def _has_mention(answer: str, company_name: str, employee_names: list[str]) -> bool:
+    # P8: ordgräns-matchning (probe_guard.text_mentions) i stället för rå delsträng —
+    # bolaget matchas på distinktivt token (split_tokens), personer på helt namn.
     if not answer:
         return False
-    haystack = answer.lower()
-    if company_name.lower() in haystack:
+    if probe_guard.text_mentions(answer, company_name, split_tokens=True):
         return True
-    return any(name.lower() in haystack for name in employee_names if name)
+    return any(probe_guard.text_mentions(answer, name) for name in employee_names if name)
 
 
 def _extract_persons(answer: str, employee_names: list[str]) -> list[str]:
     if not answer:
         return []
-    found = []
-    haystack = answer.lower()
-    for name in employee_names:
-        if name and name.lower() in haystack:
-            found.append(name)
-    return found
+    return [name for name in employee_names if name and probe_guard.text_mentions(answer, name)]
 
 
 def _safe_judge_sentiment(llm: Any, answer: str, company_name: str) -> float | None:
@@ -479,6 +502,23 @@ def _aggregate(
     sov_se = _proportion_se(len(with_mention), total)      # P0: brusband på SoV
     sov_ci95 = round(1.96 * sov_se, 4)
 
+    # P2: separera "AI Base Knowledge" (training) från "AI Live Signal" (web_rag).
+    # Ett poolat SoV blandar parametriskt minne med live-webb-RAG — olika fördelningar
+    # som inte ska medeltalas, och som dessutom skiftar om en motors tillgänglighet ändras.
+    by_source: dict[str, list[QuestionAnswer]] = {}
+    for a in answers:
+        by_source.setdefault(model_registry.knowledge_source_for(a.model), []).append(a)
+    sov_by_source: dict[str, dict[str, Any]] = {}
+    for src, src_answers in by_source.items():
+        n = len(src_answers)
+        m = sum(1 for a in src_answers if a.mentioned)
+        sov_by_source[src] = {
+            "share_of_voice": (m / n) if n else 0.0,
+            "se": round(_proportion_se(m, n), 4),
+            "n_runs": n,
+            "engines": sorted({a.model for a in src_answers}),
+        }
+
     # Representativa svar (run_idx 0) — ett per (fråga × motor). Sentiment, paritet och
     # konkurrent-NER körs bara på dessa (P0: dyra anrop multipliceras inte), så deras
     # nämnare är stabila och identiska med det gamla n=1-beteendet.
@@ -559,6 +599,7 @@ def _aggregate(
         sov_se=round(sov_se, 4),
         sov_ci95=sov_ci95,
         runs_per_query=max(1, runs),
+        sov_by_source=sov_by_source,
     )
 
 
@@ -596,6 +637,7 @@ def _write(result: PollingResult) -> None:
             "sov_se": result.sov_se,
             "sov_ci95": result.sov_ci95,
             "runs_per_query": result.runs_per_query,
+            "sov_by_source": result.sov_by_source,  # P2: training vs web_rag, aldrig poolat
             "run_at": firestore.SERVER_TIMESTAMP,
         }
     )
