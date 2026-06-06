@@ -58,6 +58,24 @@ RISK_GENERATE_TIMEOUT_SEC = float(os.environ.get("RISK_GENERATE_TIMEOUT_SEC", "6
 T = TypeVar("T")
 
 
+def _runs_per_query() -> int:
+    """Antal gånger varje (fråga × motor) ställs per körning (P0 — upprepad sampling).
+
+    En motor som hallucinerar en skada gör det ofta bara i en del av körningarna
+    (icke-determinism även vid temp=0). Med n=1 är ett fynd ett enda slumpdrag; med
+    N körningar får varje fynd en `detection_rate` = k/N som säger HUR konsekvent
+    skadan uppträder — och en risk räknas som ren bara om 0/N körningar flaggar
+    (skydd mot flimmer, bryggar P6 resolved-logiken).
+
+    Default 3 (risk-screening letar främst efter OM en skada finns, inte exakt rate —
+    billigare än pollingens 7×). Env RISK_RUNS_PER_QUERY=1 → gammalt n=1. Clampas [1, 7]."""
+    try:
+        n = int(os.getenv("RISK_RUNS_PER_QUERY", "3"))
+    except ValueError:
+        return 3
+    return max(1, min(7, n))
+
+
 def _call_with_timeout(fn: Callable[[], T], timeout: float, default: T, what: str) -> T:
     """Daemon-tråd + join(timeout). Vi väntar max `timeout` på fn() och returnerar default
     om den hänger. Tråden fortsätter köra i bakgrunden tills den dör naturligt eller
@@ -173,6 +191,8 @@ class RiskFinding:
     uncertain: bool = False        # klassaren var osäker → kandidat för följdfråga (§B)
     via_follow_up: bool = False    # utfallet kom/skärptes via en följdfråga
     follow_up_question: str = ""    # följdfrågans text (för rapport/revision)
+    detection_rate: float = 1.0    # P0: andel direkta körningar (k/N) där skadan uppträdde
+    n_runs: int = 1                # P0: antal lyckade sampling-körningar bakom fyndet
 
 
 @dataclass
@@ -246,32 +266,66 @@ def run_for_client(client_id: str) -> RiskRunResult | None:
         log.info("risk loop %s: inga godkända frågor — generera + granska först", client_id)
         return RiskRunResult(client_id, 0, [])
 
+    runs = _runs_per_query()
     findings: list[RiskFinding] = []
     answers_by_persona: dict[str, int] = {p: 0 for p in ALL_PERSONAS}
     for q in questions:
         for engine_name, engine in engines.items():
-            answer = _safe_ask(q.text, engine, engine_name)
-            if not answer:
-                continue
-            cls = _safe_classify(validator, q, answer, context)
-            if cls is None:
+            cls, src_answer, harm_count, answered = _probe_question_engine(
+                validator, engine, engine_name, q, context, runs,
+            )
+            if answered == 0:
                 continue
             answers_by_persona[q.persona] = answers_by_persona.get(q.persona, 0) + 1
-            if _should_follow_up(cls):  # §B — bunden följdfråga vid gränsfall
-                cls = _safe_follow_up(validator, engine, q, answer, cls, context, engine_name) or cls
-            if cls.harm == "ok":
-                # §8.4 — motorn svarar nu säkert: bygg ren-streak, lös efter N cykler.
+            if cls is not None and _should_follow_up(cls):  # §B — bunden följdfråga vid gränsfall
+                cls = _safe_follow_up(validator, engine, q, src_answer, cls, context, engine_name) or cls
+            if cls is None or cls.harm == "ok":
+                # §8.4 — motorn svarar nu säkert i ALLA körningar: bygg ren-streak.
                 _mark_clean(client_id, q.persona, q.text, engine_name)
                 continue
             cls.persona, cls.track, cls.question, cls.engine = (
                 q.persona, q.track, q.text, engine_name,
             )
+            # P0: hur konsekvent skadan uppträdde över de direkta körningarna (k/N).
+            cls.detection_rate = round(harm_count / answered, 3)
+            cls.n_runs = answered
             _persist(client_id, cls)
             findings.append(cls)
 
     _persist_run_summary(client_id, answers_by_persona, len(findings))
-    log.info("risk loop %s: %d frågor → %d findings", client_id, len(questions), len(findings))
+    log.info(
+        "risk loop %s: %d frågor × %d motorer × %d körningar → %d findings",
+        client_id, len(questions), len(engines), runs, len(findings),
+    )
     return RiskRunResult(client_id, len(questions), findings)
+
+
+def _probe_question_engine(
+    validator: Any, engine: Any, engine_name: str, q: "Question", context: "Context", runs: int,
+) -> tuple["RiskFinding | None", str, int, int]:
+    """Ställ EN fråga till EN motor `runs` gånger, klassa varje svar, och returnera
+    (allvarligaste utfallet, dess källsvar, antal körningar som flaggade skada, antal
+    lyckade körningar). P0: en skada som syns 1/5 är en svagare signal än 5/5, och en
+    risk räknas som ren bara om 0/runs körningar flaggar — vilket dämpar flimret som
+    n=1 + temp=0-icke-determinism annars skapar."""
+    harm_count = 0
+    answered = 0
+    best: RiskFinding | None = None
+    best_answer = ""
+    for _ in range(max(1, runs)):
+        answer = _safe_ask(q.text, engine, engine_name)
+        if not answer:
+            continue
+        cls = _safe_classify(validator, q, answer, context)
+        if cls is None:
+            continue
+        answered += 1
+        if cls.harm != "ok":
+            harm_count += 1
+        # Behåll det allvarligaste utfallet som representant (skada slår ok; högre severity vinner).
+        if best is None or _more_severe(best, cls) is cls:
+            best, best_answer = cls, answer
+    return best, best_answer, harm_count, answered
 
 
 def _persist_run_summary(client_id: str, answers_by_persona: dict[str, int], findings_count: int) -> None:
@@ -653,6 +707,8 @@ def _persist(client_id: str, f: RiskFinding) -> None:
         "engine_excerpt": f.engine_excerpt,
         "via_follow_up": f.via_follow_up,
         "follow_up_question": f.follow_up_question,
+        "detection_rate": f.detection_rate,  # P0: k/N — hur konsekvent skadan uppträder
+        "n_runs": f.n_runs,
         "detected_at": firestore.SERVER_TIMESTAMP,
         "clean_streak": 0,  # risken syns igen → nollställ ren-streak
     }

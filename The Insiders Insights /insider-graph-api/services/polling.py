@@ -45,6 +45,37 @@ POLLING_ORG_TIMEOUT_SEC = float(os.environ.get("POLLING_ORG_TIMEOUT_SEC", "20"))
 T = TypeVar("T")
 
 
+def _runs_per_query() -> int:
+    """Antal gånger varje (fråga × motor) ställs per körning (P0 — upprepad sampling).
+
+    En enskild körning är ETT slumpdrag ur motorns svarsfördelning (motorn är
+    icke-deterministisk även vid temp=0). Share of Voice blir därför en
+    mention-RATE över N körningar med ett standardfel, i stället för en brusig
+    on/off-mätning. Bara de billiga ask-anropen multipliceras — sentiment och
+    org-extraktion körs 1× per (fråga × motor) på ett representativt svar
+    (run_idx 0), så cost-taket respekteras (jfr warmth_probes._probe_runs_per_query).
+
+    Default 7 (SE<0.10 på per-motor detektionsrate, docs/api-vs-ui-research).
+    Env POLLING_RUNS_PER_QUERY=1 → gammalt n=1-beteende. Clampas till [1, 7]."""
+    try:
+        n = int(os.getenv("POLLING_RUNS_PER_QUERY", "7"))
+    except ValueError:
+        return 7
+    return max(1, min(7, n))
+
+
+def _proportion_se(successes: int, n: int) -> float:
+    """Binomialt standardfel för en andel (mention-rate). 0.0 om n=0.
+
+    SE = sqrt(p(1-p)/n) — den pragmatiska brusuppskattningen för en detektionsrate
+    samplad över n oberoende körningar. CI95 ≈ 1.96·SE. Ej en formell hypotesprövning
+    mot UI, men ger trenden i cockpiten ett brusband (P1 grindar pilar mot detta)."""
+    if n <= 0:
+        return 0.0
+    p = successes / n
+    return (p * (1.0 - p) / n) ** 0.5
+
+
 def _call_with_timeout(fn: Callable[[], T], timeout: float, default: T, what: str) -> T:
     """Daemon-tråd + join(timeout): vi väntar max `timeout` på fn() och returnerar default
     om den hänger. Tråden fortsätter köra i bakgrunden tills den dör naturligt eller
@@ -114,6 +145,7 @@ class QuestionAnswer:
     sentiment: float | None = None
     persons_mentioned: list[str] = field(default_factory=list)
     orgs_mentioned: list[str] = field(default_factory=list)
+    run_idx: int = 0   # P0: vilken sampling-körning (0 = representativ; sentiment/org körs bara på den)
 
 
 @dataclass
@@ -129,6 +161,10 @@ class PollingResult:
     total_answers: int
     answers_with_mention: int
     raw_responses: list[dict[str, Any]]
+    # P0 — sampling-osäkerhet på Share of Voice (binomialt SE + CI95 över alla körningar).
+    sov_se: float = 0.0
+    sov_ci95: float = 0.0
+    runs_per_query: int = 1
 
 
 def run_for_client(client_id: str) -> PollingResult | None:
@@ -153,14 +189,21 @@ def run_for_client(client_id: str) -> PollingResult | None:
     employee_names = [emp.get("name", "") for _, emp in employees if emp.get("name")]
     employee_gender = {emp.get("name", ""): emp.get("gender") for _, emp in employees}
 
-    answers = _collect_answers(questions, models)
+    runs = _runs_per_query()
+    answers = _collect_answers(questions, models, runs)
 
     for ans in answers:
         ans.mentioned = _has_mention(ans.answer, company_name, employee_names)
         ans.persons_mentioned = _extract_persons(ans.answer, employee_names)
 
+    # Dyra anrop (sentiment + org-NER) körs 1× per (fråga × motor) på det
+    # representativa svaret (run_idx 0) — P0 multiplicerar bara de billiga ask-anropen.
+    # Mention-detektering (gratis substring) körs däremot på ALLA körningar ovan, så att
+    # Share of Voice blir en samplad rate med standardfel.
     judge = next(iter(models.values()))
     for ans in answers:
+        if ans.run_idx != 0:
+            continue
         if ans.mentioned:
             ans.sentiment = _safe_judge_sentiment(judge, ans.answer, company_name)
         # Konkurrent-kontext: vilka andra org nämns? Alla svar, inte bara där vi nämns
@@ -173,7 +216,7 @@ def run_for_client(client_id: str) -> PollingResult | None:
                 what="extract_orgs",
             )
 
-    result = _aggregate(client_id, company_name, answers, employee_gender)
+    result = _aggregate(client_id, company_name, answers, employee_gender, runs)
     _write(result)
     return result
 
@@ -251,14 +294,20 @@ def _build_models() -> dict[str, Any]:
 def _collect_answers(
     questions: list[tuple[str, str]],
     models: dict[str, Any],
+    runs: int = 1,
 ) -> list[QuestionAnswer]:
     """Parallell ask-fas med per-anrop-timeout. Worker-tråden anropar _safe_ask som
     daemon-skyddar den faktiska LLM-anropet — om gpt-4o/gemini hänger kommer worker
-    att returnera "" efter POLLING_ASK_TIMEOUT_SEC istället för att blockera hela jobbet."""
+    att returnera "" efter POLLING_ASK_TIMEOUT_SEC istället för att blockera hela jobbet.
+
+    P0: varje (fråga × motor) ställs `runs` gånger; varje körning är ett eget task
+    (run_idx) så ThreadPool-parallelismen utnyttjas fullt. Mention-rate beräknas sedan
+    över alla körningar (samplad Share of Voice med standardfel)."""
     tasks = []
     for category, question in questions:
         for model_name, llm in models.items():
-            tasks.append((category, question, model_name, llm))
+            for run_idx in range(max(1, runs)):
+                tasks.append((category, question, model_name, llm, run_idx))
 
     results: list[QuestionAnswer] = []
     # Snappa huvudtrådens context EN gång per task (token_meter+cost_budget bunden
@@ -268,19 +317,22 @@ def _collect_answers(
     # objekt inte kan .run():as parallellt från flera trådar.
     with ThreadPoolExecutor(max_workers=min(8, len(tasks))) as pool:
         futures = {}
-        for category, q, model_name, llm in tasks:
+        for category, q, model_name, llm, run_idx in tasks:
             task_ctx = contextvars.copy_context()
             fut = pool.submit(task_ctx.run, _safe_ask, q, llm, model_name)
-            futures[fut] = (category, q, model_name)
+            futures[fut] = (category, q, model_name, run_idx)
         for fut in as_completed(futures):
-            category, question, model_name = futures[fut]
+            category, question, model_name, run_idx = futures[fut]
             try:
                 answer = fut.result()
             except Exception as exc:
                 log.warning("model %s failed on %r: %s", model_name, question, exc)
                 answer = ""
             results.append(
-                QuestionAnswer(category=category, question=question, model=model_name, answer=answer)
+                QuestionAnswer(
+                    category=category, question=question, model=model_name,
+                    answer=answer, run_idx=run_idx,
+                )
             )
     return results
 
@@ -418,60 +470,76 @@ def _aggregate(
     company_name: str,
     answers: list[QuestionAnswer],
     employee_gender: dict[str, str | None],
+    runs: int = 1,
 ) -> PollingResult:
-    total = len(answers)
+    total = len(answers)                                   # alla sampling-körningar
     with_mention = [a for a in answers if a.mentioned]
 
     sov = (len(with_mention) / total) if total else 0.0
-    sentiments = [a.sentiment for a in with_mention if a.sentiment is not None]
+    sov_se = _proportion_se(len(with_mention), total)      # P0: brusband på SoV
+    sov_ci95 = round(1.96 * sov_se, 4)
+
+    # Representativa svar (run_idx 0) — ett per (fråga × motor). Sentiment, paritet och
+    # konkurrent-NER körs bara på dessa (P0: dyra anrop multipliceras inte), så deras
+    # nämnare är stabila och identiska med det gamla n=1-beteendet.
+    reps = [a for a in answers if a.run_idx == 0]
+
+    sentiments = [a.sentiment for a in reps if a.mentioned and a.sentiment is not None]
     avg_sentiment = (sum(sentiments) / len(sentiments)) if sentiments else None
 
-    all_persons = [name for a in answers for name in a.persons_mentioned]
+    all_persons = [name for a in reps for name in a.persons_mentioned]
     parity = _calculate_parity(all_persons, employee_gender)
 
     category_results: dict[str, dict[str, float]] = {}
     category_competitors: dict[str, list[dict[str, Any]]] = {}
     for cat in {a.category for a in answers}:
-        cat_answers = [a for a in answers if a.category == cat]
+        cat_answers = [a for a in answers if a.category == cat]      # alla körningar
         cat_with = [a for a in cat_answers if a.mentioned]
         cat_sov = (len(cat_with) / len(cat_answers)) if cat_answers else 0.0
-        cat_sents = [a.sentiment for a in cat_with if a.sentiment is not None]
+        cat_reps = [a for a in cat_answers if a.run_idx == 0]        # representativa
+        cat_sents = [a.sentiment for a in cat_reps if a.mentioned and a.sentiment is not None]
         cat_sent = (sum(cat_sents) / len(cat_sents)) if cat_sents else None
         category_results[cat] = {
             "share_of_voice": cat_sov,
             "sentiment_score": cat_sent if cat_sent is not None else 0.0,
             "answer_count": float(len(cat_answers)),
             "mention_count": float(len(cat_with)),
+            "se": round(_proportion_se(len(cat_with), len(cat_answers)), 4),
         }
-        # Konkurrent-aggregat per kategori: vilka andra org nämns mest? Top 5 + share
-        # av kategorins svar. Tom lista om ingen extraktion gav träffar — t.ex. vid
-        # kort/tomt LLM-svar.
+        # Konkurrent-aggregat per kategori: vilka andra org nämns mest? Top 5 + share.
+        # Räknas över de representativa svaren (org-NER körs bara på run_idx 0), så share-
+        # nämnaren är antalet (fråga × motor)-par i kategorin, inte alla körningar.
         counts: dict[str, int] = {}
-        for a in cat_answers:
+        for a in cat_reps:
             for org in a.orgs_mentioned:
                 key = org.strip()
                 if key:
                     counts[key] = counts.get(key, 0) + 1
         ordered = sorted(counts.items(), key=lambda x: (-x[1], x[0]))[:5]
+        denom = len(cat_reps)
         category_competitors[cat] = [
             {
                 "name": name,
                 "mentions": n,
-                "share": (n / len(cat_answers)) if cat_answers else 0.0,
+                "share": (n / denom) if denom else 0.0,
             }
             for name, n in ordered
         ]
 
+    # raw_responses behåller ALLA körningar (så routerns per-motor-SoV också blir samplad),
+    # men den stora svarstexten + sentiment/orgs bärs bara av run_idx 0 — övriga körningar
+    # lagras kompakt (bara mention-flaggan) för att hålla Firestore-dokumentet under 1 MB.
     raw_responses = [
         {
             "category": a.category,
             "question": a.question,
             "model": a.model,
-            "answer": a.answer,
+            "answer": a.answer if a.run_idx == 0 else "",
             "mentioned": a.mentioned,
-            "sentiment": a.sentiment,
-            "persons_mentioned": a.persons_mentioned,
-            "orgs_mentioned": a.orgs_mentioned,
+            "sentiment": a.sentiment if a.run_idx == 0 else None,
+            "persons_mentioned": a.persons_mentioned if a.run_idx == 0 else [],
+            "orgs_mentioned": a.orgs_mentioned if a.run_idx == 0 else [],
+            "run_idx": a.run_idx,
         }
         for a in answers
     ]
@@ -488,6 +556,9 @@ def _aggregate(
         total_answers=total,
         answers_with_mention=len(with_mention),
         raw_responses=raw_responses,
+        sov_se=round(sov_se, 4),
+        sov_ci95=sov_ci95,
+        runs_per_query=max(1, runs),
     )
 
 
@@ -521,6 +592,10 @@ def _write(result: PollingResult) -> None:
             "total_answers": result.total_answers,
             "answers_with_mention": result.answers_with_mention,
             "raw_responses": result.raw_responses,
+            # P0 — sampling-osäkerhet (grindar trendpilar i P1)
+            "sov_se": result.sov_se,
+            "sov_ci95": result.sov_ci95,
+            "runs_per_query": result.runs_per_query,
             "run_at": firestore.SERVER_TIMESTAMP,
         }
     )

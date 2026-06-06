@@ -143,6 +143,9 @@ def list_results(client_id: str, limit: int = 12) -> dict[str, Any]:
             {
                 "week_id": snap.id,
                 "share_of_voice": data.get("share_of_voice"),
+                "sov_se": data.get("sov_se"),
+                "sov_ci95": data.get("sov_ci95"),
+                "runs_per_query": data.get("runs_per_query"),
                 "sentiment_score": data.get("sentiment_score"),
                 "parity_index": data.get("parity_index"),
                 "category_results": data.get("category_results"),
