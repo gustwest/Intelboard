@@ -164,7 +164,8 @@ Princip: felnotiser internt (ops); kundyta = friktionsfri engångsöverlämning 
 ### C1 — Deep research (KLAR 2026-06-05)
 Se Evidensbas. Slutsats: sv+en motiverat av engine-query-språkprincipen (motorspecifik); ingen studie mätte svenska/ChatGPT/Claude → C2 avgör.
 
-### C2 — Empiriskt polling-experiment sv vs en (**M**, avgörande)
+### C2 — Empiriskt polling-experiment sv vs en (**M**, avgörande) — 🟡 HARNESS KLAR (körning återstår)
+> Gjort (commit dc45d3bbd): `services/lang_probe.py` kör samma frågor sv+en mot probe-motorerna med språkmatchade system-prompter, mäter omnämnandegrad per motor×språk + vinnande språk. Rena delar testade. Körs `python -m services.lang_probe --client-id <id>`. **Kvar:** faktisk körning kräver probe-motor-nycklar (finns på Cloud Run-jobben, ej lokalt) → registrera som jobb eller kör med nycklar; resultatet matar C3.
 **Mål:** mät vår faktiska kontext med befintlig polling-loop.
 **Ändringar:** kör samma probe-batteri på svenska vs engelska per motor × persona för ≥1 pilotkund; jämför citerbarhet/uppfattning. Undersök öppna frågan om persona-skillnad (investerare/talang ev. mer engelska än kund i Norden). Återanvänd `services/polling.py` + `polling_questions`-konfig per kund (`clients.py` POLLING_CATEGORIES).
 **Acceptans:** jämförande mätning sv vs en per persona/motor finns; matar C3.
@@ -201,3 +202,15 @@ Kombinera C1 + C2 → sätt `language` per kund/marknad (P0.2) och avgör om eng
 **Håll A1 (språk-refaktorn) tills efter A2–A5** — annars refaktorerar vi strängar som A2–A5 ändå skriver om, och språkbeslutet (C3) är inte fattat än. Svenska kunder är opåverkade under tiden.
 
 Nästa konkreta leverabel: en PR som (a) lägger `contact_email`+`language` på kund-doc:et och (b) renderar källa/citat/siffra inline vid varje faktapåstående på profilsidan, med snapshot-test.
+
+---
+
+## P1 — clean-URL-cutover (status 2026-06-06)
+
+**Kod KLAR:** `schema_org/urls.py` hanterar båda lägena via `CDN_CLEAN_URLS`; `tests/test_urls.py` passerar båda. `bootstrap.sh` §3b provisionerar LB/IP/cert/URL-map (gated på `PROFILE_DOMAIN`). Flippen (steg 4) = sätt `CDN_BASE_URL` + `CDN_CLEAN_URLS=true` permanent i `cloudbuild.yaml`, sedan recompile.
+
+**BLOCKERAD på DNS/domän:** `geogiraph.com` finns INTE i projektets Cloud DNS (bara `intelboard.com` är managed här), och ingen LB/cert är provisionerad. Google-managed-certet provisioneras först när DNS pekar på LB-IP:t → att skapa LB:n nu vore en fastlåst, betald resurs. Kräver beslut:
+1. **Vilken domän** är sanningskällan? (`profiles.geogiraph.com` enligt koden — men den domänen kontrolleras inte här; `intelboard.com` gör det.)
+2. **DNS-åtkomst** för att skapa A-record → LB-IP.
+
+Sekvens när domän/DNS är klart: `PROFILE_DOMAIN=<dom> ./bootstrap.sh` (skapar LB+IP) → A-record → vänta cert ACTIVE → flippa env i cloudbuild → `compile-all-schemas` → städa gamla `clients/`-objekt.
