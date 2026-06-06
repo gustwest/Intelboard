@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Users, Trash2, AlertCircle, ExternalLink, Check, Clock } from 'lucide-react';
+import { Users, Trash2, AlertCircle, ExternalLink, Check, Clock, ShieldCheck } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../../_components/GraphPageShell';
 import AttestedUpload from '../../_components/AttestedUpload';
 import JobFeedsEditor from '../../_components/JobFeedsEditor';
@@ -226,6 +226,23 @@ export default function ClientDetailPage() {
 
           {/* Verifierings-cockpit — manuell "Manually verified by Geogiraph" (ops, §7) */}
           <VerificationCockpit clientId={clientId} />
+
+          {/* Bevisarkiv — granskningsbar provenans för denna kunds verifierade claims (D3) */}
+          <UI.Card
+            padding="18px 20px"
+            style={{ marginBottom: 16 }}
+            title="Bevisarkiv"
+            hint="Tidsstämplad, granskningsbar provenans för varje verifierat påstående om kunden — med källcitat och de fyra kontrollerna. Revisor-/överlämningsbeviset."
+            action={
+              <a
+                href={`/insider-graph/bevisarkiv?client=${clientId}`}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: C.accent, fontSize: 13, fontWeight: 600, textDecoration: 'none' }}
+              >
+                <ShieldCheck size={14} /> Öppna bevisarkiv
+              </a>
+            }
+          />
+
 
           {/* Platsannons-feeds (ATS-XML) — per kund */}
           <JobFeedsEditor clientId={clientId} />

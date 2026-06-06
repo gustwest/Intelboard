@@ -163,7 +163,13 @@ export default function ProofReceiptPage() {
             <UI.StatTile icon={<Search size={13} />} label="Upptäckt" value={data.detected.count} sub="risker denna månad" tone={data.detected.count ? 'attention' : undefined} />
             <UI.StatTile icon={<Wrench size={13} />} label="Rekommenderat" value={data.recommended.count} sub="åtgärder" />
             <UI.StatTile icon={<CheckCircle2 size={13} />} label="Stängt" value={data.resolved.count} sub="rena svar N cykler" tone={data.resolved.count ? 'ok' : undefined} />
-            <UI.StatTile icon={<Archive size={13} />} label="Arkivet växte" value={`+${data.archive_growth.new_this_month}`} sub={`${data.archive_growth.total} totalt`} />
+            <a
+              href={selected ? `/insider-graph/bevisarkiv?client=${selected}` : '#'}
+              style={{ textDecoration: 'none' }}
+              title="Öppna bevisarkivet"
+            >
+              <UI.StatTile icon={<Archive size={13} />} label="Arkivet växte" value={`+${data.archive_growth.new_this_month}`} sub={`${data.archive_growth.total} totalt →`} />
+            </a>
           </div>
 
           {/* Upptäckt */}
