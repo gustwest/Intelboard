@@ -21,6 +21,7 @@ import {
   DollarSign,
   Bell,
   Cpu,
+  ShieldCheck,
 } from 'lucide-react';
 import ProductSwitcher, { activeProductId } from './ProductSwitcher';
 import { graphFetch } from '@/app/insider-graph/_lib/api';
@@ -58,6 +59,7 @@ const GRAPH_GROUPS: NavGroup[] = [
     links: [
       { href: '/insider-graph/review', label: 'Granska', icon: Inbox, badge: 'review' },
       { href: '/insider-graph/leverans', label: 'Leverans', icon: Rocket },
+      { href: '/insider-graph/bevisarkiv', label: 'Bevisarkiv', icon: ShieldCheck },
     ],
   },
   {
