@@ -24,7 +24,9 @@ class QuestionPairsTest(unittest.TestCase):
 
 
 class AggregateTest(unittest.TestCase):
-    def test_rates_and_winner(self):
+    def test_rates_but_inconclusive_at_low_n(self):
+        # P7: 0.5 vs 1.0 på bara n=2 ryms i bruset → ingen vinnare utses (gammalt
+        # beteende plockade "en" på slumpen).
         rows = [
             {"engine": "gpt-4o", "lang": "sv", "question": "q1", "mentioned": True},
             {"engine": "gpt-4o", "lang": "sv", "question": "q2", "mentioned": False},
@@ -35,8 +37,20 @@ class AggregateTest(unittest.TestCase):
         eng = out["per_engine"]["gpt-4o"]
         self.assertEqual(eng["sv"]["rate"], 0.5)
         self.assertEqual(eng["en"]["rate"], 1.0)
-        self.assertEqual(eng["winner"], "en")
+        self.assertEqual(eng["winner"], "inconclusive")
+        self.assertFalse(eng["significant"])
         self.assertEqual(out["pairs"], 2)
+
+    def test_winner_when_difference_is_significant(self):
+        # Stor, ren separation (sv 0/20, en 20/20) → signifikant → "en" utses.
+        rows = (
+            [{"engine": "gpt-4o", "lang": "sv", "question": f"q{i}", "mentioned": False} for i in range(20)]
+            + [{"engine": "gpt-4o", "lang": "en", "question": f"q{i}", "mentioned": True} for i in range(20)]
+        )
+        out = lang_probe.aggregate(rows, "Acme AB")
+        eng = out["per_engine"]["gpt-4o"]
+        self.assertTrue(eng["significant"])
+        self.assertEqual(eng["winner"], "en")
 
 
 class RunExperimentTest(unittest.TestCase):

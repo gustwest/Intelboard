@@ -79,12 +79,31 @@ def _ask(question: str, llm: Any, lang: str) -> str:
     return (resp.content or "").strip() if hasattr(resp, "content") else str(resp).strip()
 
 
+def _two_proportion_sig(m_sv: int, n_sv: int, m_en: int, n_en: int, z_crit: float = 1.96) -> dict[str, Any]:
+    """Pooled 2-proportion z-test (P7): är sv-vs-en-skillnaden i omnämnandegrad större
+    än run-to-run-bruset? delta = p_sv − p_en; `significant` först när |z| ≥ z_crit
+    (≈95 %). Den poolade SE:n hanterar ren separation (0/N vs N/N) korrekt vid stort N."""
+    if not n_sv or not n_en:
+        return {"delta": None, "z": None, "significant": False}
+    p_sv, p_en = m_sv / n_sv, m_en / n_en
+    delta = round(p_sv - p_en, 3)
+    p_pool = (m_sv + m_en) / (n_sv + n_en)
+    se = (p_pool * (1 - p_pool) * (1 / n_sv + 1 / n_en)) ** 0.5
+    if se <= 0:  # p_pool är 0 eller 1 → ingen skillnad → ej signifikant
+        return {"delta": delta, "z": None, "significant": False}
+    z = (p_sv - p_en) / se
+    return {"delta": delta, "z": round(z, 2), "significant": abs(z) >= z_crit}
+
+
 def run_experiment(
     client_id: str, *, models: dict[str, Any] | None = None,
-    ask: Callable[[str, Any, str], str] = _ask,
+    ask: Callable[[str, Any, str], str] = _ask, runs: int = 5,
 ) -> dict[str, Any]:
     """Kör sv- och en-frågor mot varje probe-motor och mät omnämnandegrad.
-    `models`/`ask` injicerbara för test (inga nätverksanrop)."""
+
+    P7: varje (fråga × språk × motor) ställs `runs` gånger så omnämnandegraden bygger
+    på tillräckligt många dragningar för att ett sv/en-utslag ska kunna skiljas från
+    bruset (gammalt n=1 utsåg vinnare på rena slumpen). `models`/`ask` injicerbara för test."""
     data = fs.client_doc(client_id).get().to_dict() or {}
     name = data.get("company_name") or client_id
     pairs = question_pairs(data)
@@ -96,18 +115,21 @@ def run_experiment(
     for sv_q, en_q in pairs:
         for lang, q in (("sv", sv_q), ("en", en_q)):
             for engine, llm in models.items():
-                try:
-                    answer = ask(q, llm, lang)
-                except Exception as exc:  # en motor får inte fälla experimentet
-                    log.warning("%s (%s) failed: %s", engine, lang, exc)
-                    answer = ""
-                rows.append({"engine": engine, "lang": lang, "question": q,
-                             "mentioned": polling._has_mention(answer, name, [])})
+                for _ in range(max(1, runs)):
+                    try:
+                        answer = ask(q, llm, lang)
+                    except Exception as exc:  # en motor får inte fälla experimentet
+                        log.warning("%s (%s) failed: %s", engine, lang, exc)
+                        answer = ""
+                    rows.append({"engine": engine, "lang": lang, "question": q,
+                                 "mentioned": polling._has_mention(answer, name, [])})
     return aggregate(rows, name)
 
 
 def aggregate(rows: list[dict[str, Any]], company: str) -> dict[str, Any]:
-    """Ren aggregering: omnämnandegrad per (motor, språk) + vinnande språk per motor."""
+    """Ren aggregering: omnämnandegrad per (motor, språk) + vinnande språk per motor.
+    Vinnare utses bara när sv/en-skillnaden är statistiskt signifikant (P7); annars
+    'inconclusive' — annars blir 'vinnaren' run-to-run-brus."""
     per_engine: dict[str, dict[str, Any]] = {}
     for r in rows:
         bucket = per_engine.setdefault(r["engine"], {"sv": {"asked": 0, "mentioned": 0},
@@ -121,9 +143,14 @@ def aggregate(rows: list[dict[str, Any]], company: str) -> dict[str, Any]:
         for lang in ("sv", "en"):
             a = langs[lang]["asked"]
             langs[lang]["rate"] = round(langs[lang]["mentioned"] / a, 3) if a else None
-        sv_r, en_r = langs["sv"]["rate"], langs["en"]["rate"]
-        if sv_r is None or en_r is None or sv_r == en_r:
-            langs["winner"] = "tie" if sv_r == en_r else "n/a"
+        sv, en = langs["sv"], langs["en"]
+        sig = _two_proportion_sig(sv["mentioned"], sv["asked"], en["mentioned"], en["asked"])
+        langs["delta"], langs["z"], langs["significant"] = sig["delta"], sig["z"], sig["significant"]
+        sv_r, en_r = sv["rate"], en["rate"]
+        if sv_r is None or en_r is None:
+            langs["winner"] = "n/a"
+        elif not sig["significant"]:
+            langs["winner"] = "inconclusive"   # skillnaden ryms i bruset
         else:
             langs["winner"] = "sv" if sv_r > en_r else "en"
     return {"company": company, "pairs": len({r["question"] for r in rows}),
@@ -134,14 +161,16 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser(description="sv-vs-en probe-experiment (C2)")
     parser.add_argument("--client-id", required=True)
+    parser.add_argument("--runs", type=int, default=5,
+                        help="antal sampling-körningar per (fråga × språk × motor), default 5")
     args = parser.parse_args()
-    result = run_experiment(args.client_id)
-    print(f"\nSpråkexperiment — {result['company']} ({result['pairs']} frågepar)\n")
-    print(f"{'Motor':<24}{'sv-omnämn.':>12}{'en-omnämn.':>12}{'vinnare':>10}")
+    result = run_experiment(args.client_id, runs=args.runs)
+    print(f"\nSpråkexperiment — {result['company']} ({result['pairs']} frågepar × {args.runs} körningar)\n")
+    print(f"{'Motor':<24}{'sv-omnämn.':>12}{'en-omnämn.':>12}{'vinnare':>14}")
     for engine, langs in result["per_engine"].items():
         sv = langs["sv"]["rate"]
         en = langs["en"]["rate"]
-        print(f"{engine:<24}{str(sv):>12}{str(en):>12}{langs['winner']:>10}")
+        print(f"{engine:<24}{str(sv):>12}{str(en):>12}{langs['winner']:>14}")
 
 
 if __name__ == "__main__":
