@@ -54,6 +54,60 @@ _MONTHS_SV = [
     "juli", "augusti", "september", "oktober", "november", "december",
 ]
 
+# Kund-mejlets strängar per språk (B2, A1). Bara mejlet lokaliseras här — den interna
+# rapportmodellen är fortsatt svensk. `en` faller tillbaka till `sv` vid okänt språk.
+_EMAIL_I18N: dict[str, dict[str, Any]] = {
+    "sv": {
+        "months": _MONTHS_SV,
+        "subject": "Er AI-synlighet i {month} — {name}",
+        "heading": "Er AI-synlighet — {name}",
+        "confidence": "Beslutssäkerhet: {score}/100 ({stage})",
+        "confidence_unmeasured": "Beslutssäkerhet: ännu inte mätt",
+        "trend": "Sedan förra månaden: {prev} → {score} ({word}).",
+        "trend_unchanged": "oförändrad",
+        "trend_up": "förbättrad",
+        "trend_down": "försämrad",
+        "resolved": " {n} tidigare risk(er) är lösta.",
+        "works": "Det här fungerar",
+        "improve": "Förbättringsmöjligheter",
+        "next_step": "Nästa steg:",
+        "footer": "Profilen uppdaterar vi åt er löpande — ni behöver inte göra något. "
+                  "Frågor? Svara på det här mejlet.",
+        "method_title": "Så läser du siffran",
+        "method": "Siffran visar hur ofta dagens AI nämner er när någon frågar — mätt över "
+                  "flera körningar, med en felmarginal. Den speglar vad AI:n kan om er från "
+                  "sin träning; det AI:n hittar live på webben redovisas separat. Förändringar "
+                  "mindre än felmarginalen är normalt brus, inte en verklig rörelse.",
+    },
+    "en": {
+        "months": ["January", "February", "March", "April", "May", "June",
+                   "July", "August", "September", "October", "November", "December"],
+        "subject": "Your AI visibility in {month} — {name}",
+        "heading": "Your AI visibility — {name}",
+        "confidence": "Decision confidence: {score}/100 ({stage})",
+        "confidence_unmeasured": "Decision confidence: not measured yet",
+        "trend": "Since last month: {prev} → {score} ({word}).",
+        "trend_unchanged": "unchanged",
+        "trend_up": "improved",
+        "trend_down": "declined",
+        "resolved": " {n} earlier risk(s) resolved.",
+        "works": "What's working",
+        "improve": "Opportunities to improve",
+        "next_step": "Next step:",
+        "footer": "We keep your profile updated for you — nothing you need to do. "
+                  "Questions? Just reply to this email.",
+        "method_title": "How to read this number",
+        "method": "The number shows how often today's AI mentions you when asked — measured "
+                  "across several runs, with a margin of error. It reflects what AI knows about "
+                  "you from its training; what AI finds live on the web is reported separately. "
+                  "Changes smaller than the margin of error are normally noise, not real movement.",
+    },
+}
+
+
+def _email_strings(lang: str | None) -> dict[str, Any]:
+    return _EMAIL_I18N.get((lang or "sv").lower(), _EMAIL_I18N["sv"])
+
 
 def current_month() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m")
@@ -578,16 +632,19 @@ Påstått och bevisat hålls isär; perception vägs aldrig in i poängen.</p>
 </body></html>"""
 
 
-def render_customer_email(model: dict[str, Any]) -> tuple[str, str, str]:
+def render_customer_email(model: dict[str, Any], lang: str | None = None) -> tuple[str, str, str]:
     """Kund-säker månadssammanfattning (B2) → (subject, html, text).
 
     Återanvänder rapportmodellen men exponerar BARA ledningsgrupps-vänliga fält:
     beslutssäkerhet (steg + nästa steg), verdict, trend, styrkor och förbättrings-
     möjligheter. Lämnar avsiktligt UTANFÖR: detekterade risker, motor-citat, harm-
     koder, det interna narrativ-utkastet och humaniserings-detaljer. Ingen jargong,
-    inga kausalitetspåståenden (modellen formulerar redan "ökar sannolikheten")."""
+    inga kausalitetspåståenden (modellen formulerar redan "ökar sannolikheten").
+
+    `lang` (A1) väljer mejlets språk; faller till modellens `language`, sen sv."""
+    t = _email_strings(lang or model.get("language"))
     name = model.get("company_name") or ""
-    month_label = _month_label(model.get("month") or "")
+    month_label = _month_label(model.get("month") or "", t["months"])
     conf = model.get("decision_confidence") or {}
     score, stage = conf.get("score"), conf.get("stage")
     verdict = model.get("verdict") or ""
@@ -596,52 +653,51 @@ def render_customer_email(model: dict[str, Any]) -> tuple[str, str, str]:
     strengths = model.get("strengths") or []
     improvements = model.get("improvement_opportunities") or []
 
-    subject = f"Er AI-synlighet i {month_label} — {name}"
+    subject = t["subject"].format(month=month_label, name=name)
 
     score_line = (
-        f"Beslutssäkerhet: {score}/100 ({html.escape(stage or '')})"
-        if score is not None else "Beslutssäkerhet: ännu inte mätt"
+        t["confidence"].format(score=score, stage=stage or "")
+        if score is not None else t["confidence_unmeasured"]
     )
     trend_line = ""
     prev = trend.get("previous_score")
     if prev is not None and score is not None:
         d = score - prev
-        word = "oförändrad" if d == 0 else ("förbättrad" if d > 0 else "försämrad")
-        trend_line = f"Sedan förra månaden: {prev} → {score} ({word})."
+        word = t["trend_unchanged"] if d == 0 else (t["trend_up"] if d > 0 else t["trend_down"])
+        trend_line = t["trend"].format(prev=prev, score=score, word=word)
     resolved = (trend.get("resolved_count") or 0)
     if resolved:
-        trend_line += f" {resolved} tidigare risk(er) är lösta."
+        trend_line += t["resolved"].format(n=resolved)
 
     def _li(items: list) -> str:
         return "".join(f"<li>{html.escape(str(i))}</li>" for i in items)
 
-    html_body = f"""<!doctype html><html lang="sv"><body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1a1a1a;max-width:620px;margin:0 auto;line-height:1.6">
-<h2 style="font-size:1.2rem">Er AI-synlighet — {html.escape(name)}</h2>
+    html_body = f"""<!doctype html><html lang="{html.escape((lang or model.get("language") or "sv").lower())}"><body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1a1a1a;max-width:620px;margin:0 auto;line-height:1.6">
+<h2 style="font-size:1.2rem">{html.escape(t["heading"].format(name=name))}</h2>
 <p style="color:#666;margin-top:-.5rem">{html.escape(month_label)}</p>
 <p><strong>{html.escape(score_line)}</strong></p>
 <p>{html.escape(verdict)}</p>
 {f'<p style="color:#444">{html.escape(trend_line)}</p>' if trend_line else ''}
-{f'<h3 style="font-size:1rem">Det här fungerar</h3><ul>{_li(strengths)}</ul>' if strengths else ''}
-{f'<h3 style="font-size:1rem">Förbättringsmöjligheter</h3><ul>{_li(improvements)}</ul>' if improvements else ''}
-<p style="color:#444"><strong>Nästa steg:</strong> {html.escape(next_step)}</p>
+{f'<h3 style="font-size:1rem">{html.escape(t["works"])}</h3><ul>{_li(strengths)}</ul>' if strengths else ''}
+{f'<h3 style="font-size:1rem">{html.escape(t["improve"])}</h3><ul>{_li(improvements)}</ul>' if improvements else ''}
+<p style="color:#444"><strong>{html.escape(t["next_step"])}</strong> {html.escape(next_step)}</p>
 <hr style="border:none;border-top:1px solid #eee;margin:1.5rem 0">
-<p style="color:#666;font-size:.9rem">Profilen uppdaterar vi åt er löpande — ni behöver inte göra något. Frågor? Svara på det här mejlet.</p>
-<p style="color:#999;font-size:.8rem">Så mäter vi: siffrorna speglar vad dagens AI-modeller kan och säger om er utifrån sin träning. Där vi även väger in vad AI:n hittar live på webben redovisas det separat. Enskilda AI-svar varierar mellan körningar, så vi mäter upprepat och rapporterar mönstret — inte ett enstaka svar.</p>
+<p style="color:#666;font-size:.9rem">{html.escape(t["footer"])}</p>
+<div style="margin-top:1rem;padding:.7rem .9rem;background:#f7f7f8;border-left:3px solid #ccc;border-radius:4px">
+<p style="margin:0 0 .25rem;font-weight:600;color:#444;font-size:.85rem">{html.escape(t["method_title"])}</p>
+<p style="margin:0;color:#666;font-size:.8rem">{html.escape(t["method"])}</p>
+</div>
 </body></html>"""
 
-    text_lines = [f"Er AI-synlighet — {name} ({month_label})", "", score_line, verdict]
+    text_lines = [f"{t['heading'].format(name=name)} ({month_label})", "", score_line, verdict]
     if trend_line:
         text_lines += ["", trend_line]
     if strengths:
-        text_lines += ["", "Det här fungerar:"] + [f"- {s}" for s in strengths]
+        text_lines += ["", f"{t['works']}:"] + [f"- {s}" for s in strengths]
     if improvements:
-        text_lines += ["", "Förbättringsmöjligheter:"] + [f"- {i}" for i in improvements]
-    text_lines += ["", f"Nästa steg: {next_step}", "",
-                   "Profilen uppdaterar vi åt er löpande. Frågor? Svara på det här mejlet.", "",
-                   "Så mäter vi: siffrorna speglar vad dagens AI-modeller kan och säger om er "
-                   "utifrån sin träning. Där vi även väger in vad AI:n hittar live på webben "
-                   "redovisas det separat. Enskilda AI-svar varierar mellan körningar, så vi "
-                   "mäter upprepat och rapporterar mönstret — inte ett enstaka svar."]
+        text_lines += ["", f"{t['improve']}:"] + [f"- {i}" for i in improvements]
+    text_lines += ["", f"{t['next_step']} {next_step}", "", t["footer"],
+                   "", f"{t['method_title']}: {t['method']}"]
     return subject, html_body, "\n".join(text_lines)
 
 
@@ -678,10 +734,10 @@ def _harm_label(harm: Any) -> str:
     return f"{harm} {HARM_SV.get(harm, '')}".strip() if harm else ""
 
 
-def _month_label(month: str) -> str:
+def _month_label(month: str, months: list[str] = _MONTHS_SV) -> str:
     try:
         y, m = month.split("-")
-        return f"{_MONTHS_SV[int(m) - 1]} {y}"
+        return f"{months[int(m) - 1]} {y}"
     except (ValueError, IndexError):
         return month
 
