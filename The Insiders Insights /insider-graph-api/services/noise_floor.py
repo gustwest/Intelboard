@@ -112,11 +112,14 @@ def aggregate(rows: list[dict[str, Any]], runs: int) -> dict[str, Any]:
         # Icke-enhälligt = ett enda drag hade kunnat ge fel etikett för frågan.
         if 0 < k < n:
             cell["unstable_prompts"] += 1
-        # Varumärkesstabilitet: Jaccard över körningarnas org-uppsättningar.
+        # Varumärkesstabilitet: Jaccard över körningarnas org-uppsättningar. Räknas
+        # bara när MINST en körning faktiskt hittade varumärken — annars vore "alla
+        # tomma" en falsk 1.0 (vacuöst stabil) och skulle dölja celler utan extraktion.
         brand_sets = [_norm_brands(r.get("brands") or []) for r in prompt_rows]
-        mj = _mean_pairwise_jaccard(brand_sets)
-        if mj is not None:
-            cell["jaccards"].append(mj)
+        if any(brand_sets):
+            mj = _mean_pairwise_jaccard(brand_sets)
+            if mj is not None:
+                cell["jaccards"].append(mj)
 
     by_cell: dict[str, dict[str, Any]] = {}
     for (engine, temp), c in cells.items():
