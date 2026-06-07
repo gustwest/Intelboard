@@ -160,16 +160,32 @@ export default function ProofArchivePage() {
   const [error, setError] = useState<string | null>(null);
   const [tier, setTier] = useState<'all' | 'assured' | 'grounded'>('all');
   const [assurance, setAssurance] = useState<string>('all');
+  // Månads-deeplink från kvittot: ?month=YYYY-MM → date_from/date_to-fönster
+  // mot backendens as_of-axel. Lexikografisk: YYYY-MM-31 fångar hela månaden.
+  const [month, setMonth] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   // Klient-val delas med AI-synlighet (samma localStorage-nyckel) — växlar man
   // kund där landar man rätt här också. ?client=… har företräde (deep-link).
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const qs = new URLSearchParams(window.location.search).get('client');
-    const c = qs || window.localStorage.getItem(LS_CLIENT);
+    const params = new URLSearchParams(window.location.search);
+    const c = params.get('client') || window.localStorage.getItem(LS_CLIENT);
     if (c) setSelected(c);
+    const m = params.get('month');
+    if (m && /^\d{4}-\d{2}$/.test(m)) setMonth(m);
   }, []);
+
+  // Rensa månadsfiltret — och rensa även ut ?month= ur URL:en så reload inte
+  // återinför det. Behåll ?client=.
+  function clearMonth() {
+    setMonth(null);
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    params.delete('month');
+    const qs = params.toString();
+    window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+  }
 
   useEffect(() => {
     graphFetch<{ clients: Client[] }>('/api/clients')
@@ -196,6 +212,10 @@ export default function ProofArchivePage() {
     const params = new URLSearchParams();
     if (tier !== 'all') params.set('tier', tier);
     if (assurance !== 'all') params.set('assurance_level', assurance);
+    if (month) {
+      params.set('date_from', `${month}-01`);
+      params.set('date_to', `${month}-31`);
+    }
     const qs = params.toString();
     graphFetch<ArchiveResp>(`/api/proof-archive/${selected}${qs ? `?${qs}` : ''}`)
       .then((d) => {
@@ -212,7 +232,7 @@ export default function ProofArchivePage() {
     return () => {
       cancelled = true;
     };
-  }, [selected, tier, assurance]);
+  }, [selected, tier, assurance, month]);
 
   async function exportArchive() {
     if (!selected) return;
@@ -276,6 +296,26 @@ export default function ProofArchivePage() {
       </div>
 
       {error && <div style={errorStyle}>{error}</div>}
+
+      {/* Månadsfilter (deeplink från kvittot) — synligt scope-band med X för att rensa. */}
+      {month && (
+        <UI.StatusBanner tone="info" style={{ marginBottom: 16 }}>
+          Filtrerar på månad <strong>{month}</strong> — visar bara verifierade påståenden med <em>as_of</em> i den månaden.{' '}
+          <button
+            type="button"
+            onClick={clearMonth}
+            aria-label="Rensa månadsfilter"
+            title="Rensa månadsfilter"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 8, padding: '2px 6px',
+              background: 'transparent', border: 'none', cursor: 'pointer', color: 'inherit',
+              fontSize: 12, textDecoration: 'underline',
+            }}
+          >
+            <X size={12} /> Visa alla månader
+          </button>
+        </UI.StatusBanner>
+      )}
 
       {/* Summary-rad */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
