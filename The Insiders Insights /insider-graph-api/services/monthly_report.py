@@ -626,6 +626,7 @@ def render_customer_email(model: dict[str, Any]) -> tuple[str, str, str]:
 <p style="color:#444"><strong>Nästa steg:</strong> {html.escape(next_step)}</p>
 <hr style="border:none;border-top:1px solid #eee;margin:1.5rem 0">
 <p style="color:#666;font-size:.9rem">Profilen uppdaterar vi åt er löpande — ni behöver inte göra något. Frågor? Svara på det här mejlet.</p>
+<p style="color:#999;font-size:.8rem">Så mäter vi: siffrorna speglar vad dagens AI-modeller kan och säger om er utifrån sin träning. Där vi även väger in vad AI:n hittar live på webben redovisas det separat. Enskilda AI-svar varierar mellan körningar, så vi mäter upprepat och rapporterar mönstret — inte ett enstaka svar.</p>
 </body></html>"""
 
     text_lines = [f"Er AI-synlighet — {name} ({month_label})", "", score_line, verdict]
@@ -636,7 +637,11 @@ def render_customer_email(model: dict[str, Any]) -> tuple[str, str, str]:
     if improvements:
         text_lines += ["", "Förbättringsmöjligheter:"] + [f"- {i}" for i in improvements]
     text_lines += ["", f"Nästa steg: {next_step}", "",
-                   "Profilen uppdaterar vi åt er löpande. Frågor? Svara på det här mejlet."]
+                   "Profilen uppdaterar vi åt er löpande. Frågor? Svara på det här mejlet.", "",
+                   "Så mäter vi: siffrorna speglar vad dagens AI-modeller kan och säger om er "
+                   "utifrån sin träning. Där vi även väger in vad AI:n hittar live på webben "
+                   "redovisas det separat. Enskilda AI-svar varierar mellan körningar, så vi "
+                   "mäter upprepat och rapporterar mönstret — inte ett enstaka svar."]
     return subject, html_body, "\n".join(text_lines)
 
 

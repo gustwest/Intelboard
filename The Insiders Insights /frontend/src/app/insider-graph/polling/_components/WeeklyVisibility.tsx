@@ -47,7 +47,7 @@ export function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
     <div style={{ ...cardStyle, marginBottom: 16 }}>
       <SectionHead
         title="Veckovis synlighet"
-        hint="Det löpande måttet — hur ofta AI-motorerna nämner kunden på branschfrågor (Share of Voice), med vilket sentiment och med vilken könsbalans. Uppdateras automatiskt varje vecka."
+        hint="Det löpande måttet — hur ofta AI-motorerna nämner kunden på branschfrågor (Share of Voice), med vilket sentiment och med vilken könsbalans. Huvudtalet domineras av bas-kunskap (modellernas tränade minne av kunden), inte av vad en användare med live-webbsök ser just nu — det live-groundade är en egen serie (Live-signal) nedan, och de medeltalas aldrig. Uppdateras automatiskt varje vecka."
       />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: sovSeries.length > 1 ? 18 : 0 }}>
@@ -56,10 +56,17 @@ export function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
         <Stat label="Könsbalans (Parity)" value={pct(latest.parity_index)} />
       </div>
 
-      <div style={{ fontSize: 11, color: C.dim, margin: sovSeries.length > 1 ? '0 0 14px' : '10px 0 0' }}>
+      <div style={{ fontSize: 11, color: C.dim, margin: sovSeries.length > 1 ? '0 0 6px' : '10px 0 0' }}>
         {latest.week_id}
         {latest.total_answers != null && ` · ${latest.answers_with_mention ?? 0}/${latest.total_answers} svar nämnde kunden`}
         {latest.models_used?.length ? ` · ${latest.models_used.join(', ')}` : ''}
+      </div>
+
+      <div
+        title="Huvudtalet speglar vad AI-modellerna minns om kunden från sin träning (bas-kunskap), inte vad en användare med live-webbsök får se. Det live-groundade visas separat som Live-signal längre ned. Tills grounding läggs till på bas-motorerna är detta 'AI:s minne av er', inte 'vad en användare ser just nu'."
+        style={{ fontSize: 10, color: C.dim, fontStyle: 'italic', margin: sovSeries.length > 1 ? '0 0 14px' : '6px 0 0', cursor: 'help' }}
+      >
+        Speglar AI:s tränade minne av kunden (bas-kunskap) — inte vad en live-groundad användare ser. Live-signal redovisas separat nedan.
       </div>
 
       {sovSeries.length > 1 && (() => {
@@ -132,7 +139,7 @@ export function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
         const training = aggregateEnginesBySource(engineEntries, 'training');
         const webRag = aggregateEnginesBySource(engineEntries, 'web_rag');
         return (
-          <Block label="Per AI-motor — senaste veckan + trend" summary="Bas-kunskap vs Live-signal" defaultOpen={false}>
+          <Block label="Per AI-motor — senaste veckan + trend" summary="Bas-kunskap vs Live-signal" defaultOpen>
             <div
               title="Bas-kunskap (RLHF-tränade modeller) och Live-signal (web-RAG som Perplexity) har fundamentalt olika fördelningar och frågedjup. De medeltalas aldrig — endast jämförs sida vid sida."
               style={{ fontSize: 10, color: C.dim, fontStyle: 'italic', marginBottom: 8 }}
