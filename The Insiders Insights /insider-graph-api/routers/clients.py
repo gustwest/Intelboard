@@ -212,6 +212,14 @@ def update_client_config(client_id: str, payload: ClientConfigUpdate) -> dict[st
         # Tom sträng → rensa fältet OCH provenance (släpper tillbaka platsen till
         # auto-enrichment vid nästa scrape-körning).
         logo = payload.logo_url.strip() or None
+        # Validera vid källan: avvisa startsides-/icke-bild-URL:er (vanligaste felet är
+        # att kundens startsida klistras in) så de aldrig sparas och renderas trasiga.
+        if logo and urls.clean_logo_url(logo, (ref.get().to_dict() or {}).get("website")) is None:
+            raise HTTPException(
+                400,
+                "logo_url ser inte ut som en bild-URL (eller är kundens startsida). "
+                "Ange en direktlänk till en bildfil, t.ex. https://kund.se/logo.svg.",
+            )
         update["logo_url"] = logo
         update["logo_url_source"] = "manual" if logo else None
         update["logo_url_set_at"] = now_iso if logo else None

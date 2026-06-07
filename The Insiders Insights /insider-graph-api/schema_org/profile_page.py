@@ -199,7 +199,10 @@ def _render(model: RenderModel, graph: dict) -> str:
     # A7: persona-sektioner även i HTML (fanns bara i llms.txt) — Googlebot/människor
     # ser samma målgruppsstruktur som AI-crawlers. A9: logotyp ur Organization-noden.
     audience_html = _audience_sections_html(model, by_number)
-    logo_url = (graph.get("@graph") or [{}])[0].get("logo")
+    # Hämta org-noden via @type, inte via index 0 — grafen kan ha en ProfilePage-
+    # container före Organization.
+    org_node = next((n for n in graph.get("@graph") or [] if n.get("@type") == "Organization"), {})
+    logo_url = org_node.get("logo")
     logo_html = f'<img class="logo" src="{html.escape(str(logo_url))}" alt="{name}">' if logo_url else ""
 
     return f"""<!doctype html>

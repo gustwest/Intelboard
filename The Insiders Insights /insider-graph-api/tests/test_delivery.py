@@ -2,8 +2,10 @@
 (profilsidan) måste hänga ihop. @id är den hårda kopplingen — om den glider isär
 ser AI-motorerna två olika entiteter och hela leveransen rasar.
 
-Testet låser även de snippet-fält motorerna agerar på direkt (description,
-mainEntityOfPage, subjectOf, sameAs som leder till fetchbar sida).
+Testet låser även de snippet-fält motorerna agerar på direkt (mainEntityOfPage,
+subjectOf, sameAs som leder till fetchbar sida) OCH att claim-beroende fält
+(description, dateModified) MEDVETET hålls ute — snutten är ren stabil identitet,
+färskheten lever på den hostade grafen.
 """
 import json
 import re
@@ -148,10 +150,13 @@ class SnippetContentRichnessTest(unittest.TestCase):
         snippet = _parse(render_identity_snippet("acme"))
         self.assertEqual(snippet["url"], "https://acme.se")
 
-    def test_description_is_emitted_when_present(self):
+    def test_description_is_never_emitted(self):
+        # Ren stabil identitet: description är claim-beroende prosa och bor på den
+        # hostade grafen, inte i snutten — annars fryser/läcker marknadstexten in
+        # på kundens egen sajt.
         _seed()
         snippet = _parse(render_identity_snippet("acme"))
-        self.assertIn("fordonstillverkare", snippet["description"])
+        self.assertNotIn("description", snippet)
 
     def test_main_entity_of_page_anchors_to_customer_website(self):
         _seed()
@@ -174,10 +179,12 @@ class SnippetContentRichnessTest(unittest.TestCase):
         snippet = _parse(render_identity_snippet("acme"))
         self.assertEqual(snippet["leiCode"], "ACMELEI00000000000X")
 
-    def test_date_modified_reflects_latest_source(self):
+    def test_date_modified_is_never_emitted(self):
+        # En statisk snutt som klistras en gång får inte bära dateModified — då
+        # börjar den ljuga om färskheten. Versionen lever på den hostade grafen.
         _seed()
         snippet = _parse(render_identity_snippet("acme"))
-        self.assertIn("2024-03-01", snippet["dateModified"])
+        self.assertNotIn("dateModified", snippet)
 
     def test_payload_is_minified(self):
         _seed()

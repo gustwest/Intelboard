@@ -48,5 +48,36 @@ class UrlsTest(unittest.TestCase):
             )
 
 
+class CleanLogoUrlTest(unittest.TestCase):
+    """Logo-garde: släpp bilder igenom, stoppa startsides-/icke-bild-URL:er."""
+
+    def test_image_url_passes(self):
+        for u in ("https://kund.se/logo.svg", "https://cdn.x/a/b/logo.png",
+                  "http://kund.se/assets/marke.JPG"):
+            self.assertEqual(urls.clean_logo_url(u), u)
+
+    def test_extensionless_deep_path_passes(self):
+        # CDN-serverade bilder utan filändelse ska inte fällas.
+        u = "https://images.kund.se/media/12345"
+        self.assertEqual(urls.clean_logo_url(u), u)
+
+    def test_homepage_is_rejected(self):
+        self.assertIsNone(urls.clean_logo_url("https://kund.se", website="https://kund.se"))
+        self.assertIsNone(urls.clean_logo_url("https://kund.se/", website="https://kund.se"))
+
+    def test_bare_domain_rejected(self):
+        self.assertIsNone(urls.clean_logo_url("https://kund.se"))
+        self.assertIsNone(urls.clean_logo_url("https://kund.se/"))
+
+    def test_non_image_extension_rejected(self):
+        self.assertIsNone(urls.clean_logo_url("https://kund.se/om-oss.html"))
+        self.assertIsNone(urls.clean_logo_url("https://kund.se/broschyr.pdf"))
+
+    def test_empty_and_garbage_rejected(self):
+        self.assertIsNone(urls.clean_logo_url(None))
+        self.assertIsNone(urls.clean_logo_url("   "))
+        self.assertIsNone(urls.clean_logo_url("inte-en-url"))
+
+
 if __name__ == "__main__":
     unittest.main()

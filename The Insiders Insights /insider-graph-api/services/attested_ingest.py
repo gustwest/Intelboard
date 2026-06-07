@@ -50,21 +50,31 @@ _SHEET_TO_DIM: dict[str, str] = {
     "company size": "company_size",
 }
 
+# Vi emitterar ANDEL (sammansättning), inte rått antal. Rå-antalet ("523 följare")
+# är ett fåfänge-mätvärde — overifierbart, citeras inte av AI och läser som skryt.
+# Andelen ("ca 40 % av följarna är beslutsfattare") är äkta social proof: den säger
+# vilka som följer, inte hur många. Tredje person + källfäst (BuildCtx.source) +
+# persona-riktad (DEMOGRAPHIC_AUDIENCE) → fyller persona-sektionerna (A7).
 _FOLLOWER_TEMPLATES: dict[str, str] = {
-    "seniority": "{value} av {company}s LinkedIn-följare är på nivån {segment}.",
-    "function": "{value} av {company}s LinkedIn-följare arbetar inom {segment}.",
-    "industry": "{value} av {company}s LinkedIn-följare verkar inom branschen {segment}.",
-    "location": "{value} av {company}s LinkedIn-följare finns i {segment}.",
-    "company_size": "{value} av {company}s LinkedIn-följare arbetar på företag med {segment} anställda.",
+    "seniority": "Ca {share} % av {company}s LinkedIn-följare är på nivån {segment}.",
+    "function": "Ca {share} % av {company}s LinkedIn-följare arbetar inom {segment}.",
+    "industry": "Ca {share} % av {company}s LinkedIn-följare verkar inom branschen {segment}.",
+    "location": "Ca {share} % av {company}s LinkedIn-följare finns i {segment}.",
+    "company_size": "Ca {share} % av {company}s LinkedIn-följare arbetar på företag med {segment} anställda.",
 }
 
 _VISITOR_TEMPLATES: dict[str, str] = {
-    "seniority": "{value} av besökarna på {company}s LinkedIn-sida är på nivån {segment}.",
-    "function": "{value} av besökarna på {company}s LinkedIn-sida arbetar inom {segment}.",
-    "industry": "{value} av besökarna på {company}s LinkedIn-sida verkar inom branschen {segment}.",
-    "location": "{value} av besökarna på {company}s LinkedIn-sida finns i {segment}.",
-    "company_size": "{value} av besökarna på {company}s LinkedIn-sida arbetar på företag med {segment} anställda.",
+    "seniority": "Ca {share} % av besökarna på {company}s LinkedIn-sida är på nivån {segment}.",
+    "function": "Ca {share} % av besökarna på {company}s LinkedIn-sida arbetar inom {segment}.",
+    "industry": "Ca {share} % av besökarna på {company}s LinkedIn-sida verkar inom branschen {segment}.",
+    "location": "Ca {share} % av besökarna på {company}s LinkedIn-sida finns i {segment}.",
+    "company_size": "Ca {share} % av besökarna på {company}s LinkedIn-sida arbetar på företag med {segment} anställda.",
 }
+
+# Följar-/besökardemografi är social proof riktad mot KÖPAREN ("beslutsfattare
+# engagerar sig med oss") → taggas customer-personan så den landar i rätt
+# persona-sektion (A7) i stället för att ligga evergreen och osynlig.
+DEMOGRAPHIC_AUDIENCE = ["customer"]
 
 
 @dataclass(frozen=True)
@@ -168,8 +178,11 @@ def _demographic_build(
             val = _to_int(r[1])
             if seg and val is not None and val >= MIN_VALUE:
                 parsed.append((seg, val))
+        # Andel beräknas mot HELA dimensionens summa (före topp-5-trunkering) så
+        # procenttalet är ärligt — inte mot bara de segment vi råkar visa.
+        total = sum(v for _seg, v in parsed)
         for seg, val in sorted(parsed, key=lambda x: x[1], reverse=True)[:TOP_SEGMENTS_PER_DIMENSION]:
-            writes.append(_demo_claim(ctx, key, dim, seg, val, templates))
+            writes.append(_demo_claim(ctx, key, dim, seg, _share(val, total), templates))
     return writes
 
 
@@ -191,13 +204,22 @@ def _canonical_build(rows: list[list[str]], ctx: BuildCtx, key: str, templates: 
             by_dim.setdefault(dim, []).append((seg, val))
     writes: list[Write] = []
     for dim, segs in by_dim.items():
+        total = sum(v for _seg, v in segs)
         for seg, val in sorted(segs, key=lambda x: x[1], reverse=True)[:TOP_SEGMENTS_PER_DIMENSION]:
-            writes.append(_demo_claim(ctx, key, dim, seg, val, templates))
+            writes.append(_demo_claim(ctx, key, dim, seg, _share(val, total), templates))
     return writes
 
 
-def _demo_claim(ctx: BuildCtx, key: str, dimension: str, segment: str, value: int, templates: dict[str, str]) -> Write:
-    statement = templates[dimension].format(company=ctx.company, value=value, segment=segment)
+def _share(value: int, total: int) -> int:
+    """Segmentets andel av dimensionens total, i hela procent (minst 1 % så ett
+    litet-men-närvarande segment inte avrundas till 0 % och läser som frånvaro)."""
+    if total <= 0:
+        return 0
+    return max(1, round(100 * value / total))
+
+
+def _demo_claim(ctx: BuildCtx, key: str, dimension: str, segment: str, share: int, templates: dict[str, str]) -> Write:
+    statement = templates[dimension].format(company=ctx.company, share=share, segment=segment)
     # Deterministiskt id på (typ, dimension, segment) → omkörning skriver över.
     claim_id = "att-" + hashlib.sha1(f"{key}|{dimension}|{segment.lower()}".encode("utf-8")).hexdigest()[:14]
     claim = Claim(
@@ -206,6 +228,8 @@ def _demo_claim(ctx: BuildCtx, key: str, dimension: str, segment: str, value: in
         statement=statement[:200],
         source=[ctx.source],
         confidence=1.0,
+        # Persona-riktad → landar i köpar-sektionen (A7), inte evergreen/osynlig.
+        audience=list(DEMOGRAPHIC_AUDIENCE),
         # Staged: ingår INTE i grafen förrän operatören bekräftar "Inkludera i leverans".
         included_in_output=False,
         needs_review=False,

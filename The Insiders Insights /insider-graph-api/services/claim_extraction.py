@@ -26,7 +26,7 @@ from typing import Any
 
 import firestore_client as fs
 from schemas import Claim, ClaimSource
-from services import claim_grounding
+from services import claim_grounding, claim_voice
 from services import llm as llm_factory
 
 log = logging.getLogger(__name__)
@@ -87,8 +87,10 @@ class Chunk:
 
 def extract_claims_for_client(client_id: str) -> dict[str, Any]:
     """Kör hela pipelinen och persistera godkända/review-pliktiga narrative-claims."""
-    if not fs.client_doc(client_id).get().exists:
+    client_snap = fs.client_doc(client_id).get()
+    if not client_snap.exists:
         raise KeyError(f"client not found: {client_id}")
+    company = (client_snap.to_dict() or {}).get("company_name") or client_id
 
     generator = _pick_generator()
     validator = _pick_validator()
@@ -111,6 +113,14 @@ def extract_claims_for_client(client_id: str) -> dict[str, Any]:
             skipped += 1  # ingen källa → inget claim
             continue
 
+        # Hård social-metric-spärr: följarantal/likes är fåfänge — kasseras helt
+        # (mjuka prompt-regeln i GENERATE_PROMPT räcker bevisligen inte). Körs tidigt,
+        # före de dyrare grindarna.
+        if claim_voice.mentions_social_metric(statement):
+            log.info("claim avvisat (social-metric): %s", statement[:60])
+            skipped += 1
+            continue
+
         source_text = "\n\n".join(c.text for c in cited)
 
         # Deterministisk källgrind AVGÖR (modelloberoende): citatet måste finnas i källan och
@@ -125,6 +135,10 @@ def extract_claims_for_client(client_id: str) -> dict[str, Any]:
         if not _validate(validator, statement, source_text):
             skipped += 1  # valideringen föll → kasseras
             continue
+
+        # Neutralisera röst EFTER grindarna (de dömde på originaltexten). Byter bara
+        # första-person → bolagsnamn, rör inga siffror, så källgrundningen står kvar.
+        statement = claim_voice.neutralize(statement, company)
 
         confidence = float(cand.get("confidence", 0.0))
         approved = confidence >= REVIEW_THRESHOLD

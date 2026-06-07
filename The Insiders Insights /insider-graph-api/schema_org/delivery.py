@@ -6,8 +6,12 @@ entitet) och pekar via `sameAs` på profilsidan + via `subjectOf` på den
 maskinläsbara grafen (schema.json) — så AI-motorer som inte följer sameAs ändå
 hittar färska fakta. Statisk (ingen JS-injektion), så AI-crawlers läser den.
 
-Snippet och kompilator härleds ur SAMMA render-modell (`build_render_model`) så
-fält (name, description, sameAs, dateModified, leiCode) inte kan glida isär.
+REN STABIL IDENTITET: snutten bär BARA fält som inte driver med claims —
+identitet (@id/name/url/logo/identifier/leiCode/sameAs) som klistras en gång och
+aldrig rörs igen. Färska/claim-beroende fält (description, dateModified) bor
+medvetet INTE här: de skulle frysa vid inklistring och dessutom bära in claims-
+prosa på kundens egen sajt. All färskhet lever på den hostade grafen som
+`subjectOf` pekar på — motorerna följer den för aktuellt innehåll.
 """
 from __future__ import annotations
 
@@ -15,7 +19,7 @@ import json
 
 import firestore_client as fs
 from schema_org.compiler import build_render_model
-from schema_org.urls import cdn_url, external_same_as, served_url
+from schema_org.urls import cdn_url, clean_logo_url, external_same_as, served_url
 
 
 def render_identity_snippet(client_id: str) -> str:
@@ -31,12 +35,16 @@ def render_identity_snippet(client_id: str) -> str:
     }
     if website:
         org["url"] = website
-    if data.get("logo_url"):
-        # Logo direkt i snippet → motorerna behöver inte gissa via favicon eller
-        # och bygger genast en korrekt knowledge-panel/avatar.
-        org["logo"] = data["logo_url"]
-    if model.description:
-        org["description"] = model.description
+    logo = clean_logo_url(data.get("logo_url"), website)
+    if logo:
+        # Logo direkt i snippet → motorerna behöver inte gissa via favicon och bygger
+        # genast en korrekt knowledge-panel/avatar. Samma garde som compilern: en
+        # startsides-/icke-bild-URL klistras aldrig in som trasig avatar hos kunden.
+        org["logo"] = logo
+
+    # OBS: description bor MEDVETET inte här (se modul-docstring). Den är claim-
+    # beroende och skulle (1) frysa vid inklistring och (2) bära in claims-/marknads-
+    # prosa på kundens egen sajt. Färska beskrivningar lever på den hostade grafen.
 
     # Hårda identifierare direkt i snippet: motorerna behöver inte följa subjectOf
     # för att disambiguera bolaget. leiCode lyfts ur fakta (kommer via GLEIF-
@@ -52,10 +60,9 @@ def render_identity_snippet(client_id: str) -> str:
             "value": data["org_number"],
         }]
 
-    if model.last_updated:
-        # Berättar för motorn vilken version av identitets-fakta som gäller.
-        # Källornas senaste datum är vår bästa proxy för "när vet vi att detta stämde".
-        org["dateModified"] = model.last_updated
+    # OBS: dateModified bor inte heller här — en statisk snutt som klistras en gång
+    # skulle frysa datumet och börja ljuga om färskheten. Versionen/färskheten lever
+    # på den hostade grafen (subjectOf) som motorerna följer för aktuellt innehåll.
 
     # sameAs: profilsidan (fetchbar färsk graf) + externa identitetslänkar (LinkedIn).
     # I path-style-läge är canonical_url-domänen aspirationell — utan served_url

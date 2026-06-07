@@ -108,6 +108,32 @@ class ExtractionTest(unittest.TestCase):
         self.assertEqual(result.get("reason"), "no_llm")
         self.assertEqual(fakefs.writes(), {})
 
+    def test_social_metric_claim_is_dropped(self):
+        # Följar-prosa är fåfänge — kasseras av grinden även om citatet är grundat.
+        fakefs.reset(
+            client={"company_name": "Acme AB"},
+            company_items={"src1": {"content": "Acme AB har hundratals följare på LinkedIn."}},
+        )
+        self._use(_FakeLLM([{"statement": "Acme AB har hundratals följare på LinkedIn",
+                             "chunks": ["C1"], "quote": "hundratals följare på LinkedIn", "confidence": 0.9}]))
+        result = ce.extract_claims_for_client("acme")
+        self.assertEqual(result["written"], 0)
+        self.assertEqual(result["skipped"], 1)
+        self.assertEqual(fakefs.writes(), {})
+
+    def test_first_person_claim_is_neutralized(self):
+        # Första-persons marknadstext neutraliseras till tredje person vid persistens.
+        fakefs.reset(
+            client={"company_name": "Acme AB"},
+            company_items={"src1": {"content": "Vi hjälper bolag med data."}},
+        )
+        self._use(_FakeLLM([{"statement": "Vi hjälper bolag med data", "chunks": ["C1"],
+                             "quote": "Vi hjälper bolag med data", "confidence": 0.9}]))
+        result = ce.extract_claims_for_client("acme")
+        self.assertEqual(result["written"], 1)
+        written = list(fakefs.writes().values())[0]
+        self.assertEqual(written["statement"], "Acme AB hjälper bolag med data")
+
 
 _orig_pick_generator = ce._pick_generator
 _orig_pick_validator = ce._pick_validator

@@ -34,12 +34,22 @@ class AttestedIngestTest(unittest.TestCase):
         self.assertFalse(sample["included_in_output"])  # staged tills "Inkludera i leverans" bekräftas
         self.assertFalse(sample["needs_review"])
 
-    def test_statement_uses_company_and_value(self):
+    def test_statement_uses_company_and_share_not_raw_count(self):
         _setup()
         ai.ingest_attested_csv("acme", "linkedin_follower_demographics", CSV, attested_at="2026-05-01")
         statements = [c["statement"] for c in fakefs.writes().values()]
-        self.assertTrue(any("1500 av Acme ABs LinkedIn-följare är på nivån Director" in s for s in statements))
+        # Andel av dimensionens total (Director 1500 av 1900 → 79 %), inte rått antal.
+        self.assertTrue(any("Ca 79 % av Acme ABs LinkedIn-följare är på nivån Director" in s for s in statements))
         self.assertTrue(any("Engineering" in s for s in statements))
+        # Rå-antalet (fåfänge-mätvärdet) får ALDRIG läcka ut i prosan.
+        self.assertFalse(any("1500" in s for s in statements))
+
+    def test_demographic_claims_are_audience_targeted(self):
+        _setup()
+        ai.ingest_attested_csv("acme", "linkedin_follower_demographics", CSV, attested_at="2026-05-01")
+        claims = list(fakefs.writes().values())
+        # Social proof riktad mot köparen → fyller customer-persona-sektionen (A7).
+        self.assertTrue(all(c["audience"] == ["customer"] for c in claims))
 
     def test_unknown_dimension_is_skipped(self):
         _setup()
@@ -143,7 +153,9 @@ class NativeSheetsTest(unittest.TestCase):
         statements = [p["statement"] for tgt, _id, p in writes if tgt == "claim"]
         self.assertEqual(len(writes), 3)  # 2 seniority + 1 location; tidsserien räknas inte
         self.assertTrue(any("besökarna på Acme ABs LinkedIn-sida är på nivån Senior" in s for s in statements))
-        self.assertTrue(any("262" in s for s in statements))
+        # Andel (Senior 262 av 356 → 74 %), inte rått antal — rå-siffran får inte läcka.
+        self.assertTrue(any("Ca 74 %" in s for s in statements))
+        self.assertFalse(any("262" in s for s in statements))
 
     def test_content_posts_become_socialmediaposting_without_author(self):
         sheets = {

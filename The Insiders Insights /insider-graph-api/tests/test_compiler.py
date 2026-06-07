@@ -134,6 +134,47 @@ class CompileClientTest(unittest.TestCase):
         # ingen rå confidence-siffra läcker ut i grafen
         self.assertNotIn("confidence", repr(org).lower())
 
+    def _knows(self, value, conf, cid):
+        return {
+            "claim_kind": "property", "subject_ref": "org", "predicate": "knowsAbout",
+            "value": value, "confidence": conf, "included_in_output": True,
+            "source": [{"kind": "item", "item_id": "bv1"}],
+        }
+
+    def test_knowsabout_drops_placeholder_dedups_and_normalizes(self):
+        # Platshållaren "Aggregerade kompetenser" (formfält-etikett som fastnat som
+        # värde) ska bort; ai/AI dedupas; korta akronymer versaliseras.
+        _graph_setup(claims={
+            "kp": self._knows("Aggregerade kompetenser", 1.0, "kp"),  # platshållare → bort
+            "k1": self._knows("ai", 0.9, "k1"),
+            "k2": self._knows("AI", 0.85, "k2"),                       # dubblett av ai
+            "k3": self._knows("geo", 0.8, "k3"),
+            "k4": self._knows("Sales Management", 0.7, "k4"),
+        })
+        graph = compile_client("acme")
+        org = _nodes(graph, "Organization")[0]
+        self.assertEqual(org["knowsAbout"], ["AI", "GEO", "Sales Management"])
+        # Platshållaren får inte heller läcka in i ledmeningen/ingressen.
+        self.assertNotIn("Aggregerade", repr(graph))
+
+    def test_claim_without_source_is_dropped(self):
+        # "Inget claim utan källa" — sista spärren vid kompilering fångar gammal/
+        # manuell data med tomt source[] men included_in_output=True.
+        _graph_setup(claims={
+            "ok": {
+                "claim_kind": "narrative", "subject_ref": "org",
+                "statement": "Har källa och ska synas",
+                "source": [{"kind": "item", "item_id": "bv1"}], "included_in_output": True,
+            },
+            "orphan": {
+                "claim_kind": "narrative", "subject_ref": "org",
+                "statement": "Påhittat utan källa", "source": [], "included_in_output": True,
+            },
+        })
+        org = _nodes(compile_client("acme"), "Organization")[0]
+        self.assertIn("Har källa", org["description"])
+        self.assertNotIn("Påhittat utan källa", org["description"])
+
     def test_active_job_emits_jobposting_node_closed_does_not(self):
         from datetime import timedelta
 
@@ -423,6 +464,104 @@ class ClaimReviewMarkupTest(unittest.TestCase):
         self.assertEqual(rev["reviewRating"]["ratingValue"], 3)
         self.assertNotIn("reviewBody", rev)
         self.assertNotIn("datePublished", rev)
+
+
+class JsonLdCorrectnessTest(unittest.TestCase):
+    """P-B: sameAs-semantik, inLanguage på Organization och ProfilePage-container."""
+
+    def test_sameas_keeps_identity_drops_content_urls(self):
+        # En Organization-källa (allabolag) är identitet → sameAs. Ett LinkedIn-INLÄGG
+        # (SocialMediaPosting) är innehåll → källnod men ALDRIG sameAs.
+        _graph_setup(
+            company_items={
+                "bv1": {"schema_type": "Organization", "url": "https://allabolag.se/x",
+                        "published_at": datetime(2024, 3, 1, tzinfo=timezone.utc),
+                        "included_in_output": True, "extra": {}},
+                "li1": {"schema_type": "SocialMediaPosting", "url": "https://linkedin.com/post/42",
+                        "published_at": datetime(2024, 5, 1, tzinfo=timezone.utc),
+                        "included_in_output": True, "extra": {}},
+            },
+            claims={
+                "c1": {"claim_kind": "narrative", "subject_ref": "org", "statement": "Org-källa",
+                       "source": [{"kind": "item", "item_id": "bv1"}], "included_in_output": True},
+                "c2": {"claim_kind": "narrative", "subject_ref": "org", "statement": "Inläggskälla",
+                       "source": [{"kind": "item", "item_id": "li1"}], "included_in_output": True},
+            },
+        )
+        graph = compile_client("acme")
+        org = _nodes(graph, "Organization")[0]
+        self.assertIn("https://allabolag.se/x", org["sameAs"])
+        self.assertNotIn("https://linkedin.com/post/42", org["sameAs"])
+        # Inlägget finns ändå kvar som källnod (citat bevaras, bara identitetssignalen rensas).
+        self.assertTrue(any(n.get("url") == "https://linkedin.com/post/42" for n in graph["@graph"]))
+
+    def test_organization_carries_inlanguage(self):
+        _graph_setup(client={"company_name": "Acme AB", "website": "https://acme.se", "language": "en"})
+        org = _nodes(compile_client("acme"), "Organization")[0]
+        self.assertEqual(org["inLanguage"], "en")
+
+    def test_profilepage_container_present_and_points_to_org(self):
+        _graph_setup()
+        graph = compile_client("acme")
+        org = _nodes(graph, "Organization")[0]
+        page = _nodes(graph, "ProfilePage")[0]
+        self.assertEqual(page["about"]["@id"], org["@id"])
+        self.assertEqual(page["mainEntity"]["@id"], org["@id"])
+        self.assertEqual(page["inLanguage"], "sv")
+
+    def test_homepage_logo_is_not_emitted(self):
+        # Startsidan inklistrad i logo-fältet → gardet stoppar den (ingen trasig avatar).
+        _graph_setup(client={"company_name": "Acme AB", "website": "https://acme.se",
+                             "logo_url": "https://acme.se"})
+        org = _nodes(compile_client("acme"), "Organization")[0]
+        self.assertNotIn("logo", org)
+
+    def test_real_image_logo_is_emitted(self):
+        _graph_setup(client={"company_name": "Acme AB", "website": "https://acme.se",
+                             "logo_url": "https://acme.se/logo.svg"})
+        org = _nodes(compile_client("acme"), "Organization")[0]
+        self.assertEqual(org["logo"], "https://acme.se/logo.svg")
+
+
+class CompileTimeVoiceTest(unittest.TestCase):
+    """(c) vid compile: neutralisera röst + släng social-metric ur REDAN lagrade claims
+    (så recompile fixar live-data utan re-extraktion). Attesterad demografi undantas."""
+
+    def setUp(self):
+        _graph_setup(claims={
+            "fp": {"claim_kind": "narrative", "subject_ref": "org",
+                   "statement": "Vi hjälper bolag med data.",
+                   "source": [{"kind": "item", "item_id": "bv1"}], "included_in_output": True},
+            "sm": {"claim_kind": "narrative", "subject_ref": "org",
+                   "statement": "Vi har hundratals följare på LinkedIn.",
+                   "source": [{"kind": "item", "item_id": "bv1"}], "included_in_output": True},
+            "demo": {"claim_kind": "narrative", "subject_ref": "org",
+                     "statement": "Ca 40 % av Acme ABs LinkedIn-följare är beslutsfattare.",
+                     "source": [{"kind": "attested", "label": "LinkedIn-data", "attested_at": "2026-05-01"}],
+                     "included_in_output": True},
+            # Attesterad people_bio MED följar-skryt men UTAN demografi-markör → ska slängas.
+            "bio": {"claim_kind": "narrative", "subject_ref": "org",
+                    "statement": "Bolaget har hundratals engagerade följare.",
+                    "source": [{"kind": "attested", "label": "Personprofil-dokument från bolaget",
+                                "attested_at": "2026-05-01"}],
+                    "included_in_output": True},
+        })
+        self.desc = _nodes(compile_client("acme"), "Organization")[0]["description"]
+
+    def test_first_person_is_neutralized(self):
+        self.assertIn("Acme AB hjälper bolag med data", self.desc)
+        self.assertNotIn("Vi hjälper", self.desc)
+
+    def test_marketing_social_metric_is_dropped(self):
+        self.assertNotIn("hundratals följare", self.desc)
+
+    def test_attested_demographic_follower_claim_is_kept(self):
+        # Attesterad andels-demografi nämner "följare" men är legitim → behålls.
+        self.assertIn("är beslutsfattare", self.desc)
+
+    def test_attested_bio_follower_brag_is_dropped(self):
+        # Attesterad MEN ej demografi (saknar LinkedIn-följare/-sida-markör) → spärras.
+        self.assertNotIn("engagerade följare", self.desc)
 
 
 if __name__ == "__main__":

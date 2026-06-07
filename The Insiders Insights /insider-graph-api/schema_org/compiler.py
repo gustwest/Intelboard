@@ -20,6 +20,8 @@ domänen). Det är så default/premium-hosting (§7) styrs.
 from __future__ import annotations
 
 import hashlib
+import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Iterator
 
@@ -31,8 +33,11 @@ from schema_org.claims import (
     derive_property_claims,
     derive_skill_claims,
 )
-from schema_org.urls import canonical_url, external_same_as
+from schema_org.urls import canonical_url, clean_logo_url, external_same_as
 from schemas import Claim, ClaimSource
+from services import claim_voice
+
+log = logging.getLogger(__name__)
 
 # Default-etiketter (sv) — i18n.strings(language) väljer rätt språk per kund (A1).
 # Behålls som konstanter för bakåtkompatibilitet; värdena = sv-strängtabellen.
@@ -63,6 +68,13 @@ _ASSURANCE_RANK = {level: value for level, (value, _name) in _ASSURANCE_RATING.i
 # Org/Person/JobPosting-källor är i praktiken webbsidor vi läst — JobPosting-TYPEN är
 # reserverad för de dedikerade rollnoderna (#job-…), inte för källnoder (#src-…).
 _PAGE_TYPES = {"Organization", "Person", "JobPosting"}
+
+# sameAs = "samma entitet någon annanstans" — INTE en samling citat. Källtyper som är
+# INNEHÅLL om bolaget (enskilda inlägg, artiklar) är inte identitetslänkar: deras URL:er
+# hör hemma som numrerade källnoder (subjectOf/citation), aldrig i sameAs. Annars späder
+# t.ex. 17 LinkedIn-inläggs-URL:er ut identitetssignalen. Identitetskällor (Organization-
+# sidor, allabolag, attesterade företagsankare) passerar och hamnar i sameAs som förr.
+_SAMEAS_EXCLUDED_TYPES = {"SocialMediaPosting", "Article", "NewsArticle", "BlogPosting"}
 
 
 @dataclass
@@ -218,7 +230,9 @@ def build_render_model(client_id: str) -> RenderModel:
             if existing is None:
                 return None, None
             sources[src.item_id] = existing
-        if existing.url:
+        # Bara identitetskällor i sameAs — innehåll (inlägg/artiklar) blir källnod, inte
+        # identitetslänk. Citatet/källnoden byggs ändå (returnerar number nedan).
+        if existing.url and existing.schema_type not in _SAMEAS_EXCLUDED_TYPES:
             if existing.url not in same_as:
                 same_as.append(existing.url)
         return existing.number, None
@@ -242,7 +256,23 @@ def build_render_model(client_id: str) -> RenderModel:
                               manual_label, claim.confidence, audience,
                               assurance_level, verification_id))
         elif claim.claim_kind == "narrative" and claim.statement:
-            _merge_prose(prose_by_key, claim.statement.strip(), footnotes, manual_label,
+            statement = claim.statement.strip()
+            # Undanta BARA attesterad demografi (andel av LinkedIn-följare/-besökare) —
+            # legitim social proof. Markören "LinkedIn-följare"/"LinkedIn-sida" sätts av
+            # demografi-templaterna (attested_ingest); attesterade people_bio-/övriga
+            # claims med följar-skryt omfattas däremot av spärren.
+            low = statement.lower()
+            is_demographic = any(s.kind == "attested" for s in claim.source) and (
+                "linkedin-följare" in low or "linkedin-sida" in low
+            )
+            # Social-metric-/fåfänge-läckage publiceras ALDRIG — sista spärren även för
+            # redan lagrad data (recompile rensar live utan re-extraktion).
+            if not is_demographic and claim_voice.mentions_social_metric(statement):
+                continue
+            # Neutralisera företagsröst (idempotent) så även äldre lagrade första-persons-
+            # claims renderas i tredje person vid recompile — utan re-extraktion.
+            statement = claim_voice.neutralize(statement, data.get("company_name") or client_id)
+            _merge_prose(prose_by_key, statement, footnotes, manual_label,
                          audience, assurance_level, verification_id)
 
     # Starkast bevisade fakta först. Stabil sortering → värden med samma vikt
@@ -250,6 +280,12 @@ def build_render_model(client_id: str) -> RenderModel:
     # (aktiva/fullt bevisade kompetenser före avklingade) — vikten visas aldrig
     # som siffra, den styr bara prominensen.
     facts.sort(key=lambda f: f.confidence, reverse=True)
+
+    # Sanera knowsAbout: släng platshållar-/rubrik-läckage ("Aggregerade kompetenser"),
+    # dedupa skiftlägesokänsligt och normalisera akronymer. Körs EFTER sorteringen så
+    # den starkaste ytformen av en dubblett behålls. Påverkar både JSON-LD-arrayen och
+    # ledmeningen (båda läser samma facts-lista).
+    facts = _sanitize_knowsabout(facts)
 
     # Dedup: snarlika påståenden (samma normaliserade text) är sammanslagna; deras
     # källor är förenade → ett påstående som bekräftas av flera källor citerar alla.
@@ -303,6 +339,60 @@ def _build_lead(name: str, facts: list[Fact], prose: list[Prose], lang: str) -> 
     return (prose[0].statement.rstrip(".") + ".") if prose else None
 
 
+# Interna platshållar-/rubriketiketter som aldrig får läcka ut som en kompetens.
+# (Formfältet i routers/linkedin.py heter "Aggregerade kompetenser" — den texten har
+# i praktiken fastnat som ett knowsAbout-VÄRDE för en kund.) Normaliserad jämförelse.
+_KNOWSABOUT_PLACEHOLDERS = {
+    "kompetenser", "kompetens", "kompetensstatistik",
+    "skills", "aggregated skills", "competencies", "färdigheter",
+}
+
+
+def _normalize_skill(value: Any) -> str:
+    """Trimma + kollapsa blanksteg. Korta enkel-ord helt i bokstäver behandlas som
+    akronymer och versaliseras (ai → AI, geo → GEO) så de dedupar mot varandra och
+    läser proffsigt. Flerordsfraser ("Sales Management") lämnas orörda."""
+    s = re.sub(r"\s+", " ", str(value)).strip()
+    if s and " " not in s and len(s) <= 4 and s.isalpha():
+        return s.upper()
+    return s
+
+
+def _is_knowsabout_placeholder(normalized_lower: str) -> bool:
+    return (
+        normalized_lower in _KNOWSABOUT_PLACEHOLDERS
+        or normalized_lower.startswith("aggregerad")  # "aggregerade kompetenser" m.fl.
+    )
+
+
+def _sanitize_knowsabout(facts: list[Fact]) -> list[Fact]:
+    """Rensa knowsAbout-fakta: släng platshållar-/rubrik-läckage, dedupa skiftläges-
+    okänsligt och normalisera akronymer. Övriga predikat passerar orörda. Ett faktum
+    vars värden alla faller bort släpps helt. Drabbar även äldre Firestore-data vid
+    nästa kompilering — ingen DB-kirurgi krävs."""
+    seen: set[str] = set()
+    out: list[Fact] = []
+    for f in facts:
+        if f.predicate != "knowsAbout":
+            out.append(f)
+            continue
+        was_list = isinstance(f.value, list)
+        values = f.value if was_list else [f.value]
+        cleaned: list[str] = []
+        for v in values:
+            norm = _normalize_skill(v)
+            key = norm.lower()
+            if not norm or _is_knowsabout_placeholder(key) or key in seen:
+                continue
+            seen.add(key)
+            cleaned.append(norm)
+        if not cleaned:
+            continue  # bara platshållare/dubbletter → släpp hela faktumet
+        f.value = cleaned if was_list else cleaned[0]
+        out.append(f)
+    return out
+
+
 def _gather_job_postings(client_id: str, base: str) -> list[JobPosting]:
     """Aktiva (ej stängda, ej generiska) platsannonser → JobPosting-vyer."""
     out: list[JobPosting] = []
@@ -338,15 +428,20 @@ def compile_client(client_id: str) -> dict[str, Any]:
         "@type": "Organization",
         "@id": model.org_id,
         "name": model.company_name,
+        # Profilens språk (A1) på själva entiteten, inte bara på FAQPage — så motorerna
+        # vet vilket språk fakta/beskrivning är skrivna på var de än läser noden.
+        "inLanguage": model.language,
     }
     if data.get("website"):
         # Canonical homepage. Snippet i kundens <head> delar samma `url` — så
         # motorerna ser ETT konsistent entitetskort var de än läser den.
         organization["url"] = data["website"]
-    if data.get("logo_url"):
+    logo = clean_logo_url(data.get("logo_url"), data.get("website"))
+    if logo:
         # Schema.org Organization.logo accepterar URL eller ImageObject. URL räcker —
-        # motorerna laddar den och bygger sina egna avatar-/knowledge-paneler.
-        organization["logo"] = data["logo_url"]
+        # motorerna laddar den och bygger sina egna avatar-/knowledge-paneler. Gardet
+        # (clean_logo_url) stoppar startsides-/icke-bild-URL:er så ingen trasig avatar emittas.
+        organization["logo"] = logo
     if data.get("org_number"):
         # Svenskt org.nr — PropertyValue med propertyID gör identifieraren entydig.
         # `identifier` är en lista i schema.org-modellen → vi initierar som lista även
@@ -463,7 +558,23 @@ def compile_client(client_id: str) -> dict[str, Any]:
             node["url"] = jp.url
         job_nodes.append(node)
 
-    graph = [organization, *model.persons, *source_nodes, *claim_nodes,
+    # ProfilePage-container (GEO-best practice): en uttrycklig sid-nod som säger "det
+    # här dokumentet HANDLAR OM bolaget". Ger motorerna sid↔entitet-relationen explicit
+    # i stället för att gissa, och bär sidans språk + färskhet.
+    profile_page = {
+        "@type": "ProfilePage",
+        "@id": f"{model.base}#page",
+        "url": model.base,
+        "inLanguage": model.language,
+        "about": {"@id": model.org_id},
+        "mainEntity": {"@id": model.org_id},
+    }
+    if model.company_name:
+        profile_page["name"] = model.company_name
+    if model.last_updated:
+        profile_page["dateModified"] = model.last_updated
+
+    graph = [profile_page, organization, *model.persons, *source_nodes, *claim_nodes,
              *review_nodes, *faq_nodes, *job_nodes]
     return {"@context": "https://schema.org", "@graph": graph}
 
@@ -517,6 +628,13 @@ def _iter_output_claims(client_id: str) -> Iterator[Claim]:
         # narrative-claim (bevaras som evidens, renderas aldrig). Skippas oavsett
         # included_in_output — gammal data kan ha kvar flaggan truthy.
         if raw.get("review_status") in ("rejected", "aggregated"):
+            continue
+        # Inget claim utan källa (spec §2.2). Regeln gäller vid skapandet, men gammal/
+        # manuellt skriven data kan ha tomt source[] med included_in_output=True. Sista
+        # spärren vid kompilering: släpp claims utan proveniens så de aldrig når grafen
+        # (drabbar även befintlig live-data vid nästa recompile — ingen DB-kirurgi krävs).
+        if not (raw.get("source") or []):
+            log.info("claim %s saknar källa — släpps (inget claim utan källa)", _claim_id)
             continue
         yield Claim(**raw)
     yield from derive_property_claims(client_id)

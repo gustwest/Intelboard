@@ -18,7 +18,44 @@ deklarerar vi medvetet kundens domän även om vi hostar sidan.
 """
 from __future__ import annotations
 
+from urllib.parse import urlparse
+
 from config import settings
+
+# Filändelser vi accepterar som en faktisk bild-logotyp.
+_IMAGE_EXTS = {"svg", "png", "jpg", "jpeg", "gif", "webp", "avif", "ico"}
+
+
+def clean_logo_url(logo_url: str | None, website: str | None = None) -> str | None:
+    """Returnera logo_url om den rimligen pekar på en BILD, annars None.
+
+    Logo-fältet i kundkortet är ett fritt URL-fält utan validering, så det vanligaste
+    felet är att kundens STARTSIDA klistras in (→ ingen avatar renderas, bara en trasig
+    bild i knowledge-panelen). Gardet fångar det utan att vara för strikt:
+      * tom/whitespace → None
+      * exakt = website (startsidan) → None
+      * bar domän / path "/" (ingen filväg) → None
+      * filändelse som inte är en bild (.html/.pdf …) → None
+    Extensionslösa djupa vägar (CDN-serverade bilder) släpps igenom — vi avvisar bara
+    det som tydligt INTE är en bild."""
+    if not logo_url:
+        return None
+    u = logo_url.strip()
+    if not u:
+        return None
+    if website and u.rstrip("/") == website.rstrip("/"):
+        return None
+    parsed = urlparse(u)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return None
+    path = parsed.path or ""
+    if path in ("", "/"):
+        return None
+    last = path.rsplit("/", 1)[-1]
+    ext = last.rsplit(".", 1)[-1].lower() if "." in last else ""
+    if ext and ext not in _IMAGE_EXTS:
+        return None
+    return u
 
 # Aspirationell publik domän som kanoniken pekar på i path-style-läget (innan
 # clean-URL-cutover). I clean-läge kommer kanoniken i stället från CDN_BASE_URL,
