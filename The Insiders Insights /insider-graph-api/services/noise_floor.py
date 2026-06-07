@@ -238,7 +238,11 @@ def run_experiment(
                 q, engine, run_idx = futs[fut]
                 answers[(q, engine, run_idx)] = fut.result()
 
-        for q, engine, _llm, run_idx in tasks:
+        # Varumärkesextraktion parallellt (domaren är trådsäker). Sekventiellt tog för
+        # lång tid: ~400 domar-anrop i rad gjorde att hela körningen aldrig hann klart
+        # innan långa bakgrundsjobb dödades. Per-anrop-timeout skyddar fortfarande.
+        def _row(task: tuple[str, str, Any, int]) -> dict[str, Any]:
+            q, engine, _llm, run_idx = task
             answer = answers.get((q, engine, run_idx), "")
             brands: list[str] = []
             if extract_brands and judge is not None and answer and len(answer.strip()) >= 20:
@@ -246,11 +250,14 @@ def run_experiment(
                     lambda a=answer: polling._extract_orgs(judge, a, name, employee_names),
                     timeout=ORG_TIMEOUT_SEC, default=[], what=f"noise_floor.extract_orgs[{engine}]",
                 )
-            rows.append({
+            return {
                 "engine": engine, "temp": temp, "prompt": q, "run_idx": run_idx,
                 "mentioned": polling._has_mention(answer, name, employee_names),
                 "brands": brands,
-            })
+            }
+
+        with ThreadPoolExecutor(max_workers=min(8, len(tasks))) as pool:
+            rows.extend(pool.map(_row, tasks))
 
     return {"company": name, **aggregate(rows, runs)}
 
