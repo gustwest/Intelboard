@@ -199,6 +199,14 @@ def claim_doc(client_id: str, claim_id: str) -> _DocRef:
     )
 
 
+def write_claim_preserving_review(client_id: str, claim_id: str, build) -> None:
+    """Fake av den transaktionella read-modify-write (firestore_client.write_claim_preserving_review):
+    läser ev. befintligt (granskat) claim ur STATE['claims'] och skriver resultatet till
+    writes() — extraktionen skapar nya, så assertioner använder samma writes()-spegel som förr."""
+    existing = STATE.get("claims", {}).get(claim_id) or {}
+    STATE["writes"][claim_id] = build(existing)
+
+
 def risk_findings_col(client_id: str) -> _Col:
     return _Col(STATE.get("risk_findings"))
 

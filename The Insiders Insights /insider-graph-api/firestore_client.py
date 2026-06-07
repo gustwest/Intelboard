@@ -11,7 +11,7 @@ Collection-layout speglar spec.md sektion 02:
 import hashlib
 import os
 from functools import lru_cache
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 from google.cloud import firestore
 
@@ -65,6 +65,29 @@ def claim_doc(client_id: str, claim_id: str):
 def iter_claims(client_id: str) -> Iterator[tuple[str, dict[str, Any]]]:
     for doc in claims_col(client_id).stream():
         yield doc.id, doc.to_dict() or {}
+
+
+def write_claim_preserving_review(
+    client_id: str, claim_id: str, build: Callable[[dict[str, Any]], dict[str, Any]]
+) -> None:
+    """Transaktionell read-modify-write på ett claim-dokument.
+
+    `build(existing)` får det nuvarande dokumentet (tom dict om nytt) och returnerar
+    payloaden som ska skrivas. Läsning + skrivning sker i SAMMA transaktion, vilket
+    stänger lost-update-racet mot granskningsflödets .update(): utan transaktion kan
+    (om)extraktionen läsa "inget beslut", en operatör hinner godkänna däremellan, och
+    extraktionen skriver sedan över beslutet. Används av claim_extraction för att hålla
+    review_status/needs_review m.m. intakta över ett schemalagt omkörnings-pass.
+    """
+    ref = claim_doc(client_id, claim_id)
+    transaction = db().transaction()
+
+    @firestore.transactional
+    def _apply(txn) -> None:
+        snap = ref.get(transaction=txn)
+        txn.set(ref, build(snap.to_dict() or {}))
+
+    _apply(transaction)
 
 
 def polling_results_col(client_id: str):

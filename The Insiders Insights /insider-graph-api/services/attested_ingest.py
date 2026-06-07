@@ -558,9 +558,17 @@ def ingest_attested(
     if not writes:
         raise ValueError("no valid rows in file")
 
+    # Bevara "Inkludera i leverans"-bekräftelsen över en omladdning av samma data.
+    # Deterministiska doc-id:n gör att samma segment/inlägg får samma id, så en redan
+    # inkluderad post inte tyst faller ur leveransen — varken när replace-läget raderar
+    # och återstagear, eller när append-läget skriver över. Måste fångas FÖRE radering.
+    confirmed = _existing_inclusion(client_id, source_type)
+
     removed = _delete_existing(client_id, source_type) if st.mode == "replace" else 0
     origin = f"attested:{source_type}"
     for target, doc_id, payload in writes:
+        if doc_id in confirmed:
+            payload = {**payload, "included_in_output": True}
         if target == "claim":
             fs.claim_doc(client_id, doc_id).set({**payload, "origin": origin})
         else:
@@ -656,6 +664,22 @@ def clear_source(client_id: str, source_type: str) -> int:
     if not fs.client_doc(client_id).get().exists:
         raise ValueError(f"client not found: {client_id}")
     return _delete_existing(client_id, source_type)
+
+
+def _existing_inclusion(client_id: str, source_type: str) -> set[str]:
+    """Doc-id:n för källtypen som operatören redan bekräftat "Inkludera i leverans".
+    Fångas FÖRE replace-radering/överskrivning så bekräftelsen kan bäras över till de
+    nya (deterministiskt id-satta) posterna vid en omladdning av samma data."""
+    origin = f"attested:{source_type}"
+    included: set[str] = set()
+    for claim_id, raw in fs.iter_claims(client_id):
+        if (raw.get("origin") or "") == origin and raw.get("included_in_output"):
+            included.add(claim_id)
+    for snap in fs.raw_items_company_col(client_id).stream():
+        d = snap.to_dict() or {}
+        if d.get("attested_source") == source_type and d.get("included_in_output"):
+            included.add(snap.id)
+    return included
 
 
 def _delete_existing(client_id: str, source_type: str) -> int:

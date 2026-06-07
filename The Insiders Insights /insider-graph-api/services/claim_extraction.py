@@ -212,10 +212,37 @@ def _validate(llm, statement: str, source_text: str) -> bool:
     return True
 
 
+# Fält extraktionen får uppdatera även på ett redan granskat claim — färskare
+# proveniens stärker bara leveransen. Allt annat (själva beslutet, ev. ops-redigerad
+# statement, aggregerings-metadata) ägs av gransknings-/aggregeringsflödet och bevaras.
+_MACHINE_OWNED_FIELDS = ("source", "confidence", "validated_at", "validated_by")
+# Statusar som betyder "en människa (eller aggregeringen) har redan bestämt sig".
+# Beslutet är sticky på statement-hashen: maskinen återöppnar aldrig — bara en operatör.
+_DECIDED_STATES = ("approved", "rejected", "aggregated")
+
+
+def _merge_preserving_review(existing: dict[str, Any], fresh: dict[str, Any]) -> dict[str, Any]:
+    """Bygg dokumentet som ska skrivas vid (om)extraktion.
+
+    Finns redan ett granskningsbeslut: bevara hela det befintliga dokumentet och uppdatera
+    bara den maskinägda proveniensen — så ett godkänt/avvisat claim ALDRIG nollställs
+    tillbaka till granskningskön vid ett schemalagt omkörnings-pass. Saknas beslut (nytt
+    eller ännu ogranskat claim): skriv det färska claimet rakt av.
+    """
+    if existing.get("review_status") in _DECIDED_STATES:
+        return {**existing, **{k: fresh[k] for k in _MACHINE_OWNED_FIELDS if k in fresh}}
+    return fresh
+
+
 def _persist(client_id: str, claim: Claim) -> None:
     # Deterministiskt id → idempotent vid omkörning (skriv inte dubbletter).
     claim_id = "narr-" + hashlib.sha1((claim.statement or "").encode()).hexdigest()[:12]
-    fs.claim_doc(client_id, claim_id).set(claim.model_dump())
+    fresh = claim.model_dump()
+    # Transaktionell read-modify-write: bevarar ett ev. granskningsbeslut i samma atomära
+    # steg (stänger racet mot review-flödets .update()). Se _merge_preserving_review.
+    fs.write_claim_preserving_review(
+        client_id, claim_id, lambda existing: _merge_preserving_review(existing, fresh)
+    )
 
 
 # Module-level seams (patchas i tester).
