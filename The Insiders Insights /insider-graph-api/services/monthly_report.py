@@ -144,7 +144,8 @@ def build_report_model(client_id: str, month: str | None = None) -> dict[str, An
     )
     actions = [_action_row(d) for d in actioned_f]
     confidence = _decision_confidence(open_f, answers_by_persona)
-    trend = _trend(client_id, month, confidence.get("score"), len(resolved_f))
+    trend = _trend(client_id, month, confidence.get("score"), len(resolved_f),
+                   confidence.get("score_se"))
     parity = _latest_parity(client_id)
 
     return {
@@ -168,13 +169,35 @@ def build_report_model(client_id: str, month: str | None = None) -> dict[str, An
     }
 
 
+def _confidence_score_se(open_findings: list[dict], total: int) -> float | None:
+    """Brusband (SE) för beslutssäkerhets-poängen, propagerat ur findings detection_rate.
+
+    Poängen = 100·(1 − F/total). Det enda brusiga är F = antal öppna findings: varje
+    finding är "öppen" med sannolikhet dr_i (P6:s detection_rate, k/N). F är då en summa
+    av oberoende Bernoulli → Var(F) = Σ dr_i(1−dr_i), och SE(score) = (100/total)·√Var(F).
+    Robusta fynd (dr=1, syns varje körning) bidrar 0; vingliga (dr≈0.5) dominerar bandet —
+    poängens osäkerhet kommer från de vacklande fynden (samma princip som _runtorun_se).
+
+    Findings utan detection_rate (historik före P6) antas robusta (dr=1) → 0 bidrag;
+    deras månadsjämförelse faller tillbaka på MONTHLY_TREND_MIN_DELTA-golvet i _trend."""
+    if not total:
+        return None
+    var = 0.0
+    for f in open_findings:
+        dr = float(f.get("detection_rate", 1.0) or 1.0)
+        dr = min(1.0, max(0.0, dr))
+        var += dr * (1.0 - dr)
+    return round((100.0 / total) * (var ** 0.5), 2)
+
+
 def _decision_confidence(open_findings: list[dict], answers_by_persona: dict[str, int]) -> dict[str, Any]:
     """Graderad beslutssäkerhet (högre=bättre) på en 0–100-resa med namngivna nivåer.
     Inte binärt bra/dåligt: taket hålls under 100 (GEO blir aldrig 'klart') och tunn
     täckning kan inte nå toppskiktet. Risk Exposure (lägre=bättre) kvar som undermått."""
     total = sum(int(v or 0) for v in answers_by_persona.values())
     if not total:
-        return {"score": None, "stage": "Ej mätt", "headroom": None, "answers": 0, "safe": 0,
+        return {"score": None, "score_se": None, "stage": "Ej mätt", "headroom": None,
+                "answers": 0, "safe": 0,
                 "covered_personas": 0, "ceiling": CONFIDENCE_CEILING,
                 "next_step": "Generera och godkänn ett frågebatteri för att mäta bilden."}
     safe = max(0, total - len(open_findings))
@@ -184,6 +207,7 @@ def _decision_confidence(open_findings: list[dict], answers_by_persona: dict[str
     score = round(min(raw, ceiling))
     return {
         "score": score,
+        "score_se": _confidence_score_se(open_findings, total),
         "stage": _stage(score),
         "headroom": ceiling - score,
         "answers": total,
@@ -343,26 +367,41 @@ def _latest_parity(client_id: str) -> float | None:
     return latest
 
 
-def _trend(client_id: str, month: str, current_score: int | None, resolved_count: int) -> dict[str, Any]:
+def _trend(client_id: str, month: str, current_score: int | None, resolved_count: int,
+           current_score_se: float | None = None) -> dict[str, Any]:
     """Effekt över tid (§8.4): beslutssäkerhet månad-för-månad (serie + delta mot närmast
-    föregående) plus antal lösta risker. Trenden — inte ett kausalitetspåstående — är beviset."""
+    föregående) plus antal lösta risker. Trenden — inte ett kausalitetspåstående — är beviset.
+
+    P1-förfining: `significant` avgör om månadens rörelse är åtskild från samplingsbruset
+    (findings detection_rate, propagerat till score_se). Olika från SoV: SE=0 betyder att
+    alla öppna fynd är robusta → poängen är deterministisk → varje rörelse ÄR verklig (inte
+    brus). Då — och för historik utan score_se — faller vi tillbaka på MONTHLY_TREND_MIN_DELTA
+    som golv. Med uppmätt brus krävs |Δ| ≥ max(1.96·SE_diff, golv)."""
     history = []
-    prev_id, prev_score = "", None
+    prev_id, prev_score, prev_se = "", None, None
     for rid, data in fs.iter_monthly_reports(client_id):
         if rid >= month:  # hoppa över ev. redan persisterad körning för samma månad
             continue
-        score = (data.get("decision_confidence") or {}).get("score")
+        conf = data.get("decision_confidence") or {}
+        score = conf.get("score")
         history.append({"month": rid, "score": score})
         if rid > prev_id:
-            prev_id, prev_score = rid, score
+            prev_id, prev_score, prev_se = rid, score, conf.get("score_se")
     series = sorted(history, key=lambda x: x["month"]) + [{"month": month, "score": current_score}]
     delta = None
+    significant = False
     if current_score is not None and prev_score is not None:
         delta = current_score - prev_score
+        se_diff = ((current_score_se or 0.0) ** 2 + (prev_se or 0.0) ** 2) ** 0.5
+        floor = MONTHLY_TREND_MIN_DELTA
+        threshold = max(1.96 * se_diff, floor) if se_diff > 0 else floor
+        significant = abs(delta) >= threshold
     return {
         "previous_month": prev_id or None,
         "previous_score": prev_score,
+        "previous_score_se": prev_se,
         "delta": delta,
+        "significant": significant,
         "resolved_count": resolved_count,
         "series": series,
     }
@@ -514,8 +553,12 @@ def render_report_html(report: dict[str, Any]) -> str:
     if trend.get("previous_month"):
         d = trend.get("delta")
         arrow = "→ oförändrad"
-        # P1: rendera pil bara när deltan når brusbandet (annars läses brus som rörelse).
-        if d is not None and abs(d) >= MONTHLY_TREND_MIN_DELTA:
+        # P1-förfining: rendera pil bara när rörelsen är statistiskt åtskild från
+        # samplingsbruset (trend.significant, propagerat ur findings detection_rate) —
+        # annars läses brus som rörelse.
+        # Default True = bakåtkompatibelt: modeller utan significant-fält (äldre/fixtures)
+        # beter sig som förr; build_report_model sätter alltid fältet i produktion.
+        if d is not None and trend.get("significant", True):
             arrow = f"▲ +{d} (förbättrad)" if d > 0 else f"▼ {d} (försämrad)"
         series_txt = " → ".join(
             f"{html.escape(s['month'])}: {_fmt_int(s.get('score'))}" for s in (trend.get("series") or [])
@@ -663,7 +706,12 @@ def render_customer_email(model: dict[str, Any], lang: str | None = None) -> tup
     prev = trend.get("previous_score")
     if prev is not None and score is not None:
         d = score - prev
-        word = t["trend_unchanged"] if d == 0 else (t["trend_up"] if d > 0 else t["trend_down"])
+        # P1-förfining: kalla det "förbättrad/försämrad" bara när rörelsen är åtskild från
+        # samplingsbruset — annars "oförändrad" (talet visas ändå, men inget falskt löfte).
+        if d == 0 or not trend.get("significant", True):  # default True = bakåtkompatibelt
+            word = t["trend_unchanged"]
+        else:
+            word = t["trend_up"] if d > 0 else t["trend_down"]
         trend_line = t["trend"].format(prev=prev, score=score, word=word)
     resolved = (trend.get("resolved_count") or 0)
     if resolved:

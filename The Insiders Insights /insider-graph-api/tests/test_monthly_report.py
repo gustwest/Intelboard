@@ -147,6 +147,84 @@ class BuildModelTest(unittest.TestCase):
         self.assertTrue(any("bevakning" in i for i in m["improvement_opportunities"]))
 
 
+class ConfidenceScoreSETest(unittest.TestCase):
+    """P1-förfining: brusband på beslutssäkerhets-poängen ur findings detection_rate."""
+
+    def test_robust_findings_zero_se(self):
+        # Alla fynd syns varje körning (dr=1) → poängen deterministisk → SE 0.
+        self.assertEqual(mr._confidence_score_se([{"detection_rate": 1.0}, {"detection_rate": 1.0}], 20), 0.0)
+
+    def test_missing_detection_rate_treated_robust(self):
+        # Historik före P6 saknar detection_rate → antas robust (0 bidrag).
+        self.assertEqual(mr._confidence_score_se([{}, {}], 20), 0.0)
+
+    def test_wobbly_findings_have_se(self):
+        # Två vingliga fynd (dr=0.5) → var = 2·0.25 = 0.5; SE = (100/20)·√0.5.
+        self.assertAlmostEqual(
+            mr._confidence_score_se([{"detection_rate": 0.5}, {"detection_rate": 0.5}], 20),
+            5 * (0.5 ** 0.5), places=2)
+
+    def test_zero_total_is_none(self):
+        self.assertIsNone(mr._confidence_score_se([{"detection_rate": 0.5}], 0))
+
+
+class TrendSignificanceTest(unittest.TestCase):
+    """P1-förfining: månadens rörelse grindas mot poängens brusband (z-test)."""
+
+    def _prev(self, score, se):
+        fakefs.reset(client={"company_name": "Acme AB"},
+                     monthly_reports={"2026-04": {"decision_confidence": {"score": score, "score_se": se}}})
+
+    def test_small_move_within_band_not_significant(self):
+        self._prev(70, 3.0)  # Δ=3, SE_diff=√(9+9)=4.24, 1.96·≈8.3 → 3 < 8.3
+        t = mr._trend("acme", "2026-05", 73, 0, current_score_se=3.0)
+        self.assertEqual(t["delta"], 3)
+        self.assertFalse(t["significant"])
+
+    def test_large_move_is_significant(self):
+        self._prev(50, 2.0)
+        t = mr._trend("acme", "2026-05", 80, 0, current_score_se=2.0)  # Δ=30 ≫ band
+        self.assertTrue(t["significant"])
+
+    def test_deterministic_move_is_significant(self):
+        # SE=0 båda (robusta fynd) → poängen deterministisk → Δ≥golv ÄR verklig, ej brus.
+        self._prev(70, 0.0)
+        t = mr._trend("acme", "2026-05", 72, 0, current_score_se=0.0)
+        self.assertTrue(t["significant"])
+
+    def test_no_previous_not_significant(self):
+        fakefs.reset(client={"company_name": "Acme AB"}, monthly_reports={})
+        t = mr._trend("acme", "2026-05", 72, 0, current_score_se=0.0)
+        self.assertFalse(t["significant"])
+        self.assertIsNone(t["previous_score"])
+
+
+class EmailTrendGateTest(unittest.TestCase):
+    """P1-förfining: kundmejlets trend-ord grindas på significant (default True = legacy)."""
+
+    def _model(self, trend):
+        return {"company_name": "Acme AB", "month": "2026-05",
+                "decision_confidence": {"score": 72, "stage": "Stark", "next_step": "—"},
+                "verdict": "", "trend": trend}
+
+    def test_insignificant_reads_unchanged(self):
+        _s, html, _t = mr.render_customer_email(
+            self._model({"previous_score": 65, "significant": False}))
+        self.assertIn("65 → 72", html)        # talet visas fortfarande
+        self.assertIn("oförändrad", html)
+        self.assertNotIn("förbättrad", html)
+
+    def test_significant_reads_improved(self):
+        _s, html, _t = mr.render_customer_email(
+            self._model({"previous_score": 65, "significant": True}))
+        self.assertIn("förbättrad", html)
+
+    def test_missing_flag_defaults_to_shown(self):
+        # Bakåtkompatibelt: modell utan significant-fält → gammalt beteende (visar ordet).
+        _s, html, _t = mr.render_customer_email(self._model({"previous_score": 65}))
+        self.assertIn("förbättrad", html)
+
+
 class NarrativeTest(unittest.TestCase):
     def setUp(self):
         self._orig = mr.llm_factory.invoke_json
