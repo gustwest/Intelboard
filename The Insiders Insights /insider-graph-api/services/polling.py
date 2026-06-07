@@ -99,6 +99,36 @@ def _proportion_se(successes: int, n: int) -> float:
     return (p * (1.0 - p) / n) ** 0.5
 
 
+def _runtorun_se(answers: list["QuestionAnswer"]) -> float:
+    """Prompt-klustrat standardfel för poolad SoV (P1-förfining, kalibrerat 2026-06-07).
+
+    Trenden jämförs vecka-mot-vecka på SAMMA cachade frågor, så den enda bruskällan
+    som kan flytta talet spuriöst är run-to-run-variationen INOM varje (fråga × motor)-
+    cell — mellan-fråge-heterogeniteten är identisk båda veckorna och tar ut sig. Den
+    naiva poolade binomialen (_proportion_se över alla körningar) blandar in den
+    heterogeniteten och ÖVERSKATTAR därför bruset; en fråga som aldrig flippar (p=0/1)
+    ska bidra med noll brus.
+
+    Korrekt design: cellen = (fråga, motor) med r_c körningar och rate p_c. Poolad
+    SoV = Σm_c/Σr_c, så Var(SoV) = Σ_c r_c·p_c(1−p_c) / N²  (N = Σr_c). Celler vid
+    extremerna bidrar 0. Detta är (per Jensen) ≤ den naiva binomialen — alltså ett
+    tightare, korrekt brusband, så färre verkliga trender felaktigt grå-tonas."""
+    cells: dict[tuple[str, str], list["QuestionAnswer"]] = {}
+    for a in answers:
+        cells.setdefault((a.question, a.model), []).append(a)
+    total = len(answers)
+    if total <= 0 or not cells:
+        return 0.0
+    var_sum = 0.0
+    for cell in cells.values():
+        r = len(cell)
+        if r <= 0:
+            continue
+        p = sum(1 for a in cell if a.mentioned) / r
+        var_sum += r * p * (1.0 - p)
+    return (var_sum / (total * total)) ** 0.5
+
+
 def _call_with_timeout(fn: Callable[[], T], timeout: float, default: T, what: str) -> T:
     """Daemon-tråd + join(timeout): vi väntar max `timeout` på fn() och returnerar default
     om den hänger. Tråden fortsätter köra i bakgrunden tills den dör naturligt eller
@@ -507,7 +537,9 @@ def _aggregate(
     with_mention = [a for a in answers if a.mentioned]
 
     sov = (len(with_mention) / total) if total else 0.0
-    sov_se = _proportion_se(len(with_mention), total)      # P0: brusband på SoV
+    # P1-förfining: prompt-klustrat brusband (run-to-run inom (fråga×motor)), inte naiv
+    # binomial över alla körningar — den senare överskattar bruset på fixerade frågor.
+    sov_se = _runtorun_se(answers)
     sov_ci95 = round(1.96 * sov_se, 4)
 
     # P2: separera "AI Base Knowledge" (training) från "AI Live Signal" (web_rag).
@@ -522,7 +554,7 @@ def _aggregate(
         m = sum(1 for a in src_answers if a.mentioned)
         sov_by_source[src] = {
             "share_of_voice": (m / n) if n else 0.0,
-            "se": round(_proportion_se(m, n), 4),
+            "se": round(_runtorun_se(src_answers), 4),  # P1-förfining: prompt-klustrat
             "n_runs": n,
             "engines": sorted({a.model for a in src_answers}),
         }

@@ -23,6 +23,36 @@ class ProportionSETest(unittest.TestCase):
         self.assertEqual(polling._proportion_se(4, 4), 0.0)
 
 
+class RunToRunSETest(unittest.TestCase):
+    """P1-förfining: prompt-klustrat brusband (run-to-run inom (fråga×motor))."""
+
+    def _ans(self, question, model, mentioned):
+        return QuestionAnswer(category="c", question=question, model=model,
+                              answer="", mentioned=mentioned)
+
+    def test_deterministic_cells_have_zero_noise(self):
+        # En fråga alltid nämnd, en aldrig — ingen flippar → noll run-to-run-brus,
+        # även om poolad rate är 0.5 (där naiv binomial skulle ge ett brett band).
+        rows = ([self._ans("q1", "m", True) for _ in range(3)]
+                + [self._ans("q2", "m", False) for _ in range(3)])
+        self.assertEqual(polling._runtorun_se(rows), 0.0)
+        self.assertGreater(polling._proportion_se(3, 6), 0.0)  # naiv ≠ 0
+
+    def test_single_cell_matches_binomial(self):
+        # Med en enda cell ska klustrad SE = naiv binomial (ingen heterogenitet).
+        rows = [self._ans("q1", "m", True), self._ans("q1", "m", False)]
+        self.assertAlmostEqual(polling._runtorun_se(rows), polling._proportion_se(1, 2), places=6)
+
+    def test_clustered_is_tighter_than_naive_when_heterogeneous(self):
+        # Cell A alltid (p=1, bidrar 0), cell B flippar (p=0.5). Klustrad < naiv.
+        rows = ([self._ans("qA", "m", True) for _ in range(2)]
+                + [self._ans("qB", "m", True), self._ans("qB", "m", False)])
+        clustered = polling._runtorun_se(rows)
+        naive = polling._proportion_se(3, 4)
+        self.assertAlmostEqual(clustered, 0.1768, places=3)
+        self.assertLess(clustered, naive)
+
+
 class RunsEnvTest(unittest.TestCase):
     def tearDown(self):
         os.environ.pop("POLLING_RUNS_PER_QUERY", None)
