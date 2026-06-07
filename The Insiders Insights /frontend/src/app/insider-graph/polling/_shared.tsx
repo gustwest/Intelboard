@@ -176,6 +176,8 @@ export type Competitor = {
 export type PollingWeek = {
   week_id: string;
   share_of_voice: number | null;
+  sov_ci95: number | null;  // P1: 95%-brusband (1.96·prompt-klustrad SE)
+  sov_trend: SovTrend | null;  // P1: vecka-mot-vecka-signifikans
   sentiment_score: number | null;
   parity_index: number | null;
   category_results: Record<string, CategoryResult> | null;
@@ -184,6 +186,15 @@ export type PollingWeek = {
   total_answers: number | null;
   answers_with_mention: number | null;
   models_used: string[] | null;
+};
+
+// P1: är veckans SoV-förändring åtskild från run-to-run-brus? `comparable` = samma
+// motoruppsättning mättes båda veckorna (P3). UI grå-tonar pilar när significant=false.
+export type SovTrend = {
+  delta: number | null;
+  significant: boolean;
+  z: number | null;
+  comparable?: boolean;
 };
 
 // Backend returnerar id:n från services/model_registry (PROBE_CLAUDE_MODEL,

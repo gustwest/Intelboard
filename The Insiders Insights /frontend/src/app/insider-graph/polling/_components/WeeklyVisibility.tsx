@@ -63,10 +63,11 @@ export function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
       </div>
 
       <div
-        title="Huvudtalet speglar vad AI-modellerna minns om kunden från sin träning (bas-kunskap), inte vad en användare med live-webbsök får se. Det live-groundade visas separat som Live-signal längre ned. Tills grounding läggs till på bas-motorerna är detta 'AI:s minne av er', inte 'vad en användare ser just nu'."
-        style={{ fontSize: 10, color: C.dim, fontStyle: 'italic', margin: sovSeries.length > 1 ? '0 0 14px' : '6px 0 0', cursor: 'help' }}
+        style={{ fontSize: 10, color: C.dim, lineHeight: 1.5, margin: sovSeries.length > 1 ? '0 0 14px' : '6px 0 0', padding: '7px 10px', borderLeft: `2px solid ${C.border}`, borderRadius: 4 }}
       >
-        Speglar AI:s tränade minne av kunden (bas-kunskap) — inte vad en live-groundad användare ser. Live-signal redovisas separat nedan.
+        <span style={{ fontWeight: 600, color: C.muted }}>Så läser du talet. </span>
+        Speglar AI:s tränade minne av kunden (bas-kunskap), inte vad en live-groundad användare ser — Live-signal redovisas separat nedan. Mätt över flera körningar per fråga
+        {latest.sov_ci95 != null ? `, ±${Math.round(latest.sov_ci95 * 100)} pp brusband` : ''}; vecka-mot-vecka-rörelser inom bandet är inte säkerställda.
       </div>
 
       {sovSeries.length > 1 && (() => {
@@ -76,11 +77,14 @@ export function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
         const breakByIndex = new Map(breaks.map((b) => [b.beforeIndex, b]));
         return (
           <div>
-            <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span>Share of Voice över tid</span>
+              <span style={{ fontSize: 10, color: C.dim, fontWeight: 500 }}>
+                ╪ = brusband (95 %) · bleka staplar = rörelse inom bruset, ej säkerställd
+              </span>
               {breaks.length > 0 && (
                 <span style={{ fontSize: 10, color: C.dim, fontWeight: 500 }}>
-                  ⋮ = modellbyte (ej jämförbart över linjen)
+                  · ⋮ = modellbyte (ej jämförbart)
                 </span>
               )}
             </div>
@@ -100,11 +104,35 @@ export function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
                         <span style={{ position: 'absolute', top: -2, left: -6, fontSize: 11, color: C.accent }}>⋮</span>
                       </div>
                     )}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1, maxWidth: 48 }}>
-                      <span style={{ fontSize: 10, color: C.muted }}>{Math.round(w.share_of_voice * 100)}</span>
-                      <div style={{ width: '100%', maxWidth: 28, height: `${Math.max(3, w.share_of_voice * 72)}px`, background: C.accent, borderRadius: '4px 4px 0 0', opacity: 0.85 }} />
-                      <span style={{ fontSize: 9, color: C.dim, fontFamily: 'ui-monospace, monospace' }}>{w.week_id.slice(5)}</span>
-                    </div>
+                    {(() => {
+                      // P1: brusband (±CI95) som whisker + blek stapel när veckans rörelse
+                      // ryms i bruset (ej statistiskt åtskild från run-to-run). Saknas
+                      // jämförelse (äldsta stapeln, delta=null) → ingen blekning.
+                      const sov = w.share_of_voice;
+                      const ci = w.sov_ci95 ?? 0;
+                      const moved = w.sov_trend?.delta != null;
+                      const withinNoise = moved && !w.sov_trend?.significant;
+                      const top = Math.min(1, sov + ci);
+                      const bottom = Math.max(0, sov - ci);
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1, maxWidth: 48 }}>
+                          <span style={{ fontSize: 10, color: C.muted }}>{Math.round(sov * 100)}</span>
+                          <div style={{ position: 'relative', width: '100%', maxWidth: 28, height: 72, display: 'flex', alignItems: 'flex-end' }}>
+                            <div style={{ width: '100%', height: `${Math.max(3, sov * 72)}px`, background: C.accent, borderRadius: '4px 4px 0 0', opacity: withinNoise ? 0.4 : 0.85 }} />
+                            {ci > 0 && (
+                              <div
+                                title={`Brusband ±${Math.round(ci * 100)} pp (95 %)${withinNoise ? ' — veckans rörelse ryms i bruset' : ''}`}
+                                style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', bottom: `${bottom * 72}px`, height: `${(top - bottom) * 72}px`, width: 1, background: C.muted, opacity: 0.7, cursor: 'help' }}
+                              >
+                                <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 7, height: 1, background: C.muted }} />
+                                <div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: 7, height: 1, background: C.muted }} />
+                              </div>
+                            )}
+                          </div>
+                          <span style={{ fontSize: 9, color: C.dim, fontFamily: 'ui-monospace, monospace' }}>{w.week_id.slice(5)}</span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })}
