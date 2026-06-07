@@ -291,6 +291,12 @@ create_or_update_job model-availability-check jobs.model_availability_check 1 1 
 # Kostnads-roll-up: läser föregående dygns job_runs.summary.tokens, summerar
 # USD per modell/kund/jobb-typ, kollar trösklar. Lätt jobb — Firestore-läsning + lite mattematik.
 create_or_update_job cost-rollup              jobs.cost_rollup              1 1 600s
+# C2 språkexperiment (docs/leverans-arbetsplan.md §C2): ad-hoc per kund — INGEN
+# scheduler. Triggas manuellt med args-override:
+#   gcloud run jobs execute lang-probe --region=$REGION \
+#     --args="-m,jobs.lang_probe,--client-id,<id>" --wait
+# LLM-tungt (probe-anrop × sv/en × runs) → höjd timeout.
+create_or_update_job lang-probe               jobs.lang_probe               1 1 1800s
 
 # ---- 7. Cloud Scheduler-triggers ------------------------------------------
 schedule_job() {
