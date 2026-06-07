@@ -164,13 +164,21 @@ def list_results(client_id: str, limit: int = 12) -> dict[str, Any]:
     # grå-tona ▲/▼ när sov_trend.significant är False — annars läses brus som rörelse.
     for i, w in enumerate(weeks):
         prev = weeks[i + 1] if i + 1 < len(weeks) else None
-        w["sov_trend"] = (
+        trend = (
             sov_change_significance(
                 w.get("share_of_voice"), w.get("sov_se"),
                 prev.get("share_of_voice"), prev.get("sov_se"),
             )
             if prev else {"delta": None, "significant": False, "z": None}
         )
+        # P3: en SoV-jämförelse är giltig bara om SAMMA motoruppsättning mättes båda
+        # veckorna. Bytte en probe-modell mellan veckorna (always-latest-policyn) korsar
+        # deltan ett instrumentbyte → markera ej jämförbar så pilen inte läses som trend.
+        if prev is not None:
+            trend["comparable"] = (w.get("models_used") or []) == (prev.get("models_used") or [])
+            if not trend["comparable"]:
+                trend["significant"] = False
+        w["sov_trend"] = trend
     return {"client_id": client_id, "weeks": weeks[:limit]}
 
 
