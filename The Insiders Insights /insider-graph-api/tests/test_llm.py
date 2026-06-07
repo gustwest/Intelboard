@@ -90,9 +90,9 @@ class ProbeEnginesTest(unittest.TestCase):
         )
         llm._vertex_gemini = lambda model, temperature=0, location=None: ("gemini", model, location)
         llm._vertex_mistral = lambda model, location=None: ("mistral", model, location)
-        llm._openai_chat = lambda model: ("openai", model)
-        llm._anthropic_chat = lambda model: ("claude", model)
-        llm._perplexity_chat = lambda model: ("perplexity", model)
+        llm._openai_chat = lambda model, temperature=None: ("openai", model)
+        llm._anthropic_chat = lambda model, temperature=None: ("claude", model)
+        llm._perplexity_chat = lambda model, temperature=None: ("perplexity", model)
 
     def tearDown(self):
         # Återställ status-flaggorna

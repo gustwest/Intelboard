@@ -146,47 +146,58 @@ def _vertex_anthropic(model: str, location: str | None = None):
     )
 
 
-def _openai_chat(model: str):
+def _openai_chat(model: str, temperature: float | None = None):
     """OpenAI direktanslutning — GPT-modeller finns inte i Vertex Model Garden.
 
     GPT-5-modeller stöder ENDAST temperature=1 (default). Värden < 1 returnerar
     400 "Only the default is supported". ChatOpenAI:s internt default är 0.7 →
     måste sättas explicit till 1 för gpt-5*. Tidigare modeller (gpt-4*) får
-    fortsatt 0 för polling-konsistens."""
+    fortsatt 0 för polling-konsistens.
+
+    `temperature`-override (None = produktionsdefault) används av brusgolv-
+    experimentet för att köra samma motor vid temp=0 och temp>0. GPT-5 kan inte
+    hedra en override — API:t tillåter bara default 1, så den klampas dit."""
     from langchain_openai import ChatOpenAI
 
-    temperature = 1 if model.startswith("gpt-5") else 0
+    if temperature is None:
+        temperature = 1 if model.startswith("gpt-5") else 0
+    elif model.startswith("gpt-5"):
+        temperature = 1  # gpt-5 stöder bara default — override ignoreras
     return ChatOpenAI(
         api_key=settings.openai_api_key, model=model, temperature=temperature, timeout=60,
     )
 
 
-def _perplexity_chat(model: str):
+def _perplexity_chat(model: str, temperature: float | None = None):
     """Perplexity-probe via deras direkta API (OpenAI-kompatibel). Mäter web-RAG-
     signal — vad AI hittar om bolaget LIVE på webben, distinkt från training-data-
-    baserade probarna. Finns inte i Vertex Model Garden, så separat auth-väg."""
+    baserade probarna. Finns inte i Vertex Model Garden, så separat auth-väg.
+
+    `temperature`-override (None = produktionsdefault 0) för brusgolv-experimentet."""
     from langchain_openai import ChatOpenAI
 
     return ChatOpenAI(
         api_key=settings.perplexity_api_key,
         base_url="https://api.perplexity.ai",
         model=model,
-        temperature=0,
+        temperature=0 if temperature is None else temperature,
         timeout=60,
     )
 
 
-def _anthropic_chat(model: str):
+def _anthropic_chat(model: str, temperature: float | None = None):
     """Claude-probe via första-parts Anthropic API (api.anthropic.com). 2026-06-04
     bytte vi från Vertex Model Garden (quota=0 på global endpoint + hostname-bugg) till
     direkt-API — samma mönster som ChatGPT/Perplexity. Publik probe-payload, ingen
-    kunddata, så ingen EU-residens-konflikt."""
+    kunddata, så ingen EU-residens-konflikt.
+
+    `temperature`-override (None = produktionsdefault 0) för brusgolv-experimentet."""
     from langchain_anthropic import ChatAnthropic
 
     return ChatAnthropic(
         api_key=settings.anthropic_api_key,
         model=model,
-        temperature=0,
+        temperature=0 if temperature is None else temperature,
         max_tokens=1024,
         timeout=60,
     )
@@ -236,7 +247,7 @@ def _planned_probe_ids() -> set[str]:
     return {row["id"] for row in PROBE_ENGINE_REGISTRY if row.get("status") == "planned"}
 
 
-def make_probe_engines() -> dict[str, Any]:
+def make_probe_engines(temperature: float | None = None) -> dict[str, Any]:
     """Probarna (Claude + Gemini + ChatGPT + ev. Mistral + Perplexity) mäter de publika
     AI-assistenter användare träffar. Vertex-probarna kör typiskt `vertex_location="global"`
     eller en EU-region — payloaden är publik (bolagsnamn + generisk fråga), EU-residens
@@ -246,16 +257,22 @@ def make_probe_engines() -> dict[str, Any]:
     Per-probe-isolering: en motors init-fel ska inte slå ut de andra.
 
     Filtrering: motorer som är markerade "planned" i PROBE_ENGINE_REGISTRY SKIPPAS HELT.
-    De skulle annars förbruka polling-jobbets retries och timeouts utan att ge data."""
+    De skulle annars förbruka polling-jobbets retries och timeouts utan att ge data.
+
+    `temperature` (None = produktionsdefault, dvs temp=0 för alla utom gpt-5) används av
+    brusgolv-experimentet (services/noise_floor) för att köra samma motoruppsättning vid
+    temp=0 och temp>0 och mäta hur mycket run-to-run-variansen växer. Produktionsanropen
+    skickar inget → exakt oförändrat beteende."""
     engines: dict[str, Any] = {}
     planned = _planned_probe_ids()
+    gemini_temp = 0 if temperature is None else temperature
 
     if settings.gcp_project:
         gid = model_registry.get_id("probe_gemini")
         if gid not in planned:
             try:
                 engines[gid] = token_meter.track(
-                    _vertex_gemini(gid, location=_location_for("probe_gemini")), gid,
+                    _vertex_gemini(gid, temperature=gemini_temp, location=_location_for("probe_gemini")), gid,
                 )
             except Exception as exc:
                 log.warning("Gemini probe (Vertex) init failed: %s", exc)
@@ -275,7 +292,7 @@ def make_probe_engines() -> dict[str, Any]:
         oid = model_registry.get_id("probe_openai")
         if oid not in planned:
             try:
-                engines[oid] = token_meter.track(_openai_chat(oid), oid)
+                engines[oid] = token_meter.track(_openai_chat(oid, temperature=temperature), oid)
             except Exception as exc:
                 log.warning("OpenAI probe init failed: %s", exc)
     else:
@@ -285,7 +302,7 @@ def make_probe_engines() -> dict[str, Any]:
         cid = model_registry.get_id("probe_claude")
         if cid not in planned:
             try:
-                engines[cid] = token_meter.track(_anthropic_chat(cid), cid)
+                engines[cid] = token_meter.track(_anthropic_chat(cid, temperature=temperature), cid)
             except Exception as exc:
                 log.warning("Claude probe (Anthropic direkt) init failed: %s", exc)
     else:
@@ -295,7 +312,7 @@ def make_probe_engines() -> dict[str, Any]:
         pid = model_registry.get_id("probe_perplexity")
         if pid not in planned:
             try:
-                engines[pid] = token_meter.track(_perplexity_chat(pid), pid)
+                engines[pid] = token_meter.track(_perplexity_chat(pid, temperature=temperature), pid)
             except Exception as exc:
                 log.warning("Perplexity probe init failed: %s", exc)
     else:
