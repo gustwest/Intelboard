@@ -321,6 +321,137 @@ def make_probe_engines(temperature: float | None = None) -> dict[str, Any]:
     return engines
 
 
+# --- Groundade probe-motorer (P4a: "AI Live Signal" bortom Perplexity) --------
+# De rena probarna ovan mäter modellens TRÄNADE minne (knowledge_source=training).
+# Experiment #2 (2026-06-07) visade att den listan överlappar bara ~13–15 % med vad en
+# web-groundad användare ser och innehåller fabricerade bolagsnamn. Dessa grounded-
+# motorer kör SAMMA modeller med web-sök PÅ → en separat web_rag-serie som speglar vad
+# användare faktiskt möter. Nycklas "<model_id>-grounded" så knowledge_source_for()
+# taggar dem web_rag och de aldrig poolas med training-talet.
+#
+# De installerade langchain-versionerna (openai 0.2.5 / vertexai 2.0.7) stödjer inte
+# providernas nuvarande grounding-API:er rent, så adaptrarna går mot rå-SDK:erna
+# (verifierat live 2026-06-07 att alla tre faktiskt groundar). De exponerar
+# .invoke(messages) -> objekt med .content (text) — drop-in mot polling._ask.
+
+GROUNDED_SUFFIX = "-grounded"
+
+
+class _GroundedResp:
+    """Minimal svar-wrapper — polling._ask läser bara resp.content."""
+
+    def __init__(self, content: str):
+        self.content = content
+
+
+def _messages_to_prompt(messages: Any) -> str:
+    """Platta langchains [SystemMessage, HumanMessage] (eller en str) till en
+    prompt-sträng för rå-SDK:er som tar en enkel input."""
+    if isinstance(messages, str):
+        return messages
+    parts = []
+    for m in messages:
+        content = getattr(m, "content", None)
+        if content:
+            parts.append(content if isinstance(content, str) else str(content))
+    return "\n\n".join(parts)
+
+
+def _anthropic_text_blocks(content: Any) -> str:
+    """Claude med web_search returnerar en lista av block (server_tool_use, sökresultat,
+    text). Plocka ut och konkatenera bara text-blocken."""
+    if isinstance(content, str):
+        return content
+    out = []
+    for block in content or []:
+        if isinstance(block, dict) and block.get("type") == "text":
+            out.append(block.get("text", ""))
+        elif isinstance(block, str):
+            out.append(block)
+    return "".join(out).strip()
+
+
+class _GroundedOpenAI:
+    """gpt via OpenAI Responses API + web_search_preview (langchain 0.2.5 saknar
+    Responses-stöd → rå openai-klient)."""
+
+    def __init__(self, model: str):
+        from openai import OpenAI
+
+        self._client = OpenAI(api_key=settings.openai_api_key)
+        self._model = model
+
+    def invoke(self, messages: Any) -> _GroundedResp:
+        r = self._client.responses.create(
+            model=self._model, tools=[{"type": "web_search_preview"}],
+            input=_messages_to_prompt(messages),
+        )
+        return _GroundedResp(r.output_text or "")
+
+
+class _GroundedGemini:
+    """Gemini via google-genai + google_search-grounding (Vertex-backend)."""
+
+    def __init__(self, model: str, location: str):
+        from google import genai
+
+        self._client = genai.Client(vertexai=True, project=settings.gcp_project, location=location)
+        self._model = model
+
+    def invoke(self, messages: Any) -> _GroundedResp:
+        from google.genai import types
+
+        resp = self._client.models.generate_content(
+            model=self._model, contents=_messages_to_prompt(messages),
+            config=types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())], temperature=0),
+        )
+        return _GroundedResp(resp.text or "")
+
+
+class _GroundedAnthropic:
+    """Claude via langchain bind_tools web_search (fungerar rent i 0.3.13)."""
+
+    def __init__(self, model: str):
+        from langchain_anthropic import ChatAnthropic
+
+        base = ChatAnthropic(api_key=settings.anthropic_api_key, model=model,
+                             temperature=0, max_tokens=1024, timeout=60)
+        self._llm = base.bind_tools(
+            [{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}])
+
+    def invoke(self, messages: Any) -> _GroundedResp:
+        resp = self._llm.invoke(messages)
+        return _GroundedResp(_anthropic_text_blocks(getattr(resp, "content", "")))
+
+
+def make_grounded_probe_engines() -> dict[str, Any]:
+    """Groundade varianter (web-sök PÅ) av training-probarna — P4a:s "AI Live Signal".
+    Nycklas "<model_id>-grounded" så knowledge_source_for() taggar dem web_rag och de
+    aldrig poolas med de rena training-talen. Per-provider-isolering som make_probe_engines.
+    Perplexity utelämnas (redan web_rag); Mistral utelämnas (planned)."""
+    engines: dict[str, Any] = {}
+    if settings.openai_api_key:
+        oid = model_registry.get_id("probe_openai")
+        try:
+            engines[oid + GROUNDED_SUFFIX] = _GroundedOpenAI(oid)
+        except Exception as exc:
+            log.warning("Grounded OpenAI-probe init failed: %s", exc)
+    if settings.gcp_project:
+        gid = model_registry.get_id("probe_gemini")
+        try:
+            engines[gid + GROUNDED_SUFFIX] = _GroundedGemini(gid, _location_for("probe_gemini"))
+        except Exception as exc:
+            log.warning("Grounded Gemini-probe init failed: %s", exc)
+    if settings.anthropic_api_key:
+        cid = model_registry.get_id("probe_claude")
+        try:
+            engines[cid + GROUNDED_SUFFIX] = _GroundedAnthropic(cid)
+        except Exception as exc:
+            log.warning("Grounded Claude-probe init failed: %s", exc)
+    return engines
+
+
 # Auktoritativ lista över ALLA probe-motorer vi vill mäta — live ELLER planerade.
 # Driver health-statusraden i AI-synlighet-fliken: UI:t visar samma 6 motorer oavsett
 # vilka som faktiskt är inkopplade, så att roadmap-bredden är synlig. När en motor

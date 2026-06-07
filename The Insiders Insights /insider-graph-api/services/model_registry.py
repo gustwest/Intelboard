@@ -278,7 +278,12 @@ def knowledge_source_for(engine_id: str) -> str:
 
     Default är "training" om id:t inte finns i registret eller bland legacy-aliaserna —
     det är den säkraste defaulten för bas-LLM:er och har varit Antagandet historiskt.
+
+    P4a: groundade probe-varianter nycklas "<model_id>-grounded" och är per definition
+    web_rag (web-sök PÅ) — de mäter "AI Live Signal", aldrig poolat med training-talet.
     """
+    if engine_id.endswith("-grounded"):
+        return "web_rag"
     for entry in _REGISTRY:
         if entry.role.startswith("probe_") and entry.model_id == engine_id:
             return entry.knowledge_source

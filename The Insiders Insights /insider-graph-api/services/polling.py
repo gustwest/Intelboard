@@ -315,7 +315,15 @@ def resolve_polling_questions(client: dict[str, Any]) -> dict[str, Any]:
 def _build_models() -> dict[str, Any]:
     # Delad probe-factory: första-parts gpt-4o + gemini (de publika motorer vi mäter).
     # EU-skyddet ligger på resonemangsmodellerna (Vertex EU), inte här. Se make_probe_engines.
-    return llm_factory.make_probe_engines()
+    models = llm_factory.make_probe_engines()
+    # P4a (opt-in): slå på groundade varianter (web-sök PÅ) som en separat "AI Live
+    # Signal"-serie bortom Perplexity. Default AV — grounding kostar sök-avgift per anrop,
+    # så det är ett medvetet ops-val. De taggas web_rag av knowledge_source_for() och
+    # poolas aldrig med training-talet (P2). Experiment #2 (2026-06-07) visade att det
+    # rena API:t bara överlappar ~13–15 % med vad en groundad användare ser.
+    if os.environ.get("POLLING_GROUNDED", "").lower() in ("1", "true", "yes"):
+        models.update(llm_factory.make_grounded_probe_engines())
+    return models
 
 
 def _collect_answers(
