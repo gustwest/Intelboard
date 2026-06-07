@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from itertools import combinations
 from typing import Any, Callable
@@ -43,6 +44,11 @@ log = logging.getLogger("services.noise_floor")
 
 DEFAULT_RUNS = 10
 DEFAULT_TEMPS = (0.0, 0.7)
+# Per-anrop-timeouts: ett hängande motor-/domar-anrop får ALDRIG stalla experimentet.
+# Utan dessa blockerar ett enda hängande LLM-anrop hela as_completed-loopen för evigt
+# (det inträffade på en bakgrundskörning 2026-06-07). Env-överstyrbara.
+ASK_TIMEOUT_SEC = float(os.environ.get("NOISE_FLOOR_ASK_TIMEOUT_SEC", "45"))
+ORG_TIMEOUT_SEC = float(os.environ.get("NOISE_FLOOR_ORG_TIMEOUT_SEC", "30"))
 
 
 # --- ren statistik (testbar, inga nätverksanrop) ------------------------------
@@ -236,10 +242,10 @@ def run_experiment(
             answer = answers.get((q, engine, run_idx), "")
             brands: list[str] = []
             if extract_brands and judge is not None and answer and len(answer.strip()) >= 20:
-                try:
-                    brands = polling._extract_orgs(judge, answer, name, employee_names)
-                except Exception as exc:
-                    log.warning("org-extraktion misslyckades (%s): %s", engine, exc)
+                brands = polling._call_with_timeout(
+                    lambda a=answer: polling._extract_orgs(judge, a, name, employee_names),
+                    timeout=ORG_TIMEOUT_SEC, default=[], what=f"noise_floor.extract_orgs[{engine}]",
+                )
             rows.append({
                 "engine": engine, "temp": temp, "prompt": q, "run_idx": run_idx,
                 "mentioned": polling._has_mention(answer, name, employee_names),
@@ -250,11 +256,13 @@ def run_experiment(
 
 
 def _safe_ask(question: str, llm: Any, ask: Callable[[str, Any], str]) -> str:
-    try:
-        return ask(question, llm)
-    except Exception as exc:
-        log.warning("ask misslyckades: %s", exc)
-        return ""
+    """Timeout-skyddat ask: ett hängande motor-anrop får inte stalla hela
+    as_completed-loopen (utan timeout hänger experimentet för evigt på en motor).
+    Återanvänder polling:s daemon-tråd-mönster — fel/timeout → tomt svar."""
+    return polling._call_with_timeout(
+        lambda: ask(question, llm),
+        timeout=ASK_TIMEOUT_SEC, default="", what="noise_floor.ask",
+    )
 
 
 # --- CLI ----------------------------------------------------------------------

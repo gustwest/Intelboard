@@ -34,7 +34,7 @@ from typing import Any, Callable
 import firestore_client as fs
 from services import llm as llm_factory
 from services import polling
-from services.noise_floor import _jaccard, _norm_brands
+from services.noise_floor import ASK_TIMEOUT_SEC, ORG_TIMEOUT_SEC, _jaccard, _norm_brands
 
 log = logging.getLogger("services.api_vs_ui")
 
@@ -167,21 +167,20 @@ def run_experiment(
     def _brands(answer: str) -> list[str]:
         if judge is None or not answer or len(answer.strip()) < 20:
             return []
-        try:
-            return polling._extract_orgs(judge, answer, name, employee_names)
-        except Exception as exc:
-            log.warning("org-extraktion misslyckades: %s", exc)
-            return []
+        return polling._call_with_timeout(
+            lambda: polling._extract_orgs(judge, answer, name, employee_names),
+            timeout=ORG_TIMEOUT_SEC, default=[], what="api_vs_ui.extract_orgs",
+        )
 
     rows: list[dict[str, Any]] = []
     for _category, q in questions:
         for engine, llm in api_models.items():
-            # API-arm: produktions-probe (temp=0, ingen grounding).
-            try:
-                api_ans = ask(q, llm)
-            except Exception as exc:
-                log.warning("API-ask misslyckades (%s): %s", engine, exc)
-                api_ans = ""
+            # API-arm: produktions-probe (temp=0, ingen grounding). Timeout-skyddad så
+            # ett hängande motor-anrop inte stallar experimentet.
+            api_ans = polling._call_with_timeout(
+                lambda: ask(q, llm),
+                timeout=ASK_TIMEOUT_SEC, default="", what=f"api_vs_ui.ask[{engine}]",
+            )
             rows.append({"engine": engine, "prompt": q, "channel": API,
                          "mentioned": polling._has_mention(api_ans, name, employee_names),
                          "brands": _brands(api_ans)})
