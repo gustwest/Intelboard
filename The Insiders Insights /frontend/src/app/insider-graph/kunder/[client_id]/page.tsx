@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Users, Trash2, AlertCircle, ExternalLink, Check, Clock, ShieldCheck } from 'lucide-react';
+import { Users, Trash2, AlertCircle, ExternalLink, Check, Clock, ShieldCheck, Circle, ListChecks } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../../_components/GraphPageShell';
 import AttestedUpload from '../../_components/AttestedUpload';
 import JobFeedsEditor from '../../_components/JobFeedsEditor';
@@ -39,6 +39,11 @@ type ClientDetail = {
   tier: string;
   profile_base_url: string | null;
   last_compiled: string | null;
+  // Konfig-fält som driver setup-checklistan (ON1/ON2). Alla redan med i
+  // GET /api/clients/{id}-svaret — checklistan räknas klient-side ur dem.
+  contact_email: string | null;
+  industry: string | null;
+  audience_priorities: unknown[] | null;
   employees: Employee[];
 };
 
@@ -182,6 +187,9 @@ export default function ClientDetailPage() {
               })}
             </div>
           </UI.Card>
+
+          {/* Setup-checklista (ON1/ON2) — vad återstår att konfigurera. Döljs när allt är klart. */}
+          <SetupChecklist client={client} />
 
           {/* Företagsöversikt */}
           <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
@@ -425,5 +433,73 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
       <span>{label}</span>
       <span style={{ color: C.text, fontFamily: mono ? 'ui-monospace, monospace' : undefined }}>{value}</span>
     </div>
+  );
+}
+
+// Setup-checklista (ON1/ON2): konfig-komplett för en nyss skapad kund. Skild från
+// PipelineStatus (operativt körningstillstånd) — den här mäter att rätt SAKER är
+// ifyllda. Kontakt-e-post markeras "krävs" eftersom leveransen tyst inte når någon
+// utan den. Döljs helt när allt är klart, så den inte blir clutter på en mogen kund.
+function SetupChecklist({ client }: { client: ClientDetail }) {
+  const items = [
+    {
+      done: !!client.contact_email,
+      label: 'Kontakt-e-post',
+      hint: 'Krävs för leverans — installationskit och månadsmejl går hit. Sätts under Identitetsmetadata nedan.',
+      critical: true,
+    },
+    {
+      done: client.active_connectors.length > 0,
+      label: 'Connectors valda',
+      hint: 'Välj vilka källor kunden hämtar data från (Connectors nedan).',
+    },
+    {
+      done: !!client.industry,
+      label: 'Bransch ifylld',
+      hint: 'Fyller platshållarna i mätfrågorna. Sätts under Mätkonfiguration nedan.',
+    },
+    {
+      done: Array.isArray(client.audience_priorities) && client.audience_priorities.length > 0,
+      label: 'Audience-targets satta',
+      hint: 'Vilka målgrupper ni vill bli citerade av i AI-svar. Sätts under Persona-targets nedan.',
+    },
+    {
+      done: !!client.last_compiled,
+      label: 'Första profil körd',
+      hint: 'Kör "Uppdatera profil" ovan för att hämta data och publicera profilen.',
+    },
+  ];
+  const doneCount = items.filter((i) => i.done).length;
+  if (doneCount === items.length) return null; // allt klart → ingen clutter
+
+  return (
+    <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+        <ListChecks size={16} color={C.accent} />
+        <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: C.text }}>Slutför setup</h2>
+        <span style={{ fontSize: 12, color: C.muted, marginLeft: 'auto' }}>{doneCount}/{items.length} klart</span>
+      </div>
+      <p style={{ fontSize: 12, color: C.muted, margin: '0 0 12px' }}>
+        Kunden är skapad. Det här återstår för en komplett konfiguration.
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {items.map((it) => (
+          <div key={it.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            {it.done
+              ? <Check size={16} color="#16a34a" style={{ flexShrink: 0, marginTop: 1 }} />
+              : <Circle size={16} color={it.critical ? '#d97706' : C.dim} style={{ flexShrink: 0, marginTop: 1 }} />}
+            <div style={{ flex: 1 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: it.done ? C.muted : C.text }}>
+                {it.label}
+                {it.critical && !it.done && (
+                  <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: '#d97706', textTransform: 'uppercase', letterSpacing: '0.06em' }}>krävs</span>
+                )}
+              </span>
+              {!it.done && <p style={{ fontSize: 12, color: C.muted, margin: '2px 0 0' }}>{it.hint}</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </UI.Card>
   );
 }

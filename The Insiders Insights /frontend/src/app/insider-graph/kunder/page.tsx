@@ -402,6 +402,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
 
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     graphFetch<{ connectors: ConnectorMeta[] }>('/api/connectors')
@@ -492,6 +493,9 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
           ? `Skapade kund ${data.client_id} med ${data.employees_created} medarbetare.`
           : `Skapade kund ${data.client_id}.`,
       });
+      // ON1: lämna inte operatören på listan — ta dem direkt till kunddetalj där
+      // setup-checklistan visar vad som återstår att konfigurera.
+      router.push(`/insider-graph/kunder/${data.client_id}`);
     } catch (e) {
       setResult({ ok: false, message: e instanceof Error ? e.message : 'Onboarding misslyckades' });
     } finally {
