@@ -21,7 +21,8 @@ router = APIRouter(prefix="/api/review", tags=["review"])
 
 
 class ReviewAction(BaseModel):
-    decision: Literal["approve", "reject"]
+    # "reset" = ångra ett tidigare beslut → tillbaka till needs_review (AR1: undo-toast).
+    decision: Literal["approve", "reject", "reset"]
     note: str | None = None
 
 
@@ -314,7 +315,7 @@ class LinkedInVerifyAction(BaseModel):
     finslipas före godkännande. decision="reject": snapshottet förkastas.
     """
 
-    decision: Literal["approve", "reject"]
+    decision: Literal["approve", "reject", "reset"]  # reset = ångra → PENDING (AR1)
     skills: list[str] | None = None  # valfri finslipning av kompetenslistan
     note: str | None = None
 
@@ -327,6 +328,17 @@ def verify_linkedin(
     doc_ref = fs.linkedin_snapshot_doc(client_id, snapshot_id)
     if not doc_ref.get().exists:
         raise HTTPException(404, "linkedin snapshot not found")
+
+    if action.decision == "reset":
+        # Ångra: tillbaka till PENDING. (Återaktiverar inte ev. tidigare aktivt
+        # snapshot — re-godkänn gör det igen; acceptabelt för en omedelbar ångring.)
+        doc_ref.update({
+            "status": LinkedInStatus.PENDING,
+            "is_active": False,
+            "review_note": None,
+            "verified_at": None,
+        })
+        return {"status": "ok", "decision": "reset"}
 
     if action.decision == "reject":
         doc_ref.update(
@@ -393,7 +405,7 @@ def list_pending(client_id: str) -> dict[str, Any]:
 
 
 class ClaimReviewAction(BaseModel):
-    decision: Literal["approve", "reject"]
+    decision: Literal["approve", "reject", "reset"]  # reset = ångra → needs_review (AR1)
     statement: str | None = None  # valfri redigering av påståendet före godkännande
     note: str | None = None
 
@@ -436,6 +448,18 @@ def decide_claim(client_id: str, claim_id: str, action: ClaimReviewAction) -> di
         raise HTTPException(404, "claim not found")
     existing = snap.to_dict() or {}
 
+    if action.decision == "reset":
+        # Ångra: tillbaka i granskningskön. Lämnar validated_* som historik (påverkar
+        # inte kön — list_claims filtrerar bara på needs_review).
+        doc_ref.update({
+            "review_status": None,
+            "review_note": None,
+            "reviewed_at": None,
+            "included_in_output": False,
+            "needs_review": True,
+        })
+        return {"status": "ok", "decision": "reset"}
+
     # VIKTIGT: reviewed_at/validated_at MÅSTE vara ISO-strängar. Claim-modellen
     # i schemas.py har `validated_at: str | None` och kraschar compile_client om
     # vi skriver firestore.SERVER_TIMESTAMP (blir DatetimeWithNanoseconds vid läsning).
@@ -467,6 +491,16 @@ def decide(client_id: str, employee_id: str, item_id: str, action: ReviewAction)
     snap = doc_ref.get()
     if not snap.exists:
         raise HTTPException(404, "item not found")
+
+    if action.decision == "reset":
+        doc_ref.update({
+            "review_status": None,
+            "review_note": None,
+            "reviewed_at": None,
+            "included_in_output": False,
+            "needs_review": True,
+        })
+        return {"status": "ok", "decision": "reset"}
 
     doc_ref.update(
         {

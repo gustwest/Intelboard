@@ -59,6 +59,11 @@ type Snapshot = {
 
 type Tab = 'items' | 'claims' | 'linkedin';
 
+// AR1 ångra: ett beslut (eller en bulk) kan återställas via reset-endpointen. Vi
+// sparar vad som behövs för att POST:a {decision:'reset'} till varje rörd post.
+type UndoAct = { cid: string; path: string; approvedId?: string };
+type UndoState = { label: string; kind: Tab; acted: UndoAct[] };
+
 const ALL = 'all';
 
 type InboxClientLite = { client_id: string; company_name: string | null; counts: Record<string, number> };
@@ -123,6 +128,10 @@ export default function GraphReviewPage() {
   // så vi slipper härleda state i en effekt).
   const [inboxByClient, setInboxByClient] = useState<Record<string, { claims: number; items: number; linkedin: number }>>({});
   const [resolved, setResolved] = useState<Record<string, { claims: number; items: number; linkedin: number }>>({});
+  // AR1: ångra-toast (mjuk-radering), bulk-markering och tangentbordsfokus.
+  const [undo, setUndo] = useState<UndoState | null>(null);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [focusIdx, setFocusIdx] = useState(0);
 
   useEffect(() => {
     graphFetch<{ clients: Client[] }>('/api/clients')
@@ -209,6 +218,7 @@ export default function GraphReviewPage() {
       });
       setItems((prev) => (prev ? prev.filter((i) => !(i.id === item.id && i.client_id === item.client_id)) : prev));
       bumpResolved('items', cid);
+      setUndo({ label: decision === 'approve' ? 'Godkänd' : 'Avvisad', kind: 'items', acted: [{ cid, path: `/api/review/${cid}/${item.employee_id}/${item.id}` }] });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -238,6 +248,7 @@ export default function GraphReviewPage() {
         setClaims((prev) => (prev ? prev.filter((c) => !(c.id === claim.id && c.client_id === claim.client_id)) : prev));
       }
       bumpResolved('claims', cid); // både godkänt och avvisat löser needs_review
+      setUndo({ label: decision === 'approve' ? 'Godkänd' : 'Avvisad', kind: 'claims', acted: [{ cid, path: `/api/review/${cid}/claims/${claim.id}`, approvedId: decision === 'approve' ? claim.id : undefined }] });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -266,6 +277,7 @@ export default function GraphReviewPage() {
       });
       setSnapshots((prev) => (prev ? prev.filter((s) => !(s.id === snap.id && s.client_id === snap.client_id)) : prev));
       bumpResolved('linkedin', cid);
+      setUndo({ label: decision === 'approve' ? 'Verifierad' : 'Avvisad', kind: 'linkedin', acted: [{ cid, path: `/api/review/${cid}/linkedin/${snap.id}` }] });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -283,6 +295,130 @@ export default function GraphReviewPage() {
       setError(e instanceof Error ? e.message : String(e));
     }
   }
+
+  // --- AR1: härledd lista, bulk, ångra, tangentbord ---
+  const currentList: (ClaimItem | ReviewItem | Snapshot)[] =
+    ((tab === 'claims' ? claims : tab === 'items' ? items : snapshots) ?? []);
+  const focusedId = currentList[focusIdx]?.id ?? null;
+  const allSelected = currentList.length > 0 && sel.size === currentList.length;
+
+  // Rå POST utan UI-mutation — delas av bulk. (Enkelbesluten har egen logik ovan.)
+  async function rawDecide(kind: Tab, obj: ClaimItem | ReviewItem | Snapshot, decision: 'approve' | 'reject'): Promise<UndoAct | null> {
+    const cid = obj.client_id ?? (selected === ALL ? null : selected);
+    if (!cid) return null;
+    const body: Record<string, unknown> = { decision };
+    let path: string;
+    if (kind === 'claims') {
+      const c = obj as ClaimItem;
+      path = `/api/review/${cid}/claims/${c.id}`;
+      const edited = edits[c.id];
+      if (decision === 'approve' && edited != null && edited !== c.statement) body.statement = edited;
+    } else if (kind === 'items') {
+      const it = obj as ReviewItem;
+      path = `/api/review/${cid}/${it.employee_id}/${it.id}`;
+    } else {
+      const s = obj as Snapshot;
+      path = `/api/review/${cid}/linkedin/${s.id}`;
+      if (decision === 'approve') {
+        const edited = skillEdits[s.id];
+        body.skills = (edited ?? s.skills.join(', ')).split(/[\n,]/).map((x) => x.trim()).filter(Boolean);
+      }
+    }
+    await graphFetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    return { cid, path, approvedId: decision === 'approve' && kind === 'claims' ? obj.id : undefined };
+  }
+
+  function decideCurrent(obj: ClaimItem | ReviewItem | Snapshot, decision: 'approve' | 'reject') {
+    if (tab === 'claims') decideClaim(obj as ClaimItem, decision);
+    else if (tab === 'items') decideItem(obj as ReviewItem, decision);
+    else decideSnapshot(obj as Snapshot, decision);
+  }
+
+  async function bulkDecide(decision: 'approve' | 'reject') {
+    const chosen = currentList.filter((o) => sel.has(o.id));
+    if (chosen.length === 0) return;
+    setBusyId('__bulk__');
+    const acted: UndoAct[] = [];
+    try {
+      for (const obj of chosen) {
+        const res = await rawDecide(tab, obj, decision);
+        if (res) { acted.push(res); bumpResolved(tab, res.cid); }
+      }
+      setSel(new Set());
+      await load(selected, tab);
+      if (acted.length) setUndo({ label: `${acted.length} ${decision === 'approve' ? 'godkända' : 'avvisade'}`, kind: tab, acted });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      await load(selected, tab);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function doUndo() {
+    if (!undo) return;
+    const u = undo;
+    setUndo(null);
+    try {
+      for (const a of u.acted) {
+        await graphFetch(a.path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision: 'reset' }) });
+        if (a.approvedId) setApproved((prev) => { const n = { ...prev }; delete n[a.approvedId!]; return n; });
+      }
+      setResolved((prev) => {
+        const next = { ...prev };
+        for (const a of u.acted) {
+          const cur = next[a.cid] || { claims: 0, items: 0, linkedin: 0 };
+          next[a.cid] = { ...cur, [u.kind]: Math.max(0, cur[u.kind] - 1) };
+        }
+        return next;
+      });
+      await load(selected, tab);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      await load(selected, tab);
+    }
+  }
+
+  function toggleSel(id: string) {
+    setSel((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }
+
+  // Nollställ markering + fokus vid byte av kund/flik.
+  useEffect(() => { setSel(new Set()); setFocusIdx(0); }, [selected, tab]);
+
+  // Auto-stäng ångra-toasten efter 7 s.
+  useEffect(() => {
+    if (!undo) return;
+    const t = setTimeout(() => setUndo(null), 7000);
+    return () => clearTimeout(t);
+  }, [undo]);
+
+  // Tangentbord: j/k navigera · a godkänn · r avvisa · x markera · ⌘/Ctrl+Enter godkänn.
+  // Ingen deps-array → läser alltid färsk currentList/focusIdx (åter-prenumererar per render).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName;
+      const typing = tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SELECT';
+      const obj = currentList[focusIdx];
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        if (obj) { e.preventDefault(); decideCurrent(obj, 'approve'); }
+        return;
+      }
+      if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === 'j') { e.preventDefault(); setFocusIdx((i) => Math.min(currentList.length - 1, i + 1)); }
+      else if (e.key === 'k') { e.preventDefault(); setFocusIdx((i) => Math.max(0, i - 1)); }
+      else if (e.key === 'a' && obj) { e.preventDefault(); decideCurrent(obj, 'approve'); }
+      else if (e.key === 'r' && obj) { e.preventDefault(); decideCurrent(obj, 'reject'); }
+      else if (e.key === 'x' && obj) { e.preventDefault(); toggleSel(obj.id); }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  // Scrolla fokuserat kort i sikte.
+  useEffect(() => {
+    document.querySelector('[data-review-focus="true"]')?.scrollIntoView({ block: 'nearest' });
+  }, [focusIdx, tab]);
 
   return (
     <GraphPageShell
@@ -326,7 +462,44 @@ export default function GraphReviewPage() {
         </UI.StatusBanner>
       )}
 
+      {currentList.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap', fontSize: 12, color: C.muted }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: 600 }}>
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={() => setSel(allSelected ? new Set() : new Set(currentList.map((o) => o.id)))}
+            />
+            Markera alla ({currentList.length})
+          </label>
+          {sel.size > 0 && (
+            <>
+              <span style={{ fontWeight: 600, color: C.text }}>{sel.size} valda</span>
+              <button onClick={() => bulkDecide('approve')} disabled={busyId === '__bulk__'} style={approveBtn}>
+                <Check size={12} /> Godkänn {sel.size}
+              </button>
+              <button onClick={() => bulkDecide('reject')} disabled={busyId === '__bulk__'} style={rejectBtn}>
+                <X size={12} /> Avvisa {sel.size}
+              </button>
+              <button onClick={() => setSel(new Set())} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 12 }}>
+                Avmarkera
+              </button>
+            </>
+          )}
+          <span style={{ marginLeft: 'auto', color: C.dim }}>Tangenter: j/k navigera · a godkänn · r avvisa · x markera · ⌘↵ godkänn</span>
+        </div>
+      )}
+
       {tab === 'items' ? renderItems() : tab === 'linkedin' ? renderLinkedIn() : renderClaims()}
+
+      {undo && (
+        <div style={{ position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)', zIndex: 50, display: 'flex', alignItems: 'center', gap: 14, background: '#1f2937', color: '#fff', padding: '10px 16px', borderRadius: 10, boxShadow: '0 6px 24px rgba(0,0,0,0.25)', fontSize: 13 }}>
+          <span>{undo.label}</span>
+          <button onClick={doUndo} style={{ background: 'transparent', border: 'none', color: '#7dd3fc', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
+            Ångra
+          </button>
+        </div>
+      )}
     </GraphPageShell>
   );
 
@@ -336,7 +509,7 @@ export default function GraphReviewPage() {
       return <Empty hint="Inga LinkedIn-snapshots väntar på verifiering. Kunden laddar upp sin kvartalsdata under fliken LinkedIn." />;
     const groups = selected === ALL ? groupByClient(snapshots) : [{ clientId: 'one', name: null, items: snapshots }];
     return (
-      <GroupedList groups={groups}>
+      <GroupedList groups={groups} selectedIds={sel} onToggle={toggleSel} focusedId={focusedId}>
         {(snap) => {
           const skillText = skillEdits[snap.id] ?? snap.skills.join(', ');
           return (
@@ -402,7 +575,7 @@ export default function GraphReviewPage() {
     if (items.length === 0) return <Empty hint="Alla inkommande mail har confidence ≥ 0,7 eller är redan beslutade." />;
     const groups = selected === ALL ? groupByClient(items) : [{ clientId: 'one', name: null, items }];
     return (
-      <GroupedList groups={groups}>
+      <GroupedList groups={groups} selectedIds={sel} onToggle={toggleSel} focusedId={focusedId}>
         {(item) => {
           const Icon = TYPE_ICON[item.schema_type] || FileText;
           return (
@@ -440,7 +613,7 @@ export default function GraphReviewPage() {
     if (claims.length === 0) return <Empty hint="Inga claims väntar på granskning — alla har confidence ≥ 0,7 eller är redan beslutade." />;
     const groups = selected === ALL ? groupByClient(claims) : [{ clientId: 'one', name: null, items: claims }];
     return (
-      <GroupedList groups={groups}>
+      <GroupedList groups={groups} selectedIds={sel} onToggle={toggleSel} focusedId={focusedId}>
         {(claim) => {
           const sourceLabel = claim.source.map((s) => (s.kind === 'manual' ? s.label || 'manuell' : 'källa')).join(', ') || 'ingen källa';
           const text = edits[claim.id] ?? claim.statement ?? '';
@@ -508,9 +681,15 @@ export default function GraphReviewPage() {
 function GroupedList<T extends { id: string }>({
   groups,
   children,
+  selectedIds,
+  onToggle,
+  focusedId,
 }: {
   groups: Array<{ clientId: string; name: string | null; items: T[] }>;
   children: (item: T) => React.ReactNode;
+  selectedIds?: Set<string>;
+  onToggle?: (id: string) => void;
+  focusedId?: string | null;
 }) {
   const grouped = groups.some((g) => g.name !== null);
   return (
@@ -518,7 +697,27 @@ function GroupedList<T extends { id: string }>({
       {groups.map((g) => (
         <div key={g.clientId} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {g.name !== null && <ClientGroupHeader name={g.name} count={g.items.length} />}
-          {g.items.map((item) => children(item))}
+          {g.items.map((item) => {
+            const focused = item.id === focusedId;
+            return (
+              <div
+                key={item.id}
+                data-review-focus={focused ? 'true' : undefined}
+                style={{ display: 'flex', gap: 10, alignItems: 'stretch', outline: focused ? `2px solid ${C.accent}` : undefined, outlineOffset: 2, borderRadius: 12 }}
+              >
+                {onToggle && (
+                  <input
+                    type="checkbox"
+                    checked={selectedIds?.has(item.id) ?? false}
+                    onChange={() => onToggle(item.id)}
+                    aria-label="Markera för bulk-åtgärd"
+                    style={{ marginTop: 20, cursor: 'pointer', flexShrink: 0 }}
+                  />
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>{children(item)}</div>
+              </div>
+            );
+          })}
         </div>
       ))}
     </div>
