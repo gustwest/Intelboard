@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { fmtDate } from '@/lib/datetime';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
@@ -103,7 +104,7 @@ export default function GoalsTab({ customerId }: { customerId: string }) {
                     {g.description && <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 8, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{g.description}</div>}
                     
                     <div style={{ fontSize: 10, color: C.dim, marginTop: 12 }}>
-                      Skapad {new Date(g.created_at).toLocaleDateString('sv-SE')}
+                      Skapad {fmtDate(g.created_at)}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 4, marginLeft: 16 }}>

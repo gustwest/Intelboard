@@ -6,6 +6,7 @@ import { Leaf, Check, X } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../../_components/GraphPageShell';
 import * as UI from '../../_components/ui';
 import { graphFetch } from '../../_lib/api';
+import { fmtDate } from '@/lib/datetime';
 
 // --- Typer (speglar routers/esg.py) ------------------------------------------
 type PillarScore = {
@@ -142,7 +143,7 @@ export default function ESGWorkspacePage() {
             <Stat label="Frågor att granska" value={status.questions.pending} hint={status.questions.lint_flagged ? `${status.questions.lint_flagged} flaggade av lint` : undefined} />
             <Stat label="Godkända frågor" value={status.questions.approved} />
             <Stat label="Öppna findings" value={status.findings.open} hint={status.findings.actioned ? `${status.findings.actioned} åtgärdade` : undefined} />
-            <Stat label="Senaste skanning" value={status.last_scan.ran_at ? new Date(status.last_scan.ran_at).toLocaleDateString('sv-SE') : '—'} />
+            <Stat label="Senaste skanning" value={status.last_scan.ran_at ? fmtDate(status.last_scan.ran_at) : '—'} />
             <Stat label="AI ESG Risk Score" value={rs?.overall != null ? `${rs.overall}%` : '—'} hint="högre = högre risk" />
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }}>

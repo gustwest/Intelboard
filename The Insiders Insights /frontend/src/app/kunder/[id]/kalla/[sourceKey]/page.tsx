@@ -5,6 +5,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend,
 } from 'recharts';
+import { fmtDate } from '@/lib/datetime';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -171,7 +172,7 @@ function FilesSection({ source, openDs }: { source: SourceSummary; openDs: (id: 
                   {d.period_start && d.period_end ? `${d.period_start.slice(0, 7)} → ${d.period_end.slice(0, 7)}` : '—'}
                 </td>
                 <td style={{ ...tdStyle, color: C.muted, fontSize: 11 }}>
-                  {new Date(d.uploaded_at).toLocaleDateString('sv-SE')}
+                  {fmtDate(d.uploaded_at)}
                 </td>
                 <td style={tdStyle}>
                   <button type="button" onClick={e => e.stopPropagation()} style={ghostBtn()}>Rådata</button>

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Play, Pause, CalendarClock } from 'lucide-react';
 import { graphColors as C } from '../../_components/GraphPageShell';
 import { fmtRelative } from '../../_lib/jobRuns';
+import { fmtDateTime } from '@/lib/datetime';
 import {
   ScheduleRow,
   Finding,
@@ -28,7 +29,7 @@ export function SchedulesPanel({ rows, onToggle }: { rows: ScheduleRow[]; onTogg
   const fmt = (iso?: string | null) => {
     if (!iso) return '—';
     const d = new Date(iso);
-    return isNaN(d.getTime()) ? '—' : d.toLocaleString('sv-SE', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return isNaN(d.getTime()) ? '—' : fmtDateTime(d, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
   return (
     <div style={{ ...cardStyle, marginBottom: 16 }}>

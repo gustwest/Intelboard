@@ -28,7 +28,7 @@ import hashlib
 import logging
 import os
 import re
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
@@ -36,6 +36,7 @@ from google.cloud import firestore
 
 import firestore_client as fs
 from jobs._run_tracker import log_event, record_run
+from services import clock
 from services import model_registry
 
 log = logging.getLogger("jobs.model_drift_scan")
@@ -330,7 +331,9 @@ def _persist(findings: list[dict]) -> None:
 
 
 def _today_iso() -> str:
-    return date.today().isoformat()
+    # Svensk dag (se services/clock.py) i stället för ambient container-TZ (UTC på
+    # Cloud Run) — "idag" för sunset-/drift-jämförelser ska följa svensk kalender.
+    return clock.stockholm_date()
 
 
 if __name__ == "__main__":  # tillåt manuell körning: python -m jobs.model_drift_scan

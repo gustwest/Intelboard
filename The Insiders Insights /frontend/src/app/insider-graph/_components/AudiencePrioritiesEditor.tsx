@@ -5,6 +5,7 @@ import { Target, Sparkles, Plus, Trash2, Check, AlertCircle, Loader2 } from 'luc
 import { graphColors as C } from './GraphPageShell';
 import * as UI from './ui';
 import { graphFetch } from '../_lib/api';
+import { fmtDateTime } from '@/lib/datetime';
 
 // Audience-typer — håll i synk med services/output_quality.py (AUDIENCE_TYPES)
 const AUDIENCE_LABELS: Record<string, { label: string; emoji: string; hint: string }> = {
@@ -185,7 +186,7 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
 
       <p style={{ fontSize: 11, color: C.dim, margin: '0 0 14px' }}>
         Driver output-kvalitets-rubric:en — vilka målgrupper (kunder/kandidater/investerare) ni vill bli citerade av i AI-svar.
-        {setAt && <> Senast sparat: {new Date(setAt).toLocaleString('sv-SE')}.</>}
+        {setAt && <> Senast sparat: {fmtDateTime(setAt)}.</>}
       </p>
 
       {msg && (

@@ -12,12 +12,12 @@ from __future__ import annotations
 
 import html
 import logging
-from datetime import datetime, timezone
 from typing import Any
 
 from google.cloud import firestore
 
 import firestore_client as fs
+from services import clock
 from services import esrs_mapping
 
 log = logging.getLogger(__name__)
@@ -33,7 +33,8 @@ _MONTHS_SV = [
 
 
 def current_month() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m")
+    # Svensk kalender (se services/clock.py) — rapporten tillhör Stockholm-månaden.
+    return clock.stockholm_month()
 
 
 # --- AI ESG Risk Score --------------------------------------------------------

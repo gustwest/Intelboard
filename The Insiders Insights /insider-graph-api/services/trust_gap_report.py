@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import html
 import logging
-from datetime import datetime, timezone
 from typing import Any
 
 import firestore_client as fs
+from services import clock
 from schema_org import humanization_config as hc
 from services import model_registry
 
@@ -27,7 +27,9 @@ ENGINE_SV = {"perplexity": "Perplexity", "gemini": "Gemini", "chatgpt": "ChatGPT
 
 
 def today() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    # Snapshot-id daterat efter svensk kalender (se services/clock.py). Måste matcha
+    # cutoffen i jobs/compute_trust_gap.py så self-reference-filtret blir konsekvent.
+    return clock.stockholm_date()
 
 
 # --- Begriplighetslager (§10.1) ----------------------------------------------

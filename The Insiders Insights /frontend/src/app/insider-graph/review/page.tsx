@@ -5,6 +5,7 @@ import { Inbox, Check, X, Mail, Calendar, Award, FileText, AlertCircle, Quote, N
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import * as UI from '../_components/ui';
 import { graphFetch, graphFetchBlob } from '../_lib/api';
+import { fmtDate } from '@/lib/datetime';
 
 type Client = { client_id: string; company_name: string | null };
 
@@ -350,7 +351,7 @@ export default function GraphReviewPage() {
                     <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
                       {snap.filename ? `${snap.filename} · ` : ''}
                       {snap.followers != null ? `${snap.followers.toLocaleString('sv-SE')} följare · ` : ''}
-                      {snap.uploaded_at ? new Date(snap.uploaded_at).toLocaleDateString('sv-SE') : ''}
+                      {snap.uploaded_at ? fmtDate(snap.uploaded_at) : ''}
                     </div>
                   </div>
                 </div>
@@ -458,7 +459,7 @@ export default function GraphReviewPage() {
                     </div>
                     {validatedTs && (
                       <div style={{ fontSize: 11, color: '#3a7d44', marginTop: 2 }}>
-                        ✓ Validerad {new Date(validatedTs).toLocaleDateString('sv-SE')}
+                        ✓ Validerad {fmtDate(validatedTs)}
                         {validatedBy ? ` · ${validatedBy}` : ''}
                       </div>
                     )}

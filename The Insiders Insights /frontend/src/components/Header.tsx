@@ -6,6 +6,7 @@ import { useSession, signOut } from 'next-auth/react';
 import { activeProductId } from './ProductSwitcher';
 import GraphSearch from './GraphSearch';
 import GraphInboxBell from './GraphInboxBell';
+import { fmtDate } from '@/lib/datetime';
 
 export default function Header() {
   const pathname = usePathname();
@@ -32,11 +33,11 @@ export default function Header() {
   const avatarUrl = user?.image;
 
   // Format today's date
-  const today = new Date().toLocaleDateString('sv-SE', { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
+  const today = fmtDate(new Date(), {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
   });
 
   return (

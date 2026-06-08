@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { fmtDateTime } from '@/lib/datetime';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
@@ -99,7 +100,7 @@ export default function NotesTab({ customerId }: { customerId: string }) {
                     {n.body && <div style={{ fontSize: 12, color: C.muted, whiteSpace: 'pre-wrap', marginTop: 4 }}>{n.body}</div>}
                     <div style={{ fontSize: 10, color: C.dim, marginTop: 6 }}>
                       {n.author && <span>{n.author} · </span>}
-                      {new Date(n.created_at).toLocaleString('sv-SE')}
+                      {fmtDateTime(n.created_at)}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 4 }}>

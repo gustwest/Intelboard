@@ -7,6 +7,7 @@ import { graphColors as C } from './GraphPageShell';
 import { graphFetch } from '../_lib/api';
 import { VerdictBadge, ScoreBadge, ShadowGateBadge } from './OutputQualityBits';
 import * as UI from './ui';
+import { fmtDateTime } from '@/lib/datetime';
 
 type LogSummary = {
   log_id: string;
@@ -119,7 +120,7 @@ export default function OutputQualityPanel({ clientId }: { clientId: string }) {
               <> · audience {latest.audience_count > 0 ? '✓' : '⨯'}</>
             )}
             {latest.logged_at && (
-              <> · {new Date(latest.logged_at).toLocaleString('sv-SE')}</>
+              <> · {fmtDateTime(latest.logged_at)}</>
             )}
           </div>
         </div>

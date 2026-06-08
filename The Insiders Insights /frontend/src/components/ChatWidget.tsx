@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useUser } from './UserProvider';
 import { colorForName } from '@/lib/team';
+import { fmtTime } from '@/lib/datetime';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const WS_URL = API_URL.replace('https://', 'wss://').replace('http://', 'ws://');
@@ -305,7 +306,7 @@ export default function ChatWidget() {
   };
 
   // Helpers
-  const formatTime = (iso: string) => new Date(iso).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+  const formatTime = (iso: string) => fmtTime(iso, { hour: '2-digit', minute: '2-digit' });
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;

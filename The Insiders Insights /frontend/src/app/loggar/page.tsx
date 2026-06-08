@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { Terminal, RefreshCw, Trash2 } from 'lucide-react';
+import { fmtTime } from '@/lib/datetime';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
@@ -94,7 +95,7 @@ export default function LogsPage() {
             const { ts, level: lvl, event, logger: _lg, ...rest } = e;
             return (
               <div key={i} style={{ padding: '8px 10px', fontSize: 11, borderBottom: `1px solid ${C.border}`, display: 'grid', gridTemplateColumns: '180px 80px 200px 1fr', gap: 10, alignItems: 'start', fontFamily: 'monospace' }}>
-                <div style={{ color: C.dim }}>{new Date(ts).toLocaleTimeString()}.{ts.split('.')[1]?.slice(0, 3) || '000'}</div>
+                <div style={{ color: C.dim }}>{fmtTime(ts)}.{ts.split('.')[1]?.slice(0, 3) || '000'}</div>
                 <div style={{ color: levelColor[lvl] || C.muted, fontWeight: 700 }}>{lvl}</div>
                 <div style={{ color: C.text }}>{event}</div>
                 <div style={{ color: C.muted, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>

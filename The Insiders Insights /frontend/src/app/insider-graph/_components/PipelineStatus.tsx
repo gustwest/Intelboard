@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Check, AlertTriangle } from 'lucide-react';
 import { graphColors as C } from './GraphPageShell';
 import { graphFetch } from '../_lib/api';
+import { fmtDate } from '@/lib/datetime';
 
 export type PipelineStep = {
   key: string;
@@ -31,7 +32,7 @@ const STATE_LABEL: Record<PipelineStep['state'], string> = {
 function fmt(at?: string | null): string | null {
   if (!at) return null;
   const d = new Date(at);
-  return isNaN(d.getTime()) ? null : d.toLocaleDateString('sv-SE');
+  return isNaN(d.getTime()) ? null : fmtDate(d);
 }
 
 /**

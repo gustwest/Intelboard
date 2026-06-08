@@ -5,6 +5,7 @@ import { Image as ImageIcon, Check, AlertCircle, Download, Loader2 } from 'lucid
 import { graphColors as C } from './GraphPageShell';
 import * as UI from './ui';
 import { graphFetch } from '../_lib/api';
+import { fmtDate } from '@/lib/datetime';
 
 type ClientIdentity = {
   logo_url: string | null;
@@ -277,7 +278,7 @@ function ProvenanceLine({ source, setAt, hasValue }: { source: string | null; se
 function formatDate(iso: string): string {
   try {
     const d = new Date(iso);
-    return d.toLocaleDateString('sv-SE');
+    return fmtDate(d);
   } catch {
     return iso.slice(0, 10);
   }

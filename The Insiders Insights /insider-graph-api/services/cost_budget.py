@@ -29,6 +29,7 @@ from typing import Any, Literal
 from google.cloud import firestore
 
 import firestore_client as fs
+from services import clock
 from services import ops_alerts
 
 log = logging.getLogger(__name__)
@@ -60,7 +61,8 @@ class BudgetConfig:
     def effective_limit(self) -> int:
         """Effektivt tak just nu — override om aktivt, annars månadstaket."""
         if self.override_until and self.override_token_limit is not None:
-            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            # override_until är ett operatör-ifyllt svenskt datum — jämför mot svensk dag.
+            today = clock.stockholm_date()
             if today <= self.override_until:
                 return self.override_token_limit
         return self.monthly_token_limit
@@ -128,7 +130,8 @@ def set_budget(client_id: str, config: BudgetConfig) -> None:
 
 
 def _current_month() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m")
+    # Budgettaket gäller per svensk kalendermånad (se services/clock.py).
+    return clock.stockholm_month()
 
 
 def current_usage(client_id: str, *, month: str | None = None) -> int:

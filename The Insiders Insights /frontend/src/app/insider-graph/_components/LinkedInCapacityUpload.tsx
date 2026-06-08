@@ -13,6 +13,7 @@ import { Network, UploadCloud, CheckCircle2, AlertCircle, FileCheck2, X, BellRin
 import { graphColors as C } from './GraphPageShell';
 import { graphFetch } from '../_lib/api';
 import * as UI from './ui';
+import { fmtDate } from '@/lib/datetime';
 
 type Snapshot = { id: string; status: string; is_active: boolean; skills: string[]; quarter: string | null; uploaded_at: string | null };
 type Todo = { id: string; type: string; status: string; message: string; created_at: string | null };
@@ -167,7 +168,7 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
               <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11, color: C.muted }}>
                 <span style={{ flex: 1, minWidth: 0 }}>
                   {s.quarter || 'Snapshot'}{s.is_active ? ' · aktiv' : ''} · {s.skills.length} kompetenser
-                  {s.uploaded_at ? ` · ${new Date(s.uploaded_at).toLocaleDateString('sv-SE')}` : ''}
+                  {s.uploaded_at ? ` · ${fmtDate(s.uploaded_at)}` : ''}
                 </span>
                 <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, background: st.bg, color: st.fg, fontWeight: 600 }}>{st.label}</span>
               </div>

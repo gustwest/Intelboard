@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { BarChart2, TrendingUp, Users, Target, FileText, Video, Sparkles, ChevronDown, ChevronUp, AlertTriangle, Loader2 } from 'lucide-react';
+import { fmtDateTime } from '@/lib/datetime';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
@@ -104,7 +105,7 @@ export default function LinkedInReport({ customerId, customerName }: { customerI
             </p>
           </div>
           <div style={{ textAlign: 'right', fontSize: 11, color: C.dim }}>
-            Genererad: {new Date(report.generated_at).toLocaleString('sv-SE')}<br />
+            Genererad: {fmtDateTime(report.generated_at)}<br />
             {s.key_metrics.dataset_count} datakällor · {s.key_metrics.total_rows.toLocaleString('sv-SE')} rader
           </div>
         </div>

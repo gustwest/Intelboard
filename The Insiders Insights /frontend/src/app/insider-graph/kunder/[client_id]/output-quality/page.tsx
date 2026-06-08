@@ -10,6 +10,7 @@ import {
   type ClaimAction,
 } from '../../../_components/OutputQualityBits';
 import * as UI from '../../../_components/ui';
+import { fmtDateTime } from '@/lib/datetime';
 
 type LogSummary = {
   log_id: string; logged_at: string | null; source: string | null;
@@ -242,7 +243,7 @@ export default function OutputQualityDetailPage() {
                       <ShadowGateBadge source={log.source} />
                     </div>
                     <div style={{ fontSize: 10, color: C.dim }}>
-                      {log.logged_at ? new Date(log.logged_at).toLocaleString('sv-SE') : '—'}
+                      {log.logged_at ? fmtDateTime(log.logged_at) : '—'}
                     </div>
                     <div style={{ fontSize: 10, color: C.muted }}>
                       {log.claim_count} claims · {log.flag_count} flagg
@@ -280,7 +281,7 @@ export default function OutputQualityDetailPage() {
                     <div style={{ fontSize: 11, color: C.dim }}>
                       {detail.claim_count} claims · {detail.bundle_flags.length} flagg{detail.bundle_flags.length === 1 ? 'a' : 'or'}
                       {detail.audience_count != null && <> · audience {detail.audience_count > 0 ? '✓' : '⨯'}</>}
-                      {detail.logged_at && <> · {new Date(detail.logged_at).toLocaleString('sv-SE')}</>}
+                      {detail.logged_at && <> · {fmtDateTime(detail.logged_at)}</>}
                     </div>
                   </div>
                 </div>

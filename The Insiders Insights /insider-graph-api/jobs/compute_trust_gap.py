@@ -19,6 +19,7 @@ import firestore_client as fs
 from jobs._run_tracker import record_run
 from schema_org import humanization_config as hc
 from schema_org.claims import iter_culture_claims
+from services import clock
 from services import engine_baselines
 
 log = logging.getLogger(__name__)
@@ -243,7 +244,9 @@ def _read_prior_snapshot(client_id: str, today: str | None = None) -> dict[str, 
 
     Returns: {"date": "YYYY-MM-DD", "dimensions": {dim: entry_dict}} eller None.
     """
-    cutoff = today or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    # Svensk dag (se services/clock.py) — måste matcha trust_gap_report.today() som
+    # daterar snapshotsen, annars filtreras inte dagens egen output bort konsekvent.
+    cutoff = today or clock.stockholm_date()
     prev_id, prev = "", None
     try:
         for sid, data in fs.iter_trust_gap_snapshots(client_id):

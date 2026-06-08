@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import styles from './feedback-bubble.module.css';
+import { fmtDateTime } from '@/lib/datetime';
 
 type Tool = 'pen' | 'text' | 'arrow';
 
@@ -243,7 +244,7 @@ export default function FeedbackBubble() {
 
     try {
       const pagePath = window.location.pathname;
-      const fullDesc = `${description.trim()}\n\n---\n📍 Sida: ${pagePath}\n📅 ${new Date().toLocaleString('sv-SE')}`;
+      const fullDesc = `${description.trim()}\n\n---\n📍 Sida: ${pagePath}\n📅 ${fmtDateTime(new Date())}`;
 
       const body: Record<string, unknown> = {
         title: `[Feedback] ${title.trim()}`,

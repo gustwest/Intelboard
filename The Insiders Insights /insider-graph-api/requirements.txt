@@ -40,3 +40,9 @@ pypdf==6.12.1
 sendgrid==6.11.0
 openpyxl==3.1.5
 xlrd==2.0.1
+defusedxml==0.7.1
+# IANA-tidszondatabasen. python:3.12-slim saknar OS-zonfilerna, så zoneinfo.ZoneInfo
+# ("Europe/Stockholm") i services/clock.py kräver detta paket för att inte kasta
+# ZoneInfoNotFoundError i prod.
+tzdata==2025.2
+slowapi==0.1.9

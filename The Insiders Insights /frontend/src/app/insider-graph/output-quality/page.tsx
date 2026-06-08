@@ -5,6 +5,7 @@ import { Gauge, TrendingDown, AlertTriangle, RefreshCw, Sparkles, ShieldCheck } 
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import { graphFetch } from '../_lib/api';
 import * as UI from '../_components/ui';
+import { fmtDate } from '@/lib/datetime';
 
 type ConnectorScore = {
   connector: string;
@@ -128,7 +129,7 @@ export default function OutputQualityPage() {
                     <Td>
                       <div style={{ fontWeight: 600, color: C.text }}>{c.connector}</div>
                       <div style={{ fontSize: 10, color: C.dim, marginTop: 2 }}>
-                        {c.last_seen_at ? `senast ${new Date(c.last_seen_at).toLocaleDateString('sv-SE')}` : ''}
+                        {c.last_seen_at ? `senast ${fmtDate(c.last_seen_at)}` : ''}
                       </div>
                     </Td>
                     <Td align="right">

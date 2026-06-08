@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import css from './architecture.module.css';
 import { GLOSSARY, FIRESTORE_COLLECTIONS, type SchemaModel } from './data';
+import { fmtTime } from '@/lib/datetime';
 
 type StatusEntry = { name: string; url: string; ok: boolean; ms: number | null; detail: string };
 type StatusResponse = { checkedAt: string; services: StatusEntry[] };
@@ -84,7 +85,7 @@ export default function LiveTab({
         </button>
         {status && (
           <span className={css.small + ' ' + css.muted}>
-            Kontrollerat {new Date(status.checkedAt).toLocaleTimeString('sv-SE')}
+            Kontrollerat {fmtTime(status.checkedAt)}
           </span>
         )}
       </div>
