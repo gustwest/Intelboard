@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, UploadFile
+from services.upload_limits import read_capped
 
 import firestore_client as fs
 from services.attested_ingest import SOURCE_TYPES, attested_status, clear_source, include_source, ingest_attested
@@ -44,7 +45,7 @@ async def upload_attested(
     attested_at: str = Form(...),
     url: str | None = Form(None),
 ) -> dict[str, Any]:
-    raw = await file.read()
+    raw = await read_capped(file)
     try:
         # LinkedIns native-export (.xls/.xlsx) eller kanonisk CSV — ingesten väljer rätt.
         return ingest_attested(client_id, source_type, file.filename, raw, attested_at=attested_at, url=url)

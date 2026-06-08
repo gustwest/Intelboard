@@ -103,6 +103,16 @@ def canonical_url(client_id: str, profile_base_url: str | None = None) -> str:
     return f"{DEFAULT_BASE}/{client_id}"
 
 
+def resolve_website(data: dict) -> str | None:
+    """Kundens kanoniska hemsida. Top-level `website` om satt, annars crawl-startens
+    URL (`settings.website.start_url`) som onboarding sparar. Annars blir `url` null bara
+    för att URL:en bor på en nästlad plats — fast den finns."""
+    w = data.get("website")
+    if w:
+        return w
+    return ((data.get("settings") or {}).get("website") or {}).get("start_url")
+
+
 def external_same_as(data: dict) -> list[str]:
     """Externa identitetslänkar för Organization.sameAs ur ett client_doc.
 
@@ -111,4 +121,4 @@ def external_same_as(data: dict) -> list[str]:
     webbplatsen i sameAs också. Vi behåller det för bakåtkompatibilitet (motorer
     klagar inte; det är bara redundant), men exponerar bygget på ETT ställe så
     delivery och compiler aldrig hamnar i olika listor."""
-    return [u for u in [data.get("website"), data.get("company_linkedin_url")] if u]
+    return [u for u in [resolve_website(data), data.get("company_linkedin_url")] if u]

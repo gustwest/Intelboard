@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
+from services.upload_limits import read_capped
 
 import firestore_client as fs
 from schemas import Claim, ClaimSource, VerificationSubmission
@@ -69,7 +70,7 @@ async def add_upload(
     # Artefakten sparas privat oavsett roll (revisionsspår). Self-no-op utan upload-bucket.
     artifact_ref = None
     if file is not None:
-        content = await file.read()
+        content = await read_capped(file)
         upload_id = hashlib.sha1(
             f"{file.filename}|{datetime.now(timezone.utc).isoformat()}".encode("utf-8")
         ).hexdigest()[:12]

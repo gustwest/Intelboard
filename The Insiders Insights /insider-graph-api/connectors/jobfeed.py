@@ -24,9 +24,13 @@ from __future__ import annotations
 import hashlib
 import logging
 import xml.etree.ElementTree as ET
+
+from defusedxml.ElementTree import fromstring as safe_fromstring
 from datetime import datetime, timezone
 
 import httpx
+
+from services import safe_fetch
 
 from connectors.base import BaseConnector, ConnectorConfig, InputField, RawItem
 from services.skill_extractor import extract_skills
@@ -89,9 +93,8 @@ class JobFeedConnector(BaseConnector):
 
     def _fetch_feed(self, client_id: str, url: str) -> list[RawItem]:
         try:
-            with httpx.Client(timeout=20, follow_redirects=True) as client:
-                resp = client.get(url, headers={"User-Agent": "InsiderGraphBot/1.0"})
-        except httpx.HTTPError as exc:
+            resp = safe_fetch.safe_get(url, headers={"User-Agent": "InsiderGraphBot/1.0"}, timeout=20)
+        except (httpx.HTTPError, safe_fetch.SsrfError) as exc:
             log.warning("jobfeed fetch failed for %s: %s", url, exc)
             return []
         if resp.status_code >= 400:
@@ -99,8 +102,9 @@ class JobFeedConnector(BaseConnector):
             return []
 
         try:
-            root = ET.fromstring(resp.content)
-        except ET.ParseError as exc:
+            # defusedxml: blockerar XXE/entity-expansion i kund-kontrollerade feeds.
+            root = safe_fromstring(resp.content)
+        except (ET.ParseError, ValueError) as exc:
             log.warning("jobfeed parse failed for %s: %s", url, exc)
             return []
 

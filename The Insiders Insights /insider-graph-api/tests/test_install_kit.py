@@ -32,12 +32,12 @@ class InstallKitRenderTest(unittest.TestCase):
 
 class InstallKitSendTest(unittest.TestCase):
     def setUp(self):
-        self._orig = (settings.sendgrid_api_key, settings.notify_from_email, notifications._deliver)
-        settings.sendgrid_api_key = "SG.x"
+        self._orig = (settings.brevo_api_key, settings.notify_from_email, notifications._deliver)
+        settings.brevo_api_key = "SG.x"
         settings.notify_from_email = "noreply@geogiraph.com"
 
     def tearDown(self):
-        settings.sendgrid_api_key, settings.notify_from_email, notifications._deliver = self._orig
+        settings.brevo_api_key, settings.notify_from_email, notifications._deliver = self._orig
 
     def test_sends_kit_to_contact(self):
         fakefs.reset(client={

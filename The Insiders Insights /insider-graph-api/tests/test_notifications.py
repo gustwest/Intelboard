@@ -6,18 +6,18 @@ from services import notifications as n
 
 class NotificationsTest(unittest.TestCase):
     def setUp(self):
-        self._orig = (n.settings.sendgrid_api_key, n.settings.notify_from_email, n.settings.ops_notify_email, n._deliver)
+        self._orig = (n.settings.brevo_api_key, n.settings.notify_from_email, n.settings.ops_notify_email, n._deliver)
 
     def tearDown(self):
-        n.settings.sendgrid_api_key, n.settings.notify_from_email, n.settings.ops_notify_email, n._deliver = self._orig
+        n.settings.brevo_api_key, n.settings.notify_from_email, n.settings.ops_notify_email, n._deliver = self._orig
 
     def _configure(self):
-        n.settings.sendgrid_api_key = "SG.x"
+        n.settings.brevo_api_key = "SG.x"
         n.settings.notify_from_email = "noreply@geogiraph.com"
         n.settings.ops_notify_email = "ops@geogiraph.com"
 
     def test_noop_when_unconfigured(self):
-        n.settings.sendgrid_api_key = ""
+        n.settings.brevo_api_key = ""
         result = n.send_quarterly_reminder("acme", {"company_name": "Acme AB"}, "msg")
         self.assertEqual(result, {"sent": False, "reason": "not_configured"})
 
@@ -50,7 +50,7 @@ class NotificationsTest(unittest.TestCase):
     # --- send_customer_email (Spår B: kundvänt utskick) ---
 
     def test_customer_email_noop_unconfigured(self):
-        n.settings.sendgrid_api_key = ""
+        n.settings.brevo_api_key = ""
         result = n.send_customer_email("vd@acme.se", "sub", "<b>h</b>", "t")
         self.assertEqual(result["reason"], "not_configured")
 

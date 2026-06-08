@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import HTTPException, Request
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from config import settings
 
@@ -22,6 +22,7 @@ PUBLIC_PREFIXES = (
     "/health",
     "/api/webhooks/",            # webhooks (SendGrid + ops-alerts) auth:ar separat
     "/api/jobs/compile-via-eventarc",
+    "/api/badge/",               # trust-badgen embeddas på KUNDENS sajt → måste vara publik
     "/docs",
     "/openapi.json",
     "/redoc",
@@ -39,5 +40,8 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
 
         provided = request.headers.get("x-api-key") or request.query_params.get("api_key")
         if provided != settings.admin_api_key:
-            raise HTTPException(status_code=401, detail="invalid or missing api key")
+            # OBS: en HTTPException som RAISE:as i en BaseHTTPMiddleware blir 500, inte
+            # 401 (Starlette-fälla — FastAPI:s exception-handlers körs bara i routinglagret).
+            # Returnera därför ett explicit 401-svar.
+            return JSONResponse({"detail": "invalid or missing api key"}, status_code=401)
         return await call_next(request)

@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Form, HTTPException, Response, UploadFile
+from services.upload_limits import read_capped
 from google.cloud import firestore
 
 import firestore_client as fs
@@ -53,7 +54,7 @@ async def upload_snapshot(
     file_path = None
     extracted: dict[str, Any] = {}
     if file:
-        content = await file.read()
+        content = await read_capped(file)
         # Deterministiskt först (CSV/XLSX). För PDF/bild: LLM-extraktion via Vertex EU.
         extracted = capacity_parse.extract(file.filename, file.content_type, content)
         if not extracted.get("skills"):

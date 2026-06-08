@@ -33,7 +33,7 @@ from schema_org.claims import (
     derive_property_claims,
     derive_skill_claims,
 )
-from schema_org.urls import canonical_url, clean_logo_url, external_same_as
+from schema_org.urls import canonical_url, clean_logo_url, external_same_as, resolve_website
 from schemas import Claim, ClaimSource
 from services import claim_voice
 
@@ -432,10 +432,11 @@ def compile_client(client_id: str) -> dict[str, Any]:
         # vet vilket språk fakta/beskrivning är skrivna på var de än läser noden.
         "inLanguage": model.language,
     }
-    if data.get("website"):
+    website = resolve_website(data)
+    if website:
         # Canonical homepage. Snippet i kundens <head> delar samma `url` — så
         # motorerna ser ETT konsistent entitetskort var de än läser den.
-        organization["url"] = data["website"]
+        organization["url"] = website
     logo = clean_logo_url(data.get("logo_url"), data.get("website"))
     if logo:
         # Schema.org Organization.logo accepterar URL eller ImageObject. URL räcker —

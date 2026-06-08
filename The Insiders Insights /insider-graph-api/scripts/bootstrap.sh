@@ -220,7 +220,7 @@ OPS_WEBHOOK_TOKEN_ENV="${OPS_WEBHOOK_TOKEN:-}"
 gcloud run services update "$SERVICE" --region="$REGION" --project="$PROJECT_ID" \
   --service-account="$SA_EMAIL" \
   --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS},OPS_WEBHOOK_TOKEN=${OPS_WEBHOOK_TOKEN_ENV}" \
-  --update-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,PERPLEXITY_API_KEY=insider-graph-perplexity-api-key:latest,ANTHROPIC_API_KEY=insider-graph-anthropic-api-key:latest" \
+  --update-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,PERPLEXITY_API_KEY=insider-graph-perplexity-api-key:latest,ANTHROPIC_API_KEY=insider-graph-anthropic-api-key:latest,BREVO_API_KEY=insider-graph-brevo-api-key:latest,ADMIN_API_KEY=insider-graph-admin-api-key:latest" \
   || echo "==> Service finns ej ännu — kör cloudbuild först"
 
 # ---- 6. Cloud Run Jobs -----------------------------------------------------
@@ -245,7 +245,7 @@ create_or_update_job() {
       --command="python" --args="-m,$CMD" \
       --tasks="$TASKS" --parallelism="$PARALLELISM" --task-timeout="$TASK_TIMEOUT" \
       --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS}" \
-      --update-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,PERPLEXITY_API_KEY=insider-graph-perplexity-api-key:latest,ANTHROPIC_API_KEY=insider-graph-anthropic-api-key:latest"
+      --update-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,PERPLEXITY_API_KEY=insider-graph-perplexity-api-key:latest,ANTHROPIC_API_KEY=insider-graph-anthropic-api-key:latest,BREVO_API_KEY=insider-graph-brevo-api-key:latest,ADMIN_API_KEY=insider-graph-admin-api-key:latest"
   else
     echo "==> Skapar job: $NAME (tasks=$TASKS parallelism=$PARALLELISM timeout=$TASK_TIMEOUT)"
     gcloud run jobs create "$NAME" \
@@ -255,7 +255,7 @@ create_or_update_job() {
       --tasks="$TASKS" --parallelism="$PARALLELISM" --task-timeout="$TASK_TIMEOUT" \
       --max-retries=1 \
       --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS}" \
-      --set-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,PERPLEXITY_API_KEY=insider-graph-perplexity-api-key:latest,ANTHROPIC_API_KEY=insider-graph-anthropic-api-key:latest"
+      --set-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,PERPLEXITY_API_KEY=insider-graph-perplexity-api-key:latest,ANTHROPIC_API_KEY=insider-graph-anthropic-api-key:latest,BREVO_API_KEY=insider-graph-brevo-api-key:latest,ADMIN_API_KEY=insider-graph-admin-api-key:latest"
   fi
 }
 

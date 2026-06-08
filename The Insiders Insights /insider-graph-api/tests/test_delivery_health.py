@@ -92,5 +92,62 @@ class CheckLiveTest(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 404)
 
 
+_ORG_ID = "https://profiles.geogiraph.com/acme#org"
+
+
+class EvaluateSnippetTest(unittest.TestCase):
+    def _ld(self, at_id):
+        return f'{{"@type":"Organization","@id":"{at_id}","name":"Acme"}}'
+
+    def test_installed_when_org_id_present(self):
+        r = dh.evaluate_snippet(status=200, html=_page(jsonld=self._ld(_ORG_ID)), org_id=_ORG_ID)
+        self.assertEqual(r["verdict"], "installed")
+        self.assertTrue(r["snippet_installed"])
+
+    def test_not_installed_when_only_own_org_markup(self):
+        # Kundens egen Organization-markup med samma NAMN men annat @id → ej vår snutt.
+        r = dh.evaluate_snippet(status=200, html=_page(jsonld=self._ld("https://kund.se/#org")), org_id=_ORG_ID)
+        self.assertEqual(r["verdict"], "not_installed")
+        self.assertFalse(r["snippet_installed"])
+
+    def test_unreachable_when_site_down(self):
+        r = dh.evaluate_snippet(status=0, html="", org_id=_ORG_ID)
+        self.assertEqual(r["verdict"], "unreachable")
+
+
+class CheckSnippetOnSiteTest(unittest.TestCase):
+    def test_fetches_resolved_website_and_finds_snippet(self):
+        captured = {}
+
+        def fake_fetch(url):
+            captured["url"] = url
+            return 200, _page(jsonld=f'{{"@type":"Organization","@id":"{_ORG_ID}"}}')
+
+        out = dh.check_snippet_on_site(
+            "acme", {"company_name": "Acme", "website": "https://kund.se"}, fetch=fake_fetch,
+        )
+        self.assertEqual(captured["url"], "https://kund.se")
+        self.assertEqual(out["verdict"], "installed")
+        self.assertEqual(out["website"], "https://kund.se")
+
+    def test_falls_back_to_nested_start_url(self):
+        captured = {}
+
+        def fake_fetch(url):
+            captured["url"] = url
+            return 200, _page(jsonld=f'{{"@id":"{_ORG_ID}"}}')
+
+        out = dh.check_snippet_on_site(
+            "acme", {"settings": {"website": {"start_url": "https://kund.se/"}}}, fetch=fake_fetch,
+        )
+        self.assertEqual(captured["url"], "https://kund.se/")
+        self.assertTrue(out["snippet_installed"])
+
+    def test_no_website_verdict_when_absent(self):
+        out = dh.check_snippet_on_site("acme", {"company_name": "Acme"}, fetch=lambda _u: (200, ""))
+        self.assertEqual(out["verdict"], "no_website")
+        self.assertFalse(out["snippet_installed"])
+
+
 if __name__ == "__main__":
     unittest.main()

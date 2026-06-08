@@ -19,13 +19,13 @@ import json
 
 import firestore_client as fs
 from schema_org.compiler import build_render_model
-from schema_org.urls import cdn_url, clean_logo_url, external_same_as, served_url
+from schema_org.urls import cdn_url, clean_logo_url, external_same_as, resolve_website, served_url
 
 
 def render_identity_snippet(client_id: str) -> str:
     model = build_render_model(client_id)
     data = fs.client_doc(client_id).get().to_dict() or {}
-    website = data.get("website")
+    website = resolve_website(data)
 
     org: dict = {
         "@context": "https://schema.org",

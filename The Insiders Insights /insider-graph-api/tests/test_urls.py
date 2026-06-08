@@ -79,5 +79,22 @@ class CleanLogoUrlTest(unittest.TestCase):
         self.assertIsNone(urls.clean_logo_url("inte-en-url"))
 
 
+class ResolveWebsiteTest(unittest.TestCase):
+    def test_top_level_website_wins(self):
+        self.assertEqual(urls.resolve_website({"website": "https://kund.se"}), "https://kund.se")
+
+    def test_falls_back_to_settings_start_url(self):
+        # Onboarding sparar URL:en nästlad — den ska ändå bli `url`.
+        data = {"settings": {"website": {"start_url": "https://kund.se/"}}}
+        self.assertEqual(urls.resolve_website(data), "https://kund.se/")
+
+    def test_top_level_preferred_over_nested(self):
+        data = {"website": "https://kanonisk.se", "settings": {"website": {"start_url": "https://crawl.se"}}}
+        self.assertEqual(urls.resolve_website(data), "https://kanonisk.se")
+
+    def test_none_when_absent(self):
+        self.assertIsNone(urls.resolve_website({}))
+
+
 if __name__ == "__main__":
     unittest.main()

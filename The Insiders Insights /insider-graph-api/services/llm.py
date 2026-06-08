@@ -357,6 +357,23 @@ def _messages_to_prompt(messages: Any) -> str:
     return "\n\n".join(parts)
 
 
+def _record_grounded(base_model: str, input_tokens: int, output_tokens: int) -> None:
+    """Registrera en groundad probes tokens i den aktiva token-mätaren under nyckeln
+    "<base_model>-grounded" — samma id som motorn nycklas på, så kostnaden taggas
+    web_rag (knowledge_source_for) och cost_estimator lägger på web-sök-avgiften.
+
+    Måste göras manuellt här: de groundade adaptrarna går mot rå-SDK:er och lindas
+    INTE av token_meter.track() (som bara förstår LangChain-svar). Utan detta blir hela
+    grounded-serien $0 i kostnadsbilden trots att den drar riktiga web-sök-anrop mot
+    Claude/OpenAI/Gemini. Får aldrig fälla probe-anropet."""
+    try:
+        token_meter.record(
+            base_model + GROUNDED_SUFFIX, int(input_tokens or 0), int(output_tokens or 0),
+        )
+    except Exception:  # noqa: BLE001 — mätning får aldrig fälla anropet
+        log.debug("grounded token-record misslyckades för %s", base_model, exc_info=True)
+
+
 def _anthropic_text_blocks(content: Any) -> str:
     """Claude med web_search returnerar en lista av block (server_tool_use, sökresultat,
     text). Plocka ut och konkatenera bara text-blocken."""
@@ -386,6 +403,12 @@ class _GroundedOpenAI:
             model=self._model, tools=[{"type": "web_search_preview"}],
             input=_messages_to_prompt(messages),
         )
+        usage = getattr(r, "usage", None)
+        _record_grounded(
+            self._model,
+            getattr(usage, "input_tokens", 0) if usage else 0,
+            getattr(usage, "output_tokens", 0) if usage else 0,
+        )
         return _GroundedResp(r.output_text or "")
 
 
@@ -406,6 +429,12 @@ class _GroundedGemini:
             config=types.GenerateContentConfig(
                 tools=[types.Tool(google_search=types.GoogleSearch())], temperature=0),
         )
+        um = getattr(resp, "usage_metadata", None)
+        _record_grounded(
+            self._model,
+            getattr(um, "prompt_token_count", 0) if um else 0,
+            getattr(um, "candidates_token_count", 0) if um else 0,
+        )
         return _GroundedResp(resp.text or "")
 
 
@@ -415,6 +444,7 @@ class _GroundedAnthropic:
     def __init__(self, model: str):
         from langchain_anthropic import ChatAnthropic
 
+        self._model = model
         base = ChatAnthropic(api_key=settings.anthropic_api_key, model=model,
                              temperature=0, max_tokens=1024, timeout=60)
         self._llm = base.bind_tools(
@@ -422,6 +452,8 @@ class _GroundedAnthropic:
 
     def invoke(self, messages: Any) -> _GroundedResp:
         resp = self._llm.invoke(messages)
+        i, o = token_meter._extract_usage(resp)
+        _record_grounded(self._model, i, o)
         return _GroundedResp(_anthropic_text_blocks(getattr(resp, "content", "")))
 
 

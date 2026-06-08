@@ -14,10 +14,12 @@ import logging
 import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Query
 from google.cloud import firestore
 
 import firestore_client as fs
+from config import settings
+from services.log_redact import mask_email
 from services.email_extraction import extract
 
 log = logging.getLogger(__name__)
@@ -30,13 +32,21 @@ CONFIDENCE_THRESHOLD = 0.7
 
 @router.post("/sendgrid")
 async def sendgrid_inbound(
+    token: str = Query(""),
     to: str = Form(""),
     sender: str = Form("", alias="from"),
     subject: str = Form(""),
     text: str = Form(""),
     html: str = Form(""),
 ):
-    log.info("inbound mail to=%s from=%s subject=%s", to, sender, subject)
+    # AVSTÄNGD som standard: vi skickar via Brevo och inbound-parse är inte kopplat.
+    # Endpointen skriver raw_items, så en öppen oautentiserad väg vore data-poisoning.
+    # Kräver en delad token (`?token=`) mot inbound-secreten; tom secret = avvisa allt
+    # (säker default, jfr ops-webhooken). Återaktiveras genom att sätta secreten och
+    # låta inbound-providern POSTa med token.
+    if not settings.sendgrid_webhook_secret or token != settings.sendgrid_webhook_secret:
+        raise HTTPException(403, "inbound mail webhook disabled")
+    log.info("inbound mail to=%s from=%s subject=%s", mask_email(to), mask_email(sender), subject)
 
     parsed = _parse_address(to)
     if not parsed:

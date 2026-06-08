@@ -6,10 +6,11 @@ De faktiska grounding-anropen verifieras live (kan inte mockas meningsfullt här
 """
 import os
 import unittest
+from types import SimpleNamespace
 
 import fakefs  # noqa: F401 — installerar fake firestore_client (polling importerar det)
 from config import settings
-from services import llm, model_registry, polling
+from services import llm, model_registry, polling, token_meter
 
 
 class KnowledgeSourceTest(unittest.TestCase):
@@ -68,6 +69,51 @@ class FactoryGatingTest(unittest.TestCase):
         settings.anthropic_api_key = ""
         settings.gcp_project = ""
         self.assertEqual(llm.make_grounded_probe_engines(), {})
+
+
+class GroundedTokenRecordingTest(unittest.TestCase):
+    """Grounded-adaptrarna går mot rå-SDK:er (inte LangChain) → de måste registrera
+    sina tokens manuellt, annars blir hela web-sök-serien $0 i kostnadsbilden trots
+    riktig spend mot Claude/OpenAI/Gemini. Verifierar att usage hamnar under
+    "<modell>-grounded"-nyckeln (så cost_estimator lägger på web-sök-avgiften)."""
+
+    def test_record_grounded_uses_suffix_key(self):
+        with token_meter.measure() as m:
+            llm._record_grounded("gpt-4.1", 100, 50)
+        by_model = m.to_dict()["by_model"]
+        self.assertIn("gpt-4.1-grounded", by_model)
+        self.assertEqual(by_model["gpt-4.1-grounded"]["input"], 100)
+        self.assertEqual(by_model["gpt-4.1-grounded"]["output"], 50)
+        self.assertEqual(by_model["gpt-4.1-grounded"]["calls"], 1)
+
+    def test_record_grounded_noop_without_meter(self):
+        # Utanför en measure()-context ska det vara en tyst no-op, inte krascha.
+        llm._record_grounded("gpt-4.1", 100, 50)  # ingen aktiv mätare
+
+    def test_openai_adapter_records_usage(self):
+        eng = object.__new__(llm._GroundedOpenAI)
+        eng._model = "gpt-4.1"
+        resp = SimpleNamespace(output_text="svar", usage=SimpleNamespace(input_tokens=120, output_tokens=30))
+        eng._client = SimpleNamespace(responses=SimpleNamespace(create=lambda **kw: resp))
+        with token_meter.measure() as m:
+            out = eng.invoke("fråga")
+        self.assertEqual(out.content, "svar")
+        rec = m.to_dict()["by_model"]["gpt-4.1-grounded"]
+        self.assertEqual((rec["input"], rec["output"]), (120, 30))
+
+    def test_anthropic_adapter_records_usage(self):
+        eng = object.__new__(llm._GroundedAnthropic)
+        eng._model = "claude-sonnet-4-6"
+        resp = SimpleNamespace(
+            content=[{"type": "text", "text": "svar"}],
+            usage_metadata={"input_tokens": 90, "output_tokens": 40},
+        )
+        eng._llm = SimpleNamespace(invoke=lambda messages: resp)
+        with token_meter.measure() as m:
+            out = eng.invoke("fråga")
+        self.assertEqual(out.content, "svar")
+        rec = m.to_dict()["by_model"]["claude-sonnet-4-6-grounded"]
+        self.assertEqual((rec["input"], rec["output"]), (90, 40))
 
 
 class PollingOptInTest(unittest.TestCase):

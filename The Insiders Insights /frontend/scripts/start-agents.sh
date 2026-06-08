@@ -22,6 +22,7 @@ export AGENT_API_BASE
 export AGENT_API_KEY
 export AGENT_CLI
 export AGENT_MODEL
+export CLAUDE_CONFIG_DIR="$HOME/.beachvibes-agents/freddi-claude-config"
 
 LOG_DIR="$HOME/.insiders-agents"
 mkdir -p "$LOG_DIR"

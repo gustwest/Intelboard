@@ -28,7 +28,8 @@ def run(client_id: str, month: str | None = None) -> dict:
             return r.summary
         model = snap.to_dict() or {}
         data = fs.client_doc(client_id).get().to_dict() or {}
-        subject, html_body, text_body = render_customer_email(model)
+        # A1: mejlet följer kundens språk (default sv om ej satt).
+        subject, html_body, text_body = render_customer_email(model, lang=data.get("language"))
         result = notifications.send_customer_email(
             data.get("contact_email"), subject, html_body, text_body,
         )

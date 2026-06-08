@@ -83,6 +83,39 @@ class CostEstimatorTest(unittest.TestCase):
         # En modell med bara request-avgift (0 tokens) ska INTE flaggas som okänd.
         self.assertEqual(result["unknown_models"], [])
 
+    def test_grounded_inherits_base_token_price_plus_search_fee(self):
+        # "<modell>-grounded" ärver basmodellens token-pris och får en web-sök-avgift
+        # per anrop. claude-sonnet-4-6: $3/$15 + $0.010/anrop (anthropic-grounding).
+        base = cost_estimator.usd_for("claude-sonnet-4-6", 1_000_000, 1_000_000, calls=10)
+        grounded = cost_estimator.usd_for("claude-sonnet-4-6-grounded", 1_000_000, 1_000_000, calls=10)
+        self.assertAlmostEqual(grounded - base, 10 * 0.010, places=6)
+
+    def test_grounded_search_fee_varies_by_vendor(self):
+        # OpenAI $0.025, Google $0.035, Anthropic $0.010 per anrop (utöver tokens).
+        for mid, fee in [
+            ("gpt-4.1-grounded", 0.025),
+            ("gemini-2.5-pro-grounded", 0.035),
+            ("claude-sonnet-4-6-grounded", 0.010),
+        ]:
+            token_only = cost_estimator.usd_for(mid, 1000, 1000, calls=0)
+            with_calls = cost_estimator.usd_for(mid, 1000, 1000, calls=100)
+            self.assertAlmostEqual(with_calls - token_only, 100 * fee, places=6, msg=mid)
+
+    def test_grounded_is_priced_not_unknown(self):
+        # Grounded-nycklar är prissatta (via fallback) → flaggas INTE som okänd modell.
+        self.assertTrue(cost_estimator.is_priced("gpt-4.1-grounded"))
+        summary = {"by_model": {"gpt-4.1-grounded": {"input": 1000, "output": 1000, "calls": 1}}}
+        result = cost_estimator.estimate_summary(summary)
+        self.assertEqual(result["unknown_models"], [])
+        self.assertGreater(result["by_model"]["gpt-4.1-grounded"]["usd"], 0)
+
+    def test_grounded_unknown_base_still_zero(self):
+        # En grounded-variant av en modell vi inte prissätter förblir $0.
+        with self.assertLogs("services.cost_estimator", level="WARNING"):
+            usd = cost_estimator.usd_for("inte-en-modell-grounded", 1000, 1000, calls=5)
+        self.assertEqual(usd, 0.0)
+        self.assertFalse(cost_estimator.is_priced("inte-en-modell-grounded"))
+
     def test_prices_for_ui_has_required_fields(self):
         prices = cost_estimator.prices_for_ui()
         self.assertTrue(len(prices) > 0)

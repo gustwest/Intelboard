@@ -51,15 +51,30 @@ class CustomerEmailRenderTest(unittest.TestCase):
         for secret in _SECRETS:
             self.assertNotIn(secret, blob, f"känsligt fält läckte: {secret}")
 
+    def test_english_localization(self):
+        subject, html, text = monthly_report.render_customer_email(MODEL, lang="en")
+        self.assertIn("Your AI visibility", subject)
+        self.assertIn("May 2026", subject)            # lokaliserat månadsnamn
+        self.assertIn("Decision confidence: 72/100", html)
+        self.assertIn("improved", html)               # trend-ord på engelska
+        self.assertIn("What's working", text)         # text-versionen (ej HTML-escapad)
+        self.assertIn('lang="en"', html)
+        self.assertNotIn("Beslutssäkerhet", html)     # ingen svenska kvar
+        self.assertNotIn("förbättrad", html)
+
+    def test_lang_falls_back_to_model_language(self):
+        subject, _h, _t = monthly_report.render_customer_email({**MODEL, "language": "en"})
+        self.assertIn("Your AI visibility", subject)
+
 
 class CustomerEmailSendTest(unittest.TestCase):
     def setUp(self):
-        self._orig = (settings.sendgrid_api_key, settings.notify_from_email, notifications._deliver)
-        settings.sendgrid_api_key = "SG.x"
+        self._orig = (settings.brevo_api_key, settings.notify_from_email, notifications._deliver)
+        settings.brevo_api_key = "SG.x"
         settings.notify_from_email = "noreply@geogiraph.com"
 
     def tearDown(self):
-        settings.sendgrid_api_key, settings.notify_from_email, notifications._deliver = self._orig
+        settings.brevo_api_key, settings.notify_from_email, notifications._deliver = self._orig
 
     def test_sends_safe_email_to_contact(self):
         fakefs.reset(
@@ -84,12 +99,12 @@ class CustomerEmailSendTest(unittest.TestCase):
 
 class CustomerEmailJobTest(unittest.TestCase):
     def setUp(self):
-        self._orig = (settings.sendgrid_api_key, settings.notify_from_email, notifications._deliver)
-        settings.sendgrid_api_key = "SG.x"
+        self._orig = (settings.brevo_api_key, settings.notify_from_email, notifications._deliver)
+        settings.brevo_api_key = "SG.x"
         settings.notify_from_email = "noreply@geogiraph.com"
 
     def tearDown(self):
-        settings.sendgrid_api_key, settings.notify_from_email, notifications._deliver = self._orig
+        settings.brevo_api_key, settings.notify_from_email, notifications._deliver = self._orig
 
     def test_per_client_job_sends(self):
         from jobs import customer_report_email as job

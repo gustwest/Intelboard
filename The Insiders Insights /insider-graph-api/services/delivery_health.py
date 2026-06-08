@@ -25,7 +25,8 @@ from typing import Any, Callable
 
 import httpx
 
-from schema_org.urls import canonical_url, served_url
+from schema_org.urls import canonical_url, resolve_website, served_url
+from services import safe_fetch
 
 log = logging.getLogger(__name__)
 
@@ -39,12 +40,13 @@ _LDJSON_RE = re.compile(
 
 
 def _http_get(url: str) -> tuple[int, str]:
-    """GET → (status, text). Nätverksfel → (0, "") (best-effort, fäller aldrig)."""
+    """GET → (status, text). Nät-/SSRF-fel → (0, "") (best-effort, fäller aldrig).
+    SSRF-grindad: kundens website/profil-URL är kund-kontrollerad och får inte kunna
+    rikta servern mot intern/metadata-adress."""
     try:
-        with httpx.Client(timeout=FETCH_TIMEOUT_SEC, follow_redirects=True) as client:
-            resp = client.get(url, headers={"User-Agent": USER_AGENT})
+        resp = safe_fetch.safe_get(url, headers={"User-Agent": USER_AGENT}, timeout=FETCH_TIMEOUT_SEC)
         return resp.status_code, resp.text or ""
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, safe_fetch.SsrfError) as exc:
         log.info("delivery-health: hämtning misslyckades för %s: %s", url, exc)
         return 0, ""
 
@@ -136,3 +138,55 @@ def check_live(
         "checked_at": datetime.now(timezone.utc).isoformat(),
         **checks,
     }
+
+
+def evaluate_snippet(*, status: int, html: str, org_id: str) -> dict[str, Any]:
+    """Ren utvärdering: ligger identitets-snutten (org-nodens `@id`) i den hämtade
+    sidans JSON-LD? Matchar ENBART på `@id` (vår kanoniska org-IRI) — inte på namn,
+    eftersom kundens egen sajt naturligt nämner bolagsnamnet och då skulle ge falskt
+    positivt. Verdikt: installed > not_installed > unreachable."""
+    reachable = status == 200
+    parsed = _parse_blocks(html) if reachable else []
+    nodes = [n for block in parsed for n in _iter_nodes(block) if isinstance(n, dict)]
+    target = (org_id or "").rstrip("/").lower()
+    installed = any(str(n.get("@id") or "").rstrip("/").lower() == target for n in nodes) if target else False
+
+    if not reachable:
+        verdict = "unreachable"
+    elif installed:
+        verdict = "installed"
+    else:
+        verdict = "not_installed"
+
+    return {
+        "reachable": reachable,
+        "has_jsonld": bool(nodes),
+        "snippet_installed": installed,
+        "verdict": verdict,
+    }
+
+
+def check_snippet_on_site(
+    client_id: str,
+    client: dict[str, Any] | None = None,
+    *,
+    fetch: Callable[[str], tuple[int, str]] = _http_get,
+) -> dict[str, Any]:
+    """Verifiera att snutten faktiskt ligger på KUNDENS EGNA sajt — inte bara att vår
+    hostade profilsida finns. Stänger gapet auditen flaggade: snutten kan vara
+    överlämnad (B1) men aldrig inklistrad. Hämtar kundens website och letar org-nodens
+    `@id`. Saknas website → verdict 'no_website' (inget att kontrollera mot)."""
+    client = client or {}
+    website = resolve_website(client)
+    base = canonical_url(client_id, client.get("profile_base_url"))
+    org_id = f"{base}#org"
+    out: dict[str, Any] = {
+        "client_id": client_id,
+        "website": website,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if not website:
+        return {**out, "reachable": False, "has_jsonld": False,
+                "snippet_installed": False, "verdict": "no_website"}
+    status, html = fetch(website)
+    return {**out, **evaluate_snippet(status=status, html=html, org_id=org_id)}

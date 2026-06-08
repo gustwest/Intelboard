@@ -48,8 +48,8 @@ class _FakeUpload:
         self._content = content
         self.content_type = content_type
 
-    async def read(self):
-        return self._content
+    async def read(self, size: int = -1):
+        return self._content if size < 0 else self._content[:size]
 
 
 class FileStorageTest(unittest.TestCase):

@@ -522,6 +522,14 @@ class JsonLdCorrectnessTest(unittest.TestCase):
         org = _nodes(compile_client("acme"), "Organization")[0]
         self.assertEqual(org["logo"], "https://acme.se/logo.svg")
 
+    def test_url_falls_back_to_nested_start_url(self):
+        # Top-level website saknas men onboarding sparade settings.website.start_url →
+        # url ska ändå emitteras (annars blir knowledge-panelens primärlänk null).
+        _graph_setup(client={"company_name": "Acme AB",
+                             "settings": {"website": {"start_url": "https://acme.se/"}}})
+        org = _nodes(compile_client("acme"), "Organization")[0]
+        self.assertEqual(org["url"], "https://acme.se/")
+
 
 class CompileTimeVoiceTest(unittest.TestCase):
     """(c) vid compile: neutralisera röst + släng social-metric ur REDAN lagrade claims

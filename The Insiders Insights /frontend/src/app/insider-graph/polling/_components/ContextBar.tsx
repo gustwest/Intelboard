@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { graphColors as C } from '../../_components/GraphPageShell';
-import { GRAPH_API } from '../../_lib/api';
+import { proxyShareUrl } from '../../_lib/api';
+import { fmtTime } from '@/lib/datetime';
 import {
   Client,
   EngineHealth,
@@ -32,7 +33,7 @@ export function StickyContextBar({ clients, selected, onSelectClient, months, mo
   onRefreshEngineHealth: () => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const fullShareUrl = reportShareUrl ? `${GRAPH_API}${reportShareUrl}` : '';
+  const fullShareUrl = reportShareUrl ? proxyShareUrl(reportShareUrl) : '';
   async function copyShareLink() {
     if (!fullShareUrl) return;
     try {
@@ -220,7 +221,7 @@ export function EngineHealthBar({ data, onRefresh }: { data: EngineHealthResp; o
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
         <button
           onClick={async () => { setRefreshing(true); await onRefresh(); setTimeout(() => setRefreshing(false), 600); }}
-          title={`Senast kollat ${new Date(data.checked_at).toLocaleTimeString('sv-SE')} — klick för att probe på nytt`}
+          title={`Senast kollat ${fmtTime(data.checked_at)} — klick för att probe på nytt`}
           style={{
             padding: '3px 8px', fontSize: 10, fontWeight: 600,
             color: refreshing ? C.accent : C.muted, background: 'transparent',
@@ -233,7 +234,7 @@ export function EngineHealthBar({ data, onRefresh }: { data: EngineHealthResp; o
           {refreshing ? 'Probar…' : 'Kolla'}
         </button>
         <span style={{ fontSize: 10, color: C.dim, marginLeft: 'auto' }}>
-          {new Date(data.checked_at).toLocaleTimeString('sv-SE')}
+          {fmtTime(data.checked_at)}
         </span>
       </div>
 

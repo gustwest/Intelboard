@@ -22,6 +22,8 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 
+from services import safe_fetch
+
 log = logging.getLogger(__name__)
 
 USER_AGENT = "InsiderGraphBot/1.0"
@@ -135,9 +137,8 @@ def _httpx_fetch(url: str, max_mb: int) -> FetchResult | None:
     from connectors import readers
 
     try:
-        with httpx.Client(timeout=20, follow_redirects=True) as client:
-            resp = client.get(url, headers={"User-Agent": USER_AGENT})
-    except httpx.HTTPError as exc:
+        resp = safe_fetch.safe_get(url, headers={"User-Agent": USER_AGENT}, timeout=20)
+    except (httpx.HTTPError, safe_fetch.SsrfError) as exc:
         log.warning("fetch failed for %s: %s", url, exc)
         return None
     if resp.status_code >= 400:

@@ -32,13 +32,18 @@ def get_delivery(client_id: str) -> dict[str, str | None]:
 
 @router.get("/{client_id}/health")
 def get_delivery_health(client_id: str) -> dict[str, object]:
-    """P2 — verifiera att kundens profilsida faktiskt är live (200 + JSON-LD för rätt
-    entitet + färsk). Ops-kontroll så vi inte påstår 'stängt gap' mot en sida som
-    aldrig publicerades. Best-effort: nätverksfel → verdict 'missing'."""
+    """P2 — verifiera att leveransen faktiskt är live. Två nivåer:
+      * den hostade profilsidan (200 + JSON-LD för rätt entitet + färsk), och
+      * `snippet`: att identitets-snutten faktiskt ligger på KUNDENS EGNA sajt (inte
+        bara överlämnad). Stänger gapet audit #1 flaggade. Best-effort: nätverksfel →
+        verdict 'missing'/'unreachable'."""
     snap = fs.client_doc(client_id).get()
     if not snap.exists:
         raise HTTPException(404, f"client not found: {client_id}")
-    return delivery_health.check_live(client_id, snap.to_dict() or {})
+    data = snap.to_dict() or {}
+    result = delivery_health.check_live(client_id, data)
+    result["snippet"] = delivery_health.check_snippet_on_site(client_id, data)
+    return result
 
 
 @router.get("/{client_id}/install-kit", response_class=HTMLResponse)

@@ -71,13 +71,51 @@ PRICE_TABLE: dict[str, ModelPrice] = {
 }
 
 
+# Groundade probe-varianter (services/llm.make_grounded_probe_engines) nycklas
+# "<model_id>-grounded" och kör SAMMA modell men med web-sök PÅ. De debiteras
+# basmodellens token-pris PLUS en sök-/grounding-avgift per anrop som de rena
+# token-modellerna inte har. Listpriser per leverantör (USD/anrop, publika 2026):
+#   - OpenAI web_search (Responses API): ~$25/1000 = $0.025
+#   - Google Search grounding (Vertex): ~$35/1000 = $0.035
+#   - Anthropic web_search: ~$10/1000 = $0.010
+# Avgiften tas per ANROP (en .invoke). Claude kan göra upp till max_uses sökningar
+# per anrop → detta är en konservativ underkant; bättre än det gamla $0 som gjorde
+# hela grounded-serien osynlig i kostnadsbilden.
+GROUNDED_SUFFIX = "-grounded"
+_GROUNDING_FEE_BY_VENDOR: dict[str, float] = {
+    "openai": 0.025,
+    "google": 0.035,
+    "anthropic": 0.010,
+}
+
+
+def _resolve_price(model_id: str) -> tuple[ModelPrice | None, float]:
+    """(pris, grounding-avgift/anrop) för ett modell-id. För "<base>-grounded"-id:n
+    ärvs basmodellens token-pris och en web-sök-avgift läggs till per anrop, så att
+    grounded-probarna får en realistisk kostnad i stället för $0."""
+    price = PRICE_TABLE.get(model_id)
+    if price is not None:
+        return price, 0.0
+    if model_id.endswith(GROUNDED_SUFFIX):
+        base = PRICE_TABLE.get(model_id[: -len(GROUNDED_SUFFIX)])
+        if base is not None:
+            return base, _GROUNDING_FEE_BY_VENDOR.get(base.vendor, 0.0)
+    return None, 0.0
+
+
+def is_priced(model_id: str) -> bool:
+    """True om vi kan prissätta modellen (direkt eller via grounded-fallback)."""
+    return _resolve_price(model_id)[0] is not None
+
+
 def usd_for(model_id: str, input_tokens: int, output_tokens: int, calls: int = 0) -> float:
     """Beräkna USD för token-förbrukning på en modell. 0.0 om priset saknas.
 
-    `calls` lägger till per-request-avgiften (price.per_request_usd × calls) —
-    behövs för Perplexity Sonars sök-avgift. Lämnas 0 för rena token-modeller
-    eller där anropsantal saknas (då fås bara token-kostnaden, oförändrat beteende)."""
-    price = PRICE_TABLE.get(model_id)
+    `calls` lägger till per-request-avgiften ((price.per_request_usd + grounding_fee)
+    × calls) — behövs för Perplexity Sonars sök-avgift och för de groundade probarnas
+    web-sök-avgift. Lämnas 0 för rena token-modeller eller där anropsantal saknas (då
+    fås bara token-kostnaden, oförändrat beteende)."""
+    price, grounding_fee = _resolve_price(model_id)
     if price is None:
         log.warning("cost: saknar pris för modell %s (input=%d output=%d)",
                     model_id, input_tokens, output_tokens)
@@ -85,7 +123,7 @@ def usd_for(model_id: str, input_tokens: int, output_tokens: int, calls: int = 0
     return (
         (input_tokens / 1_000_000.0) * price.input_per_million
         + (output_tokens / 1_000_000.0) * price.output_per_million
-        + (calls or 0) * price.per_request_usd
+        + (calls or 0) * (price.per_request_usd + grounding_fee)
     )
 
 
@@ -118,7 +156,7 @@ def estimate_summary(summary_tokens: dict[str, Any]) -> dict[str, Any]:
             "usd": round(usd, 6),
         }
         total_usd += usd
-        if usd == 0 and (i or o) and mid not in PRICE_TABLE:
+        if usd == 0 and (i or o) and not is_priced(mid):
             unknown.append(mid)
     return {
         "by_model": out_by_model,

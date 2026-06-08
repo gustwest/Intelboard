@@ -6,8 +6,10 @@ manuellt. Bygger JSON-LD-graf och laddar upp till GCS bakom Cloud CDN.
 Change-agent-logiken (skipa upload om grafen är oförändrad) körs här.
 """
 import argparse
+import hashlib
 import json
 import logging
+from datetime import datetime, timezone
 
 from google.cloud import firestore, storage
 
@@ -19,6 +21,9 @@ from schema_org.compiler import compile_client
 from schema_org.profile_page import render_llms_txt, render_profile_html
 
 log = logging.getLogger("jobs.compile_schema")
+
+# Hur många changelog-poster vi behåller per kund (kapad lista → obegränsad tillväxt undviks).
+_HISTORY_CAP = 20
 
 
 def run(client_id: str) -> None:
@@ -38,6 +43,7 @@ def run(client_id: str) -> None:
 
         graph = compile_client(client_id)
         payload = json.dumps(graph, ensure_ascii=False, default=str)
+        payload_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
         profile_html = render_profile_html(client_id)
         llms_txt = render_llms_txt(client_id)
 
@@ -74,17 +80,32 @@ def run(client_id: str) -> None:
             llms_blob.cache_control = "public, max-age=300"
             llms_blob.patch()
 
-        fs.client_doc(client_id).update(
-            {
-                "cdn_url": urls.cdn_url(client_id),
-                # served_url pekar i path-style-läge direkt på objektet (…/index.html),
-                # eftersom GCS path-style inte serverar index.html för en katalog-URL. I
-                # clean-läge (bakom LB med MainPageSuffix) blir det den rena …/<id>/-URL:en.
-                "profile_url": urls.served_url(client_id),
-                "last_compiled": firestore.SERVER_TIMESTAMP,
+        # Versionering/changelog (P3): bumpa en monoton version + spara innehållshash +
+        # en kapad ändringslogg BARA när grafen faktiskt ändrats — så "vilken version är
+        # live och när ändrades den" är spårbart (och ger en rollback-referens).
+        update: dict = {
+            "cdn_url": urls.cdn_url(client_id),
+            # served_url pekar i path-style-läge direkt på objektet (…/index.html),
+            # eftersom GCS path-style inte serverar index.html för en katalog-URL. I
+            # clean-läge (bakom LB med MainPageSuffix) blir det den rena …/<id>/-URL:en.
+            "profile_url": urls.served_url(client_id),
+            "last_compiled": firestore.SERVER_TIMESTAMP,
+        }
+        if not unchanged:
+            prev = fs.client_doc(client_id).get().to_dict() or {}
+            version = int(prev.get("compiled_version") or 0) + 1
+            entry = {
+                "version": version,
+                "hash": payload_hash,
+                "at": datetime.now(timezone.utc).isoformat(),
+                "nodes": len(graph.get("@graph", [])),
             }
-        )
-        r.summary = {"uploaded": not unchanged}
+            history = (prev.get("compiled_history") or [])[-(_HISTORY_CAP - 1):] + [entry]
+            update.update(compiled_version=version, compiled_hash=payload_hash, compiled_history=history)
+
+        fs.client_doc(client_id).update(update)
+        r.summary = {"uploaded": not unchanged, "version": update.get("compiled_version"),
+                     "hash": payload_hash}
 
         # Change-agent: håll Förtroendegap-tillståndet färskt i samma loop (spec §8, kadens).
         # Best-effort — får aldrig fälla schema-kompileringen.

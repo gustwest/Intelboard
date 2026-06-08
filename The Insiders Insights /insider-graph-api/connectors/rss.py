@@ -16,6 +16,8 @@ from __future__ import annotations
 import hashlib
 import logging
 import xml.etree.ElementTree as ET
+
+from defusedxml.ElementTree import fromstring as safe_fromstring
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any
@@ -23,6 +25,7 @@ from typing import Any
 import httpx
 
 from connectors.base import BaseConnector, ConnectorConfig, InputField, RawItem
+from services import safe_fetch
 
 log = logging.getLogger(__name__)
 
@@ -65,9 +68,8 @@ class RssConnector(BaseConnector):
 
     def _fetch_feed(self, url: str, schema_type: str) -> list[RawItem]:
         try:
-            with httpx.Client(timeout=20, follow_redirects=True) as client:
-                resp = client.get(url, headers={"User-Agent": "InsiderGraphBot/1.0"})
-        except httpx.HTTPError as exc:
+            resp = safe_fetch.safe_get(url, headers={"User-Agent": "InsiderGraphBot/1.0"}, timeout=20)
+        except (httpx.HTTPError, safe_fetch.SsrfError) as exc:
             log.warning("rss fetch failed for %s: %s", url, exc)
             return []
         if resp.status_code >= 400:
@@ -75,8 +77,10 @@ class RssConnector(BaseConnector):
             return []
 
         try:
-            root = ET.fromstring(resp.content)
-        except ET.ParseError as exc:
+            # defusedxml: blockerar XXE/entity-expansion i kund-kontrollerade feeds.
+            # DefusedXmlException ärver ValueError → fångas här (feeden förkastas).
+            root = safe_fromstring(resp.content)
+        except (ET.ParseError, ValueError) as exc:
             log.warning("rss parse failed for %s: %s", url, exc)
             return []
 
