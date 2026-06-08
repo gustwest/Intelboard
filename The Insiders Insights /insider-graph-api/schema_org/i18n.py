@@ -47,7 +47,7 @@ _STRINGS: dict[str, dict[str, Any]] = {
         "trust_compiled_many": "Sammanställd från {n} källor",
         "trust_updated": "senast uppdaterad {date}",
         # Footer + meta.
-        "footer": "AI-Profil verifierad av Geogiraph.",
+        "footer": "AI-profil verifierad av Geogiraph.",
         "verified_by": "AI-profil verifierad av Geogiraph",
         "title_suffix": "AI-profil",
         "desc_fallback": "AI-profil för {name}.",

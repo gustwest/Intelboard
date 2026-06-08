@@ -72,6 +72,10 @@ _EMAIL_I18N: dict[str, dict[str, Any]] = {
         "improve": "Förbättringsmöjligheter",
         "next_step": "Nästa steg:",
         "profile_cta": "Se din AI-profil",
+        "greeting": "Hej {name},",
+        "greeting_generic": "Hej,",
+        "confidence_def": "Beslutssäkerhet = hur säkert AI-motorerna idag svarar korrekt och "
+                          "rättvist om er när någon frågar inför ett beslut.",
         "footer": "Profilen uppdaterar vi åt er löpande — ni behöver inte göra något. "
                   "Frågor? Svara på det här mejlet.",
         "method_title": "Så läser du siffran",
@@ -96,6 +100,10 @@ _EMAIL_I18N: dict[str, dict[str, Any]] = {
         "improve": "Opportunities to improve",
         "next_step": "Next step:",
         "profile_cta": "View your AI profile",
+        "greeting": "Hi {name},",
+        "greeting_generic": "Hi,",
+        "confidence_def": "Decision confidence = how reliably today's AI answers correctly and "
+                          "fairly about you when someone asks ahead of a decision.",
         "footer": "We keep your profile updated for you — nothing you need to do. "
                   "Questions? Just reply to this email.",
         "method_title": "How to read this number",
@@ -723,7 +731,7 @@ Påstått och bevisat hålls isär; perception vägs aldrig in i poängen.</p>
 </body></html>"""
 
 
-def render_customer_email(model: dict[str, Any], lang: str | None = None) -> tuple[str, str, str]:
+def render_customer_email(model: dict[str, Any], lang: str | None = None, contact_name: str | None = None) -> tuple[str, str, str]:
     """Kund-säker månadssammanfattning (B2) → (subject, html, text).
 
     Återanvänder rapportmodellen men exponerar BARA ledningsgrupps-vänliga fält:
@@ -732,9 +740,12 @@ def render_customer_email(model: dict[str, Any], lang: str | None = None) -> tup
     koder, det interna narrativ-utkastet och humaniserings-detaljer. Ingen jargong,
     inga kausalitetspåståenden (modellen formulerar redan "ökar sannolikheten").
 
-    `lang` (A1) väljer mejlets språk; faller till modellens `language`, sen sv."""
+    `lang` (A1) väljer mejlets språk; faller till modellens `language`, sen sv.
+    `contact_name` (TP7) personaliserar hälsningen; None → generisk "Hej,"."""
     t = _email_strings(lang or model.get("language"))
     name = model.get("company_name") or ""
+    first = (contact_name or "").strip().split()
+    greeting = t["greeting"].format(name=first[0]) if first else t["greeting_generic"]
     month_label = _month_label(model.get("month") or "", t["months"])
     conf = model.get("decision_confidence") or {}
     score, stage = conf.get("score"), conf.get("stage")
@@ -758,6 +769,7 @@ def render_customer_email(model: dict[str, Any], lang: str | None = None) -> tup
         t["confidence"].format(score=score, stage=stage or "")
         if score is not None else t["confidence_unmeasured"]
     )
+    conf_def = t["confidence_def"] if score is not None else ""  # TP6: definiera talet i en rad
     trend_line = ""
     prev = trend.get("previous_score")
     if prev is not None and score is not None:
@@ -777,9 +789,11 @@ def render_customer_email(model: dict[str, Any], lang: str | None = None) -> tup
         return "".join(f"<li>{html.escape(str(i))}</li>" for i in items)
 
     html_body = f"""<!doctype html><html lang="{html.escape((lang or model.get("language") or "sv").lower())}"><body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1a1a1a;max-width:620px;margin:0 auto;line-height:1.6">
+<p>{html.escape(greeting)}</p>
 <h2 style="font-size:1.2rem">{html.escape(t["heading"].format(name=name))}</h2>
 <p style="color:#666;margin-top:-.5rem">{html.escape(month_label)}</p>
 <p><strong>{html.escape(score_line)}</strong></p>
+{f'<p style="color:#666;font-size:.85rem;margin-top:-.4rem">{html.escape(conf_def)}</p>' if conf_def else ''}
 <p>{html.escape(verdict)}</p>
 {f'<p style="color:#444">{html.escape(trend_line)}</p>' if trend_line else ''}
 {f'<h3 style="font-size:1rem">{html.escape(t["works"])}</h3><ul>{_li(strengths)}</ul>' if strengths else ''}
@@ -793,7 +807,10 @@ def render_customer_email(model: dict[str, Any], lang: str | None = None) -> tup
 </div>
 </body></html>"""
 
-    text_lines = [f"{t['heading'].format(name=name)} ({month_label})", "", score_line, verdict]
+    text_lines = [greeting, "", f"{t['heading'].format(name=name)} ({month_label})", "", score_line]
+    if conf_def:
+        text_lines.append(conf_def)
+    text_lines.append(verdict)
     if trend_line:
         text_lines += ["", trend_line]
     if strengths:
