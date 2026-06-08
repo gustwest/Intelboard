@@ -162,12 +162,12 @@ export default function ClientDetailPage() {
                 Pipeline
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {renderJobBtn('Uppdatera profil', 'extract', `/api/jobs/extract-claims/${clientId}`, 'extract_claims', {
+                {renderJobBtn('Kör full uppdatering', 'extract', `/api/jobs/extract-claims/${clientId}`, 'extract_claims', {
                   primary: true,
                   runningLabel: 'Uppdaterar…',
                   title: 'Läser om allt material, extraherar verifierade claims och publicerar profilen (~1 min)',
                 })}
-                {renderJobBtn('Återpublicera', 'compile', `/api/jobs/compile/${clientId}`, 'compile_schema', {
+                {renderJobBtn('Bygg om profilen', 'compile', `/api/jobs/compile/${clientId}`, 'compile_schema', {
                   title: 'Bygger om profilen från befintliga claims — snabbt, ingen ny analys',
                 })}
               </div>

@@ -428,7 +428,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
   }
 
   function validate(): string | null {
-    if (!clientId.trim()) return 'client_id (slug) krävs.';
+    if (!clientId.trim()) return 'Kund-ID (slug) krävs.';
     if (!companyName.trim()) return 'Företagsnamn krävs.';
     for (const conn of available) {
       if (!active.has(conn.id)) continue;
@@ -538,8 +538,8 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
         {/* Företag */}
         <SectionLabel>Företag</SectionLabel>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-          <Field label="client_id (slug)" value={clientId} onChange={setClientId} placeholder="exempel-ab" />
-          <Field label="Företagsnamn" value={companyName} onChange={setCompanyName} placeholder="Exempel AB" />
+          <Field label="Kund-ID (slug)" value={clientId} onChange={(v) => setClientId(slugify(v))} placeholder="exempel-ab" required hint="Gemener, siffror och bindestreck — används i URL:er. Formateras automatiskt." />
+          <Field label="Företagsnamn" value={companyName} onChange={setCompanyName} placeholder="Exempel AB" required />
         </div>
 
         <div style={{ marginBottom: 18 }}>
@@ -851,11 +851,17 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+// Auto-slug: gemener, siffror, bindestreck. Körs på varje tangenttryck så client_id
+// alltid är en giltig slug (ON4) — inget "Exempel AB" som id längre.
+function slugify(v: string): string {
+  return v.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/-{2,}/g, '-').replace(/^-+/, '');
+}
+
+function Field({ label, value, onChange, placeholder, required, hint }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; required?: boolean; hint?: string }) {
   return (
     <div>
       <label style={{ fontSize: 11, color: '#6a7e8a', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-        {label}
+        {label}{required && <span style={{ color: '#dc2626', marginLeft: 3 }}>*</span>}
       </label>
       <input
         value={value}
@@ -874,6 +880,7 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
           outline: 'none',
         }}
       />
+      {hint && <div style={{ fontSize: 10, color: '#9aa8b1', marginTop: 3 }}>{hint}</div>}
     </div>
   );
 }
