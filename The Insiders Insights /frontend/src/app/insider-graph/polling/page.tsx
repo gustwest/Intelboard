@@ -32,8 +32,10 @@ import { StickyContextBar } from './_components/ContextBar';
 import { SchedulesPanel, ActivityFeed, PollingQuestionsPanel, RiskTable, TrendView } from './_components/Panels';
 import { RiskLoopStatus, ApprovedQuestionsPanel } from './_components/RiskLoop';
 import { WeeklyVisibility } from './_components/WeeklyVisibility';
+import { CompetitorSurface } from './_components/CompetitorSurface';
 import { TrustGapCockpit } from './_components/TrustGapCockpit';
 import { RiskLifecycleTimeline } from './_components/RiskTimeline';
+import { WhatIfPanel } from './_components/WhatIfPanel';
 
 export default function GraphRiskLoopPage() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -392,6 +394,9 @@ export default function GraphRiskLoopPage() {
       {/* Veckovis synlighet — det löpande, automatiska måttet (visas oavsett månadsrapport) */}
       {polling && polling.length > 0 && <WeeklyVisibility weeks={polling} />}
 
+      {/* Konkurrent-analys per kategori (#2, väg A) — egen analytisk yta ur veckodatan */}
+      {polling && polling.length > 0 && <CompetitorSurface weeks={polling} />}
+
       {/* Synlighets-frågor (Share of Voice) — transparens, placerad direkt efter veckovis synlighet den driver */}
       {pollingQuestions && pollingQuestions.total > 0 && selected && (
         <PollingQuestionsPanel data={pollingQuestions} clientId={selected} mode={mode} />
@@ -472,6 +477,9 @@ export default function GraphRiskLoopPage() {
               <RiskTable findings={report.detected} />
             )}
           </div>
+
+          {/* 3b. What-if — projicerad beslutssäkerhet före åtgärd */}
+          {selected && <WhatIfPanel clientId={selected} conf={conf} detected={report.detected} />}
 
           {/* 4. Vad mjukvaran gjorde */}
           {report.actions.length > 0 && (

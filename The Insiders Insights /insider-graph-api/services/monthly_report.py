@@ -125,7 +125,10 @@ def build_report_model(client_id: str, month: str | None = None) -> dict[str, An
     client = snap.to_dict() or {}
     month = month or current_month()
 
-    findings = [d for _i, d in fs.iter_risk_findings(client_id)]
+    findings = []
+    for fid, d in fs.iter_risk_findings(client_id):
+        d["_id"] = fid  # behåll doc-id så what-if (project_confidence) kan peka ut findings
+        findings.append(d)
     # Normalisera ev. gammalt persona-id (buyer/candidate) på findings → kanoniskt.
     for d in findings:
         d["persona"] = audience_personas.normalize(d.get("persona"))
@@ -215,6 +218,46 @@ def _decision_confidence(open_findings: list[dict], answers_by_persona: dict[str
         "covered_personas": covered,
         "ceiling": ceiling,
         "next_step": _next_step(score, ceiling),
+    }
+
+
+def project_confidence(
+    open_findings: list[dict],
+    answers_by_persona: dict[str, int],
+    *,
+    resolve_ids: set[str] | None = None,
+    simulate_persona_answers: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    """What-if: hur rör sig beslutssäkerheten OM vissa findings löses och/eller
+    täckningen breddas — INNAN åtgärd (prediktion ovanpå receptmotorn).
+
+    Återanvänder _decision_confidence rakt av (ingen parallell formel → ingen drift):
+    'after' = exakt samma formel med de hypotetiskt lösta findingsen borttagna och ev.
+    simulerade persona-svar inräknade (vilket kan lyfta taket 74→95).
+
+    Matvaliditets-grind: poängen är en deterministisk projektion av formeln, inte en
+    empirisk prognos. 'exceeds_band' säger om rörelsen är större än NUVARANDE brusband
+    (1.96·SE) — annars ska UI:t läsa den som brus, inte som en trovärdig rörelse."""
+    resolve_ids = resolve_ids or set()
+    before = _decision_confidence(open_findings, answers_by_persona)
+    kept = [f for f in open_findings if f.get("_id") not in resolve_ids]
+    abp = dict(answers_by_persona)
+    for p, n in (simulate_persona_answers or {}).items():
+        abp[p] = abp.get(p, 0) + int(n or 0)
+    after = _decision_confidence(kept, abp)
+
+    b_score, a_score = before.get("score"), after.get("score")
+    delta = (a_score - b_score) if (a_score is not None and b_score is not None) else None
+    band = before.get("score_se")
+    return {
+        "before": before,
+        "after": after,
+        "delta": delta,
+        "exceeds_band": bool(
+            delta is not None and band is not None and abs(delta) >= 1.96 * band
+        ),
+        "ceiling_unlocked": (after.get("ceiling") or 0) - (before.get("ceiling") or 0),
+        "resolved_count": len(open_findings) - len(kept),
     }
 
 
@@ -335,6 +378,7 @@ def _exposure(open_findings: list[dict], answers_by_persona: dict[str, int]) -> 
 
 def _finding_row(d: dict) -> dict[str, Any]:
     return {
+        "id": d.get("_id"),  # låter UI:t peka ut en specifik risk att simulera (what-if)
         "persona": d.get("persona"),
         "question": d.get("question"),
         "engine": d.get("engine"),

@@ -91,6 +91,7 @@ export const GEO_STAGES: [number, string][] = [
 
 export type DecisionConfidence = {
   score: number | null;
+  score_se: number | null;
   stage: string;
   headroom: number | null;
   answers: number;
@@ -100,9 +101,21 @@ export type DecisionConfidence = {
   next_step: string;
 };
 
+// What-if-projektion (speglar routers/forecast.py → monthly_report.project_confidence).
+export type WhatIfResult = {
+  client_id: string;
+  before: DecisionConfidence;
+  after: DecisionConfidence;
+  delta: number | null;
+  exceeds_band: boolean;       // false → rörelsen ryms i brusbandet, läs ej som trend
+  ceiling_unlocked: number;    // >0 när simulerad täckning höjer taket (74→95)
+  resolved_count: number;
+};
+
 export type PersonaExposure = { weighted: number; answers: number; score: number | null };
 
 export type Finding = {
+  id: string | null;
   persona: string | null;
   question: string | null;
   engine: string | null;
@@ -223,6 +236,134 @@ export const CATEGORY_SV: Record<string, string> = {
   innovation: 'Innovation',
   hr: 'HR',
 };
+
+// --- Konkurrent-analys per kategori (#2, väg A) ---------------------------------
+// Bygger en analytisk vy ur de veckovisa category_competitors-snapshotsen som redan
+// skeppas i PollingWeek. VÄG A: konkurrent-NER körs bara på ett svar per fråga
+// (run_idx=0, se polling.py) → siffrorna är n≈1, INTE upprepat samplade som SoV. Därför
+// kräver en trend-riktning en rörelse > COMPETITOR_TREND_MIN_DELTA över minst K veckor,
+// annars 'flat' — vi läser smårörelser som brus, inte trend (samma princip som SoV-pilarna).
+
+export type CompetitorTrend = 'up' | 'down' | 'flat';
+
+export type CompetitorStat = {
+  name: string;
+  avgShare: number;            // medel över de veckor kategorin mättes
+  weeksPresent: number;        // antal veckor med share > 0
+  weeksMeasured: number;
+  trend: CompetitorTrend;
+  series: (number | null)[];   // share per vecka (kronologiskt); null = kategorin ej mätt
+};
+
+export type CategoryCompetition = {
+  cat: string;
+  clientSeries: (number | null)[];  // er egen SoV i kategorin per vecka
+  clientAvgShare: number;
+  competitors: CompetitorStat[];    // sorterad fallande på avgShare
+  largestGap: { name: string; gap: number } | null;  // top-konkurrent avg − er avg
+};
+
+export type CrossCategoryActor = {
+  name: string;
+  categories: string[];        // kategorier där aktören har avgShare > 0
+  categoriesCount: number;
+  avgShare: number;            // medel över de kategorier aktören syns i
+};
+
+export type CompetitorAnalytics = {
+  weekIds: string[];           // kronologiskt (äldst → nyast)
+  categories: CategoryCompetition[];
+  crossCategory: CrossCategoryActor[];
+  measuredWeeks: number;       // veckor med någon category_competitors-data
+};
+
+// Väg A-grindar mot n=1-brus.
+export const COMPETITOR_TREND_MIN_DELTA = 0.10;
+export const COMPETITOR_TREND_MIN_WEEKS = 2;
+
+export function competitorTrend(series: (number | null)[]): CompetitorTrend {
+  const measured = series.filter((v): v is number => v != null);
+  if (measured.length < COMPETITOR_TREND_MIN_WEEKS) return 'flat';
+  const half = Math.max(1, Math.floor(measured.length / 2));
+  const older = measured.slice(0, half);
+  const recent = measured.slice(measured.length - half);
+  const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const delta = avg(recent) - avg(older);
+  if (delta >= COMPETITOR_TREND_MIN_DELTA) return 'up';
+  if (delta <= -COMPETITOR_TREND_MIN_DELTA) return 'down';
+  return 'flat';
+}
+
+export function buildCompetitorAnalytics(weeks: PollingWeek[]): CompetitorAnalytics {
+  const chrono = [...weeks].reverse();  // API ger nyast först → vänd till kronologiskt
+  const weekIds = chrono.map((w) => w.week_id);
+  const catKeys = Object.keys(CATEGORY_SV);
+  const actorCatShare: Record<string, Record<string, number>> = {};  // name → cat → avgShare
+
+  const categories: CategoryCompetition[] = catKeys.map((cat) => {
+    const clientSeries = chrono.map((w) => w.category_results?.[cat]?.share_of_voice ?? null);
+    const clientMeasured = clientSeries.filter((v): v is number => v != null);
+    const clientAvgShare = clientMeasured.length
+      ? clientMeasured.reduce((a, b) => a + b, 0) / clientMeasured.length
+      : 0;
+
+    const names = new Set<string>();
+    for (const w of chrono) {
+      for (const c of w.category_competitors?.[cat] || []) names.add(c.name);
+    }
+
+    const competitors: CompetitorStat[] = [...names].map((name) => {
+      const series = chrono.map((w) => {
+        const list = w.category_competitors?.[cat];
+        if (!list) return null;                    // kategorin ej mätt den veckan
+        const hit = list.find((c) => c.name === name);
+        return hit ? hit.share : 0;                // mätt men ej nämnd → 0
+      });
+      const measured = series.filter((v): v is number => v != null);
+      const avgShare = measured.length ? measured.reduce((a, b) => a + b, 0) / measured.length : 0;
+      return {
+        name,
+        avgShare,
+        weeksPresent: measured.filter((v) => v > 0).length,
+        weeksMeasured: measured.length,
+        trend: competitorTrend(series),
+        series,
+      };
+    });
+    competitors.sort((a, b) => b.avgShare - a.avgShare || a.name.localeCompare(b.name));
+
+    for (const c of competitors) (actorCatShare[c.name] ||= {})[cat] = c.avgShare;
+
+    const top = competitors[0];
+    return {
+      cat,
+      clientSeries,
+      clientAvgShare,
+      competitors,
+      largestGap: top ? { name: top.name, gap: top.avgShare - clientAvgShare } : null,
+    };
+  });
+
+  const crossCategory: CrossCategoryActor[] = Object.entries(actorCatShare)
+    .map(([name, byCat]) => {
+      const present = Object.entries(byCat).filter(([, s]) => s > 0);
+      const cats = present.map(([c]) => c);
+      return {
+        name,
+        categories: cats,
+        categoriesCount: cats.length,
+        avgShare: present.length ? present.reduce((a, [, s]) => a + s, 0) / present.length : 0,
+      };
+    })
+    .filter((a) => a.categoriesCount > 0)
+    .sort((a, b) => b.categoriesCount - a.categoriesCount || b.avgShare - a.avgShare || a.name.localeCompare(b.name));
+
+  const measuredWeeks = chrono.filter(
+    (w) => w.category_competitors && Object.keys(w.category_competitors).length > 0,
+  ).length;
+
+  return { weekIds, categories, crossCategory, measuredWeeks };
+}
 
 // --- Kalibreringsbrytning (modellbyte mellan veckor) -----------------------
 // När probe-motorerna byts (t.ex. gpt-4o → gpt-4.1, eller nya motorer tillkommer)
