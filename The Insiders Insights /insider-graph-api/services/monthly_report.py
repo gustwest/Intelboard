@@ -14,7 +14,6 @@ import html
 import json
 import logging
 import os
-from datetime import datetime, timezone
 from typing import Any
 
 # P1: minsta beslutssäkerhets-delta som renderas som ▲/▼ — under detta visas "oförändrad"
@@ -27,6 +26,7 @@ from google.cloud import firestore
 
 import firestore_client as fs
 from services import audience_personas
+from services import clock
 from services import llm as llm_factory
 from services import trust_gap_report
 
@@ -71,6 +71,7 @@ _EMAIL_I18N: dict[str, dict[str, Any]] = {
         "works": "Det här fungerar",
         "improve": "Förbättringsmöjligheter",
         "next_step": "Nästa steg:",
+        "profile_cta": "Se din AI-profil",
         "footer": "Profilen uppdaterar vi åt er löpande — ni behöver inte göra något. "
                   "Frågor? Svara på det här mejlet.",
         "method_title": "Så läser du siffran",
@@ -94,6 +95,7 @@ _EMAIL_I18N: dict[str, dict[str, Any]] = {
         "works": "What's working",
         "improve": "Opportunities to improve",
         "next_step": "Next step:",
+        "profile_cta": "View your AI profile",
         "footer": "We keep your profile updated for you — nothing you need to do. "
                   "Questions? Just reply to this email.",
         "method_title": "How to read this number",
@@ -110,7 +112,9 @@ def _email_strings(lang: str | None) -> dict[str, Any]:
 
 
 def current_month() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m")
+    # Svensk kalender: rapporten ska tillhöra den månad det är i Stockholm, inte i
+    # UTC. Vid månadsskifte (1:a 00:00–02:00 svensk tid) skiljer de sig. Se clock.py.
+    return clock.stockholm_month()
 
 
 # --- Render-modell ------------------------------------------------------------
@@ -735,10 +739,18 @@ def render_customer_email(model: dict[str, Any], lang: str | None = None) -> tup
     conf = model.get("decision_confidence") or {}
     score, stage = conf.get("score"), conf.get("stage")
     verdict = model.get("verdict") or ""
-    next_step = conf.get("next_step") or ""
+    # Kundmejlet visar INTE conf["next_step"] — det är en operatörsåtgärd (t.ex.
+    # "Generera och godkänn ett frågebatteri") som kunden inte kan utföra och som
+    # dessutom motsäger footern "ni behöver inte göra något". Istället leder vi till
+    # leverabeln: profilsidan. Kund-specifika frågor sköts via mejl-svarsloopen.
     trend = model.get("trend") or {}
     strengths = model.get("strengths") or []
     improvements = model.get("improvement_opportunities") or []
+
+    # Lokal import för att undvika cykel på modulnivå (badge → schemas → …).
+    from schema_org.badge import profile_url
+    client_id = model.get("client_id")
+    profile_link = profile_url(client_id) if client_id else ""
 
     subject = t["subject"].format(month=month_label, name=name)
 
@@ -772,7 +784,7 @@ def render_customer_email(model: dict[str, Any], lang: str | None = None) -> tup
 {f'<p style="color:#444">{html.escape(trend_line)}</p>' if trend_line else ''}
 {f'<h3 style="font-size:1rem">{html.escape(t["works"])}</h3><ul>{_li(strengths)}</ul>' if strengths else ''}
 {f'<h3 style="font-size:1rem">{html.escape(t["improve"])}</h3><ul>{_li(improvements)}</ul>' if improvements else ''}
-<p style="color:#444"><strong>{html.escape(t["next_step"])}</strong> {html.escape(next_step)}</p>
+{f'<p style="margin:1.3rem 0"><a href="{html.escape(profile_link)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:.6rem 1.1rem;border-radius:8px;font-weight:600">{html.escape(t["profile_cta"])} &rarr;</a></p>' if profile_link else ''}
 <hr style="border:none;border-top:1px solid #eee;margin:1.5rem 0">
 <p style="color:#666;font-size:.9rem">{html.escape(t["footer"])}</p>
 <div style="margin-top:1rem;padding:.7rem .9rem;background:#f7f7f8;border-left:3px solid #ccc;border-radius:4px">
@@ -788,8 +800,9 @@ def render_customer_email(model: dict[str, Any], lang: str | None = None) -> tup
         text_lines += ["", f"{t['works']}:"] + [f"- {s}" for s in strengths]
     if improvements:
         text_lines += ["", f"{t['improve']}:"] + [f"- {i}" for i in improvements]
-    text_lines += ["", f"{t['next_step']} {next_step}", "", t["footer"],
-                   "", f"{t['method_title']}: {t['method']}"]
+    if profile_link:
+        text_lines += ["", f"{t['profile_cta']}: {profile_link}"]
+    text_lines += ["", t["footer"], "", f"{t['method_title']}: {t['method']}"]
     return subject, html_body, "\n".join(text_lines)
 
 
