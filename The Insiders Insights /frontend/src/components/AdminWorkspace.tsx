@@ -9,6 +9,7 @@ import {
 import ArchitectureClient from '@/app/arkitektur/ArchitectureClient';
 import { SCHEMA_MODELS_FALLBACK } from '@/app/arkitektur/data';
 import { AGENT_DROPDOWN_OPTIONS, AGENT_DEFAULT_MODEL_ID } from '@/lib/aiModels';
+import { fmtDate, fmtDateTime, fmtTime } from '@/lib/datetime';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -262,7 +263,7 @@ function KanbanTab({ product }: { product: string }) {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.625rem' }}>
                     <span style={{ color: 'rgba(255,255,255,0.25)' }}>
-                      {new Date(issue.createdAt).toLocaleDateString('sv-SE')}
+                      {fmtDate(issue.createdAt)}
                     </span>
                     <div style={{ display: 'flex', gap: '6px' }}>
                       {issue.images.length > 0 && (
@@ -414,7 +415,7 @@ function IssueDetailModal({ issue, onClose, onDeleted }: { issue: KanbanIssue; o
               {COLUMNS.map(col => <option key={col.key} value={col.key}>{col.label}</option>)}
             </select>
             <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)' }}>
-              Skapad {new Date(currentIssue.createdAt).toLocaleString('sv-SE')}
+              Skapad {fmtDateTime(currentIssue.createdAt)}
             </span>
             <button onClick={handleDelete} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#f85149', cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}><Trash2 size={14} /> Radera</button>
           </div>
@@ -452,7 +453,7 @@ function IssueDetailModal({ issue, onClose, onDeleted }: { issue: KanbanIssue; o
                 <div key={c.id} style={{ background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.04)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                     <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--brand-accent)' }}>{c.author}</span>
-                    <span style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.25)' }}>{new Date(c.createdAt).toLocaleString('sv-SE')}</span>
+                    <span style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.25)' }}>{fmtDateTime(c.createdAt)}</span>
                   </div>
                   <div style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.7)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{c.body}</div>
                 </div>
@@ -646,7 +647,7 @@ function FilesTab({ product }: { product: string }) {
                 {f.category}
               </span>
               <span style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.2)' }}>
-                {new Date(f.uploadedAt).toLocaleDateString('sv-SE')}
+                {fmtDate(f.uploadedAt)}
               </span>
               <a href={`${API_URL}/api/files/${f.id}/download`} download style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', color: '#e2e8f0', textDecoration: 'none', fontSize: '0.75rem', cursor: 'pointer' }}>
                 <Download size={14} style={{ marginRight: '4px', display: 'inline-block', verticalAlign: 'middle' }} /> Ladda ned
@@ -701,8 +702,8 @@ function fmtTs(iso: string) {
   const d = new Date(iso);
   const now = new Date();
   const sameDay = d.toDateString() === now.toDateString();
-  if (sameDay) return d.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
-  return d.toLocaleString('sv-SE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  if (sameDay) return fmtTime(d, { hour: '2-digit', minute: '2-digit' });
+  return fmtDateTime(d, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
 function fmtElapsed(start: string, end: string) {
@@ -727,6 +728,8 @@ function AgentTab({ product }: { product: string }) {
   const [sending, setSending] = useState(false);
   const [composingNew, setComposingNew] = useState(false);
   const [pendingImage, setPendingImage] = useState<{ base64: string; previewUrl: string; name: string; contentType: string } | null>(null);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
@@ -870,6 +873,34 @@ function AgentTab({ product }: { product: string }) {
     }, 10);
   };
 
+  const startRename = (session: AgentSession) => {
+    setEditingSessionId(session.id);
+    setEditingTitle(session.title);
+  };
+
+  const cancelRename = () => {
+    setEditingSessionId(null);
+    setEditingTitle('');
+  };
+
+  const saveRename = async (id: string) => {
+    const title = editingTitle.trim();
+    setEditingSessionId(null);
+    if (!title) return;
+    const session = sessions.find(s => s.id === id);
+    if (session && title === session.title) return;
+    // Optimistic update so the new name shows immediately
+    setSessions(prev => prev.map(s => (s.id === id ? { ...s, title } : s)));
+    try {
+      await fetch(`/api/admin/agent/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      });
+    } catch { /* ignore — next poll reconciles */ }
+    loadSessions();
+  };
+
   const currentSession = sessions.find(s => s.id === activeSession);
 
   const statusColor = status?.online ? '#22c55e' : '#ef4444';
@@ -955,29 +986,68 @@ function AgentTab({ product }: { product: string }) {
                 transition: 'all 0.15s',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <span style={{
-                  fontSize: '0.8125rem',
-                  fontWeight: 500,
-                  color: activeSession === session.id ? '#e2e8f0' : 'rgba(255,255,255,0.6)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  maxWidth: '200px',
-                }}>
-                  {session.title}
-                </span>
-                <button
-                  onClick={(e) => { e.stopPropagation(); deleteSession(session.id); }}
-                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', fontSize: '0.75rem', padding: '0 2px' }}
-                >
-                  ✕
-                </button>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '4px' }}>
+                {editingSessionId === session.id ? (
+                  <input
+                    autoFocus
+                    value={editingTitle}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setEditingTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); saveRename(session.id); }
+                      if (e.key === 'Escape') { e.preventDefault(); cancelRename(); }
+                    }}
+                    onBlur={() => saveRename(session.id)}
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      fontSize: '0.8125rem',
+                      fontWeight: 500,
+                      color: '#e2e8f0',
+                      background: 'rgba(0,0,0,0.3)',
+                      border: '1px solid rgba(0,212,255,0.4)',
+                      borderRadius: '6px',
+                      padding: '2px 6px',
+                      outline: 'none',
+                      fontFamily: 'inherit',
+                    }}
+                  />
+                ) : (
+                  <span style={{
+                    fontSize: '0.8125rem',
+                    fontWeight: 500,
+                    color: activeSession === session.id ? '#e2e8f0' : 'rgba(255,255,255,0.6)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    maxWidth: '200px',
+                  }}>
+                    {session.title}
+                  </span>
+                )}
+                {editingSessionId !== session.id && (
+                  <div style={{ display: 'flex', gap: '2px', flexShrink: 0 }}>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); startRename(session); }}
+                      title="Byt namn"
+                      style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', fontSize: '0.75rem', padding: '0 2px' }}
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteSession(session.id); }}
+                      title="Ta bort"
+                      style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', fontSize: '0.75rem', padding: '0 2px' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
               </div>
               <div style={{ display: 'flex', gap: '6px', marginTop: '4px', fontSize: '0.6875rem', color: 'rgba(255,255,255,0.3)' }}>
                 <span>{session.tasks.length} meddelanden</span>
                 <span>•</span>
-                <span>{new Date(session.updatedAt).toLocaleDateString('sv-SE')}</span>
+                <span>{fmtDate(session.updatedAt)}</span>
               </div>
             </div>
           ))}
