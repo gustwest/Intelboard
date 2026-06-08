@@ -56,19 +56,33 @@ const GRAPH_GROUPS: NavGroup[] = [
     ],
   },
   {
+    // Arbeta = ytor med åtgärder som ändrar tillstånd (AR6: läs-artefakterna flyttade ut).
     title: 'Arbeta',
     links: [
       { href: '/insider-graph/review', label: 'Granska', icon: Inbox, badge: 'review' },
       { href: '/insider-graph/leverans', label: 'Leverans', icon: Rocket },
-      { href: '/insider-graph/bevisarkiv', label: 'Bevisarkiv', icon: ShieldCheck },
-      { href: '/insider-graph/kvitto', label: 'Månadens kvitto', icon: ReceiptText },
     ],
   },
   {
+    // Mät = produktens kvalitet (kundvänd). MA2: skilt från infra-hälsa nedan.
     title: 'Mät',
     links: [
       { href: '/insider-graph/polling', label: 'AI-synlighet', icon: Radar, badge: 'risk' },
       { href: '/insider-graph/output-quality', label: 'Output-kvalitet (connector)', icon: Gauge },
+    ],
+  },
+  {
+    // Rapporter = read-only artefakter (AR6: ut ur Arbeta, paret som redan korslänkar).
+    title: 'Rapporter',
+    links: [
+      { href: '/insider-graph/kvitto', label: 'Månadens kvitto', icon: ReceiptText },
+      { href: '/insider-graph/bevisarkiv', label: 'Bevisarkiv', icon: ShieldCheck },
+    ],
+  },
+  {
+    // System/Drift = run-the-platform (MA2: infra-hälsa skild från kundmätning).
+    title: 'System',
+    links: [
       { href: '/insider-graph/costs', label: 'Kostnader', icon: DollarSign },
       { href: '/insider-graph/model-health', label: 'Modell-hälsa', icon: Cpu },
       { href: '/insider-graph/alerts', label: 'Drift-larm', icon: Bell },

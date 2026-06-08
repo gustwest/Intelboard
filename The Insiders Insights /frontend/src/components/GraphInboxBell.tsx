@@ -39,9 +39,9 @@ type Queue = {
 };
 
 const QUEUES: Queue[] = [
-  { label: 'Claims att granska', keys: ['claims'], href: '/insider-graph/review', icon: Quote, color: '#9f51b6' },
-  { label: 'Inkommande att granska', keys: ['items'], href: '/insider-graph/review', icon: Inbox, color: '#3b82f6' },
-  { label: 'LinkedIn att verifiera', keys: ['linkedin'], href: '/insider-graph/review', icon: Network, color: '#0ea5e9' },
+  { label: 'Claims att granska', keys: ['claims'], href: '/insider-graph/review?tab=claims', icon: Quote, color: '#9f51b6' },
+  { label: 'Inkommande att granska', keys: ['items'], href: '/insider-graph/review?tab=items', icon: Inbox, color: '#3b82f6' },
+  { label: 'LinkedIn att verifiera', keys: ['linkedin'], href: '/insider-graph/review?tab=linkedin', icon: Network, color: '#0ea5e9' },
   { label: 'Risk att åtgärda', keys: ['risk_findings', 'risk_questions'], href: '/insider-graph/polling', icon: Radar, color: '#f59e0b' },
   { label: 'ESG att granska', keys: ['esg_questions', 'esg_findings'], href: '/insider-graph/kunder', icon: Leaf, color: '#22c55e' },
   { label: 'Drift-larm', globalKey: 'ops_alerts', href: '/insider-graph/alerts', icon: AlertTriangle, color: '#ef4444' },
