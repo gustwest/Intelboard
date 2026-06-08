@@ -47,6 +47,33 @@ def connector_scores(
     return aggregate_connector_scores(client_id=client_id, window_days=days)
 
 
+# --- Källtillit: per-connector auto-godkänn-tröskel (AR1 d) ---
+
+
+class ConnectorTrustUpdate(BaseModel):
+    thresholds: dict[str, float]
+
+
+@router.get("/connector-trust")
+def get_connector_trust() -> dict[str, Any]:
+    """Per-connector auto-godkänn-trösklar (global). Tom karta = alla på default."""
+    from services import connector_trust
+    return {
+        "thresholds": connector_trust.get_thresholds(),
+        "default": connector_trust.DEFAULT_THRESHOLD,
+        "floor": connector_trust.FLOOR,
+    }
+
+
+@router.put("/connector-trust")
+def put_connector_trust(payload: ConnectorTrustUpdate) -> dict[str, Any]:
+    """Skriv hela trösklar-kartan. Värden klampas till [floor, 1.0]; utelämna en
+    connector för att återgå till default."""
+    from services import connector_trust
+    saved = connector_trust.set_thresholds(payload.thresholds)
+    return {"status": "ok", "thresholds": saved}
+
+
 # --- Per-kund-loggar (driver kundkort-panel + detaljsida) ---
 
 

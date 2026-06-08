@@ -36,6 +36,54 @@ export default function OutputQualityPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [days, setDays] = useState(14);
+  // AR1 d: per-connector auto-godkänn-trösklar (källtillit).
+  const [trust, setTrust] = useState<Record<string, number>>({});
+  const [trustDefault, setTrustDefault] = useState(0.7);
+  const [trustFloor, setTrustFloor] = useState(0.5);
+  const [trustDirty, setTrustDirty] = useState(false);
+  const [savingTrust, setSavingTrust] = useState(false);
+
+  const loadTrust = useCallback(async () => {
+    try {
+      const r = await graphFetch<{ thresholds: Record<string, number>; default: number; floor: number }>('/api/output-quality/connector-trust');
+      setTrust(r.thresholds || {});
+      setTrustDefault(r.default);
+      setTrustFloor(r.floor);
+      setTrustDirty(false);
+    } catch {
+      /* trösklar är sekundärt — tyst fel */
+    }
+  }, []);
+
+  function setThreshold(connector: string, value: string) {
+    setTrust((prev) => {
+      const next = { ...prev };
+      if (value === '') delete next[connector];
+      else next[connector] = Number(value);
+      return next;
+    });
+    setTrustDirty(true);
+  }
+
+  async function saveTrust() {
+    setSavingTrust(true);
+    try {
+      const clean: Record<string, number> = {};
+      for (const [k, v] of Object.entries(trust)) {
+        if (v == null || Number.isNaN(v)) continue;
+        clean[k] = Math.max(trustFloor, Math.min(1, v));
+      }
+      const res = await graphFetch<{ thresholds: Record<string, number> }>('/api/output-quality/connector-trust', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ thresholds: clean }),
+      });
+      setTrust(res.thresholds || {});
+      setTrustDirty(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingTrust(false);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -53,6 +101,10 @@ export default function OutputQualityPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    loadTrust();
+  }, [loadTrust]);
 
   return (
     <GraphPageShell
@@ -76,6 +128,15 @@ export default function OutputQualityPage() {
           <RefreshCw size={12} style={loading ? { animation: 'spin 0.8s linear infinite' } : undefined} />
           Uppdatera
         </button>
+        {trustDirty && (
+          <button
+            onClick={saveTrust}
+            disabled={savingTrust}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', background: 'rgba(159,81,182,0.18)', color: C.accent, border: '1px solid rgba(159,81,182,0.4)', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: savingTrust ? 'wait' : 'pointer' }}
+          >
+            {savingTrust ? 'Sparar…' : 'Spara trösklar'}
+          </button>
+        )}
       </div>
 
       {error && (
@@ -91,6 +152,11 @@ export default function OutputQualityPage() {
         Connectors markerade <strong style={{ color: C.accent }}>promotion-kandidat</strong> har konsekvent låg poäng
         och tillräckligt med data för att flyttas från shadow till active gate.
         <strong> LinkedIn-demografi är redan i active gate</strong> sedan dag 1.
+        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(159,81,182,0.18)' }}>
+          <strong>Auto-godkänn ≥</strong> är källtillit: claims från connectorn med minst den säkerheten
+          slipper granskningskön (Granska). Lägre = färre att granska men mer förlitan på connectorn.
+          Tomt = standard ({trustDefault.toFixed(2)}). Golv {trustFloor.toFixed(2)}.
+        </div>
       </div>
 
       {loading && !data ? (
@@ -121,6 +187,7 @@ export default function OutputQualityPage() {
                   <Th align="right">Kunder</Th>
                   <Th>Topp-ursprung</Th>
                   <Th>Status</Th>
+                  <Th align="right">Auto-godkänn ≥</Th>
                 </tr>
               </thead>
               <tbody>
@@ -165,6 +232,19 @@ export default function OutputQualityPage() {
                       ) : (
                         <UI.Badge tone="neutral" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>Shadow</UI.Badge>
                       )}
+                    </Td>
+                    <Td align="right">
+                      <input
+                        type="number"
+                        min={trustFloor}
+                        max={1}
+                        step={0.05}
+                        value={trust[c.connector] ?? ''}
+                        placeholder={trustDefault.toFixed(2)}
+                        onChange={(e) => setThreshold(c.connector, e.target.value)}
+                        aria-label={`Auto-godkänn-tröskel för ${c.connector}`}
+                        style={{ width: 60, padding: '4px 6px', fontSize: 12, textAlign: 'right', background: '#eef0f1', border: `1px solid ${C.border}`, borderRadius: 6, fontFamily: 'ui-monospace, monospace', color: C.text }}
+                      />
                     </Td>
                   </tr>
                 ))}

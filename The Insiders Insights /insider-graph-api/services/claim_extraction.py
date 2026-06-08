@@ -26,7 +26,7 @@ from typing import Any
 
 import firestore_client as fs
 from schemas import Claim, ClaimSource
-from services import claim_grounding, claim_voice
+from services import claim_grounding, claim_voice, connector_trust
 from services import llm as llm_factory
 
 log = logging.getLogger(__name__)
@@ -83,6 +83,7 @@ class Chunk:
     employee_id: str | None
     label: str             # promptetikett, t.ex. "C1"
     text: str
+    connector: str = "extraction"  # AR1 d: vilken connector chunk:en kom från (källtillit)
 
 
 def extract_claims_for_client(client_id: str) -> dict[str, Any]:
@@ -103,6 +104,7 @@ def extract_claims_for_client(client_id: str) -> dict[str, Any]:
         return {"client_id": client_id, "written": 0, "skipped": 0, "reason": "no_text"}
 
     by_label = {c.label: c for c in chunks}
+    trust = connector_trust.get_thresholds()  # AR1 d: en läsning per körning (cachad)
     written = skipped = 0
 
     for cand in _generate(generator, chunks):
@@ -141,7 +143,10 @@ def extract_claims_for_client(client_id: str) -> dict[str, Any]:
         statement = claim_voice.neutralize(statement, company)
 
         confidence = float(cand.get("confidence", 0.0))
-        approved = confidence >= REVIEW_THRESHOLD
+        # AR1 d: tröskeln är per-connector (källtillit). Vid flera källor används den
+        # mest konservativa (högsta) så en blandad-källa-claim inte auto-godkänns för lätt.
+        conn_threshold = max(connector_trust.threshold_for(c.connector, trust) for c in cited)
+        approved = confidence >= conn_threshold
         sources = [
             ClaimSource(kind="item", item_id=c.chunk_id, employee_id=c.employee_id)
             for c in cited
@@ -170,6 +175,10 @@ def _validated_by() -> str:
 
 
 def _gather_chunks(client_id: str) -> list[Chunk]:
+    # Kanonisk connector-härledning (samma bucket-namn som output-kvaliteten) så
+    # källtillit-trösklarna i UI:t matchar.
+    from services.output_quality_shadow import _resolve_connector
+
     chunks: list[Chunk] = []
 
     def add(snap, employee_id: str | None) -> None:
@@ -178,7 +187,7 @@ def _gather_chunks(client_id: str) -> list[Chunk]:
         if not text:
             return
         idx = len(chunks) + 1
-        chunks.append(Chunk(snap.id, employee_id, f"C{idx}", text))
+        chunks.append(Chunk(snap.id, employee_id, f"C{idx}", text, _resolve_connector(raw)))
 
     for snap in fs.raw_items_company_col(client_id).stream():
         add(snap, None)
