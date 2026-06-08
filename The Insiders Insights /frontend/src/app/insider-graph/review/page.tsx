@@ -241,14 +241,12 @@ export default function GraphReviewPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      if (decision === 'approve') {
-        // Stanna kvar med en valideringsnotis i stället för att försvinna.
-        setApproved((prev) => ({ ...prev, [claim.id]: new Date().toISOString() }));
-      } else {
-        setClaims((prev) => (prev ? prev.filter((c) => !(c.id === claim.id && c.client_id === claim.client_id)) : prev));
-      }
+      // AR2: enhetligt efter-beteende — kortet försvinner ur kön vid BÅDE godkänt och
+      // avvisat (som mail/LinkedIn). Bekräftelsen ges av ångra-toasten i stället för en
+      // kvarvarande bock, så de tre köerna beter sig likadant.
+      setClaims((prev) => (prev ? prev.filter((c) => !(c.id === claim.id && c.client_id === claim.client_id)) : prev));
       bumpResolved('claims', cid); // både godkänt och avvisat löser needs_review
-      setUndo({ label: decision === 'approve' ? 'Godkänd' : 'Avvisad', kind: 'claims', acted: [{ cid, path: `/api/review/${cid}/claims/${claim.id}`, approvedId: decision === 'approve' ? claim.id : undefined }] });
+      setUndo({ label: decision === 'approve' ? 'Godkänd' : 'Avvisad', kind: 'claims', acted: [{ cid, path: `/api/review/${cid}/claims/${claim.id}` }] });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -534,8 +532,8 @@ export default function GraphReviewPage() {
                       <FileText size={12} /> Visa underlag
                     </button>
                   )}
-                  <button onClick={() => decideSnapshot(snap, 'approve')} disabled={busyId === snap.id} style={approveBtn}>
-                    <Check size={12} /> Verifiera
+                  <button onClick={() => decideSnapshot(snap, 'approve')} disabled={busyId === snap.id} title="Godkänn — bekräftar att underlaget matchar bolaget" style={approveBtn}>
+                    <Check size={12} /> Godkänn
                   </button>
                   <button onClick={() => decideSnapshot(snap, 'reject')} disabled={busyId === snap.id} style={rejectBtn}>
                     <X size={12} /> Avvisa

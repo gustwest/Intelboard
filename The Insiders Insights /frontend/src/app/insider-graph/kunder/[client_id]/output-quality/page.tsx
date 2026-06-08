@@ -46,6 +46,7 @@ export default function OutputQualityDetailPage() {
 
   const [logs, setLogs] = useState<LogSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [companyName, setCompanyName] = useState<string | null>(null);  // KU5: breadcrumb-identitet
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<LogDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -166,6 +167,12 @@ export default function OutputQualityDetailPage() {
   useEffect(() => { loadLogs(); }, [loadLogs]);
 
   useEffect(() => {
+    graphFetch<{ company_name: string | null }>(`/api/clients/${clientId}`)
+      .then((c) => setCompanyName(c.company_name))
+      .catch(() => {});
+  }, [clientId]);
+
+  useEffect(() => {
     if (!selectedId) return;
     let cancelled = false;
     setDetailLoading(true);
@@ -198,13 +205,13 @@ export default function OutputQualityDetailPage() {
     <GraphPageShell
       title="Output-kvalitet — per kund"
       icon={<Gauge size={22} />}
-      subtitle={`Rubric-loggar för ${clientId}`}
+      subtitle={`Rubric-loggar för ${companyName || clientId}`}
     >
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       <UI.Breadcrumb
         items={[
           { label: 'Kunder', href: '/insider-graph/kunder' },
-          { label: clientId, href: `/insider-graph/kunder/${clientId}` },
+          { label: companyName || clientId, href: `/insider-graph/kunder/${clientId}` },
           { label: 'Output-kvalitet' },
         ]}
       />

@@ -62,22 +62,43 @@ export default function ESGWorkspacePage() {
   const [banner, setBanner] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [formFor, setFormFor] = useState<Finding | null>(null);
+  const [companyName, setCompanyName] = useState<string | null>(null);  // KU5: breadcrumb-identitet
+  const [enabling, setEnabling] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [s, q, f] = await Promise.all([
+      const [s, q, f, c] = await Promise.all([
         graphFetch<Status>(`/api/esg/${clientId}/status`),
         graphFetch<{ questions: Question[] }>(`/api/esg/${clientId}/questions`),
         graphFetch<{ findings: Finding[] }>(`/api/esg/${clientId}/findings`),
+        graphFetch<{ company_name: string | null }>(`/api/clients/${clientId}`).catch(() => null),
       ]);
       setStatus(s);
       setQuestions(q.questions);
       setFindings(f.findings);
+      if (c) setCompanyName(c.company_name);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
   }, [clientId]);
+
+  // KU4: aktivera ESG direkt här i stället för att skicka operatören till kundsidan.
+  async function enableEsg() {
+    setEnabling(true);
+    try {
+      await graphFetch(`/api/esg/${clientId}/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ esg_audit_enabled: true }),
+      });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setEnabling(false);
+    }
+  }
 
   useEffect(() => {
     load();
@@ -118,13 +139,13 @@ export default function ESGWorkspacePage() {
     <GraphPageShell
       title="ESG & CSRD Perception Audit"
       icon={<Leaf size={22} />}
-      subtitle={`AI-synlighet — blind nollmätning av hållbarhetsryktet i AI-motorer. Kund: ${clientId}`}
+      subtitle={`AI-synlighet — blind nollmätning av hållbarhetsryktet i AI-motorer. Kund: ${companyName || clientId}`}
       badge="AI-synlighet"
     >
       <UI.Breadcrumb
         items={[
           { label: 'Kunder', href: '/insider-graph/kunder' },
-          { label: clientId, href: `/insider-graph/kunder/${clientId}` },
+          { label: companyName || clientId, href: `/insider-graph/kunder/${clientId}` },
           { label: 'ESG' },
         ]}
       />
@@ -133,7 +154,18 @@ export default function ESGWorkspacePage() {
       {banner && <Box tone={banner.tone}>{banner.text}</Box>}
 
       {status && !status.esg_audit_enabled && (
-        <Box tone="error">ESG-tillägget är inte påslaget för den här kunden. Slå på det på kundsidan.</Box>
+        <Box tone="error">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ flex: 1 }}>ESG-tillägget är inte påslaget för den här kunden.</span>
+            <button
+              onClick={enableEsg}
+              disabled={enabling}
+              style={{ padding: '6px 14px', background: 'rgba(34,197,94,0.18)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.4)', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: enabling ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}
+            >
+              {enabling ? 'Aktiverar…' : 'Aktivera ESG'}
+            </button>
+          </div>
+        </Box>
       )}
 
       {/* Statusrad */}
