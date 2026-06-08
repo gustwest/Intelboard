@@ -68,7 +68,7 @@ const GRAPH_GROUPS: NavGroup[] = [
     title: 'Mät',
     links: [
       { href: '/insider-graph/polling', label: 'AI-synlighet', icon: Radar, badge: 'risk' },
-      { href: '/insider-graph/output-quality', label: 'Output-kvalitet (connector)', icon: Gauge },
+      { href: '/insider-graph/output-quality', label: 'Connector-kvalitet', icon: Gauge },
     ],
   },
   {

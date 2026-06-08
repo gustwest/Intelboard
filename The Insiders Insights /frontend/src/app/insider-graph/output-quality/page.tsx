@@ -108,9 +108,9 @@ export default function OutputQualityPage() {
 
   return (
     <GraphPageShell
-      title="Output-kvalitet — per connector"
+      title="Connector-kvalitet (alla kunder)"
       icon={<Gauge size={22} />}
-      subtitle="Rubric-poäng per connector — driver promotion-beslut shadow → active gate."
+      subtitle="Rubric-poäng per connector, aggregerat över alla kunder — driver promotion shadow → active gate. För en enskild kund: öppna kundens kort → Output-kvalitet."
     >
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
 

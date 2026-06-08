@@ -216,6 +216,12 @@ export default function OutputQualityDetailPage() {
         ]}
       />
 
+      <div style={{ margin: '0 0 12px' }}>
+        <a href="/insider-graph/output-quality" style={{ fontSize: 12, color: C.accent, textDecoration: 'none' }}>
+          ↗ Connector-kvalitet (alla kunder)
+        </a>
+      </div>
+
       {error && (
         <UI.StatusBanner tone="err" style={{ marginBottom: 16 }}>{error}</UI.StatusBanner>
       )}
