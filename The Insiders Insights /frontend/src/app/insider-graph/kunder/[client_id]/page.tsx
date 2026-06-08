@@ -47,6 +47,8 @@ type ClientDetail = {
   employees: Employee[];
 };
 
+type DetailTab = 'oversikt' | 'datakallor' | 'konfiguration' | 'kvalitet' | 'esg' | 'fara';
+
 export default function ClientDetailPage() {
   const params = useParams<{ client_id: string }>();
   const clientId = params.client_id;
@@ -61,6 +63,7 @@ export default function ClientDetailPage() {
     | null
   >(null);
   const [pipelineKey, setPipelineKey] = useState(0);
+  const [tab, setTab] = useState<DetailTab>('oversikt');  // KU1: flikar i stället för 15 platta kort
   const { latest, active: jobActive, trigger: runJob } = useJobRuns(clientId);
 
   // Per-kund jobbknapp med progress; uppdaterar pipeline-stegen när jobbet är klart.
@@ -133,7 +136,7 @@ export default function ClientDetailPage() {
     <GraphPageShell
       title={client?.company_name || clientId}
       icon={<Users size={22} />}
-      subtitle="Hantera medarbetare, opt-out och radering för den här kunden."
+      subtitle="Översikt, datakällor, konfiguration, kvalitet och medarbetare för kunden."
     >
       <UI.Breadcrumb
         items={[
@@ -154,6 +157,21 @@ export default function ClientDetailPage() {
         </UI.Card>
       ) : (
         <>
+          <UI.SegmentedToggle
+            value={tab}
+            onChange={(v) => setTab(v as DetailTab)}
+            style={{ marginBottom: 16, flexWrap: 'wrap' }}
+            options={[
+              { value: 'oversikt', label: 'Översikt' },
+              { value: 'datakallor', label: 'Datakällor' },
+              { value: 'konfiguration', label: 'Konfiguration' },
+              { value: 'kvalitet', label: 'Kvalitet & verifiering' },
+              { value: 'esg', label: 'ESG' },
+              { value: 'fara', label: 'Fara' },
+            ]}
+          />
+
+          {tab === 'oversikt' && (<>
           {/* Pipeline-status — var står kunden, vad är nästa steg + per-kund-jobb */}
           <UI.Card padding="20px 24px" style={{ marginBottom: 16 }}>
             <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
@@ -207,10 +225,14 @@ export default function ClientDetailPage() {
               )}
             </div>
           </UI.Card>
+          </>)}
 
+          {tab === 'datakallor' && (<>
           {/* Connectors — vilka datakällor den här kunden hämtar från */}
           <ConnectorsEditor clientId={clientId} />
+          </>)}
 
+          {tab === 'konfiguration' && (<>
           {/* Mätkonfiguration — bransch-platshållare, personas, egna pollingfrågor (AI-synlighet) */}
           <MeasurementConfigEditor clientId={clientId} />
 
@@ -222,16 +244,24 @@ export default function ClientDetailPage() {
 
           {/* Persona-palett — vilka målgrupper warmth-probarna mäter (Fas 2.1) */}
           <PersonaPaletteEditor clientId={clientId} />
+          </>)}
 
+          {tab === 'kvalitet' && (<>
           {/* Output-kvalitet — senaste rubric-scoring + länk till detaljvyn */}
           <OutputQualityPanel clientId={clientId} />
+          </>)}
 
+          {tab === 'esg' && (<>
           {/* AI-synlighet — ESG & CSRD Perception Audit (valbart tillägg, per kund) */}
           <ESGAddon clientId={clientId} />
+          </>)}
 
+          {tab === 'datakallor' && (<>
           {/* Officiell attesterad data (uppladdning) */}
           <AttestedUpload clientId={clientId} />
+          </>)}
 
+          {tab === 'kvalitet' && (<>
           {/* Verifierings-cockpit — manuell "Manually verified by Geogiraph" (ops, §7) */}
           <VerificationCockpit clientId={clientId} />
 
@@ -250,14 +280,17 @@ export default function ClientDetailPage() {
               </a>
             }
           />
+          </>)}
 
-
+          {tab === 'datakallor' && (<>
           {/* Platsannons-feeds (ATS-XML) — per kund */}
           <JobFeedsEditor clientId={clientId} />
 
           {/* LinkedIn-kapacitetsdata (kvartal) — dra in skärmklipp/export, per kund */}
           <LinkedInCapacityUpload clientId={clientId} />
+          </>)}
 
+          {tab === 'oversikt' && (<>
           {/* Medarbetare */}
           <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 14 }}>
@@ -327,6 +360,9 @@ export default function ClientDetailPage() {
             )}
           </UI.Card>
 
+          </>)}
+
+          {tab === 'fara' && (<>
           {/* Farozon */}
           <UI.Card padding="18px 20px" style={{ border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.04)' }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#ef4444', marginBottom: 6 }}>Radera kund</div>
@@ -340,6 +376,7 @@ export default function ClientDetailPage() {
               <Trash2 size={14} /> Radera kund
             </button>
           </UI.Card>
+          </>)}
         </>
       )}
 
