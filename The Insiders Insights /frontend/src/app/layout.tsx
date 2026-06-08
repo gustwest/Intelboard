@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter_Tight } from "next/font/google";
+import { DM_Mono } from "next/font/google";
 import "./globals.css";
 import FeedbackBubble from "@/components/FeedbackBubble";
 import Sidebar from "@/components/Sidebar";
@@ -9,10 +9,12 @@ import ChatWidget from "@/components/ChatWidget";
 import AIAssistant from "@/components/AIAssistant";
 import AuthSessionProvider from "@/components/AuthSessionProvider";
 
-const interTight = Inter_Tight({
+// Tekniska labels: DM Mono (matchar hemsidan). Brödtext/rubriker använder
+// system-stacken (sätts i globals.css) — ingen laddad sans behövs.
+const dmMono = DM_Mono({
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-  variable: "--font-inter-tight",
+  weight: ["300", "400", "500"],
+  variable: "--font-dm-mono",
 });
 
 export const metadata: Metadata = {
@@ -26,7 +28,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="sv" className={`${interTight.variable} h-full antialiased`}>
+    <html lang="sv" className={`${dmMono.variable} h-full antialiased`}>
       <body className="min-h-full m-0 p-0 overflow-hidden">
         <AuthSessionProvider>
           <UserProvider>

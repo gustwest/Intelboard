@@ -37,8 +37,17 @@
   --brand-border: rgba(255, 255, 255, 0.08);
   --brand-surface: var(--brand-panel);
 
-  --brand-font-sans: var(--font-inter-tight), "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --brand-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --brand-font-button: var(--brand-font-sans);
+  --brand-font-mono: var(--font-dm-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Hemsidespalett (theinsiders.se) — definierad som KÄLLA här. Mappning till
+     UI-roller (--brand-accent m.fl. + graphColors) görs i en visuell pass (a2);
+     korall får aldrig bli brödtext på cream (kontrast ~1.4:1). */
+  --site-cream: #f4f3ef;
+  --site-coral: #e08e79;
+  --site-navy: #333649;
+  --site-deep-navy: #1d1f2c;
 
   /* Typography Weights */
   --brand-heading-weight: 600;
@@ -50,7 +59,8 @@
 }
 
 @theme {
-  --font-sans: var(--font-inter-tight), "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-dm-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
   --color-brand: #00d4ff;
   --color-brand-deep: #0077ff;
 }

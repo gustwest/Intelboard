@@ -112,5 +112,6 @@ export const surfaces = {
 };
 
 export const fonts = {
-  mono: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  // Tekniska labels: DM Mono (hemsidesalignment) med systemfallback.
+  mono: 'var(--font-dm-mono), ui-monospace, SFMono-Regular, Menlo, monospace',
 };
