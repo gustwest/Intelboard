@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users, Plug, Rocket, Activity, Globe2,
@@ -134,15 +134,38 @@ export default function InsiderGraphHomePage() {
   const [inbox, setInbox] = useState<InboxData | null>(null);
   const [runs, setRuns] = useState<JobRun[] | null>(null);
   const [health, setHealth] = useState<HealthData | null>(null);
+  // Fel-tillstånd per panel — skilt från "laddar" (null) och "tomt" ([] / inga köer),
+  // så ett backend-avbrott aldrig maskeras som "inget väntar på dig".
+  const [err, setErr] = useState<{ clients?: boolean; inbox?: boolean; runs?: boolean; health?: boolean }>({});
+
+  const loadClients = useCallback(() => {
+    setErr((e) => ({ ...e, clients: false }));
+    graphFetch<{ clients: Client[] }>('/api/clients')
+      .then((d) => setClients(d.clients))
+      .catch(() => { setClients(null); setErr((e) => ({ ...e, clients: true })); });
+  }, []);
+  const loadInbox = useCallback(() => {
+    setErr((e) => ({ ...e, inbox: false }));
+    graphFetch<InboxData>('/api/inbox')
+      .then((d) => setInbox(d))
+      .catch(() => { setInbox(null); setErr((e) => ({ ...e, inbox: true })); });
+  }, []);
+  const loadRuns = useCallback(() => {
+    setErr((e) => ({ ...e, runs: false }));
+    graphFetch<{ runs: JobRun[] }>('/api/jobs/runs?limit=12')
+      .then((d) => setRuns(d.runs))
+      .catch(() => { setRuns(null); setErr((e) => ({ ...e, runs: true })); });
+  }, []);
+  const loadHealth = useCallback(() => {
+    setErr((e) => ({ ...e, health: false }));
+    graphFetch<HealthData>('/api/jobs/health')
+      .then((d) => setHealth(d))
+      .catch(() => { setHealth(null); setErr((e) => ({ ...e, health: true })); });
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    graphFetch<{ clients: Client[] }>('/api/clients').then((d) => { if (!cancelled) setClients(d.clients); }).catch(() => { if (!cancelled) setClients([]); });
-    graphFetch<InboxData>('/api/inbox').then((d) => { if (!cancelled) setInbox(d); }).catch(() => {});
-    graphFetch<{ runs: JobRun[] }>('/api/jobs/runs?limit=12').then((d) => { if (!cancelled) setRuns(d.runs); }).catch(() => { if (!cancelled) setRuns([]); });
-    graphFetch<HealthData>('/api/jobs/health').then((d) => { if (!cancelled) setHealth(d); }).catch(() => { if (!cancelled) setHealth(null); });
-    return () => { cancelled = true; };
-  }, []);
+    loadClients(); loadInbox(); loadRuns(); loadHealth();
+  }, [loadClients, loadInbox, loadRuns, loadHealth]);
 
   const activeClients = clients?.length ?? null;
   const connectorInstances = clients ? clients.reduce((n, c) => n + (c.active_connectors?.length || 0), 0) : null;
@@ -174,7 +197,9 @@ export default function InsiderGraphHomePage() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         {/* Att göra-inkorg */}
         <Panel icon={<Inbox size={16} color={C.accent} />} title="Att göra">
-          {inbox === null ? (
+          {err.inbox ? (
+            <ErrorState onRetry={loadInbox} />
+          ) : inbox === null ? (
             <Empty text="Laddar…" />
           ) : queues.length === 0 ? (
             <Empty text="Inget väntar på dig 🎉" />
@@ -196,7 +221,9 @@ export default function InsiderGraphHomePage() {
 
         {/* Senaste körningar */}
         <Panel icon={<Activity size={16} color={C.accent} />} title="Senaste körningar">
-          {runs === null ? (
+          {err.runs ? (
+            <ErrorState onRetry={loadRuns} />
+          ) : runs === null ? (
             <Empty text="Laddar…" />
           ) : runs.length === 0 ? (
             <Empty text="Inga körningar än" />
@@ -231,7 +258,9 @@ export default function InsiderGraphHomePage() {
       {/* Kundhälsa — har varje kunds data bearbetats nyligen? (tvärgående översikt) */}
       <div style={{ marginTop: 16 }}>
         <Panel icon={<HeartPulse size={16} color={C.accent} />} title="Kundhälsa — pipeline-färskhet">
-          {health === null ? (
+          {err.health ? (
+            <ErrorState onRetry={loadHealth} />
+          ) : health === null ? (
             <Empty text="Laddar…" />
           ) : health.clients.length === 0 ? (
             <Empty text="Inga kunder än" />
@@ -270,7 +299,7 @@ export default function InsiderGraphHomePage() {
           <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: C.text }}>Så här fungerar geogiraph</h2>
         </div>
         <ol style={{ paddingLeft: 18, margin: 0, color: C.muted, fontSize: 13, lineHeight: 1.7 }}>
-          <li>Kund onboardas (medarbetare + LinkedIn-URL), connectors väljs.</li>
+          <li>Kund onboardas (företagsuppgifter, ev. medarbetare), connectors väljs.</li>
           <li>Connectors hämtar profiler, inlägg, jobb, events → claims granskas.</li>
           <li>Schema-motorn kompilerar JSON-LD per kund och levererar via CDN.</li>
           <li>Polling mäter AI-synlighet och risk löpande.</li>
@@ -296,6 +325,21 @@ function RunStatus({ status }: { status: JobRun['status'] }) {
 
 function Empty({ text }: { text: string }) {
   return <UI.Empty>{text}</UI.Empty>;
+}
+
+function ErrorState({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 4px' }}>
+      <AlertTriangle size={15} color="#dc2626" />
+      <span style={{ flex: 1, fontSize: 12, color: '#dc2626' }}>Kunde inte ladda — kontrollera anslutningen.</span>
+      <button
+        onClick={onRetry}
+        style={{ font: 'inherit', fontSize: 12, fontWeight: 600, color: C.text, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, padding: '5px 12px', cursor: 'pointer' }}
+      >
+        Försök igen
+      </button>
+    </div>
+  );
 }
 
 function HealthBadge({ row }: { row: HealthRow }) {

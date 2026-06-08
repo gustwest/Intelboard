@@ -8,6 +8,7 @@ import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell'
 import PipelineStatus, { type PipelineStep } from '../_components/PipelineStatus';
 import * as UI from '../_components/ui';
 import { graphFetch } from '../_lib/api';
+import { fmtDateTime } from '@/lib/datetime';
 
 type ConnectorField = {
   name: string;
@@ -320,7 +321,7 @@ function ClientCard({ client, counts }: { client: Client; counts?: InboxCounts }
           <Row label="Connectors" value={client.active_connectors.join(', ') || '—'} />
           <Row
             label="Senast kompilerad"
-            value={client.last_compiled ? new Date(client.last_compiled).toLocaleString('sv-SE') : 'Inte ännu'}
+            value={client.last_compiled ? fmtDateTime(client.last_compiled) : 'Inte ännu'}
           />
         </div>
 
@@ -395,7 +396,9 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
   const [fieldValues, setFieldValues] = useState<Record<string, string | boolean>>({});
   const [rssFeeds, setRssFeeds] = useState<RssFeedRow[]>([{ url: '', schema_type: 'NewsArticle', label: '' }]);
 
-  const [employees, setEmployees] = useState<EmployeeRow[]>([emptyEmployee()]);
+  // Medarbetare är valfria (standard: tom). Personliga LinkedIn-profiler skrapas inte —
+  // URL:en lagras bara som referens. Företagsnivå-kunder kan onboardas utan en enda person.
+  const [employees, setEmployees] = useState<EmployeeRow[]>([]);
 
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -438,8 +441,13 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
         }
       }
     }
-    const valid = employees.filter((e) => e.name.trim() && e.linkedin_url.trim());
-    if (valid.length === 0) return 'Lägg till minst en medarbetare med namn + LinkedIn-URL.';
+    // Medarbetare är valfria. Påbörjade rader (namn men ingen URL, eller tvärtom)
+    // fångas så att man inte råkar skapa en halv referens.
+    for (const e of employees) {
+      const hasName = !!e.name.trim();
+      const hasUrl = !!e.linkedin_url.trim();
+      if (hasName !== hasUrl) return 'Medarbetare: fyll i både namn och LinkedIn-URL, eller ta bort raden.';
+    }
     return null;
   }
 
@@ -478,7 +486,12 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      setResult({ ok: true, message: `Skapade kund ${data.client_id} med ${data.employees_created} medarbetare.` });
+      setResult({
+        ok: true,
+        message: data.employees_created > 0
+          ? `Skapade kund ${data.client_id} med ${data.employees_created} medarbetare.`
+          : `Skapade kund ${data.client_id}.`,
+      });
     } catch (e) {
       setResult({ ok: false, message: e instanceof Error ? e.message : 'Onboarding misslyckades' });
     } finally {
@@ -493,7 +506,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
           const steps = [
             { label: 'Företag', done: !!clientId.trim() && !!companyName.trim() },
             { label: 'Connectors', done: active.size > 0 },
-            { label: 'Medarbetare', done: employees.some((e) => e.name.trim() && e.linkedin_url.trim()) },
+            { label: 'Medarbetare (valfritt)', done: true },
           ];
           return (
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: 22 }}>
@@ -575,7 +588,12 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
 
         {/* Medarbetare */}
         <SectionLabel>Medarbetare</SectionLabel>
+        <p style={{ fontSize: 12, color: C.muted, margin: '0 0 10px' }}>
+          Valfritt — kunden kan onboardas utan medarbetare. Lägg till nu eller senare på kundkortet.
+          LinkedIn-URL:en sparas bara som referens (ingen profil hämtas).
+        </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
+          {employees.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.8fr 1.4fr 0.9fr 28px', gap: 8, fontSize: 10, color: C.muted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0 2px' }}>
             <span>Namn</span>
             <span>LinkedIn-URL</span>
@@ -583,6 +601,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
             <span>Kön</span>
             <span />
           </div>
+          )}
           {employees.map((emp, i) => (
             <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.8fr 1.4fr 0.9fr 28px', gap: 8, alignItems: 'center' }}>
               <RowInput value={emp.name} onChange={(v) => setEmployee(i, { name: v })} placeholder="Anna Andersson" />
@@ -590,7 +609,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
               <RowInput value={emp.title} onChange={(v) => setEmployee(i, { title: v })} placeholder="VD" />
               <RowInput value={emp.gender} onChange={(v) => setEmployee(i, { gender: v })} placeholder="kvinna" />
               <button
-                onClick={() => setEmployees((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev))}
+                onClick={() => setEmployees((prev) => prev.filter((_, idx) => idx !== i))}
                 title="Ta bort rad"
                 style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer', display: 'flex', justifyContent: 'center' }}
               >

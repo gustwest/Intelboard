@@ -53,6 +53,11 @@ def render_install_kit(client_id: str) -> str:
    white-space:pre-wrap;word-break:break-all;overflow-x:auto}}
  a{{color:#2563eb}}
  .note{{color:#666;font-size:.9rem}}
+ details.howto{{margin:.6rem 0 0;font-size:.9rem}}
+ details.howto summary{{cursor:pointer;color:#2563eb;font-weight:600}}
+ details.howto ul{{margin:.6rem 0 0;padding-left:1.2rem;color:#444}}
+ details.howto li{{margin:.35rem 0}}
+ .fallback{{background:#eef4ff;border:1px solid #cfe0ff;border-radius:8px;padding:.85rem 1rem;font-size:.92rem;color:#333;margin-top:1.6rem}}
  .toolbar{{display:flex;justify-content:flex-end;margin-bottom:1rem}}
  .toolbar button{{font:inherit;padding:.4rem .9rem;border:1px solid #ccc;background:#fff;border-radius:6px;cursor:pointer}}
  @media print{{.toolbar{{display:none}} body{{margin:0;max-width:none}} pre{{white-space:pre-wrap}}}}
@@ -67,10 +72,20 @@ och behöver aldrig röras igen — profilsidan uppdaterar vi åt er löpande.</
 <h2>Identitets-snutt — klistra in i sidans <code>&lt;head&gt;</code></h2>
 <p class="note">Talar om för AI-motorerna vem ni är och pekar på er profil som kanonisk källa. Ändras aldrig.</p>
 <pre>{identity}</pre>
+<details class="howto">
+<summary>Var hittar jag <code>&lt;head&gt;</code>? Välj er plattform</summary>
+<ul>
+<li><strong>WordPress:</strong> installera ett sidhuvuds-tillägg (t.ex. WPCode eller ”Insert Headers and Footers”) och klistra in koden i fältet <em>Header</em>.</li>
+<li><strong>Squarespace:</strong> Inställningar → Avancerat → Kodinjektion → <em>Sidhuvud</em>.</li>
+<li><strong>Wix:</strong> Inställningar → Anpassad kod → Lägg till kod → placera i <em>Head</em>, på alla sidor.</li>
+<li><strong>Webflow:</strong> Project Settings → Custom Code → <em>Head Code</em>.</li>
+<li><strong>Egen eller annan sajt:</strong> klistra in precis före den avslutande <code>&lt;/head&gt;</code>-taggen.</li>
+</ul>
+</details>
 </li>
 <li>
 <h2>Badge — klistra in där den ska synas (t.ex. i footern)</h2>
-<p class="note">En diskret, verifierad länk till er AI-profil. Ren HTML, ingen JavaScript.</p>
+<p class="note">En diskret, verifierad länk till er AI-profil. Ren HTML, ingen JavaScript. Samma kodinjektions-verktyg som ovan har oftast ett <em>Footer</em>-fält.</p>
 <pre>{badge}</pre>
 </li>
 <li>
@@ -79,6 +94,8 @@ och behöver aldrig röras igen — profilsidan uppdaterar vi åt er löpande.</
 <p><a href="{profile}" target="_blank" rel="noopener">{profile}</a></p>
 </li>
 </ol>
+
+<p class="fallback"><strong>Inte säker på hur ni når koden?</strong> Vidarebefordra det här mejlet till den som sköter er webbplats — för dem tar det någon minut. Eller svara på mejlet så hjälper vi till.</p>
 
 <p class="note">Frågor? Svara på det här mejlet så hjälper vi till.</p>
 </body></html>"""
@@ -94,6 +111,14 @@ def render_install_kit_email(client_id: str) -> tuple[str, str, str]:
         f"1) Identitets-snutt (i sidans <head>):\n{kit['identity_snippet']}\n\n"
         f"2) Badge (t.ex. i footern):\n{kit['badge_snippet']}\n\n"
         f"3) Er publika AI-profil:\n{kit['profile_url']}\n\n"
+        f"Var hittar jag <head>?\n"
+        f"  WordPress: ett sidhuvuds-tillägg (WPCode m.fl.), fältet Header.\n"
+        f"  Squarespace: Inställningar > Avancerat > Kodinjektion > Sidhuvud.\n"
+        f"  Wix: Inställningar > Anpassad kod > Head, på alla sidor.\n"
+        f"  Webflow: Project Settings > Custom Code > Head Code.\n"
+        f"  Egen/annan sajt: precis före </head>.\n\n"
+        f"Inte säker på hur ni gör? Vidarebefordra mejlet till den som sköter er "
+        f"webbplats, eller svara så hjälper vi till.\n\n"
         f"Profilsidan uppdaterar vi åt er löpande. Frågor? Svara på det här mejlet.\n"
     )
     return subject, render_install_kit(client_id), text
