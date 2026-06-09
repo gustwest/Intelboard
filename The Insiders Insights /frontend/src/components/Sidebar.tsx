@@ -122,7 +122,7 @@ export default function Sidebar() {
     <aside style={{
       width: '260px',
       height: '100vh',
-      background: 'rgba(15, 17, 26, 0.95)',
+      background: product === 'graph' ? '#333649' : 'rgba(15, 17, 26, 0.95)',
       borderRight: '1px solid var(--brand-border)',
       display: 'flex',
       flexDirection: 'column',

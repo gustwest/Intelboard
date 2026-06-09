@@ -47,7 +47,7 @@ export default function Header() {
       alignItems: 'center',
       justifyContent: 'space-between',
       padding: '0 32px',
-      background: 'rgba(15, 17, 26, 0.8)',
+      background: isGraph ? '#333649' : 'rgba(15, 17, 26, 0.8)',
       backdropFilter: 'blur(20px)',
       borderBottom: '1px solid var(--brand-border)',
       position: 'sticky',
