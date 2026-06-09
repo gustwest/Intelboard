@@ -246,8 +246,8 @@ export default function OutputQualityDetailPage() {
                     onClick={() => setSelectedId(log.log_id)}
                     style={{
                       textAlign: 'left', padding: '8px 10px', borderRadius: 8,
-                      background: active ? 'rgba(159,81,182,0.10)' : 'transparent',
-                      border: `1px solid ${active ? 'rgba(159,81,182,0.3)' : 'transparent'}`,
+                      background: active ? 'rgba(224, 142, 121,0.10)' : 'transparent',
+                      border: `1px solid ${active ? 'rgba(224, 142, 121,0.3)' : 'transparent'}`,
                       cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 4,
                     }}
                   >
@@ -321,9 +321,9 @@ export default function OutputQualityDetailPage() {
                             style={{
                               display: 'inline-flex', alignItems: 'center', gap: 3,
                               padding: '3px 8px',
-                              background: alreadyAgg ? 'rgba(34,197,94,0.12)' : 'rgba(159,81,182,0.16)',
+                              background: alreadyAgg ? 'rgba(34,197,94,0.12)' : 'rgba(224, 142, 121,0.16)',
                               color: alreadyAgg ? '#16a34a' : C.accent,
-                              border: `1px solid ${alreadyAgg ? 'rgba(34,197,94,0.3)' : 'rgba(159,81,182,0.3)'}`,
+                              border: `1px solid ${alreadyAgg ? 'rgba(34,197,94,0.3)' : 'rgba(224, 142, 121,0.3)'}`,
                               borderRadius: 999, fontSize: 10, fontWeight: 600,
                               cursor: alreadyAgg ? 'default' : 'pointer',
                             }}
@@ -354,7 +354,7 @@ export default function OutputQualityDetailPage() {
                   <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 12 }}>Per connector</div>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead>
-                      <tr style={{ background: '#f1f3f5' }}>
+                      <tr style={{ background: '#edebe4' }}>
                         <th style={th}>Connector</th>
                         <th style={{ ...th, textAlign: 'right' }}>Snitt</th>
                         <th style={{ ...th, textAlign: 'right' }}>Claims</th>
@@ -416,7 +416,7 @@ export default function OutputQualityDetailPage() {
 
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead>
-                      <tr style={{ background: '#f1f3f5' }}>
+                      <tr style={{ background: '#edebe4' }}>
                         <th style={{ ...th, width: 28 }}></th>
                         <th style={th}>Claim</th>
                         <th style={{ ...th, width: 110 }}>Dimension</th>
@@ -447,7 +447,7 @@ export default function OutputQualityDetailPage() {
                               <td style={td}><ActionPill action={c.action} /></td>
                             </tr>
                             {isOpen && (
-                              <tr style={{ background: '#fafbfc' }}>
+                              <tr style={{ background: '#fbfaf7' }}>
                                 <td></td>
                                 <td colSpan={5} style={{ padding: '10px 14px 14px' }}>
                                   {c.reasons?.length > 0 && (
@@ -477,9 +477,9 @@ export default function OutputQualityDetailPage() {
                                               disabled={st === 'applying'}
                                               style={{
                                                 display: 'inline-flex', alignItems: 'center', gap: 4,
-                                                padding: '4px 10px', background: st === 'error' ? 'rgba(239,68,68,0.12)' : 'rgba(159,81,182,0.16)',
+                                                padding: '4px 10px', background: st === 'error' ? 'rgba(239,68,68,0.12)' : 'rgba(224, 142, 121,0.16)',
                                                 color: st === 'error' ? '#b91c1c' : C.accent,
-                                                border: `1px solid ${st === 'error' ? 'rgba(239,68,68,0.3)' : 'rgba(159,81,182,0.3)'}`,
+                                                border: `1px solid ${st === 'error' ? 'rgba(239,68,68,0.3)' : 'rgba(224, 142, 121,0.3)'}`,
                                                 borderRadius: 6, fontSize: 11, fontWeight: 600,
                                                 cursor: st === 'applying' ? 'wait' : 'pointer',
                                               }}
@@ -495,7 +495,7 @@ export default function OutputQualityDetailPage() {
                                           );
                                         })()}
                                       </div>
-                                      <div style={{ fontSize: 12, color: C.text, fontStyle: 'italic', padding: '8px 12px', background: 'rgba(159,81,182,0.08)', borderLeft: `3px solid ${C.accent}`, borderRadius: 4 }}>
+                                      <div style={{ fontSize: 12, color: C.text, fontStyle: 'italic', padding: '8px 12px', background: 'rgba(224, 142, 121,0.08)', borderLeft: `3px solid ${C.accent}`, borderRadius: 4 }}>
                                         {c.suggestion}
                                       </div>
                                       {c.claim_id && applyError[c.claim_id] && (
@@ -538,7 +538,7 @@ export default function OutputQualityDetailPage() {
                   <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 12 }}>Gate-åtgärder ({detail.actions.length})</div>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead>
-                      <tr style={{ background: '#f1f3f5' }}>
+                      <tr style={{ background: '#edebe4' }}>
                         <th style={th}>Claim-id</th>
                         <th style={{ ...th, width: 110 }}>Dimension</th>
                         <th style={{ ...th, textAlign: 'right', width: 60 }}>Score</th>
@@ -575,7 +575,7 @@ export default function OutputQualityDetailPage() {
           maxWidth={600}
           title={
             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Combine size={18} color={C.accent} /> Aggregera dimension: <code style={{ background: '#eef0f1', padding: '2px 6px', borderRadius: 4, fontSize: 13 }}>{aggModal.dimension}</code>
+              <Combine size={18} color={C.accent} /> Aggregera dimension: <code style={{ background: '#eceae3', padding: '2px 6px', borderRadius: 4, fontSize: 13 }}>{aggModal.dimension}</code>
             </span>
           }
         >
@@ -608,7 +608,7 @@ export default function OutputQualityDetailPage() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {aggModal.narratives.map((n, i) => (
-                    <div key={i} style={{ fontSize: 13, color: C.text, padding: '10px 14px', background: 'rgba(159,81,182,0.08)', borderLeft: `3px solid ${C.accent}`, borderRadius: 4, lineHeight: 1.55 }}>
+                    <div key={i} style={{ fontSize: 13, color: C.text, padding: '10px 14px', background: 'rgba(224, 142, 121,0.08)', borderLeft: `3px solid ${C.accent}`, borderRadius: 4, lineHeight: 1.55 }}>
                       {n}
                     </div>
                   ))}
@@ -645,7 +645,7 @@ export default function OutputQualityDetailPage() {
   );
 }
 
-const th: React.CSSProperties = { padding: '10px 12px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: '#6a7e8a', textTransform: 'uppercase', letterSpacing: '0.04em' };
+const th: React.CSSProperties = { padding: '10px 12px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: '#6b6e7e', textTransform: 'uppercase', letterSpacing: '0.04em' };
 const td: React.CSSProperties = { padding: '10px 12px', verticalAlign: 'top', color: C.text };
 
 // Wrap-helper för att rendera en row + extra-row utan extra <React.Fragment>-warning
@@ -662,7 +662,7 @@ function FilterSelect({ label, value, onChange, options }: {
       {label}:
       <select
         value={value} onChange={(e) => onChange(e.target.value)}
-        style={{ padding: '4px 8px', fontSize: 11, background: '#eef0f1', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6 }}
+        style={{ padding: '4px 8px', fontSize: 11, background: '#eceae3', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6 }}
       >
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>

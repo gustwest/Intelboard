@@ -173,7 +173,7 @@ export default function OutputQualityPanel({ clientId }: { clientId: string }) {
                   <div
                     role="img"
                     aria-label={`Åtgärdsfördelning: publish ${publishPct.toFixed(0)}%, transform ${transformPct.toFixed(0)}%, drop ${dropPct.toFixed(0)}%`}
-                    style={{ display: 'flex', width: 100, height: 6, borderRadius: 3, overflow: 'hidden', background: '#eef0f1' }}
+                    style={{ display: 'flex', width: 100, height: 6, borderRadius: 3, overflow: 'hidden', background: '#eceae3' }}
                   >
                     {publishPct > 0 && <div style={{ width: `${publishPct}%`, background: '#22c55e' }} title={`publish ${publishPct.toFixed(0)}%`} />}
                     {transformPct > 0 && <div style={{ width: `${transformPct}%`, background: '#f59e0b' }} title={`transform ${transformPct.toFixed(0)}%`} />}

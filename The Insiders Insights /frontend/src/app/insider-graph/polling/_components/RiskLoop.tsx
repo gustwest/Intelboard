@@ -211,7 +211,7 @@ export function RiskQuestionsInlineApprover({ clientId, questions, onChanged }: 
               alignItems: 'center',
               padding: '8px 6px',
               borderRadius: 6,
-              background: checked.has(q.id) ? 'rgba(159,81,182,0.06)' : 'transparent',
+              background: checked.has(q.id) ? 'rgba(224, 142, 121,0.06)' : 'transparent',
               fontSize: 12,
               opacity: pending ? 0.5 : 1,
             }}>
@@ -351,7 +351,7 @@ export function ApprovedQuestionsPanel({ questions, clientId, mode, onChanged }:
             {(['customer', 'talent', 'investor'] as const).map((p) => {
               const n = byPersona.get(p) || 0;
               return (
-                <div key={p} style={{ padding: '12px 14px', background: 'rgba(159,81,182,0.04)', border: `1px solid ${S.inProgress.border}`, borderRadius: 8 }}>
+                <div key={p} style={{ padding: '12px 14px', background: 'rgba(224, 142, 121,0.04)', border: `1px solid ${S.inProgress.border}`, borderRadius: 8 }}>
                   <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginBottom: 4 }}>
                     {PERSONA_SV[p]}
                   </div>
@@ -370,7 +370,7 @@ export function ApprovedQuestionsPanel({ questions, clientId, mode, onChanged }:
               disabled={!clientId}
               style={{
                 padding: '5px 12px', fontSize: 11, fontWeight: 600,
-                color: C.accent, background: 'rgba(159,81,182,0.08)',
+                color: C.accent, background: 'rgba(224, 142, 121,0.08)',
                 border: `1px solid ${S.inProgress.border}`, borderRadius: 6,
                 cursor: clientId ? 'pointer' : 'not-allowed', letterSpacing: '0.02em',
               }}
@@ -407,7 +407,7 @@ export function ApprovedQuestionsPanel({ questions, clientId, mode, onChanged }:
                   <span style={{ color: C.text, lineHeight: 1.5 }}>
                     {q.text || <span style={{ color: C.dim, fontStyle: 'italic' }}>(saknar fråge-text)</span>}
                     {q.custom && (
-                      <span style={{ marginLeft: 8, fontSize: 9, fontWeight: 600, color: C.accent, background: 'rgba(159,81,182,0.1)', border: `1px solid ${S.inProgress.border}`, borderRadius: 4, padding: '1px 6px', letterSpacing: '0.04em', textTransform: 'uppercase', verticalAlign: 'middle' }}>
+                      <span style={{ marginLeft: 8, fontSize: 9, fontWeight: 600, color: C.accent, background: 'rgba(224, 142, 121,0.1)', border: `1px solid ${S.inProgress.border}`, borderRadius: 4, padding: '1px 6px', letterSpacing: '0.04em', textTransform: 'uppercase', verticalAlign: 'middle' }}>
                         Egen
                       </span>
                     )}

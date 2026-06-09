@@ -93,7 +93,7 @@ export function TrustGapCockpit({
       />
 
       {ranked.length > 0 && (
-        <div style={{ marginBottom: 16, padding: '12px 14px', background: 'rgba(159,81,182,0.06)', border: '1px solid rgba(159,81,182,0.18)', borderRadius: 8 }}>
+        <div style={{ marginBottom: 16, padding: '12px 14px', background: 'rgba(224, 142, 121,0.06)', border: '1px solid rgba(224, 142, 121,0.18)', borderRadius: 8 }}>
           <div style={{ fontSize: 11, color: C.accent, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Att göra — mest angeläget först</div>
           <ol style={{ margin: 0, paddingLeft: 18, color: C.text, fontSize: 13, lineHeight: 1.65 }}>
             {ranked.map((a, i) => (
@@ -381,13 +381,13 @@ export function RecipeActions({
       {recipe.status === 'pending' && (
         <>
           {btn('Godkänn', '#0e7490', () => onTransition(recipe.recipe_id, 'agreed'))}
-          {btn('Avfärda', '#6a7e8a', () => onTransition(recipe.recipe_id, 'dismissed'))}
+          {btn('Avfärda', '#6b6e7e', () => onTransition(recipe.recipe_id, 'dismissed'))}
         </>
       )}
       {recipe.status === 'agreed' && (
         <>
           {btn('Markera publicerat', '#b45309', () => onTransition(recipe.recipe_id, 'acted'))}
-          {btn('Avfärda', '#6a7e8a', () => onTransition(recipe.recipe_id, 'dismissed'))}
+          {btn('Avfärda', '#6b6e7e', () => onTransition(recipe.recipe_id, 'dismissed'))}
         </>
       )}
       {recipe.status === 'acted' && (
@@ -395,7 +395,7 @@ export function RecipeActions({
           <span style={{ fontSize: 11, color: C.dim, fontStyle: 'italic', alignSelf: 'center' }}>
             Mäts nu — verifieras automatiskt när gapet stängs
           </span>
-          {btn('Avfärda', '#6a7e8a', () => onTransition(recipe.recipe_id, 'dismissed'))}
+          {btn('Avfärda', '#6b6e7e', () => onTransition(recipe.recipe_id, 'dismissed'))}
         </>
       )}
     </div>
@@ -434,8 +434,8 @@ export function InterventionStatusView({ intervention }: { intervention: Interve
 
 export function TrustBar({ label, value, hint, tone }: { label: string; value: number | null; hint?: string; tone: 'declared' | 'demonstrated' | 'perceived' }) {
   const colors = {
-    declared: { fill: '#6a7e8a', track: 'rgba(106,126,138,0.14)' },
-    demonstrated: { fill: C.accent, track: 'rgba(159,81,182,0.14)' },
+    declared: { fill: '#6b6e7e', track: 'rgba(106,126,138,0.14)' },
+    demonstrated: { fill: C.accent, track: 'rgba(224, 142, 121,0.14)' },
     perceived: { fill: '#0e7490', track: 'rgba(14,116,144,0.14)' },
   }[tone];
   const pctVal = value != null ? Math.max(0, Math.min(1, value)) * 100 : 0;

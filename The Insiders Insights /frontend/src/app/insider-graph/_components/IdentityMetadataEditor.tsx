@@ -269,7 +269,7 @@ function ProvenanceLine({ source, setAt, hasValue }: { source: string | null; se
     text = 'okänd källa';
   }
   return (
-    <div style={{ fontSize: 10, color: '#6a7e8a', marginTop: 4, fontStyle: 'italic' }}>
+    <div style={{ fontSize: 10, color: '#6b6e7e', marginTop: 4, fontStyle: 'italic' }}>
       {text}
     </div>
   );

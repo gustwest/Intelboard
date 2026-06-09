@@ -25,7 +25,7 @@ const PRODUCTS: Product[] = [
     name: 'geogiraph',
     tagline: 'Generative Engine Optimization',
     defaultPath: '/insider-graph',
-    accent: '#9f51b6',
+    accent: '#c26a52',
     badge: 'GG',
   },
 ];
@@ -78,8 +78,8 @@ export default function ProductSwitcher() {
                 cursor: isActive ? 'default' : 'pointer',
                 background: isActive
                   ? p.id === 'graph'
-                    ? 'rgba(159, 81, 182, 0.18)'
-                    : 'rgba(0, 212, 255, 0.15)'
+                    ? 'rgba(224, 142, 121, 0.18)'
+                    : 'rgba(224, 142, 121, 0.15)'
                   : 'transparent',
                 transition: 'background 0.15s',
               }}

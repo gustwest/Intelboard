@@ -131,7 +131,7 @@ export default function VerificationCockpit({ clientId }: { clientId: string }) 
       ) : (
         <button
           onClick={() => setOpen(true)}
-          style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'rgba(159,81,182,0.15)', color: C.accent, border: '1px solid rgba(159,81,182,0.3)', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+          style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'rgba(224, 142, 121,0.15)', color: C.accent, border: '1px solid rgba(224, 142, 121,0.3)', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
         >
           <UploadCloud size={14} /> Ladda upp underlag
         </button>
@@ -155,7 +155,7 @@ function VerificationList({ rows }: { rows: VerificationRow[] | null }) {
               <Icon size={14} color={color} />
               {r.evidence_type || 'bevis'}
               {r.assurance_level && (
-                <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: 'rgba(159,81,182,0.12)', color: C.accent, fontWeight: 600 }}>
+                <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: 'rgba(224, 142, 121,0.12)', color: C.accent, fontWeight: 600 }}>
                   {ASSURANCE.find((a) => a.key === r.assurance_level)?.label || r.assurance_level}
                 </span>
               )}
@@ -249,7 +249,7 @@ function UploadForm({
   }
 
   const inputStyle: React.CSSProperties = {
-    display: 'block', width: '100%', marginTop: 4, padding: '6px 10px', background: '#eef0f1',
+    display: 'block', width: '100%', marginTop: 4, padding: '6px 10px', background: '#eceae3',
     color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none',
   };
   const labelStyle: React.CSSProperties = { fontSize: 11, color: C.muted, fontWeight: 600 };
@@ -270,7 +270,7 @@ function UploadForm({
             onClick={() => setRole(r.key)}
             style={{
               flex: 1, minWidth: 120, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
-              background: role === r.key ? 'rgba(159,81,182,0.12)' : 'transparent',
+              background: role === r.key ? 'rgba(224, 142, 121,0.12)' : 'transparent',
               border: `1px solid ${role === r.key ? C.accent : C.border}`,
             }}
           >

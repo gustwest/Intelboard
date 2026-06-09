@@ -13,7 +13,7 @@ import { graphColors as C, statusColors, surfaces } from '../GraphPageShell';
 
 type StatusTone = 'ok' | 'warn' | 'err' | 'info';
 
-const accentTone = { fg: C.accent, bg: 'rgba(159,81,182,0.15)', border: 'rgba(159,81,182,0.3)' };
+const accentTone = { fg: C.accent, bg: 'rgba(224, 142, 121,0.15)', border: 'rgba(224, 142, 121,0.3)' };
 const neutralTone = { fg: C.muted, bg: 'rgba(0,0,0,0.05)', border: C.border };
 
 // ── Breadcrumb ───────────────────────────────────────────────────────────────
@@ -150,7 +150,7 @@ export function Pill({ children, style }: { children: ReactNode; style?: CSSProp
   return (
     <span
       style={{
-        minWidth: 22, padding: '1px 8px', background: 'rgba(159,81,182,0.14)', color: C.accent,
+        minWidth: 22, padding: '1px 8px', background: 'rgba(224, 142, 121,0.14)', color: C.accent,
         borderRadius: 10, fontSize: 12, fontWeight: 700, textAlign: 'center', ...style,
       }}
     >
@@ -214,8 +214,8 @@ export function Button({ variant = 'ghost', icon, children, style, disabled, ...
       border: `1px solid ${C.border}`, borderRadius: 8,
     },
     primary: {
-      padding: '7px 14px', background: 'rgba(159,81,182,0.18)', color: C.accent,
-      border: '1px solid rgba(159,81,182,0.3)', borderRadius: 8,
+      padding: '7px 14px', background: 'rgba(224, 142, 121,0.18)', color: C.accent,
+      border: '1px solid rgba(224, 142, 121,0.3)', borderRadius: 8,
     },
     row: {
       width: '100%', padding: '9px 8px', background: 'transparent', color: C.text,
@@ -368,9 +368,9 @@ export function SaveButton({
       title={!dirty && !saving ? (disabledReason ?? 'Inga ändringar att spara') : undefined}
       style={{
         display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px',
-        background: dirty ? 'rgba(159,81,182,0.18)' : 'transparent',
+        background: dirty ? 'rgba(224, 142, 121,0.18)' : 'transparent',
         color: dirty ? C.accent : C.muted,
-        border: `1px solid ${dirty ? 'rgba(159,81,182,0.3)' : C.border}`,
+        border: `1px solid ${dirty ? 'rgba(224, 142, 121,0.3)' : C.border}`,
         borderRadius: 8, fontSize: 12, fontWeight: 600,
         cursor: dirty && !saving ? 'pointer' : 'not-allowed', ...style,
       }}
@@ -403,9 +403,9 @@ export function SegmentedToggle<T extends string>({
             onClick={() => onChange(o.value)}
             style={{
               padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-              background: active ? 'rgba(159,81,182,0.16)' : 'transparent',
+              background: active ? 'rgba(224, 142, 121,0.16)' : 'transparent',
               color: active ? C.accent : C.muted,
-              border: `1px solid ${active ? 'rgba(159,81,182,0.3)' : C.border}`,
+              border: `1px solid ${active ? 'rgba(224, 142, 121,0.3)' : C.border}`,
             }}
           >
             {o.label}
@@ -491,7 +491,7 @@ export function DropZone({
         if (f) onFile(f);
       }}
       style={{
-        background: dragOver ? 'rgba(159,81,182,0.08)' : restBg,
+        background: dragOver ? 'rgba(224, 142, 121,0.08)' : restBg,
         border: `2px dashed ${dragOver ? C.accent : C.border}`,
         borderRadius: 10, padding, textAlign: 'center',
         cursor: disabled ? 'wait' : 'pointer', transition: 'all 0.15s', outline: 'none', ...style,

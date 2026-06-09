@@ -108,7 +108,7 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
       </div>
 
       {todos.map((t) => (
-        <div key={t.id} style={{ background: 'rgba(159,81,182,0.08)', border: '1px solid rgba(159,81,182,0.3)', borderRadius: 8, padding: '8px 12px', marginBottom: 10, display: 'flex', gap: 8, alignItems: 'center', color: '#7a3d8c', fontSize: 12 }}>
+        <div key={t.id} style={{ background: 'rgba(224, 142, 121,0.08)', border: '1px solid rgba(224, 142, 121,0.3)', borderRadius: 8, padding: '8px 12px', marginBottom: 10, display: 'flex', gap: 8, alignItems: 'center', color: '#7a3d8c', fontSize: 12 }}>
           <BellRing size={14} /> {t.message}
         </div>
       ))}
@@ -148,7 +148,7 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
 
       <textarea value={skills} onChange={(e) => setSkills(e.target.value)} rows={2}
         placeholder="Aggregerade kompetenser (valfritt): AWS, Kubernetes, ESG …"
-        style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, color: C.text, background: '#eef0f1', border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 12px', lineHeight: 1.5, resize: 'vertical', fontFamily: 'inherit', marginBottom: 10 }} />
+        style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, color: C.text, background: '#eceae3', border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 12px', lineHeight: 1.5, resize: 'vertical', fontFamily: 'inherit', marginBottom: 10 }} />
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
         <UI.Input value={quarter} onChange={(e) => setQuarter(e.target.value)} placeholder="Kvartal (2026-Q2)" style={{ flex: 1, minWidth: 140 }} />
@@ -156,14 +156,14 @@ export default function LinkedInCapacityUpload({ clientId }: { clientId: string 
       </div>
 
       <button onClick={upload} disabled={busy || (!file && !skills.trim())}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', background: (file || skills.trim()) ? 'rgba(159,81,182,0.18)' : 'transparent', color: (file || skills.trim()) ? C.accent : C.muted, border: `1px solid ${(file || skills.trim()) ? 'rgba(159,81,182,0.3)' : C.border}`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: busy ? 'wait' : 'pointer' }}>
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', background: (file || skills.trim()) ? 'rgba(224, 142, 121,0.18)' : 'transparent', color: (file || skills.trim()) ? C.accent : C.muted, border: `1px solid ${(file || skills.trim()) ? 'rgba(224, 142, 121,0.3)' : C.border}`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: busy ? 'wait' : 'pointer' }}>
         <UploadCloud size={14} /> {busy ? 'Laddar upp…' : 'Ladda upp'}
       </button>
 
       {snapshots.length > 0 && (
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
           {snapshots.slice(0, 4).map((s) => {
-            const st = STATUS[s.status] || { bg: '#eef0f1', fg: C.muted, label: s.status };
+            const st = STATUS[s.status] || { bg: '#eceae3', fg: C.muted, label: s.status };
             return (
               <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11, color: C.muted }}>
                 <span style={{ flex: 1, minWidth: 0 }}>

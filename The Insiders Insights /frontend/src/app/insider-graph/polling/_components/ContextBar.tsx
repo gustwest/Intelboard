@@ -87,7 +87,7 @@ export function StickyContextBar({ clients, selected, onSelectClient, months, mo
           </button>
 
           {isDraft && (
-            <span style={{ fontSize: 10, fontWeight: 600, color: C.accent, background: 'rgba(159,81,182,0.12)', border: '1px solid rgba(159,81,182,0.3)', borderRadius: 5, padding: '3px 8px', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 10, fontWeight: 600, color: C.accent, background: 'rgba(224, 142, 121,0.12)', border: '1px solid rgba(224, 142, 121,0.3)', borderRadius: 5, padding: '3px 8px', letterSpacing: '0.04em' }}>
               INTERNT UTKAST
             </span>
           )}
@@ -150,7 +150,7 @@ export function StickyContextBar({ clients, selected, onSelectClient, months, mo
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 32, fontWeight: 600, letterSpacing: '-0.02em', color: C.text, lineHeight: 1 }}>{hero.primary}</span>
             {hero.unit && <span style={{ fontSize: 12, color: C.muted }}>{hero.unit}</span>}
-            {hero.stage && <span style={{ fontSize: 11, fontWeight: 600, color: C.accent, background: 'rgba(159,81,182,0.1)', padding: '3px 8px', borderRadius: 5, letterSpacing: '0.04em' }}>{hero.stage}</span>}
+            {hero.stage && <span style={{ fontSize: 11, fontWeight: 600, color: C.accent, background: 'rgba(224, 142, 121,0.1)', padding: '3px 8px', borderRadius: 5, letterSpacing: '0.04em' }}>{hero.stage}</span>}
             {hero.delta && <span style={{ fontSize: 11, fontWeight: 600, color: deltaColor }}>{hero.delta}</span>}
           </div>
         </div>

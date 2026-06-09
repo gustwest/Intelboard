@@ -172,7 +172,7 @@ export function PollingQuestionsPanel({ data, clientId, mode }: { data: PollingQ
       {open && (
         <>
           {mode === 'ops' && !data.is_custom && (
-            <div style={{ marginBottom: 14, padding: '10px 14px', background: 'rgba(159,81,182,0.04)', border: `1px solid ${S.inProgress.border}`, borderRadius: 8, fontSize: 11, color: C.muted, lineHeight: 1.5 }}>
+            <div style={{ marginBottom: 14, padding: '10px 14px', background: 'rgba(224, 142, 121,0.04)', border: `1px solid ${S.inProgress.border}`, borderRadius: 8, fontSize: 11, color: C.muted, lineHeight: 1.5 }}>
               <strong style={{ color: C.text }}>Default-frågor ifyllda med kundens kontext:</strong>{' '}
               industry=<code style={{ color: C.accent }}>{data.substitutions.industry}</code> ·{' '}
               topic=<code style={{ color: C.accent }}>{data.substitutions.topic}</code> ·{' '}
@@ -190,7 +190,7 @@ export function PollingQuestionsPanel({ data, clientId, mode }: { data: PollingQ
                   {qs.map((q, i) => (
                     <div key={i} style={{
                       padding: '8px 12px',
-                      background: q.source === 'custom' ? 'rgba(159,81,182,0.04)' : 'rgba(106,126,138,0.04)',
+                      background: q.source === 'custom' ? 'rgba(224, 142, 121,0.04)' : 'rgba(106,126,138,0.04)',
                       border: `1px solid ${q.source === 'custom' ? S.inProgress.border : C.border}`,
                       borderRadius: 6,
                       fontSize: 12,
@@ -202,7 +202,7 @@ export function PollingQuestionsPanel({ data, clientId, mode }: { data: PollingQ
                     }}>
                       <span style={{ flex: 1 }}>{q.text}</span>
                       {q.source === 'custom' && (
-                        <span style={{ fontSize: 9, fontWeight: 600, color: C.accent, background: 'rgba(159,81,182,0.1)', border: `1px solid ${S.inProgress.border}`, borderRadius: 4, padding: '1px 6px', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', alignSelf: 'flex-start' }}>
+                        <span style={{ fontSize: 9, fontWeight: 600, color: C.accent, background: 'rgba(224, 142, 121,0.1)', border: `1px solid ${S.inProgress.border}`, borderRadius: 4, padding: '1px 6px', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', alignSelf: 'flex-start' }}>
                           Egen
                         </span>
                       )}
@@ -222,7 +222,7 @@ export function PollingQuestionsPanel({ data, clientId, mode }: { data: PollingQ
                 href={editorUrl}
                 style={{
                   padding: '6px 14px', fontSize: 11, fontWeight: 600,
-                  color: C.accent, background: 'rgba(159,81,182,0.08)',
+                  color: C.accent, background: 'rgba(224, 142, 121,0.08)',
                   border: `1px solid ${S.inProgress.border}`, borderRadius: 6,
                   textDecoration: 'none', letterSpacing: '0.02em',
                   display: 'inline-flex', alignItems: 'center', gap: 4,

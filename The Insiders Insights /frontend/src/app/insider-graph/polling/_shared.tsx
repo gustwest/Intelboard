@@ -621,10 +621,10 @@ export const PERSONAS: Persona[] = ['customer', 'talent', 'investor'];
 export const S = {
   open: { fg: '#b91c1c', bg: 'rgba(239,68,68,0.10)', border: 'rgba(239,68,68,0.28)' },
   waiting: { fg: '#b45309', bg: 'rgba(245,158,11,0.10)', border: 'rgba(245,158,11,0.28)' },
-  inProgress: { fg: C.accent, bg: 'rgba(159,81,182,0.10)', border: 'rgba(159,81,182,0.28)' },
+  inProgress: { fg: C.accent, bg: 'rgba(224, 142, 121,0.10)', border: 'rgba(224, 142, 121,0.28)' },
   resolved: { fg: '#16a34a', bg: 'rgba(22,163,74,0.08)', border: 'rgba(22,163,74,0.25)' },
   info: { fg: '#0e7490', bg: 'rgba(14,116,144,0.08)', border: 'rgba(14,116,144,0.25)' },
-  neutral: { fg: '#6a7e8a', bg: 'rgba(106,126,138,0.10)', border: 'rgba(106,126,138,0.22)' },
+  neutral: { fg: '#6b6e7e', bg: 'rgba(106,126,138,0.10)', border: 'rgba(106,126,138,0.22)' },
 };
 
 export const SEVERITY: Record<string, { label: string; color: string; bg: string }> = {
@@ -650,11 +650,11 @@ export const RECIPE_STATUS_LABEL: Record<RecipeStatus, string> = {
 
 export function recipeStatusColor(status: RecipeStatus): [string, string] {
   switch (status) {
-    case 'pending':   return [C.accent, 'rgba(159,81,182,0.12)'];  // lila — väntar handling
+    case 'pending':   return [C.accent, 'rgba(224, 142, 121,0.12)'];  // lila — väntar handling
     case 'agreed':    return ['#0e7490', 'rgba(14,116,144,0.12)'];  // blå — i loopen
     case 'acted':     return ['#b45309', 'rgba(245,158,11,0.14)'];  // gul — mäts nu
     case 'verified':  return ['#16a34a', 'rgba(22,163,74,0.12)'];   // grön — loopen stängd
-    case 'dismissed': return ['#6a7e8a', 'rgba(106,126,138,0.12)']; // grå — terminal
+    case 'dismissed': return ['#6b6e7e', 'rgba(106,126,138,0.12)']; // grå — terminal
   }
 }
 
@@ -828,7 +828,7 @@ export function buildLifecycleEvents(row: RiskTimelineRow): { label: string; dat
     out.push({
       label: row.action_taken === 'reinforced_claim' ? 'Korrigerad' : row.status === 'dismissed' ? 'Avfärdad' : 'Åtgärdad',
       date: fmtDate(row.action_at),
-      color: row.status === 'dismissed' ? '#6a7e8a' : C.accent,
+      color: row.status === 'dismissed' ? '#6b6e7e' : C.accent,
     });
   }
   if (row.resolved_at) {
@@ -898,7 +898,7 @@ export const engineGrid: React.CSSProperties = {
 
 export const selectStyle: React.CSSProperties = {
   padding: '8px 12px',
-  background: '#eef0f1',
+  background: '#eceae3',
   color: C.text,
   border: `1px solid ${C.border}`,
   borderRadius: 8,

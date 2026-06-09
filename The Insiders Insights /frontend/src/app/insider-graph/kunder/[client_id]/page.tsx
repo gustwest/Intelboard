@@ -434,7 +434,7 @@ function ConfirmDeleteModal({
           value={typed}
           onChange={(e) => setTyped(e.target.value)}
           autoFocus
-          style={{ display: 'block', width: '100%', padding: '8px 12px', background: '#eef0f1', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, outline: 'none', marginBottom: 16 }}
+          style={{ display: 'block', width: '100%', padding: '8px 12px', background: '#eceae3', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, outline: 'none', marginBottom: 16 }}
         />
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button

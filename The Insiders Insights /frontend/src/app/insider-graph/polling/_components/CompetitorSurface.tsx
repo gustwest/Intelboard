@@ -52,8 +52,8 @@ export function CompetitorSurface({ weeks }: { weeks: PollingWeek[] }) {
                 padding: '6px 14px', fontSize: 12, fontWeight: 600, borderRadius: 8,
                 cursor: disabled ? 'default' : 'pointer',
                 color: on ? C.accent : disabled ? C.dim : C.text,
-                background: on ? 'rgba(159,81,182,0.08)' : 'transparent',
-                border: `1px solid ${on ? 'rgba(159,81,182,0.4)' : C.border}`,
+                background: on ? 'rgba(224, 142, 121,0.08)' : 'transparent',
+                border: `1px solid ${on ? 'rgba(224, 142, 121,0.4)' : C.border}`,
                 opacity: disabled ? 0.5 : 1,
               }}
             >
@@ -103,7 +103,7 @@ export function CompetitorSurface({ weeks }: { weeks: PollingWeek[] }) {
 const TREND_VIS: Record<CompetitorTrend, { arrow: string; color: string }> = {
   up: { arrow: '▲', color: '#16a34a' },
   down: { arrow: '▼', color: '#b91c1c' },
-  flat: { arrow: '→', color: '#6a7e8a' },
+  flat: { arrow: '→', color: '#6b6e7e' },
 };
 
 function LeaderRow({ name, share, series, trend, weeksPresent, highlight }: {
@@ -111,7 +111,7 @@ function LeaderRow({ name, share, series, trend, weeksPresent, highlight }: {
 }) {
   const t = TREND_VIS[trend];
   const pctVal = Math.max(0, Math.min(1, share)) * 100;
-  const barColor = highlight ? C.accent : '#6a7e8a';
+  const barColor = highlight ? C.accent : '#6b6e7e';
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr 70px 90px', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${C.border}`, fontSize: 12 }}>
       <span style={{ color: highlight ? C.accent : C.text, fontWeight: highlight ? 600 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -170,7 +170,7 @@ function Row({ name, catKeys, shares }: { name: string; catKeys: string[]; share
         return (
           <div key={cat} title={`${CATEGORY_SV[cat] || cat}: ${Math.round(s * 100)}%`}
             style={{ height: 26, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: s > 0 ? `rgba(159,81,182,${Math.min(0.85, 0.12 + s * 0.7)})` : 'rgba(106,126,138,0.06)',
+              background: s > 0 ? `rgba(224, 142, 121,${Math.min(0.85, 0.12 + s * 0.7)})` : 'rgba(106,126,138,0.06)',
               color: s > 0.4 ? '#fff' : C.muted, fontSize: 10, fontFamily: 'ui-monospace, monospace' }}>
             {s > 0 ? `${Math.round(s * 100)}` : ''}
           </div>

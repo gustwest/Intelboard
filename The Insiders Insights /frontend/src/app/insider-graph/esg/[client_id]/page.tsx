@@ -299,9 +299,9 @@ function Action({ label, loading, onClick, subtle }: { label: string; loading: b
       disabled={loading}
       style={{
         padding: '7px 12px',
-        background: subtle ? 'transparent' : 'rgba(159,81,182,0.12)',
+        background: subtle ? 'transparent' : 'rgba(224, 142, 121,0.12)',
         color: subtle ? C.muted : C.accent,
-        border: `1px solid ${subtle ? C.border : 'rgba(159,81,182,0.4)'}`,
+        border: `1px solid ${subtle ? C.border : 'rgba(224, 142, 121,0.4)'}`,
         borderRadius: 8,
         fontSize: 12,
         fontWeight: 600,
@@ -382,7 +382,7 @@ function FindingRow({ f, onRespond }: { f: Finding; onRespond: () => void }) {
       )}
       <button
         onClick={onRespond}
-        style={{ padding: '6px 12px', background: 'rgba(159,81,182,0.12)', color: C.accent, border: '1px solid rgba(159,81,182,0.4)', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+        style={{ padding: '6px 12px', background: 'rgba(224, 142, 121,0.12)', color: C.accent, border: '1px solid rgba(224, 142, 121,0.4)', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
       >
         Borde svaret varit annorlunda? [Ja, vi har/gör detta]
       </button>
@@ -547,7 +547,7 @@ function MetricsFormModal({ clientId, finding, onClose, onSubmitted }: { clientI
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
           <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Avbryt</button>
-          <button onClick={submit} disabled={submitting} style={{ padding: '8px 14px', background: 'rgba(159,81,182,0.85)', color: '#fff', border: '1px solid rgba(159,81,182,0.6)', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: submitting ? 'wait' : 'pointer' }}>
+          <button onClick={submit} disabled={submitting} style={{ padding: '8px 14px', background: 'rgba(224, 142, 121,0.85)', color: '#fff', border: '1px solid rgba(224, 142, 121,0.6)', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: submitting ? 'wait' : 'pointer' }}>
             {submitting ? 'Skickar…' : 'Skicka in'}
           </button>
         </div>
@@ -589,7 +589,7 @@ function Checkbox({ label, checked, onChange }: { label: string; checked: boolea
 }
 function Toggle({ label, on, onClick }: { label: string; on: boolean; onClick: () => void }) {
   return (
-    <button onClick={onClick} style={{ width: '100%', textAlign: 'left', padding: '8px 12px', marginBottom: 12, background: on ? 'rgba(159,81,182,0.08)' : 'transparent', color: on ? C.accent : C.muted, border: `1px dashed ${on ? 'rgba(159,81,182,0.4)' : C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+    <button onClick={onClick} style={{ width: '100%', textAlign: 'left', padding: '8px 12px', marginBottom: 12, background: on ? 'rgba(224, 142, 121,0.08)' : 'transparent', color: on ? C.accent : C.muted, border: `1px dashed ${on ? 'rgba(224, 142, 121,0.4)' : C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
       {on ? '− ' : '+ '}{label}
     </button>
   );

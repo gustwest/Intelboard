@@ -160,7 +160,7 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
     }
   }
 
-  const inp: React.CSSProperties = { padding: '8px 12px', background: '#eef0f1', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none' };
+  const inp: React.CSSProperties = { padding: '8px 12px', background: '#eceae3', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none' };
 
   const missingAudiences = ORDER.filter((t) => !priorities.some((p) => p.audience_type === t));
 
@@ -200,7 +200,7 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
             {derivedPreview && msg.tone === 'info' && (
               <button
                 onClick={applyDerived}
-                style={{ padding: '4px 10px', background: 'rgba(159,81,182,0.18)', color: C.accent, border: '1px solid rgba(159,81,182,0.4)', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                style={{ padding: '4px 10px', background: 'rgba(224, 142, 121,0.18)', color: C.accent, border: '1px solid rgba(224, 142, 121,0.4)', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
               >
                 Använd förslag
               </button>

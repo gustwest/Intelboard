@@ -80,7 +80,7 @@ function renderMarkdown(text: string) {
     return s
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.+?)\*/g, '<em>$1</em>')
-      .replace(/`(.+?)`/g, '<code style="background:rgba(0,212,255,0.15);padding:1px 5px;border-radius:4px;font-size:0.75rem">$1</code>');
+      .replace(/`(.+?)`/g, '<code style="background:rgba(224, 142, 121,0.15);padding:1px 5px;border-radius:4px;font-size:0.75rem">$1</code>');
   };
 
   for (let i = 0; i < lines.length; i++) {
@@ -321,7 +321,7 @@ export default function AIAssistant() {
     card: 'var(--brand-surface)',
     border: 'rgba(255,255,255,0.06)',
     accent: 'var(--brand-accent)',
-    accentGlow: 'rgba(0,212,255,0.4)',
+    accentGlow: 'rgba(224, 142, 121,0.4)',
     text: '#e2e8f0',
     dim: 'rgba(255,255,255,0.3)',
   };
@@ -339,7 +339,7 @@ export default function AIAssistant() {
             background: 'linear-gradient(135deg, var(--brand-accent) 0%, #7c3aed 50%, #4f46e5 100%)',
             border: 'none', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: `0 4px 30px ${C.accentGlow}, 0 0 60px rgba(0,212,255,0.15)`,
+            boxShadow: `0 4px 30px ${C.accentGlow}, 0 0 60px rgba(224, 142, 121,0.15)`,
             zIndex: 100000, transition: 'all 0.3s ease',
             fontSize: '1.5rem', color: '#fff',
             animation: 'ai-pulse 3s ease-in-out infinite',
@@ -357,8 +357,8 @@ export default function AIAssistant() {
         </button>
         <style>{`
           @keyframes ai-pulse {
-            0%, 100% { box-shadow: 0 4px 30px ${C.accentGlow}, 0 0 60px rgba(0,212,255,0.1); }
-            50% { box-shadow: 0 4px 30px ${C.accentGlow}, 0 0 80px rgba(0,212,255,0.25); }
+            0%, 100% { box-shadow: 0 4px 30px ${C.accentGlow}, 0 0 60px rgba(224, 142, 121,0.1); }
+            50% { box-shadow: 0 4px 30px ${C.accentGlow}, 0 0 80px rgba(224, 142, 121,0.25); }
           }
         `}</style>
       </div>
@@ -396,7 +396,7 @@ export default function AIAssistant() {
         display: 'flex', flexDirection: 'column',
         background: C.card,
         border: isDragging ? `2px dashed ${C.accent}` : `1px solid ${C.border}`,
-        boxShadow: `0 20px 80px rgba(0,0,0,0.6), 0 0 40px rgba(0,212,255,0.1)`,
+        boxShadow: `0 20px 80px rgba(0,0,0,0.6), 0 0 40px rgba(224, 142, 121,0.1)`,
         zIndex: 100000,
         fontFamily: 'var(--font-inter-tight), system-ui, sans-serif',
         transition: 'border 0.2s ease',
@@ -404,7 +404,7 @@ export default function AIAssistant() {
         {/* Header */}
         <div style={{
           padding: '14px 18px',
-          background: 'linear-gradient(135deg, rgba(0,212,255,0.12) 0%, rgba(79,70,229,0.08) 100%)',
+          background: 'linear-gradient(135deg, rgba(224, 142, 121,0.12) 0%, rgba(79,70,229,0.08) 100%)',
           borderBottom: `1px solid ${C.border}`,
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
@@ -414,7 +414,7 @@ export default function AIAssistant() {
               background: 'linear-gradient(135deg, var(--brand-accent), #7c3aed)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: '#fff',
-              boxShadow: '0 2px 12px rgba(0,212,255,0.3)',
+              boxShadow: '0 2px 12px rgba(224, 142, 121,0.3)',
             }}>
               <Bot size={20} />
             </div>
@@ -463,9 +463,9 @@ export default function AIAssistant() {
               <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'center' }}>
                 <div style={{
                   width: '56px', height: '56px', borderRadius: '16px',
-                  background: 'linear-gradient(135deg, rgba(0,212,255,0.1), rgba(124,58,237,0.1))',
+                  background: 'linear-gradient(135deg, rgba(224, 142, 121,0.1), rgba(124,58,237,0.1))',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  border: `1px solid rgba(0,212,255,0.2)`,
+                  border: `1px solid rgba(224, 142, 121,0.2)`,
                 }}>
                   <Bot size={32} className="brand-text-accent" />
                 </div>
@@ -497,8 +497,8 @@ export default function AIAssistant() {
                       fontFamily: 'inherit',
                     }}
                     onMouseEnter={e => {
-                      (e.target as HTMLElement).style.background = 'rgba(0,212,255,0.08)';
-                      (e.target as HTMLElement).style.borderColor = 'rgba(0,212,255,0.2)';
+                      (e.target as HTMLElement).style.background = 'rgba(224, 142, 121,0.08)';
+                      (e.target as HTMLElement).style.borderColor = 'rgba(224, 142, 121,0.2)';
                     }}
                     onMouseLeave={e => {
                       (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.02)';
@@ -525,10 +525,10 @@ export default function AIAssistant() {
                 padding: msg.role === 'user' ? '10px 14px' : '12px 16px',
                 borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
                 background: msg.role === 'user'
-                  ? 'linear-gradient(135deg, rgba(0,212,255,0.25), rgba(124,58,237,0.2))'
+                  ? 'linear-gradient(135deg, rgba(224, 142, 121,0.25), rgba(124,58,237,0.2))'
                   : 'rgba(255,255,255,0.03)',
                 border: msg.role === 'user'
-                  ? '1px solid rgba(0,212,255,0.2)'
+                  ? '1px solid rgba(224, 142, 121,0.2)'
                   : `1px solid ${C.border}`,
               }}>
                 {msg.role === 'assistant' ? (
@@ -538,7 +538,7 @@ export default function AIAssistant() {
                     {msg.insightContext && (
                       <div style={{
                         fontSize: '0.6875rem', color: 'rgba(255,255,255,0.55)',
-                        borderLeft: '2px solid rgba(0,212,255,0.4)',
+                        borderLeft: '2px solid rgba(224, 142, 121,0.4)',
                         paddingLeft: '8px', marginBottom: '6px',
                         fontStyle: 'italic', lineHeight: 1.4,
                       }}>
@@ -607,8 +607,8 @@ export default function AIAssistant() {
           {pinnedInsight && (
             <div style={{
               display: 'flex', alignItems: 'flex-start', gap: '8px',
-              padding: '10px 12px', background: 'rgba(0,212,255,0.06)',
-              border: '1px solid rgba(0,212,255,0.18)', borderRadius: '12px',
+              padding: '10px 12px', background: 'rgba(224, 142, 121,0.06)',
+              border: '1px solid rgba(224, 142, 121,0.18)', borderRadius: '12px',
               marginBottom: '8px', fontSize: '0.75rem',
             }}>
               <span style={{ color: C.accent, fontWeight: 600, flexShrink: 0 }}>✨</span>
@@ -632,8 +632,8 @@ export default function AIAssistant() {
           {pendingFile && (
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '4px 10px', background: 'rgba(0,212,255,0.1)',
-              border: `1px solid rgba(0,212,255,0.2)`, borderRadius: '12px',
+              padding: '4px 10px', background: 'rgba(224, 142, 121,0.1)',
+              border: `1px solid rgba(224, 142, 121,0.2)`, borderRadius: '12px',
               marginBottom: '8px', fontSize: '0.75rem', color: C.accent,
             }}>
               <Paperclip size={12} />
@@ -670,7 +670,7 @@ export default function AIAssistant() {
               }}
               onMouseEnter={e => {
                 (e.target as HTMLElement).style.color = C.accent;
-                (e.target as HTMLElement).style.background = 'rgba(0,212,255,0.1)';
+                (e.target as HTMLElement).style.background = 'rgba(224, 142, 121,0.1)';
               }}
               onMouseLeave={e => {
                 (e.target as HTMLElement).style.color = C.dim;
@@ -701,7 +701,7 @@ export default function AIAssistant() {
                 lineHeight: 1.5, maxHeight: '80px',
                 transition: 'border-color 0.15s',
               }}
-              onFocus={e => (e.target as HTMLElement).style.borderColor = 'rgba(0,212,255,0.3)'}
+              onFocus={e => (e.target as HTMLElement).style.borderColor = 'rgba(224, 142, 121,0.3)'}
               onBlur={e => (e.target as HTMLElement).style.borderColor = C.border}
             />
             <button
@@ -718,7 +718,7 @@ export default function AIAssistant() {
                 color: '#fff',
                 transition: 'all 0.2s',
                 opacity: !input.trim() || isLoading ? 0.4 : 1,
-                boxShadow: input.trim() ? '0 2px 12px rgba(0,212,255,0.3)' : 'none',
+                boxShadow: input.trim() ? '0 2px 12px rgba(224, 142, 121,0.3)' : 'none',
               }}
             >
               <Send size={16} />

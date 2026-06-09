@@ -33,7 +33,7 @@ export function SectionHead({ title, hint, collapsible, open, onToggle, badge }:
 export function StageScale({ score, ceiling }: { score: number; ceiling: number }) {
   return (
     <div style={{ marginTop: 8 }}>
-      <div style={{ position: 'relative', height: 8, background: '#eef0f1', borderRadius: 5, overflow: 'hidden' }}>
+      <div style={{ position: 'relative', height: 8, background: '#eceae3', borderRadius: 5, overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, width: `${score}%`, background: C.accent, borderRadius: 5 }} />
         {/* Tak — markerar att 100 aldrig nås */}
         <div style={{ position: 'absolute', top: -2, bottom: -2, left: `${ceiling}%`, width: 2, background: C.dim }} title={`Tak ${ceiling}`} />

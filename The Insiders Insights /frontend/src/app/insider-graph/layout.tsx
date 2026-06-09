@@ -5,7 +5,7 @@ import { ReactNode } from 'react';
 // behind the page cards with the off-white background and slate base text.
 export default function InsiderGraphLayout({ children }: { children: ReactNode }) {
   return (
-    <div style={{ background: '#f9fafb', color: '#3a4b56', minHeight: '100%' }}>
+    <div style={{ background: '#f4f3ef', color: '#333649', minHeight: '100%' }}>
       {children}
     </div>
   );

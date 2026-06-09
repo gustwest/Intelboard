@@ -319,7 +319,7 @@ export function CategoryRow({ cat, row, competitors, clientSoV, trend }: {
 
 export function CompetitorBar({ name, share, mentions, highlight }: { name: string; share: number; mentions?: number; highlight?: boolean }) {
   const pctVal = Math.max(0, Math.min(1, share)) * 100;
-  const color = highlight ? C.accent : '#6a7e8a';
+  const color = highlight ? C.accent : '#6b6e7e';
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 60px', alignItems: 'center', gap: 10, fontSize: 12 }}>
       <span style={{ color: highlight ? C.accent : C.text, fontWeight: highlight ? 600 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

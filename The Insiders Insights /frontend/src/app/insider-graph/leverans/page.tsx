@@ -348,7 +348,7 @@ export default function LeveransPage() {
           <button
             onClick={sendKit}
             disabled={!selected || kitBusy !== null}
-            style={{ ...btnStyle, background: 'rgba(159,81,182,0.18)', color: C.accent, border: `1px solid rgba(159,81,182,0.3)` }}
+            style={{ ...btnStyle, background: 'rgba(224, 142, 121,0.18)', color: C.accent, border: `1px solid rgba(224, 142, 121,0.3)` }}
           >
             <Send size={14} /> {kitBusy === 'send' ? 'Skickar…' : 'Skicka installationskit'}
           </button>
@@ -561,9 +561,9 @@ function CopyBtn({ label, copied, onClick }: { label: string; copied: boolean; o
         alignItems: 'center',
         gap: 6,
         padding: '6px 12px',
-        background: copied ? 'rgba(34,197,94,0.15)' : 'rgba(159,81,182,0.18)',
+        background: copied ? 'rgba(34,197,94,0.15)' : 'rgba(224, 142, 121,0.18)',
         color: copied ? '#16a34a' : C.accent,
-        border: `1px solid ${copied ? 'rgba(34,197,94,0.3)' : 'rgba(159,81,182,0.3)'}`,
+        border: `1px solid ${copied ? 'rgba(34,197,94,0.3)' : 'rgba(224, 142, 121,0.3)'}`,
         borderRadius: 6,
         fontSize: 12,
         fontWeight: 600,
@@ -579,7 +579,7 @@ function CopyBtn({ label, copied, onClick }: { label: string; copied: boolean; o
 
 const selectStyle: React.CSSProperties = {
   padding: '8px 12px',
-  background: '#eef0f1',
+  background: '#eceae3',
   color: C.text,
   border: `1px solid ${C.border}`,
   borderRadius: 8,
@@ -599,7 +599,7 @@ const codeStyle: React.CSSProperties = {
 };
 
 const preStyle: React.CSSProperties = {
-  background: '#eef0f1',
+  background: '#eceae3',
   border: `1px solid ${C.border}`,
   borderRadius: 8,
   padding: '14px 18px',

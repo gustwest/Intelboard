@@ -22,7 +22,7 @@ const actionMeta: Record<ClaimAction, { label: string; color: string; bg: string
 };
 
 export function VerdictBadge({ verdict, size = 'md' }: { verdict: Verdict | string; size?: 'sm' | 'md' }) {
-  const meta = verdictMeta[verdict as Verdict] || { label: verdict, color: '#6a7e8a', bg: 'transparent', border: C.border, icon: Sparkles };
+  const meta = verdictMeta[verdict as Verdict] || { label: verdict, color: '#6b6e7e', bg: 'transparent', border: C.border, icon: Sparkles };
   const Icon = meta.icon;
   const px = size === 'sm' ? 8 : 12;
   const py = size === 'sm' ? 3 : 5;
@@ -48,7 +48,7 @@ export function ScoreBadge({ score, size = 'md' }: { score: number; size?: 'sm' 
 }
 
 export function ActionPill({ action }: { action: ClaimAction | string }) {
-  const meta = actionMeta[action as ClaimAction] || { label: action, color: '#6a7e8a', bg: 'transparent', icon: Sparkles };
+  const meta = actionMeta[action as ClaimAction] || { label: action, color: '#6b6e7e', bg: 'transparent', icon: Sparkles };
   const Icon = meta.icon;
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', background: meta.bg, color: meta.color, borderRadius: 999, fontSize: 10, fontWeight: 600 }}>
@@ -64,12 +64,12 @@ const flagColor: Record<string, string> = {
   missing_persona: '#d97706',
   low_authority_density: '#d97706',
   volume_too_high: '#d97706',
-  no_audience_target: '#6a7e8a',
+  no_audience_target: '#6b6e7e',
   schema_slot_mismatch: '#ef4444',
 };
 
 export function BundleFlagChip({ flag }: { flag: BundleFlag }) {
-  const color = flagColor[flag.type] || '#6a7e8a';
+  const color = flagColor[flag.type] || '#6b6e7e';
   return (
     <span title={flag.detail || flag.type} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px', background: `${color}1f`, color, border: `1px solid ${color}55`, borderRadius: 999, fontSize: 11, fontWeight: 600 }}>
       <AlertCircle size={11} /> {flag.detail || flag.type}
@@ -79,10 +79,10 @@ export function BundleFlagChip({ flag }: { flag: BundleFlag }) {
 
 export function AudiencePill({ audience }: { audience: string | null | undefined }) {
   if (!audience || audience === 'none') {
-    return <span style={{ color: '#6a7e8a', fontSize: 10 }}>—</span>;
+    return <span style={{ color: '#6b6e7e', fontSize: 10 }}>—</span>;
   }
   const map: Record<string, { label: string; color: string; bg: string }> = {
-    customer: { label: '🛒 customer', color: C.accent, bg: 'rgba(159,81,182,0.14)' },
+    customer: { label: '🛒 customer', color: C.accent, bg: 'rgba(224, 142, 121,0.14)' },
     talent: { label: '🎯 talent', color: '#0ea5e9', bg: 'rgba(14,165,233,0.14)' },
     investor: { label: '💰 investor', color: '#16a34a', bg: 'rgba(34,197,94,0.14)' },
   };
@@ -97,7 +97,7 @@ export function AudiencePill({ audience }: { audience: string | null | undefined
 export function HintChip({ hint }: { hint: string | null | undefined }) {
   if (!hint) return null;
   return (
-    <span style={{ display: 'inline-block', padding: '2px 7px', background: '#eef0f1', color: C.text, borderRadius: 4, fontFamily: 'ui-monospace, monospace', fontSize: 10 }}>
+    <span style={{ display: 'inline-block', padding: '2px 7px', background: '#eceae3', color: C.text, borderRadius: 4, fontFamily: 'ui-monospace, monospace', fontSize: 10 }}>
       {hint}
     </span>
   );
@@ -112,7 +112,7 @@ export function ShadowGateBadge({ source }: { source: string | null | undefined 
     );
   }
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', background: '#eef0f1', color: '#6a7e8a', borderRadius: 4, fontSize: 10 }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', background: '#eceae3', color: '#6b6e7e', borderRadius: 4, fontSize: 10 }}>
       shadow
     </span>
   );

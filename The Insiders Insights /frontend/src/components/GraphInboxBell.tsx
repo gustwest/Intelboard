@@ -39,7 +39,7 @@ type Queue = {
 };
 
 const QUEUES: Queue[] = [
-  { label: 'Claims att granska', keys: ['claims'], href: '/insider-graph/review?tab=claims', icon: Quote, color: '#9f51b6' },
+  { label: 'Claims att granska', keys: ['claims'], href: '/insider-graph/review?tab=claims', icon: Quote, color: '#c26a52' },
   { label: 'Inkommande att granska', keys: ['items'], href: '/insider-graph/review?tab=items', icon: Inbox, color: '#3b82f6' },
   { label: 'LinkedIn att verifiera', keys: ['linkedin'], href: '/insider-graph/review?tab=linkedin', icon: Network, color: '#0ea5e9' },
   { label: 'Risk att åtgärda', keys: ['risk_findings', 'risk_questions'], href: '/insider-graph/polling', icon: Radar, color: '#f59e0b' },
@@ -122,7 +122,7 @@ export default function GraphInboxBell() {
               minWidth: '16px',
               height: '16px',
               padding: '0 4px',
-              background: '#9f51b6',
+              background: '#c26a52',
               color: '#fff',
               borderRadius: '8px',
               fontSize: '0.625rem',
@@ -255,7 +255,7 @@ const rowStyle: React.CSSProperties = {
 const countPill: React.CSSProperties = {
   minWidth: '20px',
   padding: '1px 7px',
-  background: 'rgba(159, 81, 182, 0.18)',
+  background: 'rgba(224, 142, 121, 0.18)',
   color: '#c98fdb',
   borderRadius: '10px',
   fontSize: '0.6875rem',

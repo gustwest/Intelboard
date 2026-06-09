@@ -95,7 +95,7 @@ export default function ESGAddon({ clientId }: { clientId: string }) {
           </div>
           <Link
             href={`/insider-graph/esg/${clientId}`}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: 'rgba(159,81,182,0.12)', color: C.accent, border: '1px solid rgba(159,81,182,0.4)', borderRadius: 8, fontSize: 12, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: 'rgba(224, 142, 121,0.12)', color: C.accent, border: '1px solid rgba(224, 142, 121,0.4)', borderRadius: 8, fontSize: 12, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}
           >
             Öppna ESG-arbetsytan <ArrowRight size={14} />
           </Link>

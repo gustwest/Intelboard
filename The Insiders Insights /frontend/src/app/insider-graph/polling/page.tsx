@@ -130,9 +130,9 @@ export default function GraphRiskLoopPage() {
         disabled={(opts?.needsClient && !selected) || st === 'running'}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px',
-          background: st === 'success' ? 'rgba(159,81,182,0.18)' : 'transparent',
+          background: st === 'success' ? 'rgba(224, 142, 121,0.18)' : 'transparent',
           color: st === 'success' ? C.accent : C.text,
-          border: `1px solid ${st === 'success' ? 'rgba(159,81,182,0.3)' : C.border}`,
+          border: `1px solid ${st === 'success' ? 'rgba(224, 142, 121,0.3)' : C.border}`,
           borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: st === 'running' ? 'wait' : 'pointer',
         }}
       >

@@ -87,7 +87,7 @@ export default function Header() {
                   alt=""
                   style={{
                     width: '36px', height: '36px', borderRadius: '50%',
-                    border: '2px solid rgba(0, 212, 255, 0.3)',
+                    border: '2px solid rgba(224, 142, 121, 0.3)',
                   }}
                   referrerPolicy="no-referrer"
                 />

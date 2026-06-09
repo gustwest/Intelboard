@@ -183,4 +183,4 @@ export default function ConnectorsEditor({ clientId }: { clientId: string }) {
 }
 
 // Behållen lokal stil för <select> och trash-knappen (ej UI.Input-mål).
-const inp: React.CSSProperties = { padding: '8px 12px', background: '#eef0f1', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none' };
+const inp: React.CSSProperties = { padding: '8px 12px', background: '#eceae3', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none' };

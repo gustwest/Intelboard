@@ -165,9 +165,9 @@ export default function GraphKunderPage() {
               alignItems: 'center',
               gap: 6,
               padding: '8px 14px',
-              background: 'rgba(159,81,182,0.18)',
+              background: 'rgba(224, 142, 121,0.18)',
               color: C.accent,
-              border: '1px solid rgba(159,81,182,0.3)',
+              border: '1px solid rgba(224, 142, 121,0.3)',
               borderRadius: 8,
               fontSize: 13,
               fontWeight: 600,
@@ -289,8 +289,8 @@ function ClientCard({ client, counts }: { client: Client; counts?: InboxCounts }
                 label={`${split.risk} risk`}
                 title="Åtgärda risk-findings/frågor under AI-synlighet"
                 color={C.accent}
-                bg="rgba(159,81,182,0.15)"
-                border="rgba(159,81,182,0.3)"
+                bg="rgba(224, 142, 121,0.15)"
+                border="rgba(224, 142, 121,0.3)"
                 onClick={(e) => go(e, `/insider-graph/polling?client=${encodeURIComponent(client.client_id)}`)}
               />
             )}
@@ -520,7 +520,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
                     style={{
                       width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 11, fontWeight: 700, flexShrink: 0,
-                      background: s.done ? '#22c55e' : '#eef0f1',
+                      background: s.done ? '#22c55e' : '#eceae3',
                       color: s.done ? '#fff' : C.muted,
                       border: s.done ? 'none' : `1px solid ${C.border}`,
                     }}
@@ -543,7 +543,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div style={{ marginBottom: 18 }}>
-          <label style={{ fontSize: 11, color: '#6a7e8a', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          <label style={{ fontSize: 11, color: '#6b6e7e', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
             Hosting-tier
           </label>
           <UI.SegmentedToggle
@@ -648,9 +648,9 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
             disabled={submitting}
             style={{
               padding: '9px 16px',
-              background: 'rgba(159,81,182,0.25)',
+              background: 'rgba(224, 142, 121,0.25)',
               color: C.accent,
-              border: '1px solid rgba(159,81,182,0.5)',
+              border: '1px solid rgba(224, 142, 121,0.5)',
               borderRadius: 8,
               fontSize: 13,
               fontWeight: 600,
@@ -687,10 +687,10 @@ function ConnectorCard({
   return (
     <div
       style={{
-        border: `1px solid ${active ? 'rgba(159,81,182,0.4)' : C.border}`,
+        border: `1px solid ${active ? 'rgba(224, 142, 121,0.4)' : C.border}`,
         borderRadius: 10,
         padding: '12px 14px',
-        background: active ? 'rgba(159,81,182,0.05)' : 'transparent',
+        background: active ? 'rgba(224, 142, 121,0.05)' : 'transparent',
       }}
     >
       <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
@@ -765,7 +765,7 @@ function RssFeedEditor({
   }
   return (
     <div>
-      <label style={{ fontSize: 11, color: '#6a7e8a', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+      <label style={{ fontSize: 11, color: '#6b6e7e', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
         RSS-feeds *
       </label>
       {help && <div style={{ fontSize: 11, color: C.muted, margin: '3px 0 8px' }}>{help}</div>}
@@ -815,7 +815,7 @@ function RssFeedEditor({
 const selectStyle: React.CSSProperties = {
   width: '100%',
   padding: '8px 8px',
-  background: '#eef0f1',
+  background: '#eceae3',
   color: C.text,
   border: `1px solid ${C.border}`,
   borderRadius: 6,
@@ -832,7 +832,7 @@ function RowInput({ value, onChange, placeholder }: { value: string; onChange: (
       style={{
         width: '100%',
         padding: '8px 10px',
-        background: '#eef0f1',
+        background: '#eceae3',
         color: C.text,
         border: `1px solid ${C.border}`,
         borderRadius: 6,
@@ -845,7 +845,7 @@ function RowInput({ value, onChange, placeholder }: { value: string; onChange: (
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ fontSize: 11, color: '#6a7e8a', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+    <div style={{ fontSize: 11, color: '#6b6e7e', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
       {children}
     </div>
   );
@@ -860,7 +860,7 @@ function slugify(v: string): string {
 function Field({ label, value, onChange, placeholder, required, hint }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; required?: boolean; hint?: string }) {
   return (
     <div>
-      <label style={{ fontSize: 11, color: '#6a7e8a', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+      <label style={{ fontSize: 11, color: '#6b6e7e', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
         {label}{required && <span style={{ color: '#dc2626', marginLeft: 3 }}>*</span>}
       </label>
       <input
@@ -872,7 +872,7 @@ function Field({ label, value, onChange, placeholder, required, hint }: { label:
           width: '100%',
           marginTop: 4,
           padding: '8px 12px',
-          background: '#eef0f1',
+          background: '#eceae3',
           color: C.text,
           border: `1px solid ${C.border}`,
           borderRadius: 6,
@@ -880,7 +880,7 @@ function Field({ label, value, onChange, placeholder, required, hint }: { label:
           outline: 'none',
         }}
       />
-      {hint && <div style={{ fontSize: 10, color: '#9aa8b1', marginTop: 3 }}>{hint}</div>}
+      {hint && <div style={{ fontSize: 10, color: '#9a9aa6', marginTop: 3 }}>{hint}</div>}
     </div>
   );
 }
@@ -935,7 +935,7 @@ function LeiSearchField({
   const inputStyle: React.CSSProperties = {
     flex: 1,
     padding: '8px 12px',
-    background: '#eef0f1',
+    background: '#eceae3',
     color: C.text,
     border: `1px solid ${C.border}`,
     borderRadius: 6,
@@ -945,7 +945,7 @@ function LeiSearchField({
 
   return (
     <div>
-      <label style={{ fontSize: 11, color: '#6a7e8a', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+      <label style={{ fontSize: 11, color: '#6b6e7e', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
         {label}
       </label>
       {help && <div style={{ fontSize: 11, color: C.muted, margin: '3px 0 6px' }}>{help}</div>}
@@ -1021,7 +1021,7 @@ function LeiSearchField({
                 width: '100%',
                 textAlign: 'left',
                 padding: '8px 10px',
-                background: value === h.lei ? 'rgba(159,81,182,0.08)' : 'transparent',
+                background: value === h.lei ? 'rgba(224, 142, 121,0.08)' : 'transparent',
                 border: 'none',
                 borderBottom: `1px solid ${C.border}`,
                 cursor: 'pointer',

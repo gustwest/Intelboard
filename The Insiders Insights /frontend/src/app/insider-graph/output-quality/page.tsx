@@ -132,7 +132,7 @@ export default function OutputQualityPage() {
           <button
             onClick={saveTrust}
             disabled={savingTrust}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', background: 'rgba(159,81,182,0.18)', color: C.accent, border: '1px solid rgba(159,81,182,0.4)', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: savingTrust ? 'wait' : 'pointer' }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', background: 'rgba(224, 142, 121,0.18)', color: C.accent, border: '1px solid rgba(224, 142, 121,0.4)', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: savingTrust ? 'wait' : 'pointer' }}
           >
             {savingTrust ? 'Sparar…' : 'Spara trösklar'}
           </button>
@@ -144,7 +144,7 @@ export default function OutputQualityPage() {
       )}
 
       {/* Förklaring */}
-      <div style={{ background: 'rgba(159,81,182,0.06)', border: '1px solid rgba(159,81,182,0.18)', borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 12, color: C.text, lineHeight: 1.6 }}>
+      <div style={{ background: 'rgba(224, 142, 121,0.06)', border: '1px solid rgba(224, 142, 121,0.18)', borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 12, color: C.text, lineHeight: 1.6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, marginBottom: 4 }}>
           <Sparkles size={14} color={C.accent} /> Hur du läser tabellen
         </div>
@@ -152,7 +152,7 @@ export default function OutputQualityPage() {
         Connectors markerade <strong style={{ color: C.accent }}>promotion-kandidat</strong> har konsekvent låg poäng
         och tillräckligt med data för att flyttas från shadow till active gate.
         <strong> LinkedIn-demografi är redan i active gate</strong> sedan dag 1.
-        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(159,81,182,0.18)' }}>
+        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(224, 142, 121,0.18)' }}>
           <strong>Auto-godkänn ≥</strong> är källtillit: claims från connectorn med minst den säkerheten
           slipper granskningskön (Granska). Lägre = färre att granska men mer förlitan på connectorn.
           Tomt = standard ({trustDefault.toFixed(2)}). Golv {trustFloor.toFixed(2)}.
@@ -177,7 +177,7 @@ export default function OutputQualityPage() {
           <UI.Card padding="0" style={{ overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
-                <tr style={{ background: '#f1f3f5' }}>
+                <tr style={{ background: '#edebe4' }}>
                   <Th>Connector</Th>
                   <Th align="right">Snitt</Th>
                   <Th align="right">Claims</Th>
@@ -243,7 +243,7 @@ export default function OutputQualityPage() {
                         placeholder={trustDefault.toFixed(2)}
                         onChange={(e) => setThreshold(c.connector, e.target.value)}
                         aria-label={`Auto-godkänn-tröskel för ${c.connector}`}
-                        style={{ width: 60, padding: '4px 6px', fontSize: 12, textAlign: 'right', background: '#eef0f1', border: `1px solid ${C.border}`, borderRadius: 6, fontFamily: 'ui-monospace, monospace', color: C.text }}
+                        style={{ width: 60, padding: '4px 6px', fontSize: 12, textAlign: 'right', background: '#eceae3', border: `1px solid ${C.border}`, borderRadius: 6, fontFamily: 'ui-monospace, monospace', color: C.text }}
                       />
                     </Td>
                   </tr>
@@ -269,7 +269,7 @@ function ScoreBadge({ score }: { score: number }) {
 
 function Th({ children, align }: { children: React.ReactNode; align?: 'right' }) {
   return (
-    <th style={{ padding: '10px 12px', textAlign: align || 'left', fontSize: 10, fontWeight: 600, color: '#6a7e8a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+    <th style={{ padding: '10px 12px', textAlign: align || 'left', fontSize: 10, fontWeight: 600, color: '#6b6e7e', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
       {children}
     </th>
   );

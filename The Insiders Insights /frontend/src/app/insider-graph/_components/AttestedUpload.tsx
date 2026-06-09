@@ -201,7 +201,7 @@ function SourceUploader({ clientId, source, onDone }: { clientId: string; source
             <button
               onClick={includeInDelivery}
               disabled={including}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: 'rgba(159,81,182,0.18)', color: C.accent, border: '1px solid rgba(159,81,182,0.3)', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: including ? 'wait' : 'pointer' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: 'rgba(224, 142, 121,0.18)', color: C.accent, border: '1px solid rgba(224, 142, 121,0.3)', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: including ? 'wait' : 'pointer' }}
             >
               <CheckCircle2 size={12} /> {including ? 'Inkluderar…' : 'Inkludera i leverans'}
             </button>

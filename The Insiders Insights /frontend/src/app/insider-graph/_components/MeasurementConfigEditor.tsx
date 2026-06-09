@@ -105,7 +105,7 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
     }
   }
 
-  const inp: React.CSSProperties = { padding: '8px 12px', background: '#eef0f1', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none' };
+  const inp: React.CSSProperties = { padding: '8px 12px', background: '#eceae3', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none' };
 
   return (
     <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
@@ -158,7 +158,7 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
                 <button
                   key={p.id}
                   onClick={() => togglePersona(p.id)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 999, background: on ? 'rgba(159,81,182,0.16)' : 'transparent', color: on ? C.accent : C.muted, border: `1px solid ${on ? 'rgba(159,81,182,0.4)' : C.border}`, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 999, background: on ? 'rgba(224, 142, 121,0.16)' : 'transparent', color: on ? C.accent : C.muted, border: `1px solid ${on ? 'rgba(224, 142, 121,0.4)' : C.border}`, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
                 >
                   {on && <Check size={12} />} {p.label}
                 </button>

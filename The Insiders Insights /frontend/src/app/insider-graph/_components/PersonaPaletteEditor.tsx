@@ -141,7 +141,7 @@ export default function PersonaPaletteEditor({ clientId }: { clientId: string })
           const isExpanded = expanded === p.id;
           const disabled = !isActive && atCap;
           return (
-            <div key={p.id} style={{ border: `1px solid ${isActive ? 'rgba(159,81,182,0.35)' : C.border}`, borderRadius: 8, overflow: 'hidden', background: isActive ? 'rgba(159,81,182,0.04)' : '#fff' }}>
+            <div key={p.id} style={{ border: `1px solid ${isActive ? 'rgba(224, 142, 121,0.35)' : C.border}`, borderRadius: 8, overflow: 'hidden', background: isActive ? 'rgba(224, 142, 121,0.04)' : '#fff' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px' }}>
                 <button
                   onClick={() => toggle(p.id)}

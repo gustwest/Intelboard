@@ -129,7 +129,7 @@ export default function GraphConnectorsPage() {
               </span>
               <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                 {c.output_types.map((o) => (
-                  <span key={o} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, background: 'rgba(159,81,182,0.12)', color: C.accent, fontWeight: 500 }}>{o}</span>
+                  <span key={o} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, background: 'rgba(224, 142, 121,0.12)', color: C.accent, fontWeight: 500 }}>{o}</span>
                 ))}
               </span>
               <span style={{ textAlign: 'right', color: isLive ? C.text : C.dim, fontWeight: 600, fontSize: 12 }}>

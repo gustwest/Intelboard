@@ -17,7 +17,7 @@ export default function GraphPageShell({ title, icon, subtitle, badge, children 
         maxWidth: 1400,
         margin: '0 auto',
         padding: '24px 24px 60px',
-        color: '#3a4b56',
+        color: '#333649',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 28 }}>
@@ -26,8 +26,8 @@ export default function GraphPageShell({ title, icon, subtitle, badge, children 
             width: 44,
             height: 44,
             borderRadius: 11,
-            background: 'rgba(159,81,182,0.18)',
-            color: '#9f51b6',
+            background: 'rgba(224, 142, 121,0.18)',
+            color: '#c26a52',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -56,9 +56,9 @@ export default function GraphPageShell({ title, icon, subtitle, badge, children 
                   textTransform: 'uppercase',
                   padding: '3px 8px',
                   borderRadius: 4,
-                  background: 'rgba(159,81,182,0.15)',
-                  color: '#9f51b6',
-                  border: '1px solid rgba(159,81,182,0.3)',
+                  background: 'rgba(224, 142, 121,0.15)',
+                  color: '#c26a52',
+                  border: '1px solid rgba(224, 142, 121,0.3)',
                   fontWeight: 600,
                 }}
               >
@@ -67,7 +67,7 @@ export default function GraphPageShell({ title, icon, subtitle, badge, children 
             )}
           </div>
           {subtitle && (
-            <p style={{ fontSize: '0.8125rem', color: '#6a7e8a', margin: '4px 0 0' }}>
+            <p style={{ fontSize: '0.8125rem', color: '#6b6e7e', margin: '4px 0 0' }}>
               {subtitle}
             </p>
           )}
@@ -80,11 +80,11 @@ export default function GraphPageShell({ title, icon, subtitle, badge, children 
 
 export const graphColors = {
   card: '#ffffff',
-  border: '#dfe3e7',
-  accent: '#9f51b6',
-  muted: '#6a7e8a',
-  dim: '#9aa8b1',
-  text: '#3a4b56',
+  border: '#e3e0d8',
+  accent: '#c26a52',
+  muted: '#6b6e7e',
+  dim: '#9a9aa6',
+  text: '#333649',
 };
 
 // Semantiska statusfärger. Kanonisk källa — innan detta kodades samma fyra
@@ -105,10 +105,10 @@ export const statusColors: Record<'ok' | 'warn' | 'err' | 'info', StatusTone> = 
 
 // Yt-/neutralton-tokens utöver graphColors (som bara täcker kort/kant/text).
 export const surfaces = {
-  page: '#f9fafb',        // sektionens off-white bakgrund (se layout.tsx)
-  inputBg: '#eef0f1',     // fält-/select-/toggle-bakgrund (~20 hårdkodade idag)
-  tableHeaderBg: '#f1f3f5', // tabellhuvud
-  subtle: '#fafbfc',      // svag inre yta (rader, inre paneler)
+  page: '#f4f3ef',        // sektionens off-white bakgrund (se layout.tsx)
+  inputBg: '#eceae3',     // fält-/select-/toggle-bakgrund (~20 hårdkodade idag)
+  tableHeaderBg: '#edebe4', // tabellhuvud
+  subtle: '#fbfaf7',      // svag inre yta (rader, inre paneler)
 };
 
 export const fonts = {

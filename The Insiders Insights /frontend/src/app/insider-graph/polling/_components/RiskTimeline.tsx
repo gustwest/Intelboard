@@ -94,7 +94,7 @@ export function RiskFilterChip({ label, active, onClick, tone }: { label: string
       onClick={onClick}
       style={{
         padding: '5px 12px',
-        background: active ? tone?.bg || 'rgba(159,81,182,0.14)' : 'transparent',
+        background: active ? tone?.bg || 'rgba(224, 142, 121,0.14)' : 'transparent',
         color: active ? tone?.color || C.accent : C.muted,
         border: `1px solid ${active ? tone?.color || C.accent : C.border}`,
         borderRadius: 999,

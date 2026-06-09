@@ -552,7 +552,7 @@ export default function GraphReviewPage() {
                   boxSizing: 'border-box',
                   fontSize: 13,
                   color: C.text,
-                  background: '#eef0f1',
+                  background: '#eceae3',
                   border: `1px solid ${C.border}`,
                   borderRadius: 6,
                   padding: '10px 14px',
@@ -654,7 +654,7 @@ export default function GraphReviewPage() {
                     boxSizing: 'border-box',
                     fontSize: 13,
                     color: C.text,
-                    background: '#eef0f1',
+                    background: '#eceae3',
                     border: `1px solid ${C.border}`,
                     borderRadius: 6,
                     padding: '10px 14px',
@@ -751,7 +751,7 @@ function Empty({ hint }: { hint: string }) {
 
 function IconBox({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ width: 36, height: 36, borderRadius: 9, background: 'rgba(159,81,182,0.15)', color: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+    <div style={{ width: 36, height: 36, borderRadius: 9, background: 'rgba(224, 142, 121,0.15)', color: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
       {children}
     </div>
   );
@@ -773,7 +773,7 @@ function Actions({ confidence, busy, onApprove, onReject }: { confidence: number
 
 const selectStyle: React.CSSProperties = {
   padding: '8px 12px',
-  background: '#eef0f1',
+  background: '#eceae3',
   color: C.text,
   border: `1px solid ${C.border}`,
   borderRadius: 8,
@@ -784,7 +784,7 @@ const selectStyle: React.CSSProperties = {
 const contentStyle: React.CSSProperties = {
   fontSize: 12,
   color: C.text,
-  background: '#eef0f1',
+  background: '#eceae3',
   padding: '10px 14px',
   borderRadius: 6,
   lineHeight: 1.55,
