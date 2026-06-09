@@ -79,7 +79,7 @@ export default function ProductSwitcher() {
                 background: isActive
                   ? p.id === 'graph'
                     ? 'rgba(224, 142, 121, 0.18)'
-                    : 'rgba(224, 142, 121, 0.15)'
+                    : 'rgba(0, 212, 255, 0.15)'
                   : 'transparent',
                 transition: 'background 0.15s',
               }}

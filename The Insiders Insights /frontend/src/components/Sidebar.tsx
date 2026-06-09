@@ -163,7 +163,7 @@ export default function Sidebar() {
                     transition: 'all 0.2s ease',
                     color: isActive ? '#fff' : 'var(--brand-muted)',
                     background: isActive
-                      ? `linear-gradient(90deg, ${product === 'graph' ? 'rgba(224, 142, 121, 0.18)' : 'rgba(224, 142, 121, 0.15)'}, transparent)`
+                      ? `linear-gradient(90deg, ${product === 'graph' ? 'rgba(224, 142, 121, 0.18)' : 'rgba(0, 212, 255, 0.15)'}, transparent)`
                       : 'transparent',
                     borderLeft: isActive ? `3px solid ${productAccent}` : '3px solid transparent',
                   }}

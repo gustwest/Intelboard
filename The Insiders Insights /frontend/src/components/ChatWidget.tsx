@@ -356,7 +356,7 @@ export default function ChatWidget() {
             background: 'linear-gradient(135deg, var(--brand-accent), var(--brand-accent-hover))',
             border: 'none', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 24px rgba(224, 142, 121,0.4)',
+            boxShadow: '0 4px 24px rgba(0,212,255,0.4)',
             zIndex: 100000, transition: 'all 0.2s',
             fontSize: '1.375rem', color: '#fff',
           }}
@@ -447,7 +447,7 @@ export default function ChatWidget() {
                 >
                   <span style={{
                     width: '42px', height: '42px', borderRadius: '50%',
-                    background: 'rgba(224, 142, 121,0.15)',
+                    background: 'rgba(0,212,255,0.15)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: '1.25rem', flexShrink: 0,
                   }}>
@@ -520,7 +520,7 @@ export default function ChatWidget() {
                 style={{
                   width: '40px', height: '40px', borderRadius: '10px', fontSize: '1.125rem',
                   border: newGroupEmoji === e ? '2px solid var(--brand-accent)' : '1px solid rgba(255,255,255,0.06)',
-                  background: newGroupEmoji === e ? 'rgba(224, 142, 121,0.15)' : 'rgba(255,255,255,0.03)',
+                  background: newGroupEmoji === e ? 'rgba(0,212,255,0.15)' : 'rgba(255,255,255,0.03)',
                   cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}
               >
@@ -554,8 +554,8 @@ export default function ChatWidget() {
                   style={{
                     display: 'flex', alignItems: 'center', gap: '10px',
                     padding: '10px 14px', borderRadius: '12px',
-                    border: selected ? '1px solid rgba(224, 142, 121,0.3)' : '1px solid rgba(255,255,255,0.06)',
-                    background: selected ? 'rgba(224, 142, 121,0.12)' : 'rgba(255,255,255,0.03)',
+                    border: selected ? '1px solid rgba(0,212,255,0.3)' : '1px solid rgba(255,255,255,0.06)',
+                    background: selected ? 'rgba(0,212,255,0.12)' : 'rgba(255,255,255,0.03)',
                     cursor: 'pointer', color: '#e2e8f0', fontSize: '0.8125rem',
                     width: '100%', textAlign: 'left', fontFamily: 'inherit',
                   }}
@@ -652,9 +652,9 @@ export default function ChatWidget() {
                       padding: '8px 12px',
                       borderRadius: isMe ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
                       background: isMe
-                        ? 'linear-gradient(135deg, rgba(224, 142, 121,0.25), rgba(124,58,237,0.2))'
+                        ? 'linear-gradient(135deg, rgba(0,212,255,0.25), rgba(124,58,237,0.2))'
                         : 'rgba(255,255,255,0.05)',
-                      border: isMe ? '1px solid rgba(224, 142, 121,0.2)' : '1px solid rgba(255,255,255,0.04)',
+                      border: isMe ? '1px solid rgba(0,212,255,0.2)' : '1px solid rgba(255,255,255,0.04)',
                     }}>
                       {msg.body && (
                         <div style={{ fontSize: '0.8125rem', lineHeight: 1.5, color: '#e2e8f0', whiteSpace: 'pre-wrap' }}>
@@ -701,9 +701,9 @@ export default function ChatWidget() {
                             style={{
                               padding: '2px 6px', borderRadius: '10px', fontSize: '0.6875rem',
                               border: currentUser && users.includes(currentUser.name)
-                                ? '1px solid rgba(224, 142, 121,0.4)' : '1px solid rgba(255,255,255,0.08)',
+                                ? '1px solid rgba(0,212,255,0.4)' : '1px solid rgba(255,255,255,0.08)',
                               background: currentUser && users.includes(currentUser.name)
-                                ? 'rgba(224, 142, 121,0.15)' : 'rgba(255,255,255,0.04)',
+                                ? 'rgba(0,212,255,0.15)' : 'rgba(255,255,255,0.04)',
                               cursor: 'pointer', color: '#e2e8f0',
                               display: 'flex', alignItems: 'center', gap: '3px',
                             }}

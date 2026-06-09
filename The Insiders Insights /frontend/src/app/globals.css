@@ -14,14 +14,14 @@
  * stack).
  */
 :root {
-  /* Hemsidesalignment (theinsiders.se): deep navy ytor + korall accent */
-  --brand-bg: #1d1f2c;
-  --brand-panel: #2a2d3d;
-  --brand-panel-hover: #33374a;
+  /* New Linklytics Theme Colors */
+  --brand-bg: #0f111a;
+  --brand-panel: #1e212b;
+  --brand-panel-hover: #262936;
 
-  /* Primary Accents (korall) */
-  --brand-accent: #e08e79;
-  --brand-accent-bright: #eba593;
+  /* Primary Accents (Cyan) */
+  --brand-accent: #00d4ff;
+  --brand-accent-bright: #00f2fe;
   
   /* Secondary Accents */
   --brand-success: #22c55e;
@@ -37,17 +37,20 @@
   --brand-border: rgba(255, 255, 255, 0.08);
   --brand-surface: var(--brand-panel);
 
-  --brand-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --brand-font-sans: var(--font-inter-tight), "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --brand-font-button: var(--brand-font-sans);
+  /* DM Mono används bara av geogiraph (graphColors.fonts.mono) — global laddning,
+     geogiraph-scopad användning. */
   --brand-font-mono: var(--font-dm-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* Hemsidespalett (theinsiders.se) — definierad som KÄLLA här. Mappning till
-     UI-roller (--brand-accent m.fl. + graphColors) görs i en visuell pass (a2);
-     korall får aldrig bli brödtext på cream (kontrast ~1.4:1). */
-  --site-cream: #f4f3ef;
-  --site-coral: #e08e79;
-  --site-navy: #333649;
-  --site-deep-navy: #1d1f2c;
+  /* Geogiraph-paletten (theinsiders.se-alignment) — KÄLLA. Endast geogiraph
+     använder dessa (via graphColors + insider-graph/layout). The Insiders rörs ej. */
+  --gg-cream: #f4f3ef;
+  --gg-coral: #e08e79;
+  --gg-coral-deep: #c26a52;
+  --gg-navy: #333649;
+  --gg-deep-navy: #1d1f2c;
+  --gg-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 
   /* Typography Weights */
   --brand-heading-weight: 600;
@@ -59,10 +62,9 @@
 }
 
 @theme {
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: var(--font-dm-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
-  --color-brand: #e08e79;
-  --color-brand-deep: #c26a52;
+  --font-sans: var(--font-inter-tight), "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --color-brand: #00d4ff;
+  --color-brand-deep: #0077ff;
 }
 
 @layer base {
