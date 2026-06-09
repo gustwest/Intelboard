@@ -47,7 +47,7 @@ export function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
     <div style={{ ...cardStyle, marginBottom: 16 }}>
       <SectionHead
         title="Veckovis synlighet"
-        hint="Det löpande måttet — hur ofta AI-motorerna nämner kunden på branschfrågor (Share of Voice), med vilket sentiment och med vilken könsbalans. Huvudtalet domineras av bas-kunskap (modellernas tränade minne av kunden), inte av vad en användare med live-webbsök ser just nu — det live-groundade är en egen serie (Live-signal) nedan, och de medeltalas aldrig. Uppdateras automatiskt varje vecka."
+        hint="Det löpande måttet — hur ofta AI-motorerna nämner kunden på branschfrågor (Share of Voice), med vilket sentiment och könsbalans. Uppdateras automatiskt varje vecka. (Hur talet ska läsas — bas-kunskap vs live-signal — förklaras i rutan nedan.)"
       />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: sovSeries.length > 1 ? 18 : 0 }}>
@@ -168,10 +168,7 @@ export function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
         const webRag = aggregateEnginesBySource(engineEntries, 'web_rag');
         return (
           <Block label="Per AI-motor — senaste veckan + trend" summary="Bas-kunskap vs Live-signal" defaultOpen>
-            <div
-              title="Bas-kunskap (RLHF-tränade modeller) och Live-signal (web-RAG som Perplexity) har fundamentalt olika fördelningar och frågedjup. De medeltalas aldrig — endast jämförs sida vid sida."
-              style={{ fontSize: 10, color: C.dim, fontStyle: 'italic', marginBottom: 8 }}
-            >
+            <div style={{ fontSize: 10, color: C.dim, fontStyle: 'italic', marginBottom: 8 }}>
               Bas-kunskap och Live-signal har olika fördelningar — de medeltalas aldrig, bara jämförs sida vid sida.
             </div>
             {training.engines.length > 0 && (

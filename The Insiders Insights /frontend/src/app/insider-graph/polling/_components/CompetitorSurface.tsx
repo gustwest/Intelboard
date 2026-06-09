@@ -25,6 +25,7 @@ export function CompetitorSurface({ weeks }: { weeks: PollingWeek[] }) {
   const analytics = useMemo(() => buildCompetitorAnalytics(weeks), [weeks]);
   const cats = analytics.categories;
   const [activeCat, setActiveCat] = useState(cats[0]?.cat ?? '');
+  const [open, setOpen] = useState(false);  // F3-7: fälld som default — minskar cockpit-densiteten
 
   const hasAny = cats.some((c) => c.competitors.length > 0);
   if (!hasAny) return null;
@@ -33,10 +34,14 @@ export function CompetitorSurface({ weeks }: { weeks: PollingWeek[] }) {
 
   return (
     <div style={{ ...cardStyle, marginBottom: 16 }}>
-      <SectionHead
-        title="Konkurrent-analys per kategori"
-        hint="Vilka aktörer AI-motorerna nämner i varje kategori, över tid — vem äger berättelsen och var är gapet störst. Komplement till den hopfällda raden i Veckovis synlighet."
-      />
+      <div onClick={() => setOpen((o) => !o)} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, cursor: 'pointer' }}>
+        <SectionHead
+          title="Konkurrent-analys per kategori"
+          hint={open ? 'Vilka aktörer AI-motorerna nämner i varje kategori, över tid — vem äger berättelsen och var är gapet störst. Komplement till den hopfällda raden i Veckovis synlighet.' : `${cats.filter((c) => c.competitors.length > 0).length} kategorier med konkurrentdata — klicka för att visa.`}
+        />
+        <span style={{ fontSize: 14, color: C.muted, marginTop: 2, flexShrink: 0 }}>{open ? '▾' : '▸'}</span>
+      </div>
+      {open && (<>
 
       {/* Kategori-väljare */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -96,6 +101,7 @@ export function CompetitorSurface({ weeks }: { weeks: PollingWeek[] }) {
         <span style={{ fontWeight: 600, color: C.muted }}>Så läser du detta. </span>
         Konkurrentandelarna mäts på ett AI-svar per fråga, inte upprepat som Share of Voice — läs dem som riktning, inte exakta tal. En trendpil visas bara vid en rörelse över ~10 procentenheter över minst två veckor; mindre rörelser räknas som brus.
       </p>
+      </>)}
     </div>
   );
 }

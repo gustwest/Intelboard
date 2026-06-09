@@ -478,8 +478,9 @@ export default function GraphRiskLoopPage() {
             )}
           </div>
 
-          {/* 3b. What-if — projicerad beslutssäkerhet före åtgärd */}
-          {selected && <WhatIfPanel clientId={selected} conf={conf} detected={report.detected} />}
+          {/* 3b. What-if — projicerad beslutssäkerhet före åtgärd. Ops-only (F3-1):
+              en operatörs-sandlåda hör inte hemma i den presentationsklara Kundvyn. */}
+          {selected && mode === 'ops' && <WhatIfPanel clientId={selected} conf={conf} detected={report.detected} />}
 
           {/* 4. Vad mjukvaran gjorde */}
           {report.actions.length > 0 && (

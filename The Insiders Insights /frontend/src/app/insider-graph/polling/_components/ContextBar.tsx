@@ -122,7 +122,7 @@ export function StickyContextBar({ clients, selected, onSelectClient, months, mo
             <button
               key={m}
               onClick={() => onModeChange(m)}
-              title={m === 'ops' ? 'Ops-läge: full insyn, jobbknappar, raw siffror' : 'Kund-läge: presentationsklar — bara plain-text + trender'}
+              title={m === 'ops' ? 'Ops-läge: full insyn, jobbknappar, raw siffror' : 'Kundvy: så här ser kundens rapport ut — bara plain-text + trender'}
               style={{
                 padding: '6px 14px',
                 background: mode === m ? '#ffffff' : 'transparent',
@@ -137,7 +137,7 @@ export function StickyContextBar({ clients, selected, onSelectClient, months, mo
                 boxShadow: mode === m ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
               }}
             >
-              {m === 'ops' ? 'Ops' : 'Kund'}
+              {m === 'ops' ? 'Ops' : 'Kundvy'}
             </button>
           ))}
         </div>
