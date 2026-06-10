@@ -30,6 +30,24 @@ export function SectionHead({ title, hint, collapsible, open, onToggle, badge }:
   );
 }
 
+/**
+ * Tunn, etiketterad zonrubrik som grupperar korten under sig (F3-2). Inte ett kort —
+ * en band-rubrik (versal accent + linje) som visuellt skiljer de tre zonerna i
+ * AI-synlighet: Synlighet · Risker & åtgärder · Månadsrapport. Gör att operatören
+ * läser sidan som tre sammanhängande flöden istället för en lång strömma kort.
+ */
+export function SectionDivider({ label, hint }: { label: string; hint?: string }) {
+  return (
+    <div style={{ margin: '30px 0 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <h3 style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.accent, margin: 0, whiteSpace: 'nowrap' }}>{label}</h3>
+        <div style={{ flex: 1, height: 1, background: C.border }} />
+      </div>
+      {hint && <p style={{ fontSize: 12, color: C.muted, margin: '6px 0 0', lineHeight: 1.5 }}>{hint}</p>}
+    </div>
+  );
+}
+
 export function StageScale({ score, ceiling }: { score: number; ceiling: number }) {
   return (
     <div style={{ marginTop: 8 }}>

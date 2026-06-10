@@ -27,7 +27,7 @@ import {
   cardStyle,
   errorStyle,
 } from './_shared';
-import { SectionHead, StageScale, EmptyState } from './_components/common';
+import { SectionHead, SectionDivider, StageScale, EmptyState } from './_components/common';
 import { StickyContextBar } from './_components/ContextBar';
 import { SchedulesPanel, ActivityFeed, PollingQuestionsPanel, RiskTable, TrendView } from './_components/Panels';
 import { RiskLoopStatus, ApprovedQuestionsPanel } from './_components/RiskLoop';
@@ -311,6 +311,15 @@ export default function GraphRiskLoopPage() {
   // skelett istället för att sektionerna poppar in en och en.
   const initialLoading = !!selected && polling === null && riskTimeline === null && humanization === null && riskQuestions === null;
 
+  // Zon-flaggor (F3-2): styr om respektive zonrubrik ska visas. En zon vars samtliga
+  // kort är tomma får ingen rubrik (ingen tom etikett över ingenting).
+  const hasVisibilitySection =
+    (!!polling && polling.length > 0) || (!!pollingQuestions && pollingQuestions.total > 0);
+  const hasRiskSection =
+    !!riskTimeline ||
+    !!humanization?.available ||
+    (!!riskQuestions && (riskQuestions.counts.approved > 0 || mode === 'ops'));
+
   return (
     <GraphPageShell
       title="AI-synlighet"
@@ -369,6 +378,37 @@ export default function GraphRiskLoopPage() {
         <SchedulesPanel rows={schedules.schedules} onToggle={toggleSchedule} />
       )}
 
+      {/* ===== SYNLIGHET — det löpande, automatiska måttet (Share of Voice) ===== */}
+      {hasVisibilitySection && (
+        <SectionDivider
+          label="Synlighet"
+          hint="Hur ofta och hur AI-motorerna nämner kunden — det löpande, automatiska måttet."
+        />
+      )}
+
+      {/* Veckovis synlighet */}
+      {polling && polling.length > 0 && <WeeklyVisibility weeks={polling} />}
+
+      {/* Konkurrent-analys per kategori (#2, väg A) — egen analytisk yta ur veckodatan */}
+      {polling && polling.length > 0 && <CompetitorSurface weeks={polling} />}
+
+      {/* Synlighets-frågor (Share of Voice) — transparens, direkt efter veckovis synlighet den driver */}
+      {pollingQuestions && pollingQuestions.total > 0 && selected && (
+        <PollingQuestionsPanel data={pollingQuestions} clientId={selected} mode={mode} />
+      )}
+
+      {/* ===== RISKER & ÅTGÄRDER — den slutna live-loopen samlad: upptäckt → åtgärd → löst (F3-2).
+           Tidigare låg dessa paneler utspridda (riskloop-status överst, recept + livscykel långt
+           ned, åtskilda av synlighetsytorna ovan). Nu kontiguösa så operatören håller EN vy av
+           risk istället för fem. What-if hör till månadsrapportens beslutssäkerhet (projicerar
+           just den poängen) och bor därför kvar i Månadsrapport-zonen nedan. ===== */}
+      {hasRiskSection && (
+        <SectionDivider
+          label="Risker & åtgärder"
+          hint="Den slutna loopen, löpande: upptäckt → åtgärd → löst."
+        />
+      )}
+
       {/* Riskloop-status — endast ops-läge (intern admin-loop, ej kundens öga) */}
       {mode === 'ops' && (riskQuestions || riskTimeline) && (
         <RiskLoopStatus
@@ -381,7 +421,7 @@ export default function GraphRiskLoopPage() {
         />
       )}
 
-      {/* Risk-frågor (beslutssäkerhet) — transparens, placerad direkt efter riskloopen den hör till */}
+      {/* Risk-frågor (beslutssäkerhet) — transparens, direkt efter riskloopen den hör till */}
       {riskQuestions && (riskQuestions.counts.approved > 0) && (
         <ApprovedQuestionsPanel
           questions={riskQuestions.questions.filter((q) => q.status === 'approved')}
@@ -391,18 +431,7 @@ export default function GraphRiskLoopPage() {
         />
       )}
 
-      {/* Veckovis synlighet — det löpande, automatiska måttet (visas oavsett månadsrapport) */}
-      {polling && polling.length > 0 && <WeeklyVisibility weeks={polling} />}
-
-      {/* Konkurrent-analys per kategori (#2, väg A) — egen analytisk yta ur veckodatan */}
-      {polling && polling.length > 0 && <CompetitorSurface weeks={polling} />}
-
-      {/* Synlighets-frågor (Share of Voice) — transparens, placerad direkt efter veckovis synlighet den driver */}
-      {pollingQuestions && pollingQuestions.total > 0 && selected && (
-        <PollingQuestionsPanel data={pollingQuestions} clientId={selected} mode={mode} />
-      )}
-
-      {/* Förtroendegap-cockpit — staplar i ops, bara plain-text i kund-läge */}
+      {/* Förtroendegap-cockpit (recept/åtgärd) — staplar i ops, bara plain-text i kund-läge */}
       {humanization?.available && (
         <TrustGapCockpit
           model={humanization}
@@ -422,6 +451,13 @@ export default function GraphRiskLoopPage() {
 
       {report && conf && (
         <>
+          {/* ===== MÅNADSRAPPORT — ögonblicksbild vid rapporttillfället, skild från de
+               löpande loopen ovan. Beslutssäkerhet → detekterade risker → what-if (projektion
+               av poängen) → vad mjukvaran gjorde → effekt över tid. ===== */}
+          <SectionDivider
+            label="Månadsrapport"
+            hint="Beslutssäkerhet och kvarvarande risker vid rapporttillfället — en ögonblicksbild."
+          />
           {/* 1. Beslutssäkerhet */}
           <div style={{ ...cardStyle, marginBottom: 16 }}>
             <SectionHead title="Beslutssäkerhet" hint="Hur stor andel av de beslutskritiska frågorna AI-motorerna svarar korrekt och rättvist på. En graderad resa — aldrig helt 'i mål', eftersom motorerna ständigt ändras." />
