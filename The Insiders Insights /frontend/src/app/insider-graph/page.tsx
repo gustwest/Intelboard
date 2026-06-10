@@ -182,7 +182,7 @@ export default function InsiderGraphHomePage() {
 
   return (
     <GraphPageShell
-      title="geogiraph — översikt"
+      title="Geogiraph — översikt"
       icon={<LayoutDashboard size={22} />}
       subtitle="Kommandocentral: vad väntar på dig, vad har körts och var står kunderna."
     >
@@ -296,7 +296,7 @@ export default function InsiderGraphHomePage() {
       <div style={{ marginTop: 16, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <Globe2 size={16} color={C.accent} />
-          <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: C.text }}>Så här fungerar geogiraph</h2>
+          <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: C.text }}>Så här fungerar Geogiraph</h2>
         </div>
         <ol style={{ paddingLeft: 18, margin: 0, color: C.muted, fontSize: 13, lineHeight: 1.7 }}>
           <li>Kund onboardas (företagsuppgifter, ev. medarbetare), connectors väljs.</li>

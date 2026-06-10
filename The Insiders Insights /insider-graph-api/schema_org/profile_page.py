@@ -248,6 +248,7 @@ def _render(model: RenderModel, graph: dict) -> str:
   .sources ol {{ padding-left: 1.25rem; color: #555; }}
   .sources a {{ color: #2563eb; }}
   footer {{ margin-top: 2rem; font-size: .75rem; color: #999; }}
+  footer .whatis {{ color: #666; font-size: .82rem; margin: 0 0 .5rem; line-height: 1.5; }}
 </style>
 </head>
 <body>
@@ -266,7 +267,7 @@ def _render(model: RenderModel, graph: dict) -> str:
 </ol>
 </section>
 
-<footer>{loc['footer']}</footer>
+<footer><p class="whatis">{loc['what_is_this']}</p>{loc['footer']}</footer>
 </body>
 </html>
 """

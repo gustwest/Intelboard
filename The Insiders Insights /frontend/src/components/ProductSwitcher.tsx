@@ -22,7 +22,7 @@ const PRODUCTS: Product[] = [
   },
   {
     id: 'graph',
-    name: 'geogiraph',
+    name: 'Geogiraph',
     tagline: 'Generative Engine Optimization',
     defaultPath: '/insider-graph',
     accent: '#c26a52',

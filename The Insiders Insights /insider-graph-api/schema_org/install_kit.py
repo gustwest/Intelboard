@@ -59,6 +59,7 @@ def render_install_kit(client_id: str) -> str:
  details.howto ul{{margin:.6rem 0 0;padding-left:1.2rem;color:#444}}
  details.howto li{{margin:.35rem 0}}
  .fallback{{background:#eef4ff;border:1px solid #cfe0ff;border-radius:8px;padding:.85rem 1rem;font-size:.92rem;color:#333;margin-top:1.6rem}}
+ .trust{{background:#f0f9f4;border:1px solid #cfe8d8;border-radius:8px;padding:.85rem 1rem;font-size:.92rem;color:#234;margin:1.2rem 0 0}}
  .toolbar{{display:flex;justify-content:flex-end;margin-bottom:1rem}}
  .toolbar button{{font:inherit;padding:.4rem .9rem;border:1px solid #ccc;background:#fff;border-radius:6px;cursor:pointer}}
  @media print{{.toolbar{{display:none}} body{{margin:0;max-width:none}} pre{{white-space:pre-wrap}}}}
@@ -67,6 +68,11 @@ def render_install_kit(client_id: str) -> str:
 <h1>Installationsinstruktioner</h1>
 <p class="lead">Tre saker att lägga till på er sajt, {name}. Allt klistras in <strong>en gång</strong>
 och behöver aldrig röras igen — profilsidan uppdaterar vi åt er löpande.</p>
+
+<p class="trust">✓ <strong>Tryggt att installera:</strong> koden är ren, statisk markup — ingen
+exekverande JavaScript, ingen spårning, inga cookies. Den talar bara om för AI-motorerna vem ni
+är och pekar på er verifierade profil. Geogiraph är tjänsten The Insiders använder för att hålla
+er bild korrekt i AI-svar.</p>
 
 <ol>
 <li>

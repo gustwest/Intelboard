@@ -120,7 +120,7 @@ export default function GraphKunderPage() {
     <GraphPageShell
       title="Kunder"
       icon={<Users size={22} />}
-      subtitle="geogiraph-kunder är samma bolag som i The Insiders. Här onboardas medarbetare och datakällor."
+      subtitle="Geogiraph-kunder är samma bolag som i The Insiders. Här onboardas medarbetare och datakällor."
     >
       <UI.Card
         padding="20px 24px"
@@ -550,7 +550,7 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
             value={tier}
             onChange={setTier}
             style={{ marginTop: 6, marginLeft: 12, verticalAlign: 'middle' }}
-            options={([['default', 'Default (geogiraph)'], ['premium', 'Premium (egen domän)']] as ['default' | 'premium', string][]).map(([v, label]) => ({
+            options={([['default', 'Default (Geogiraph)'], ['premium', 'Premium (egen domän)']] as ['default' | 'premium', string][]).map(([v, label]) => ({
               value: v,
               label,
             }))}

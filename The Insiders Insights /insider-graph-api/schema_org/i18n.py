@@ -48,6 +48,7 @@ _STRINGS: dict[str, dict[str, Any]] = {
         "trust_updated": "senast uppdaterad {date}",
         # Footer + meta.
         "footer": "AI-profil verifierad av Geogiraph.",
+        "what_is_this": "Vad är detta? En AI-profil är en källförsedd sammanställning som AI-motorer (som ChatGPT) läser för att svara korrekt om ett företag — underhållen löpande av Geogiraph.",
         "verified_by": "AI-profil verifierad av Geogiraph",
         "title_suffix": "AI-profil",
         "desc_fallback": "AI-profil för {name}.",
@@ -104,6 +105,7 @@ _STRINGS: dict[str, dict[str, Any]] = {
         "trust_compiled_many": "Compiled from {n} sources",
         "trust_updated": "last updated {date}",
         "footer": "AI profile verified by Geogiraph.",
+        "what_is_this": "What is this? An AI profile is a sourced summary that AI engines (like ChatGPT) read to answer correctly about a company — maintained on an ongoing basis by Geogiraph.",
         "verified_by": "AI profile verified by Geogiraph",
         "title_suffix": "AI profile",
         "desc_fallback": "AI profile for {name}.",
