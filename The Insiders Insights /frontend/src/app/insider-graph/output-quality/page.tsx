@@ -110,7 +110,7 @@ export default function OutputQualityPage() {
     <GraphPageShell
       title="Connector-kvalitet (alla kunder)"
       icon={<Gauge size={22} />}
-      subtitle="Rubric-poäng per connector, aggregerat över alla kunder — driver promotion shadow → active gate. För en enskild kund: öppna kundens kort → Output-kvalitet."
+      subtitle="Kvalitetspoäng per connector, aggregerat över alla kunder — avgör om en connector går från skuggläge (mäts bara) till aktiv grind (kvalitetsregler tillämpas). För en enskild kund: öppna kundens kort → Output-kvalitet."
     >
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
 
@@ -150,8 +150,8 @@ export default function OutputQualityPage() {
         </div>
         Sorterad efter <strong>lägsta snittpoäng</strong> först — sämsta connector överst.
         Connectors markerade <strong style={{ color: C.accent }}>promotion-kandidat</strong> har konsekvent låg poäng
-        och tillräckligt med data för att flyttas från shadow till active gate.
-        <strong> LinkedIn-demografi är redan i active gate</strong> sedan dag 1.
+        och tillräckligt med data för att flyttas från skuggläge till aktiv grind.
+        <strong> LinkedIn-demografi är redan i aktiv grind</strong> sedan dag 1.
         <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(224, 142, 121,0.18)' }}>
           <strong>Auto-godkänn ≥</strong> är källtillit: claims från connectorn med minst den säkerheten
           slipper granskningskön (Granska). Lägre = färre att granska men mer förlitan på connectorn.
@@ -165,7 +165,7 @@ export default function OutputQualityPage() {
         </UI.Card>
       ) : data && data.connectors.length === 0 ? (
         <UI.Card padding="32px" style={{ textAlign: 'center', color: C.muted, fontSize: 13 }}>
-          Inga output_quality_logs ännu i fönstret ({days} dagar). Kör en kompilering på minst en kund.
+          Inga kvalitetsloggar ännu i fönstret ({days} dagar). Kör en kompilering på minst en kund.
         </UI.Card>
       ) : data ? (
         <>
@@ -181,9 +181,9 @@ export default function OutputQualityPage() {
                   <Th>Connector</Th>
                   <Th align="right">Snitt</Th>
                   <Th align="right">Claims</Th>
-                  <Th align="right">Drop</Th>
-                  <Th align="right">Transform</Th>
-                  <Th align="right">Publish</Th>
+                  <Th align="right">Slopas</Th>
+                  <Th align="right">Omformas</Th>
+                  <Th align="right">Publiceras</Th>
                   <Th align="right">Kunder</Th>
                   <Th>Topp-ursprung</Th>
                   <Th>Status</Th>
@@ -224,13 +224,13 @@ export default function OutputQualityPage() {
                     </Td>
                     <Td>
                       {c.connector === 'linkedin_capacity' ? (
-                        <UI.Badge tone="ok" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}><ShieldCheck size={11} /> Active gate</UI.Badge>
+                        <UI.Badge tone="ok" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}><ShieldCheck size={11} /> Aktiv grind</UI.Badge>
                       ) : c.promotion_candidate ? (
                         <UI.Badge tone="accent" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}><TrendingDown size={11} /> Promotion-kandidat</UI.Badge>
                       ) : c.redundant_flag_count > 0 ? (
                         <UI.Badge tone="warn" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}><AlertTriangle size={11} /> Redundans</UI.Badge>
                       ) : (
-                        <UI.Badge tone="neutral" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>Shadow</UI.Badge>
+                        <UI.Badge tone="neutral" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>Skuggläge</UI.Badge>
                       )}
                     </Td>
                     <Td align="right">

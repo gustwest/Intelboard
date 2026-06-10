@@ -535,7 +535,7 @@ export default function OutputQualityDetailPage() {
               {/* Gate-loggar: per-action-tabell istället för per_claim (gaten har inte full per_claim) */}
               {detail.actions && detail.actions.length > 0 && (
                 <UI.Card padding="18px 20px">
-                  <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 12 }}>Gate-åtgärder ({detail.actions.length})</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 12 }}>Grind-åtgärder ({detail.actions.length})</div>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead>
                       <tr style={{ background: '#edebe4' }}>

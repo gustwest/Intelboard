@@ -9,26 +9,27 @@ import { graphColors as C } from './GraphPageShell';
 export type Verdict = 'pass' | 'needs_review' | 'block';
 export type ClaimAction = 'publish' | 'transform' | 'drop';
 
-const verdictMeta: Record<Verdict, { label: string; color: string; bg: string; border: string; icon: typeof Check }> = {
-  pass:         { label: 'Pass',          color: '#16a34a', bg: 'rgba(34,197,94,0.12)',  border: 'rgba(34,197,94,0.3)',  icon: Check },
-  needs_review: { label: 'Granska',       color: '#d97706', bg: 'rgba(245,158,11,0.16)', border: 'rgba(245,158,11,0.3)', icon: AlertCircle },
-  block:        { label: 'Blockerad',     color: '#ef4444', bg: 'rgba(239,68,68,0.12)',  border: 'rgba(239,68,68,0.3)',  icon: Ban },
+// TC4: råa kvalitets-verdicts → svenska + förklaring i tooltip (term + förklaring för kollegor).
+const verdictMeta: Record<Verdict, { label: string; title: string; color: string; bg: string; border: string; icon: typeof Check }> = {
+  pass:         { label: 'Godkänd',   title: 'Kvalitetskollen godkände påståendet — inga problem.',  color: '#16a34a', bg: 'rgba(34,197,94,0.12)',  border: 'rgba(34,197,94,0.3)',  icon: Check },
+  needs_review: { label: 'Granska',   title: 'Behöver mänsklig granskning innan publicering.',        color: '#d97706', bg: 'rgba(245,158,11,0.16)', border: 'rgba(245,158,11,0.3)', icon: AlertCircle },
+  block:        { label: 'Blockerad', title: 'Blockerad av kvalitetsgrinden — publiceras inte.',      color: '#ef4444', bg: 'rgba(239,68,68,0.12)',  border: 'rgba(239,68,68,0.3)',  icon: Ban },
 };
 
-const actionMeta: Record<ClaimAction, { label: string; color: string; bg: string; icon: typeof Check }> = {
-  publish:   { label: 'Publish',   color: '#16a34a', bg: 'rgba(34,197,94,0.12)',  icon: Check },
-  transform: { label: 'Transform', color: '#d97706', bg: 'rgba(245,158,11,0.16)', icon: Shuffle },
-  drop:      { label: 'Drop',      color: '#ef4444', bg: 'rgba(239,68,68,0.12)',  icon: Ban },
+const actionMeta: Record<ClaimAction, { label: string; title: string; color: string; bg: string; icon: typeof Check }> = {
+  publish:   { label: 'Publiceras', title: 'Påståendet publiceras som det är.',                                     color: '#16a34a', bg: 'rgba(34,197,94,0.12)',  icon: Check },
+  transform: { label: 'Omformas',   title: 'Påståendet omformas innan publicering (skrivs om eller kompletteras).', color: '#d97706', bg: 'rgba(245,158,11,0.16)', icon: Shuffle },
+  drop:      { label: 'Slopas',     title: 'Påståendet tas bort — publiceras inte.',                                color: '#ef4444', bg: 'rgba(239,68,68,0.12)',  icon: Ban },
 };
 
 export function VerdictBadge({ verdict, size = 'md' }: { verdict: Verdict | string; size?: 'sm' | 'md' }) {
-  const meta = verdictMeta[verdict as Verdict] || { label: verdict, color: '#6b6e7e', bg: 'transparent', border: C.border, icon: Sparkles };
+  const meta = verdictMeta[verdict as Verdict] || { label: verdict, title: verdict, color: '#6b6e7e', bg: 'transparent', border: C.border, icon: Sparkles };
   const Icon = meta.icon;
   const px = size === 'sm' ? 8 : 12;
   const py = size === 'sm' ? 3 : 5;
   const fs = size === 'sm' ? 10 : 12;
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: `${py}px ${px}px`, background: meta.bg, color: meta.color, border: `1px solid ${meta.border}`, borderRadius: 999, fontSize: fs, fontWeight: 600 }}>
+    <span title={meta.title} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: `${py}px ${px}px`, background: meta.bg, color: meta.color, border: `1px solid ${meta.border}`, borderRadius: 999, fontSize: fs, fontWeight: 600 }}>
       <Icon size={fs - 1} /> {meta.label}
     </span>
   );
@@ -48,10 +49,10 @@ export function ScoreBadge({ score, size = 'md' }: { score: number; size?: 'sm' 
 }
 
 export function ActionPill({ action }: { action: ClaimAction | string }) {
-  const meta = actionMeta[action as ClaimAction] || { label: action, color: '#6b6e7e', bg: 'transparent', icon: Sparkles };
+  const meta = actionMeta[action as ClaimAction] || { label: action, title: action, color: '#6b6e7e', bg: 'transparent', icon: Sparkles };
   const Icon = meta.icon;
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', background: meta.bg, color: meta.color, borderRadius: 999, fontSize: 10, fontWeight: 600 }}>
+    <span title={meta.title} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', background: meta.bg, color: meta.color, borderRadius: 999, fontSize: 10, fontWeight: 600 }}>
       <Icon size={10} /> {meta.label}
     </span>
   );
@@ -82,9 +83,9 @@ export function AudiencePill({ audience }: { audience: string | null | undefined
     return <span style={{ color: '#6b6e7e', fontSize: 10 }}>—</span>;
   }
   const map: Record<string, { label: string; color: string; bg: string }> = {
-    customer: { label: '🛒 customer', color: C.accent, bg: 'rgba(224, 142, 121,0.14)' },
-    talent: { label: '🎯 talent', color: '#0ea5e9', bg: 'rgba(14,165,233,0.14)' },
-    investor: { label: '💰 investor', color: '#16a34a', bg: 'rgba(34,197,94,0.14)' },
+    customer: { label: '🛒 Kund', color: C.accent, bg: 'rgba(224, 142, 121,0.14)' },
+    talent: { label: '🎯 Talang', color: '#0ea5e9', bg: 'rgba(14,165,233,0.14)' },
+    investor: { label: '💰 Investerare', color: '#16a34a', bg: 'rgba(34,197,94,0.14)' },
   };
   const m = map[audience] || { label: audience, color: C.text, bg: 'transparent' };
   return (
@@ -106,14 +107,14 @@ export function HintChip({ hint }: { hint: string | null | undefined }) {
 export function ShadowGateBadge({ source }: { source: string | null | undefined }) {
   if (source === 'gate') {
     return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', background: 'rgba(239,68,68,0.12)', color: '#ef4444', borderRadius: 4, fontSize: 10, fontWeight: 600 }}>
-        <ShieldOff size={10} /> gate
+      <span title="Kvalitetsgrinden var aktiv — kunde blockera eller omforma publicering." style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', background: 'rgba(239,68,68,0.12)', color: '#ef4444', borderRadius: 4, fontSize: 10, fontWeight: 600 }}>
+        <ShieldOff size={10} /> Grind
       </span>
     );
   }
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', background: '#eceae3', color: '#6b6e7e', borderRadius: 4, fontSize: 10 }}>
-      shadow
+    <span title="Kvalitetskollen körde i skuggläge — mäter och loggar, men blockerar inte." style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', background: '#eceae3', color: '#6b6e7e', borderRadius: 4, fontSize: 10 }}>
+      Skuggläge
     </span>
   );
 }
