@@ -99,7 +99,8 @@ class TestBuildDoc(unittest.TestCase):
         bot = doc["per_bot"]["GPTBot"]
         self.assertEqual(bot["artifacts"], ["index.html", "schema.json"])  # sorterad lista
         self.assertTrue(bot["last_seen"].startswith("2023-11-14"))  # micros → iso
-        self.assertEqual(bot["category_label"], ca.CATEGORY_LABELS["ai_training"])
+        self.assertEqual(bot["category"], "ai_training")
+        self.assertEqual(bot["owner"], ca.owner_of("GPTBot"))  # vänligt ägarnamn
 
 
 if __name__ == "__main__":
