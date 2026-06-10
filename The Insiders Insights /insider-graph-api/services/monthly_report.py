@@ -68,8 +68,12 @@ _EMAIL_I18N: dict[str, dict[str, Any]] = {
         "trend_up": "förbättrad",
         "trend_down": "försämrad",
         "resolved": " {n} tidigare risk(er) är lösta.",
-        "works": "Det här fungerar",
-        "improve": "Förbättringsmöjligheter",
+        # TP5/N3 — insiktsbeats istället för punktlistor: fokus (vad vi arbetar med) + ett bevis.
+        "focus_open": "Vi arbetar nu med att stänga {n} {area} med källförsedd, verifierad kontext i er AI-profil.",
+        "focus_clean": "Bilden är ren den här månaden — vi fortsätter bevaka den löpande.",
+        "area_one": "kvarvarande lucka",
+        "area_many": "kvarvarande luckor",
+        "proof_lead": "Det här fungerar redan:",
         "next_step": "Nästa steg:",
         "profile_cta": "Se din AI-profil",
         "greeting": "Hej {name},",
@@ -96,8 +100,11 @@ _EMAIL_I18N: dict[str, dict[str, Any]] = {
         "trend_up": "improved",
         "trend_down": "declined",
         "resolved": " {n} earlier risk(s) resolved.",
-        "works": "What's working",
-        "improve": "Opportunities to improve",
+        "focus_open": "We're now working to close {n} {area} with sourced, verified context in your AI profile.",
+        "focus_clean": "The picture is clean this month — we'll keep monitoring it.",
+        "area_one": "remaining gap",
+        "area_many": "remaining gaps",
+        "proof_lead": "Already working in your favour:",
         "next_step": "Next step:",
         "profile_cta": "View your AI profile",
         "greeting": "Hi {name},",
@@ -756,7 +763,7 @@ def render_customer_email(model: dict[str, Any], lang: str | None = None, contac
     # leverabeln: profilsidan. Kund-specifika frågor sköts via mejl-svarsloopen.
     trend = model.get("trend") or {}
     strengths = model.get("strengths") or []
-    improvements = model.get("improvement_opportunities") or []
+    heading = t["heading"].format(name=name)
 
     # Lokal import för att undvika cykel på modulnivå (badge → schemas → …).
     from schema_org.badge import profile_url
@@ -785,19 +792,32 @@ def render_customer_email(model: dict[str, Any], lang: str | None = None, contac
     if resolved:
         trend_line += t["resolved"].format(n=resolved)
 
-    def _li(items: list) -> str:
-        return "".join(f"<li>{html.escape(str(i))}</li>" for i in items)
+    # TP5/N3 — mejlet som ledd insikt, inte datadump: insikt → vad ändrats → fokus →
+    # ett bevis → trygghet, inte två punktlistor. Fokus härleds kund-säkert ur ENBART
+    # ANTALET öppna risker (aldrig deras innehåll — motor-citat/harm-koder/frågor stannar
+    # internt). open_count räknar bara, läcker inget känsligt.
+    open_count = sum(
+        1 for r in (model.get("detected") or []) if (r.get("status") or "open") == "open"
+    )
+    if open_count:
+        area = t["area_one"] if open_count == 1 else t["area_many"]
+        focus_line = t["focus_open"].format(n=open_count, area=area)
+    else:
+        focus_line = t["focus_clean"]
+    # Bevis: ETT konkret styrketecken (inte hela listan). Lösta-räkningen ligger redan i
+    # "vad ändrats" ovan, så beviset lyfter en styrka för att inte upprepa samma sak.
+    proof = strengths[0] if strengths else None
 
     html_body = f"""<!doctype html><html lang="{html.escape((lang or model.get("language") or "sv").lower())}"><body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1a1a1a;max-width:620px;margin:0 auto;line-height:1.6">
 <p>{html.escape(greeting)}</p>
-<h2 style="font-size:1.2rem">{html.escape(t["heading"].format(name=name))}</h2>
+<h2 style="font-size:1.2rem">{html.escape(heading)}</h2>
 <p style="color:#666;margin-top:-.5rem">{html.escape(month_label)}</p>
-<p><strong>{html.escape(score_line)}</strong></p>
+{f'<p style="font-size:1.05rem;margin-bottom:.3rem">{html.escape(verdict)}</p>' if verdict else ''}
+<p style="color:#444;margin-top:0"><strong>{html.escape(score_line)}</strong></p>
 {f'<p style="color:#666;font-size:.85rem;margin-top:-.4rem">{html.escape(conf_def)}</p>' if conf_def else ''}
-<p>{html.escape(verdict)}</p>
 {f'<p style="color:#444">{html.escape(trend_line)}</p>' if trend_line else ''}
-{f'<h3 style="font-size:1rem">{html.escape(t["works"])}</h3><ul>{_li(strengths)}</ul>' if strengths else ''}
-{f'<h3 style="font-size:1rem">{html.escape(t["improve"])}</h3><ul>{_li(improvements)}</ul>' if improvements else ''}
+<p>{html.escape(focus_line)}</p>
+{f'<p><strong>{html.escape(t["proof_lead"])}</strong> {html.escape(proof)}</p>' if proof else ''}
 {f'<p style="margin:1.3rem 0"><a href="{html.escape(profile_link)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:.6rem 1.1rem;border-radius:8px;font-weight:600">{html.escape(t["profile_cta"])} &rarr;</a></p>' if profile_link else ''}
 <hr style="border:none;border-top:1px solid #eee;margin:1.5rem 0">
 <p style="color:#666;font-size:.9rem">{html.escape(t["footer"])}</p>
@@ -807,16 +827,17 @@ def render_customer_email(model: dict[str, Any], lang: str | None = None, contac
 </div>
 </body></html>"""
 
-    text_lines = [greeting, "", f"{t['heading'].format(name=name)} ({month_label})", "", score_line]
+    text_lines = [greeting, "", f"{heading} ({month_label})", ""]
+    if verdict:
+        text_lines.append(verdict)
+    text_lines.append(score_line)
     if conf_def:
         text_lines.append(conf_def)
-    text_lines.append(verdict)
     if trend_line:
         text_lines += ["", trend_line]
-    if strengths:
-        text_lines += ["", f"{t['works']}:"] + [f"- {s}" for s in strengths]
-    if improvements:
-        text_lines += ["", f"{t['improve']}:"] + [f"- {i}" for i in improvements]
+    text_lines += ["", focus_line]
+    if proof:
+        text_lines += ["", f"{t['proof_lead']} {proof}"]
     if profile_link:
         text_lines += ["", f"{t['profile_cta']}: {profile_link}"]
     text_lines += ["", t["footer"], "", f"{t['method_title']}: {t['method']}"]

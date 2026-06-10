@@ -35,15 +35,20 @@ _SECRETS = ["HEMLIGT_CITAT", "HEMLIG_FRÅGA", "HEMLIG_ÅTGÄRD", "HEMLIGT_UTKAST
 
 class CustomerEmailRenderTest(unittest.TestCase):
     def test_includes_safe_fields(self):
+        # TP5/N3: insikts-led struktur — headline (verdict) → tal → vad ändrats (trend)
+        # → fokus → ETT bevis (styrka). Inga punktlistor, inga operatörssteg.
         subject, html, text = monthly_report.render_customer_email(MODEL)
         self.assertIn("Acme AB", subject)
         self.assertIn("72/100", html)
         self.assertIn("Stark", html)
-        self.assertIn("Mot kund surfar ni korrekt", html)
-        self.assertIn("65 → 72", html)        # trend
+        self.assertIn("I 8 av 10", html)                    # insikts-headline (verdict)
+        self.assertIn("65 → 72", html)                      # vad ändrats (trend)
         self.assertIn("förbättrad", html)
-        self.assertIn("Bredda mätningen", html)
-        self.assertIn("2 öppna risker att möta", text)
+        self.assertIn("Det här fungerar redan", html)       # bevis-lead
+        self.assertIn("Mot kund surfar ni korrekt", html)   # ETT bevis (styrka)
+        self.assertIn("källförsedd", text)                  # fokus-rad (open_count=1)
+        # Operatörs-next-step (conf["next_step"]) får ALDRIG nå kunden (TP4).
+        self.assertNotIn("Bredda mätningen", html)
 
     def test_excludes_sensitive_fields(self):
         subject, html, text = monthly_report.render_customer_email(MODEL)
@@ -57,9 +62,9 @@ class CustomerEmailRenderTest(unittest.TestCase):
         self.assertIn("May 2026", subject)            # lokaliserat månadsnamn
         self.assertIn("Decision confidence: 72/100", html)
         self.assertIn("improved", html)               # trend-ord på engelska
-        self.assertIn("What's working", text)         # text-versionen (ej HTML-escapad)
+        self.assertIn("sourced, verified context", text)  # fokus-raden på engelska
         self.assertIn('lang="en"', html)
-        self.assertNotIn("Beslutssäkerhet", html)     # ingen svenska kvar
+        self.assertNotIn("Beslutssäkerhet", html)     # ingen svensk chrome kvar
         self.assertNotIn("förbättrad", html)
 
     def test_lang_falls_back_to_model_language(self):
