@@ -115,6 +115,10 @@ class Settings(BaseSettings):
     # Saknas någon → inget mejl skickas (To-Do:n i dashboarden skapas ändå).
     notify_from_email: str = ""
     ops_notify_email: str = ""
+    # Support-adress som utgående KUND-mejl hänvisar till. Avsändaren (notify_from_email)
+    # är noreply@ och tar inte emot svar, så mejlen säger "kontakta X", inte "svara".
+    # Default = operatörens (The Insiders) support-inkorg; överstyrbar per driftsättning.
+    support_contact_email: str = "connect@theinsiders.se"
     # Privat GCS-bucket för kunduppladdat verifieringsunderlag (LinkedIn-skärmklipp,
     # spec §4.2). EU-only: ska INTE vara den publika CDN-bucketen. Tom → underlaget
     # lagras inte (endast filnamnet sparas, som tidigare).

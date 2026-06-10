@@ -25,6 +25,7 @@ MONTHLY_TREND_MIN_DELTA = int(os.environ.get("MONTHLY_TREND_MIN_DELTA", "1"))
 from google.cloud import firestore
 
 import firestore_client as fs
+from config import settings
 from services import audience_personas
 from services import clock
 from services import llm as llm_factory
@@ -81,7 +82,7 @@ _EMAIL_I18N: dict[str, dict[str, Any]] = {
         "confidence_def": "Beslutssäkerhet = hur säkert AI-motorerna idag svarar korrekt och "
                           "rättvist om er när någon frågar inför ett beslut.",
         "footer": "Profilen uppdaterar vi åt er löpande — ni behöver inte göra något. "
-                  "Frågor? Svara på det här mejlet.",
+                  f"Frågor? Kontakta {settings.support_contact_email}.",
         # N2 — bekräftelse när en (ny) huvudkontakt registreras.
         "confirm_subject": "Ni är nu kontakt för {name}:s AI-rapporter",
         "confirm_lead": "Den här adressen är nu registrerad som kontakt för {name}:s "
@@ -118,7 +119,7 @@ _EMAIL_I18N: dict[str, dict[str, Any]] = {
         "confidence_def": "Decision confidence = how reliably today's AI answers correctly and "
                           "fairly about you when someone asks ahead of a decision.",
         "footer": "We keep your profile updated for you — nothing you need to do. "
-                  "Questions? Just reply to this email.",
+                  f"Questions? Contact {settings.support_contact_email}.",
         "confirm_subject": "You're now a contact for {name}'s AI reports",
         "confirm_lead": "This address is now registered as a contact for {name}'s "
                         "AI visibility reports.",

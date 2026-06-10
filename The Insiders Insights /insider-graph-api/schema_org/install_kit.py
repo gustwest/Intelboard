@@ -13,6 +13,7 @@ from __future__ import annotations
 import html
 
 import firestore_client as fs
+from config import settings
 from schema_org.badge import profile_url, render_badge
 from schema_org.delivery import render_identity_snippet
 
@@ -95,9 +96,9 @@ och behöver aldrig röras igen — profilsidan uppdaterar vi åt er löpande.</
 </li>
 </ol>
 
-<p class="fallback"><strong>Inte säker på hur ni når koden?</strong> Vidarebefordra det här mejlet till den som sköter er webbplats — för dem tar det någon minut. Eller svara på mejlet så hjälper vi till.</p>
+<p class="fallback"><strong>Inte säker på hur ni når koden?</strong> Vidarebefordra det här mejlet till den som sköter er webbplats — för dem tar det någon minut. Eller kontakta {settings.support_contact_email} så hjälper vi till.</p>
 
-<p class="note">Frågor? Svara på det här mejlet så hjälper vi till.</p>
+<p class="note">Frågor? Kontakta {settings.support_contact_email} så hjälper vi till.</p>
 </body></html>"""
 
 
@@ -118,7 +119,7 @@ def render_install_kit_email(client_id: str) -> tuple[str, str, str]:
         f"  Webflow: Project Settings > Custom Code > Head Code.\n"
         f"  Egen/annan sajt: precis före </head>.\n\n"
         f"Inte säker på hur ni gör? Vidarebefordra mejlet till den som sköter er "
-        f"webbplats, eller svara så hjälper vi till.\n\n"
-        f"Profilsidan uppdaterar vi åt er löpande. Frågor? Svara på det här mejlet.\n"
+        f"webbplats, eller kontakta {settings.support_contact_email} så hjälper vi till.\n\n"
+        f"Profilsidan uppdaterar vi åt er löpande. Frågor? Kontakta {settings.support_contact_email}.\n"
     )
     return subject, render_install_kit(client_id), text
