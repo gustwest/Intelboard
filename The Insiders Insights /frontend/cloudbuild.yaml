@@ -28,6 +28,12 @@ steps:
       - '--region=europe-north1'
       - '--allow-unauthenticated'
       - '--platform=managed'
+      # Håll ALLTID minst en varm instans: frontenden kör Next-proxyn (/api/graph) som
+      # fan-out:ar ~9 samtidiga server-side-anrop per tung sida (t.ex. AI-synlighet). Skalar
+      # tjänsten till 0 träffar bursten en kallstart → Cloud Run 429 "no available instance".
+      # min=1 eliminerar det; max=10 ger burst-marginal. (API:t kör redan min=1/max=20.)
+      - '--min-instances=1'
+      - '--max-instances=10'
       # Server-only admin-nyckel för /api/graph-proxyn (når aldrig webbläsaren).
       - '--update-secrets=GRAPH_API_KEY=insider-graph-admin-api-key:latest'
 
