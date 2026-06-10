@@ -209,12 +209,27 @@ class PeopleBioTest(unittest.TestCase):
         for _, _, p in writes:
             self.assertLessEqual(len(p["statement"]), ai.PEOPLE_BIO_MAX_CHARS)
 
-    def test_replace_mode_reported_in_result(self):
+    def test_deprecated_people_bio_rejects_new_uploads(self):
+        # R1: people_bio är pensionerad — person-dokument går via Medarbetare-boxen
+        # (per medarbetare, samtyckes-intyg, smal extraktion). Ny uppladdning avvisas.
         fakefs.reset(client={"company_name": "Acme AB"})
-        res = ai.ingest_attested("acme", "people_bio", "bio.txt",
-                                 "Anna är VD.".encode("utf-8"), attested_at="2026-05-01")
-        self.assertEqual(res["mode"], "replace")
-        self.assertGreaterEqual(res["written"], 1)
+        with self.assertRaises(ValueError) as ctx:
+            ai.ingest_attested("acme", "people_bio", "bio.txt",
+                               "Anna är VD.".encode("utf-8"), attested_at="2026-05-01")
+        self.assertIn("pensionerad", str(ctx.exception))
+
+    def test_deprecated_type_hidden_from_status_unless_data_remains(self):
+        # Utan kvarvarande data: raden döljs helt. Med data: syns (så ops kan städa).
+        fakefs.reset(client={"company_name": "Acme AB"})
+        keys = [s["key"] for s in ai.attested_status("acme")]
+        self.assertNotIn("people_bio", keys)
+        fakefs.reset(
+            client={"company_name": "Acme AB"},
+            claims={"att-bio-1": {"origin": "attested:people_bio", "statement": "Anna är VD.",
+                                  "included_in_output": True}},
+        )
+        keys = [s["key"] for s in ai.attested_status("acme")]
+        self.assertIn("people_bio", keys)
 
     def test_clear_source_removes_attested_claims(self):
         # Priming: tidigare people_bio-claims i grafen. clear_source ska radera dem;

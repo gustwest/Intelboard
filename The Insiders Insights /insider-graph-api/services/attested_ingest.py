@@ -103,6 +103,10 @@ class SourceType:
     # read_text och får en str. Builderns första arg ges som Any för att rymma båda.
     build: Callable[[Any, BuildCtx], list[Write]]
     parser: Callable[[str | None, bytes], Any] | None = None  # None → read_sheets
+    # Pensionerad källtyp (R1): nya uppladdningar avvisas och typen döljs i UI:t
+    # (status visar den BARA om det finns kvarvarande data att städa). include/clear
+    # fungerar fortfarande så legacy-data kan hanteras.
+    deprecated: bool = False
 
 
 # --- Filinläsning: .xls / .xlsx / .csv → {fliknamn: rader} -----------------------
@@ -537,11 +541,14 @@ SOURCE_TYPES: dict[str, SourceType] = {
     "people_bio": SourceType(
         key="people_bio",
         label="Personprofiler (från bolaget)",
-        description="Dokument (PDF eller text) med biografier om de personer bolaget vill "
-                    "synliggöra. Ersätter tidigare uppladdning — ny version skriver över.",
+        description="PENSIONERAD: person-dokument laddas nu upp per medarbetare i "
+                    "Medarbetare-boxen (kundkortet → Översikt) — med samtyckes-intyg och "
+                    "smal expertis-extraktion i stället för rå text. Denna rad syns bara "
+                    "om gammal data finns kvar att städa.",
         mode="replace",
         build=_people_bio_build,
         parser=read_text,
+        deprecated=True,
     ),
     "glassdoor_reviews": SourceType(
         key="glassdoor_reviews",
@@ -569,6 +576,11 @@ def ingest_attested(
     st = SOURCE_TYPES.get(source_type)
     if st is None:
         raise ValueError(f"unknown source_type: {source_type}")
+    if st.deprecated:
+        raise ValueError(
+            f"källtypen '{st.label}' är pensionerad — person-dokument laddas upp per "
+            "medarbetare i Medarbetare-boxen på kundkortet."
+        )
 
     parser = st.parser or read_sheets
     try:
@@ -655,6 +667,8 @@ def attested_status(client_id: str) -> list[dict[str, Any]]:
             "samples": agg[st.key]["samples"],
         }
         for st in SOURCE_TYPES.values()
+        # Pensionerad typ visas BARA om det finns kvarvarande data att städa.
+        if not st.deprecated or agg[st.key]["included"] or agg[st.key]["staged"]
     ]
 
 

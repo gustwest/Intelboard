@@ -27,6 +27,7 @@ def list_source_types() -> dict[str, Any]:
         "source_types": [
             {"key": st.key, "label": st.label, "description": st.description, "mode": st.mode}
             for st in SOURCE_TYPES.values()
+            if not st.deprecated  # pensionerade typer erbjuds aldrig för ny uppladdning
         ]
     }
 
