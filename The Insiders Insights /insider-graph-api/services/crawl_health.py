@@ -117,11 +117,10 @@ def build_doc(client_agg: dict[str, Any] | None, window_days: int, *, now_iso: s
             per_bot[bot] = {
                 "hits": b["hits"],
                 "last_seen": _micros_to_iso(b["last_seen_micros"]),
-                # owner = vänligt ägarnamn (ON7) som frontend leder med; bot-namnet
-                # (nyckeln) är det tekniska som visas sekundärt.
+                # owner = vänligt ägarnamn (ON7). Frontend har sin egen rikare mappning och
+                # leder med den; detta är en stabil server-side-version (rapport/mejl).
                 "owner": crawler_agents.owner_of(bot),
                 "category": b["category"],
-                "category_label": crawler_agents.CATEGORY_LABELS.get(b["category"], b["category"]),
                 "artifacts": sorted(b["artifacts"]),
             }
     return {

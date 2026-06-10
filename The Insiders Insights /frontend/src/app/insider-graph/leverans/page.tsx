@@ -93,9 +93,8 @@ const HEALTH_SV: Record<Health['verdict'], { label: string; tone: 'ok' | 'warn' 
 type CrawlBot = {
   hits: number;
   last_seen: string | null;
-  owner: string;          // vänligt ägarnamn (OpenAI, Anthropic …) — ON7, från backend
-  category: string;
-  category_label: string; // klarspråk från backend (services/crawler_agents.py)
+  owner?: string;   // server-side ägarnamn (rapport/mejl); UI leder med ENGINE_NAMES nedan
+  category: string; // 'ai_search' | 'ai_training'
   artifacts: string[];
 };
 type CrawlHealth = {
@@ -107,9 +106,35 @@ type CrawlHealth = {
   per_bot: Record<string, CrawlBot>;
 };
 
-// Vänliga namn i klartext. Ägarnamn + kategori-text kommer från backend (ON7,
-// services/crawler_agents.py) — en källa. Här mappar vi bara råa filnamn → klartext
-// så att inga tekniska filnamn läcker ut i copy:n (MA8).
+// Klarspråk i gränssnittet (ON7 = mänskliga namn, inte tekniska bot-ID:n; MA8 = inga
+// råa filnamn i copy). Den rikare AI-tjänst-mappningen bor här i UI:t; backend har en
+// enklare owner_of() som server-side-fallback (rapport/mejl).
+const ENGINE_NAMES: Record<string, string> = {
+  GPTBot: 'ChatGPT (OpenAI)',
+  'OAI-SearchBot': 'ChatGPT Search',
+  'ChatGPT-User': 'ChatGPT (när någon frågar)',
+  ClaudeBot: 'Claude (Anthropic)',
+  'anthropic-ai': 'Claude (Anthropic)',
+  'Claude-Web': 'Claude (när någon frågar)',
+  PerplexityBot: 'Perplexity',
+  'Perplexity-User': 'Perplexity (när någon frågar)',
+  'Google-Extended': 'Google Gemini',
+  'Applebot-Extended': 'Apple Intelligence',
+  'Meta-ExternalAgent': 'Meta AI',
+  Bytespider: 'TikTok-AI (ByteDance)',
+  Amazonbot: 'Amazon-AI',
+  'cohere-ai': 'Cohere',
+  YouBot: 'You.com',
+  DuckAssistBot: 'DuckDuckGo-AI',
+  CCBot: 'Common Crawl (delas av flera AI-tjänster)',
+};
+const engineName = (bot: string) => ENGINE_NAMES[bot] ?? bot;
+
+const CATEGORY_COPY: Record<string, string> = {
+  ai_search: 'Söker live — kan citera er i ett svar redan nu',
+  ai_training: 'Lär sig om er till sina framtida svar',
+};
+
 const ARTIFACT_NAMES: Record<string, string> = {
   'index.html': 'profilsidan',
   'schema.json': 'datafilen',
@@ -409,11 +434,11 @@ export default function LeveransPage() {
                   >
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <span style={{ color: C.text, fontWeight: 600, fontSize: 13 }}>
-                        {b.owner}
+                        {engineName(bot)}
                         <span style={{ color: C.dim, fontWeight: 400, fontSize: 10, marginLeft: 6 }}>{bot}</span>
                       </span>
                       <span style={{ color: C.dim, fontSize: 11 }}>
-                        {b.category_label}{b.artifacts.length ? ` · läste ${artifactNames(b.artifacts)}` : ''}
+                        {CATEGORY_COPY[b.category] ?? ''}{b.artifacts.length ? ` · läste ${artifactNames(b.artifacts)}` : ''}
                       </span>
                     </div>
                     <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
