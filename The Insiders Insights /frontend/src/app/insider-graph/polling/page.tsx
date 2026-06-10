@@ -540,17 +540,41 @@ export default function GraphRiskLoopPage() {
             <TrendView trend={report.trend} currentScore={conf.score} />
           </div>
 
-          {/* 6. Sekundärt: Parity Index */}
+          {/* 6. Sekundärt: Parity Index v2 — gapet AI:s framlyfta personer vs formell ledning */}
           <div style={cardStyle}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
               <div>
                 <div style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>
                   Parity Index
                 </div>
-                <div style={{ fontSize: 12, color: C.dim, marginTop: 4 }}>Könsbalans i porträtteringen — eget mått, ingår ej i beslutssäkerheten.</div>
+                <div style={{ fontSize: 12, color: C.dim, marginTop: 4 }}>
+                  Könsbalans bland personer AI själv lyfter fram, mot er formella lednings sammansättning — eget mått, ingår ej i beslutssäkerheten.
+                </div>
+                {report.parity?.portrayed != null && (
+                  <div style={{ fontSize: 11, color: C.dim, marginTop: 6, lineHeight: 1.5 }}>
+                    {report.parity.n} namngivna personer
+                    {report.parity.baseline ? (
+                      <> · ledningsbaseline {Math.round(report.parity.baseline.value * 100)} % ({report.parity.baseline.source})</>
+                    ) : (
+                      <> · baseline saknas — sätt ledningens kvinnoandel i kundkortet för gap-analys</>
+                    )}
+                    {!report.parity.reliable && (
+                      <span style={{ fontWeight: 600, color: C.muted }}> · tunt underlag, ej trend</span>
+                    )}
+                  </div>
+                )}
               </div>
-              <div style={{ fontSize: 28, fontWeight: 600, color: C.text, letterSpacing: '-0.02em' }}>
-                {report.parity_index != null ? `${Math.round(report.parity_index * 100)}%` : '—'}
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ fontSize: 28, fontWeight: 600, color: C.text, letterSpacing: '-0.02em' }}>
+                  {report.parity?.portrayed != null
+                    ? `${Math.round(report.parity.portrayed * 100)}%`
+                    : report.parity_index != null ? `${Math.round(report.parity_index * 100)}%` : '—'}
+                </div>
+                {report.parity?.gap != null && (
+                  <div style={{ fontSize: 12, fontWeight: 600, marginTop: 2, color: report.parity.reliable && Math.abs(report.parity.gap) > 0.1 ? C.accent : C.muted }}>
+                    gap {report.parity.gap > 0 ? '+' : '−'}{Math.abs(Math.round(report.parity.gap * 100))} pe
+                  </div>
+                )}
               </div>
             </div>
           </div>

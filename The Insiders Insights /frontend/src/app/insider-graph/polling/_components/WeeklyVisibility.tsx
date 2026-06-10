@@ -53,7 +53,7 @@ export function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: sovSeries.length > 1 ? 18 : 0 }}>
         <Stat label="Share of Voice" value={pct(latest.share_of_voice)} accent />
         <Stat label="Sentiment" value={sent.text} color={sent.color} />
-        <Stat label="Könsbalans (Parity)" value={pct(latest.parity_index)} />
+        <ParityStat week={latest} />
       </div>
 
       <div style={{ fontSize: 11, color: C.dim, margin: sovSeries.length > 1 ? '0 0 6px' : '10px 0 0' }}>
@@ -190,6 +190,46 @@ export function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
           </Block>
         );
       })()}
+    </div>
+  );
+}
+
+/** Parity v2: porträtterad könsbalans (vilka personer AI själv namnger, könsestimerat)
+ * vs kundens ledningsbaseline — gapet är insikten. Wilson-bandet + n/okänd-grindning
+ * speglar backendens reliable-logik: tunt underlag märks, tolkas aldrig som trend. */
+function ParityStat({ week }: { week: PollingWeek }) {
+  const portrayed = week.parity_portrayed ?? week.parity_index;
+  const n = week.parity_n ?? 0;
+  const thin = portrayed != null && (n < 3 || (week.parity_unknown_share ?? 0) > 0.5);
+  const baseline = week.parity_baseline;
+  const gap = week.parity_gap;
+  const ci = week.parity_ci95;
+  return (
+    <div>
+      <Stat label="Könsbalans (porträtterad)" value={pct(portrayed)} color={thin ? C.dim : undefined} />
+      <div style={{ fontSize: 10, color: C.dim, marginTop: 4, lineHeight: 1.5 }}>
+        {portrayed == null ? (
+          'Inga namngivna personer i AI-svaren ännu.'
+        ) : (
+          <>
+            {n > 0 && `${n} namngivna`}
+            {ci && ` · ${Math.round(ci[0] * 100)}–${Math.round(ci[1] * 100)} % (95 %)`}
+            {gap != null && baseline ? (
+              <span title={`Baseline: ${baseline.source}${baseline.as_of ? ` (${baseline.as_of})` : ''}. AI:s framlyfta personer är inte samma kohort som den formella ledningen.`} style={{ cursor: 'help' }}>
+                {' '}· vs ledning {Math.round(baseline.value * 100)} % →{' '}
+                <span style={{ fontWeight: 600, color: thin ? C.dim : Math.abs(gap) > 0.1 ? C.accent : C.muted }}>
+                  gap {gap > 0 ? '+' : '−'}{Math.abs(Math.round(gap * 100))} pe
+                </span>
+              </span>
+            ) : (
+              week.parity_portrayed != null && ' · baseline saknas — sätt ledningens kvinnoandel i kundkortet'
+            )}
+            {thin && (
+              <span style={{ color: C.muted, fontWeight: 600 }}> · tunt underlag, ej trend</span>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

@@ -154,12 +154,29 @@ export type Report = {
     total: PersonaExposure;
   };
   parity_index: number | null;
+  parity: ReportParity | null;
   strengths: string[];
   improvement_opportunities: string[];
   detected: Finding[];
   actions: Action[];
   resolved: { count: number; items: Finding[] };
   trend: Trend;
+};
+
+// Parity v2 (docs/parity-index-spec.md): porträtterad paritet ur öppen person-NER,
+// jämförd mot kundens ledningsbaseline. `reliable` = underlaget bär (n/unknown-grind);
+// ogrindade tal visas men ska aldrig läsas som trend.
+export type ParityBaseline = { value: number; source: string; as_of: string | null };
+
+export type ReportParity = {
+  portrayed: number | null;
+  n: number;
+  unknown_share: number | null;
+  ci95: [number, number] | null;
+  baseline: ParityBaseline | null;
+  gap: number | null;
+  week_id: string;
+  reliable: boolean;
 };
 
 export type Client = { client_id: string; company_name: string | null };
@@ -193,6 +210,13 @@ export type PollingWeek = {
   sov_trend: SovTrend | null;  // P1: vecka-mot-vecka-signifikans
   sentiment_score: number | null;
   parity_index: number | null;
+  // Parity v2 — null/saknas för veckor före omläggningen.
+  parity_portrayed: number | null;
+  parity_n: number | null;
+  parity_unknown_share: number | null;
+  parity_ci95: [number, number] | null;
+  parity_baseline: ParityBaseline | null;
+  parity_gap: number | null;
   category_results: Record<string, CategoryResult> | null;
   category_competitors: Record<string, Competitor[]> | null;
   per_engine: Record<string, EngineResult> | null;

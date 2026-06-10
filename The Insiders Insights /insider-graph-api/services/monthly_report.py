@@ -190,9 +190,12 @@ def build_report_model(client_id: str, month: str | None = None) -> dict[str, An
         "decision_confidence": confidence,
         "verdict": _verdict(confidence, open_f, answers_by_persona),
         "risk_exposure": risk_exposure,
-        "parity_index": parity,
+        # Legacy-alias (frontendens Report.parity_index + äldre läsare): porträtterat tal.
+        "parity_index": (parity or {}).get("portrayed"),
+        # Parity v2: hela objektet (portrayed/baseline/gap/osäkerhet) — gap är insikten.
+        "parity": parity,
         "strengths": _strengths(open_f, actioned_f, resolved_f, answers_by_persona, parity),
-        "improvement_opportunities": _improvements(open_f, answers_by_persona),
+        "improvement_opportunities": _improvements(open_f, answers_by_persona, parity),
         "detected": detected,
         "actions": actions,
         "resolved": {"count": len(resolved_f), "items": [_finding_row(d) for d in resolved_f]},
@@ -350,14 +353,22 @@ def _strengths(open_findings, actioned, resolved, answers_by_persona, parity) ->
     for p in PERSONAS:
         if answers_by_persona.get(p) and p not in open_personas:
             out.append(f"Mot {PERSONA_SV[p].lower()} surfar ni korrekt — inga öppna risker den här månaden.")
-    if parity is not None and parity >= 0.8:
-        out.append(f"Könsbalansen i porträtteringen är god (Parity Index {parity}).")
+    # Parity v2: styrka ENDAST när gapet är litet OCH underlaget bär (reliable-grind).
+    # Språket markerar alltid kohort-skillnaden: AI:s urval ≠ den formella ledningen.
+    gap = (parity or {}).get("gap")
+    if parity and parity.get("reliable") and gap is not None and abs(gap) <= PARITY_GAP_THRESHOLD:
+        out.append(
+            f"AI:s framlyfta personer speglar er formella ledning väl — porträtterad andel "
+            f"kvinnor {_pct_sv(parity['portrayed'])} mot ledningens "
+            f"{_pct_sv((parity.get('baseline') or {}).get('value'))} "
+            f"(gap {_gap_pe(gap)} procentenheter, {parity['n']} namngivna personer)."
+        )
     if actioned:
         out.append(f"{len(actioned)} risk(er) har redan mötts med källförsedda korrigeringar.")
     return out
 
 
-def _improvements(open_findings, answers_by_persona) -> list[str]:
+def _improvements(open_findings, answers_by_persona, parity=None) -> list[str]:
     """Förbättringsmöjligheter — INVARIANT icke-tom (aldrig 'allt perfekt')."""
     out: list[str] = []
     if open_findings:
@@ -370,6 +381,29 @@ def _improvements(open_findings, answers_by_persona) -> list[str]:
                 f"Spåret mot {PERSONA_SV[p].lower()} är ännu otäckt — generera och godkänn "
                 "frågor för att mäta den risken."
             )
+    # Parity v2 — tre lägen, alla grindade och med kohort-brasklappen i klartext:
+    gap = (parity or {}).get("gap")
+    if parity and parity.get("reliable") and gap is not None and abs(gap) > PARITY_GAP_THRESHOLD:
+        riktning = "underrepresenterar" if gap < 0 else "överrepresenterar"
+        out.append(
+            f"AI:s framlyfta personer {riktning} kvinnor jämfört med er formella ledning — "
+            f"porträtterat {_pct_sv(parity['portrayed'])} mot ledningens "
+            f"{_pct_sv((parity.get('baseline') or {}).get('value'))} "
+            f"(gap {_gap_pe(gap)} procentenheter, {parity['n']} namngivna personer). "
+            "Obs: AI:s urval av personer är inte samma kohort som den formella ledningen — "
+            "gapet visar vilka motorerna väljer att lyfta fram."
+        )
+    elif parity and parity.get("portrayed") is not None and parity.get("baseline") is None:
+        out.append(
+            "Paritets-baseline saknas — ange ledningens kvinnoandel (officiell källa) i "
+            "kundkortet för att aktivera gap-analysen AI:s framlyfta personer vs formell ledning."
+        )
+    elif parity and parity.get("portrayed") is not None and not parity.get("reliable"):
+        out.append(
+            f"Paritetsunderlaget är för tunt för slutsatser ({parity['n']} namngivna personer"
+            + (f", {_pct_sv(parity['unknown_share'])} utan könsestimat" if parity.get("unknown_share") else "")
+            + ") — talet redovisas men ska inte tolkas som trend."
+        )
     # Alltid sist: håller sektionen icke-tom även när allt annat ser bra ut.
     out.append(
         "AI-motorerna uppdateras kontinuerligt — fortsatt månatlig bevakning krävs för att "
@@ -432,14 +466,55 @@ def _action_row(d: dict) -> dict[str, Any]:
     }
 
 
-def _latest_parity(client_id: str) -> float | None:
-    """GEO Parity Index ur senaste polling-veckan — redovisas separat, ej i scoren (§7)."""
-    latest, latest_week = None, ""
+# Parity v2-grindning (spec Fas 5): under MIN_N namn är talet anekdot, inte mätning;
+# över MAX_UNKNOWN andel oestimerbara namn är täckningen för svag. Ogrindad data
+# redovisas som tal men får ALDRIG driva styrke-/förbättringsnarrativ.
+PARITY_MIN_N = 3
+PARITY_MAX_UNKNOWN = 0.5
+# |gap| ≤ tröskeln läses som "speglar ledningen väl"; större gap blir en
+# förbättringsmöjlighet. I andel (0.10 = 10 procentenheter).
+PARITY_GAP_THRESHOLD = 0.10
+
+
+def _latest_parity(client_id: str) -> dict[str, Any] | None:
+    """Parity v2 ur senaste polling-veckan — separat mätvärde, ej i scoren (§7).
+
+    {portrayed, n, unknown_share, ci95, baseline, gap, week_id, reliable} | None.
+    Äldre veckor (pre-v2) har bara parity_index → portrayed med n=0 → reliable=False,
+    så gamla tal visas men genererar inga narrativa slutsatser."""
+    data, latest_week = None, ""
     for snap in fs.polling_results_col(client_id).stream():
         if snap.id > latest_week:
-            data = snap.to_dict() or {}
-            latest, latest_week = data.get("parity_index"), snap.id
-    return latest
+            data, latest_week = (snap.to_dict() or {}), snap.id
+    if data is None:
+        return None
+    portrayed = data.get("parity_portrayed", data.get("parity_index"))
+    if portrayed is None:
+        return None
+    n = int(data.get("parity_n") or 0)
+    unknown = data.get("parity_unknown_share")
+    reliable = n >= PARITY_MIN_N and (unknown is None or unknown <= PARITY_MAX_UNKNOWN)
+    return {
+        "portrayed": portrayed,
+        "n": n,
+        "unknown_share": unknown,
+        "ci95": data.get("parity_ci95"),
+        "baseline": data.get("parity_baseline"),
+        "gap": data.get("parity_gap"),
+        "week_id": latest_week,
+        "reliable": reliable,
+    }
+
+
+def _pct_sv(x: float | None) -> str:
+    """0.45 → '45 %' (svensk rapporttext)."""
+    return f"{round(x * 100)} %" if x is not None else "—"
+
+
+def _gap_pe(gap: float) -> str:
+    """Gap i procentenheter med tecken: -0.13 → '−13'."""
+    pe = round(gap * 100)
+    return f"−{abs(pe)}" if pe < 0 else f"+{pe}"
 
 
 def _trend(client_id: str, month: str, current_score: int | None, resolved_count: int,
@@ -549,7 +624,8 @@ def _narrative_context(model: dict[str, Any]) -> dict[str, Any]:
         "månad": model.get("month"),
         "beslutssäkerhet": model.get("decision_confidence"),
         "sammanfattning": model.get("verdict"),
-        "parity_index": model.get("parity_index"),
+        # Klartext (grundprincip 7) — aldrig råa 0–1-tal in i narrativ-prompten.
+        "paritet": _parity_context(model.get("parity")),
         "styrkor": model.get("strengths"),
         "förbättringsmöjligheter": model.get("improvement_opportunities"),
         "detekterade_risker": [
@@ -568,6 +644,28 @@ def _narrative_context(model: dict[str, Any]) -> dict[str, Any]:
         "lösta_risker": (model.get("resolved") or {}).get("count", 0),
         "trend": model.get("trend"),
         "humaniseringstäckning": _humanization_context(model.get("humanization")),
+    }
+
+
+def _parity_context(p: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Klartext-paritet till narrativ-prompten. Ogrindad data märks uttryckligen så
+    LLM:en inte spinner slutsatser av tunt underlag; kohort-brasklappen följer alltid med."""
+    if not p or p.get("portrayed") is None:
+        return None
+    baseline = p.get("baseline") or {}
+    return {
+        "porträtterad_andel_kvinnor": _pct_sv(p["portrayed"]),
+        "formell_ledning": (
+            f"{_pct_sv(baseline.get('value'))} ({baseline.get('source')})"
+            if baseline.get("value") is not None else "baseline saknas"
+        ),
+        "gap_procentenheter": _gap_pe(p["gap"]) if p.get("gap") is not None else None,
+        "underlag": f"{p.get('n', 0)} namngivna personer",
+        "tillförlitligt": bool(p.get("reliable")),
+        "läsanvisning": (
+            "AI:s urval av framlyfta personer är inte samma kohort som den formella "
+            "ledningen — gapet beskriver vilka motorerna väljer att lyfta fram."
+        ),
     }
 
 
@@ -591,7 +689,24 @@ def render_report_html(report: dict[str, Any]) -> str:
     month = report.get("month") or ""
     exp = report.get("risk_exposure") or {}
     total = (exp.get("total") or {})
-    parity = report.get("parity_index")
+    # Parity v2: gap-rad när baseline finns; annars porträtterat tal; annars —.
+    par = report.get("parity") or {}
+    if par.get("gap") is not None:
+        baseline = par.get("baseline") or {}
+        src = f" — {baseline.get('source')}" if baseline.get("source") else ""
+        parity_line = (
+            f"AI:s framlyfta personer {_pct_sv(par.get('portrayed'))} kvinnor "
+            f"({par.get('n', 0)} namngivna) vs formell ledning {_pct_sv(baseline.get('value'))}{html.escape(src)} "
+            f"→ gap {_gap_pe(par['gap'])} procentenheter."
+            + ("" if par.get("reliable") else " Tunt underlag — tolka inte som trend.")
+        )
+    elif par.get("portrayed") is not None:
+        parity_line = (
+            f"{_pct_sv(par.get('portrayed'))} kvinnor bland AI:s framlyfta personer "
+            f"({par.get('n', 0)} namngivna; baseline saknas — gap-analys ej aktiverad)."
+        )
+    else:
+        parity_line = "—."
 
     persona_rows = "".join(
         f"<tr><td>{PERSONA_SV.get(p, p)}</td><td class='num'>{_fmt_score(v.get('score'))}</td>"
@@ -720,7 +835,7 @@ ledningsgruppsrapport utanför verktyget. Inga kausalitetspåståenden — formu
 <p class="note">Graderad skala 0–100 (högre är bättre). Toppen (100) hålls medvetet öppen —
 GEO är aldrig "klart" eftersom AI-motorerna ständigt uppdateras. Tekniskt undermått
 Risk Exposure: {_fmt_score(total.get('score'))} (lägre är bättre).
-GEO Parity Index (separat): {_fmt_score(parity)}.</p>
+GEO Parity Index (separat): {parity_line}</p>
 <table><thead><tr><th>Persona</th><th class="num">Risk Exposure</th><th class="num">Vägt</th><th class="num">Svar</th></tr></thead>
 <tbody>{persona_rows}</tbody></table>
 

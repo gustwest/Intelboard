@@ -71,6 +71,57 @@ class BuildModelTest(unittest.TestCase):
         _setup()
         m = mr.build_report_model("acme", "2026-05")
         self.assertEqual(m["parity_index"], 0.9)            # senaste veckan vinner
+        # Legacy-veckor (bara parity_index, inga v2-fält) → n=0 → ogrindad: talet
+        # visas men får inte generera narrativa slutsatser.
+        self.assertFalse(m["parity"]["reliable"])
+        self.assertFalse(any("speglar er formella ledning" in s for s in m["strengths"]))
+
+    def test_parity_v2_small_gap_is_strength(self):
+        _setup(polling_results={"2026-W21": {
+            "parity_index": 0.42, "parity_portrayed": 0.42, "parity_n": 8,
+            "parity_unknown_share": 0.1, "parity_ci95": [0.2, 0.7],
+            "parity_baseline": {"value": 0.45, "source": "Årsredovisning 2025"},
+            "parity_gap": -0.03,
+        }})
+        m = mr.build_report_model("acme", "2026-05")
+        self.assertTrue(m["parity"]["reliable"])
+        self.assertTrue(any("speglar er formella ledning väl" in s for s in m["strengths"]))
+
+    def test_parity_v2_large_gap_is_improvement(self):
+        _setup(polling_results={"2026-W21": {
+            "parity_portrayed": 0.20, "parity_n": 10, "parity_unknown_share": 0.0,
+            "parity_baseline": {"value": 0.45, "source": "Årsredovisning 2025"},
+            "parity_gap": -0.25,
+        }})
+        m = mr.build_report_model("acme", "2026-05")
+        hits = [s for s in m["improvement_opportunities"] if "underrepresenterar kvinnor" in s]
+        self.assertEqual(len(hits), 1)
+        self.assertIn("inte samma kohort", hits[0])  # kohort-brasklappen följer alltid med
+        self.assertFalse(any("speglar er formella ledning" in s for s in m["strengths"]))
+
+    def test_parity_v2_thin_data_gated(self):
+        # n < PARITY_MIN_N → varken styrka eller gap-slutsats, bara tunt-underlag-notis.
+        _setup(polling_results={"2026-W21": {
+            "parity_portrayed": 1.0, "parity_n": 1, "parity_unknown_share": 0.0,
+            "parity_baseline": {"value": 0.45, "source": "ÅR"}, "parity_gap": 0.55,
+        }})
+        m = mr.build_report_model("acme", "2026-05")
+        self.assertFalse(m["parity"]["reliable"])
+        self.assertFalse(any("överrepresenterar" in s for s in m["improvement_opportunities"]))
+        self.assertTrue(any("för tunt" in s for s in m["improvement_opportunities"]))
+
+    def test_parity_v2_missing_baseline_prompts_setup(self):
+        _setup(polling_results={"2026-W21": {
+            "parity_portrayed": 0.4, "parity_n": 6, "parity_unknown_share": 0.0,
+        }})
+        m = mr.build_report_model("acme", "2026-05")
+        self.assertTrue(any("Paritets-baseline saknas" in s for s in m["improvement_opportunities"]))
+
+    def test_parity_none_when_no_polling(self):
+        _setup(polling_results={})
+        m = mr.build_report_model("acme", "2026-05")
+        self.assertIsNone(m["parity"])
+        self.assertIsNone(m["parity_index"])
 
     def test_trend_from_previous_report(self):
         # Trenden följer beslutssäkerheten (högre=bättre) månad-för-månad.

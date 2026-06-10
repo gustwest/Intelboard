@@ -1,10 +1,13 @@
 # GEO Parity Index v2 — porträttering vs baseline (DPA-säkrad)
 
-*Spec 2026-06-10. Status: Fas 0 ✅, Fas 1+2 ✅ (öppen person-NER på Vertex EU,
-nya aggregatfält, ingen namn-persistens), Fas 3 ✅ (parity_baseline på kund-doc:
-GET/PUT med proveniens-krav + inmatning i IdentityMetadataEditor), Fas 6
-backend-delen ✅ (router exponerar fälten). Kvar: Fas 5 (månadsrapportens
-gap-narrativ), Fas 6 frontend-visning (WeeklyVisibility), Fas 7 löpande.*
+*Spec 2026-06-10. Status: ALLA FASER ✅ — Fas 0 (SCB-namnestimering), Fas 1+2
+(öppen person-NER på Vertex EU, nya aggregatfält, ingen namn-persistens), Fas 3
+(parity_baseline med proveniens-krav + editor), Fas 4 (behandlingsinstruktion i
+detta dokument), Fas 5 (månadsrapport: gap-narrativ grindat på reliable, klartext
+till narrativ-prompten), Fas 6 (router + WeeklyVisibility/rapportvy med gap,
+Wilson-band och tunt-underlag-märkning), Fas 7 (tester per fas). Kvar utanför
+spec: ev. Bolagsverket-connector för baseline (steg 2) + spot-verifiering av
+person-NER-träffsäkerhet i prod.*
 
 ## Principändring
 
