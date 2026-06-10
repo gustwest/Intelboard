@@ -719,7 +719,9 @@ function AgentTab({ product }: { product: string }) {
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState(() => {
     if (typeof window === 'undefined') return AGENT_DEFAULT_MODEL_ID;
-    return localStorage.getItem(modelKey) || localStorage.getItem('admin-agent-model') || AGENT_DEFAULT_MODEL_ID;
+    const stored = localStorage.getItem(modelKey) || localStorage.getItem('admin-agent-model');
+    if (stored && AGENT_DROPDOWN_OPTIONS.some(opt => opt.value === stored)) return stored;
+    return AGENT_DEFAULT_MODEL_ID;
   });
   useEffect(() => {
     if (typeof window !== 'undefined') localStorage.setItem(modelKey, model);

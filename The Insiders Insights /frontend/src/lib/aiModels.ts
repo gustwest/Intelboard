@@ -151,9 +151,18 @@ export const MODEL_REGISTRY: readonly ModelEntry[] = [
   },
   {
     role: "agent_default",
+    modelId: "claude-fable-5",
+    provider: "claude_code_cli",
+    purpose: "Default-modell för admin-agenten (senaste, mest kapabla)",
+    latestKnown: "claude-fable-5",
+    checkedAt: _CHECKED,
+    effectiveSince: _EFFECTIVE,
+  },
+  {
+    role: "agent_opus",
     modelId: "claude-opus-4-8",
     provider: "claude_code_cli",
-    purpose: "Default-modell för admin-agenten",
+    purpose: "Opus-alternativ i admin-dropdown",
     latestKnown: "claude-opus-4-8",
     checkedAt: _CHECKED,
     effectiveSince: _EFFECTIVE,
@@ -234,8 +243,9 @@ export interface AgentDropdownOption {
 }
 
 export const AGENT_DROPDOWN_OPTIONS: readonly AgentDropdownOption[] = [
+  { role: "agent_default", value: modelId("agent_default"), label: "Fable 5" },
+  { role: "agent_opus", value: modelId("agent_opus"), label: "Opus 4.8" },
   { role: "agent_sonnet", value: modelId("agent_sonnet"), label: "Sonnet 4.6" },
-  { role: "agent_default", value: modelId("agent_default"), label: "Opus 4.8" },
   { role: "agent_haiku", value: modelId("agent_haiku"), label: "Haiku 4.5" },
 ] as const;
 

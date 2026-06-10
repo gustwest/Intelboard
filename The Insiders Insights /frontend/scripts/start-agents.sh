@@ -15,14 +15,13 @@ set -euo pipefail
 AGENT_API_BASE="https://insiders-frontend-815335042776.europe-north1.run.app"
 AGENT_API_KEY="YcpFKbokWxTu89gJCAvktIkcsD-dSDQdGJMtnxrWA-o"
 AGENT_CLI="$HOME/.local/bin/claude"
-AGENT_MODEL="claude-opus-4-7"
+AGENT_MODEL="claude-fable-5"
 
 # ── Export common env vars so child processes inherit them ──
 export AGENT_API_BASE
 export AGENT_API_KEY
 export AGENT_CLI
 export AGENT_MODEL
-export CLAUDE_CONFIG_DIR="$HOME/.beachvibes-agents/freddi-claude-config"
 
 LOG_DIR="$HOME/.insiders-agents"
 mkdir -p "$LOG_DIR"
