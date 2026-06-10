@@ -1,9 +1,10 @@
 # GEO Parity Index v2 — porträttering vs baseline (DPA-säkrad)
 
 *Spec 2026-06-10. Status: Fas 0 ✅, Fas 1+2 ✅ (öppen person-NER på Vertex EU,
-nya aggregatfält, ingen namn-persistens), Fas 6 backend-delen ✅ (router
-exponerar fälten). Kvar: Fas 3 (baseline-inmatning UI+router), Fas 5
-(månadsrapportens gap-narrativ), Fas 6 frontend, Fas 7 löpande.*
+nya aggregatfält, ingen namn-persistens), Fas 3 ✅ (parity_baseline på kund-doc:
+GET/PUT med proveniens-krav + inmatning i IdentityMetadataEditor), Fas 6
+backend-delen ✅ (router exponerar fälten). Kvar: Fas 5 (månadsrapportens
+gap-narrativ), Fas 6 frontend-visning (WeeklyVisibility), Fas 7 löpande.*
 
 ## Principändring
 

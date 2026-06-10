@@ -48,6 +48,16 @@ class ContactInput(BaseModel):
     is_primary: bool = False
 
 
+class ParityBaselineInput(BaseModel):
+    """Paritets-baseline (Parity v2, docs/parity-index-spec.md): ledningens/styrelsens
+    kvinnoandel ur officiell källa. `value` är en andel 0–1; None = rensa fältet.
+    `source` (proveniens) är obligatorisk när ett värde sätts — utan källa är
+    baselinen inte granskningsbar. `as_of` = vilken tidpunkt uppgiften avser."""
+    value: float | None = None
+    source: str | None = None
+    as_of: str | None = None
+
+
 class ClientConfigUpdate(BaseModel):
     """Per-kund mätkonfiguration (AI-synlighet). Alla fält valfria — utelämnade rörs ej.
 
@@ -87,6 +97,10 @@ class ClientConfigUpdate(BaseModel):
     # Profilsidans språk (BCP 47-bas). Default sv. Driver i18n + inLanguage på
     # profilsida/JSON-LD. Tom sträng = återgå till default (sv).
     language: str | None = None
+    # Paritets-baseline (Parity v2): polling snapshotar fältet varje vecka och
+    # räknar parity_gap = porträtterad − baseline. None = rör inte fältet;
+    # {value: None} = rensa.
+    parity_baseline: ParityBaselineInput | None = None
 
 
 @router.get("")
@@ -168,6 +182,8 @@ def get_client(client_id: str) -> dict[str, Any]:
         "contacts": contacts_svc.all_contacts(data),
         # Profilsidans språk — default sv om aldrig satt.
         "language": data.get("language") or DEFAULT_LANGUAGE,
+        # Paritets-baseline (Parity v2): {value, source, as_of, set_at} | None.
+        "parity_baseline": data.get("parity_baseline"),
         # Output-kvalitets-personor (audience_priorities). Sätt av användaren eller
         # härlett via /derive-personas. None om aldrig satt (UI visar tom-state).
         "audience_priorities": data.get("audience_priorities"),
@@ -290,6 +306,31 @@ def update_client_config(client_id: str, payload: ClientConfigUpdate) -> dict[st
         if lang and lang not in SUPPORTED_LANGUAGES:
             raise HTTPException(400, f"unsupported language: {lang}")
         update["language"] = lang or None  # tom = återgå till default (sv)
+
+    if payload.parity_baseline is not None:
+        pb = payload.parity_baseline
+        if pb.value is None:
+            update["parity_baseline"] = None  # rensa — gap slutar räknas
+        else:
+            if not (0.0 <= pb.value <= 1.0):
+                raise HTTPException(400, "parity_baseline.value måste vara en andel 0–1")
+            source = (pb.source or "").strip()
+            if not source:
+                # Proveniens är poängen: en baseline utan källa är inte granskningsbar
+                # och får inte ligga till grund för gap-narrativ i månadsrapporten.
+                raise HTTPException(400, "parity_baseline.source krävs (t.ex. 'Årsredovisning 2025')")
+            as_of = (pb.as_of or "").strip() or None
+            if as_of:
+                try:
+                    datetime.fromisoformat(as_of)
+                except ValueError:
+                    raise HTTPException(400, "parity_baseline.as_of måste vara ISO-datum (YYYY-MM-DD)")
+            update["parity_baseline"] = {
+                "value": round(float(pb.value), 4),
+                "source": source,
+                "as_of": as_of,
+                "set_at": now_iso,
+            }
 
     if update:
         ref.update(update)

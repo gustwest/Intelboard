@@ -18,6 +18,9 @@ type ClientIdentity = {
   contacts: Contact[];
   language: string;
   active_connectors: string[];  // ON3: "Hämta automatiskt" kräver website-connectorn
+  // Parity v2: ledningens/styrelsens kvinnoandel ur officiell källa. Polling
+  // snapshotar fältet veckovis → parity_gap (porträtterad − baseline).
+  parity_baseline: { value: number; source: string; as_of: string | null; set_at?: string } | null;
 };
 
 type Contact = { email: string; name: string | null; role: string | null; is_primary: boolean };
@@ -44,6 +47,10 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
   const [orgNumber, setOrgNumber] = useState('');
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [language, setLanguage] = useState('sv');
+  // Paritets-baseline: procent som text i UI:t (45 = 45 %), andel 0–1 mot API:t.
+  const [parityPct, setParityPct] = useState('');
+  const [paritySource, setParitySource] = useState('');
+  const [parityAsOf, setParityAsOf] = useState('');
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [fetching, setFetching] = useState(false);
@@ -60,6 +67,9 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
       email: c.email || '', name: c.name || '', role: c.role || '', is_primary: !!c.is_primary,
     })));
     setLanguage(d.language || 'sv');
+    setParityPct(d.parity_baseline ? String(Math.round(d.parity_baseline.value * 1000) / 10) : '');
+    setParitySource(d.parity_baseline?.source || '');
+    setParityAsOf(d.parity_baseline?.as_of || '');
     setLoaded(true);
     setDirty(false);
   }
@@ -96,6 +106,13 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
   async function save() {
     setSaving(true);
     setMsg(null);
+    // Procent i UI → andel 0–1 mot API:t. Tomt fält = rensa (value: null).
+    const pct = parityPct.trim() ? Number(parityPct.replace(',', '.')) : null;
+    if (pct !== null && (!Number.isFinite(pct) || pct < 0 || pct > 100)) {
+      setMsg({ tone: 'error', text: 'Kvinnoandel måste vara ett tal 0–100 (%).' });
+      setSaving(false);
+      return;
+    }
     try {
       await graphFetch(`/api/clients/${clientId}/config`, {
         method: 'PUT',
@@ -108,6 +125,9 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
             .map((c) => ({ email: c.email.trim(), name: c.name.trim() || null, role: c.role.trim() || null, is_primary: c.is_primary }))
             .filter((c) => c.email),
           language,
+          parity_baseline: pct === null
+            ? { value: null }
+            : { value: pct / 100, source: paritySource.trim(), as_of: parityAsOf.trim() || null },
         }),
       });
       await load();
@@ -276,6 +296,54 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
               Styr etiketter/rubriker på profilsidan + inLanguage i JSON-LD. Default svenska.
             </p>
           </div>
+
+          {/* Parity v2: ledningsbaseline — gap = AI:s framlyfta personer vs formell ledning */}
+          <div style={{ borderTop: `1px solid ${C.border}`, margin: '18px 0 14px' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 4 }}>
+            Paritets-baseline (ledning/styrelse)
+          </div>
+          <p style={{ fontSize: 11, color: C.dim, margin: '0 0 12px' }}>
+            Kvinnoandel i kundens <strong style={{ color: C.text }}>formella ledning/styrelse</strong> ur
+            officiell källa (årsredovisning, Bolagsverket). Veckomätningen jämför vilka personer
+            AI-motorerna lyfter fram mot denna baseline — gapet är insikten. Tomt fält = ingen
+            gap-beräkning. Källa krävs när andel anges.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '110px 1.6fr 150px', gap: 10, alignItems: 'start' }}>
+            <div>
+              <UI.FieldLabel>Kvinnoandel %</UI.FieldLabel>
+              <UI.Input
+                value={parityPct}
+                onChange={(e) => { setParityPct(e.target.value); setDirty(true); }}
+                placeholder="45"
+                inputMode="decimal"
+                style={{ width: '100%' }}
+              />
+            </div>
+            <div>
+              <UI.FieldLabel>Källa</UI.FieldLabel>
+              <UI.Input
+                value={paritySource}
+                onChange={(e) => { setParitySource(e.target.value); setDirty(true); }}
+                placeholder="Årsredovisning 2025, s. 12"
+                style={{ width: '100%' }}
+              />
+            </div>
+            <div>
+              <UI.FieldLabel>Avser datum</UI.FieldLabel>
+              <UI.Input
+                type="date"
+                value={parityAsOf}
+                onChange={(e) => { setParityAsOf(e.target.value); setDirty(true); }}
+                style={{ width: '100%' }}
+              />
+            </div>
+          </div>
+          {identity.parity_baseline?.set_at && (
+            <div style={{ fontSize: 10, color: '#6b6e7e', marginTop: 6, fontStyle: 'italic' }}>
+              manuellt satt {formatDate(identity.parity_baseline.set_at)}
+              {identity.parity_baseline.source ? ` · ${identity.parity_baseline.source}` : ''}
+            </div>
+          )}
         </>
       )}
     </UI.Card>
