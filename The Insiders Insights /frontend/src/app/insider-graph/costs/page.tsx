@@ -143,9 +143,11 @@ export default function CostsPage() {
 
       {data && data.n_days_with_data === 0 && (
         <Banner color="#b45309">
-          Ingen kostnadsdata för perioden ännu. <code style={code}>cost-rollup-daily</code> behöver
-          ha körts minst en gång. Trigga manuellt:{' '}
-          <code style={code}>POST /api/ops/cost-summary/rollup-now</code>.
+          Ingen kostnadsdata för perioden ännu — den dagliga sammanställningen har inte körts än.
+          <span style={{ display: 'block', marginTop: 4, fontSize: 11, opacity: 0.75 }}>
+            Tekniskt: trigga <code style={code}>cost-rollup-daily</code> manuellt via{' '}
+            <code style={code}>POST /api/ops/cost-summary/rollup-now</code>.
+          </span>
         </Banner>
       )}
 
@@ -169,9 +171,11 @@ export default function CostsPage() {
           {data.unknown_models.length > 0 && (
             <Banner color="#b45309">
               <Info size={14} style={{ display: 'inline', verticalAlign: 'text-bottom' }} />{' '}
-              {data.unknown_models.length} modell(er) saknar pris i tabellen och räknas som $0:{' '}
-              <code style={code}>{data.unknown_models.join(', ')}</code>. Lägg in i{' '}
-              <code style={code}>services/cost_estimator.PRICE_TABLE</code>.
+              {data.unknown_models.length} modell(er) saknar pris och räknas som $0:{' '}
+              <code style={code}>{data.unknown_models.join(', ')}</code>.
+              <span style={{ display: 'block', marginTop: 4, fontSize: 11, opacity: 0.75 }}>
+                Tekniskt: lägg in priset i pristabellen (<code style={code}>services/cost_estimator.PRICE_TABLE</code>).
+              </span>
             </Banner>
           )}
 

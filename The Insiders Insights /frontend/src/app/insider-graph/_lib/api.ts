@@ -21,19 +21,49 @@ function applyServerKey(headers: Headers): Headers {
 
 export async function graphFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = applyServerKey(new Headers(init?.headers));
-  const res = await fetch(`${targetUrl(path)}`, { ...init, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${targetUrl(path)}`, { ...init, headers });
+  } catch {
+    // KU8: nätverks-/anslutningsfel → vänlig text i st f rått TypeError ("Failed to fetch").
+    throw new Error('Kunde inte nå servern — kontrollera anslutningen och försök igen.');
+  }
   if (!res.ok) {
-    const detail = await res.text().catch(() => '');
-    throw new Error(`HTTP ${res.status}: ${detail.slice(0, 200)}`);
+    throw new Error(friendlyHttpError(res.status, await res.text().catch(() => '')));
   }
   return res.json();
+}
+
+// KU8: råa "HTTP 500: <body>"-fel → vänlig svensk copy. FastAPI:s {"detail":"…"} plockas ut
+// (ofta redan en läsbar mening, t.ex. "ogiltig contact_email"); annars en generisk text per
+// statusklass. Det exakta felet loggas i webbläsarkonsolen (rått kvar där för felsökning).
+function friendlyHttpError(status: number, body: string): string {
+  let detail = '';
+  try {
+    const j = JSON.parse(body);
+    if (j?.detail) detail = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail);
+  } catch {
+    /* body ej JSON */
+  }
+  if (status >= 400) console.warn(`graphFetch ${status}:`, detail || body.slice(0, 300));
+  if (status === 404) return detail || 'Det här hittades inte.';
+  if (status === 401 || status === 403) return 'Du saknar behörighet — logga in igen.';
+  if (status === 429) return 'För många anrop just nu — vänta en stund och försök igen.';
+  if (status >= 500) return 'Något gick fel på servern. Försök igen om en stund.';
+  // 4xx (400/409 m.fl.): FastAPI-detail är oftast en läsbar valideringsmening.
+  return detail || `Något gick fel (kod ${status}).`;
 }
 
 /** Hämtar binärt innehåll (t.ex. uppladdat verifieringsunderlag) via proxyn. */
 export async function graphFetchBlob(path: string): Promise<Blob> {
   const headers = applyServerKey(new Headers());
-  const res = await fetch(`${targetUrl(path)}`, { headers });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  let res: Response;
+  try {
+    res = await fetch(`${targetUrl(path)}`, { headers });
+  } catch {
+    throw new Error('Kunde inte nå servern — kontrollera anslutningen.');
+  }
+  if (!res.ok) throw new Error(friendlyHttpError(res.status, await res.text().catch(() => '')));
   return res.blob();
 }
 
