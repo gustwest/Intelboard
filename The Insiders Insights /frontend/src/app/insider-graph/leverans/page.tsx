@@ -93,8 +93,9 @@ const HEALTH_SV: Record<Health['verdict'], { label: string; tone: 'ok' | 'warn' 
 type CrawlBot = {
   hits: number;
   last_seen: string | null;
+  owner: string;          // vänligt ägarnamn (OpenAI, Anthropic …) — ON7, från backend
   category: string;
-  category_label: string;
+  category_label: string; // klarspråk från backend (services/crawler_agents.py)
   artifacts: string[];
 };
 type CrawlHealth = {
@@ -105,6 +106,17 @@ type CrawlHealth = {
   window_days?: number;
   per_bot: Record<string, CrawlBot>;
 };
+
+// Vänliga namn i klartext. Ägarnamn + kategori-text kommer från backend (ON7,
+// services/crawler_agents.py) — en källa. Här mappar vi bara råa filnamn → klartext
+// så att inga tekniska filnamn läcker ut i copy:n (MA8).
+const ARTIFACT_NAMES: Record<string, string> = {
+  'index.html': 'profilsidan',
+  'schema.json': 'datafilen',
+  'llms.txt': 'AI-sammanfattningen',
+};
+const artifactNames = (a: string[]) =>
+  a.map((x) => ARTIFACT_NAMES[x] ?? x).join(', ');
 
 type Theme = 'light' | 'dark';
 type Variant = 'footer' | 'pill';
@@ -370,22 +382,22 @@ export default function LeveransPage() {
         />
       </UI.Card>
 
-      {/* Crawl-hälsa (P2 passivt): hämtar AI-motorernas crawlers profilsidan? */}
+      {/* Läses av AI: hämtar AI-tjänsterna faktiskt profilen? (steget efter "Live") */}
       <UI.Card
         padding="18px 22px"
         style={{ marginBottom: 16 }}
-        title="Crawl-hälsa"
-        hint="Hämtar AI-motorernas crawlers faktiskt den hostade profilsidan? Passiv mätning ur serverloggarna — nästa steg efter 'Live' i kedjan publicerad → installerad → läst."
+        title="Läses av AI-tjänster"
+        hint="Hämtar AI-tjänsterna (ChatGPT, Perplexity, Claude m.fl.) faktiskt kundens profil? Vi ser det i serverns besöksloggar. Steget efter 'Live': sidan är publicerad → installerad → läst."
       >
         {!crawl || !crawl.measured || crawl.total_hits === 0 ? (
           <div style={{ color: C.muted, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <Clock size={13} />
-            Inväntar första crawl — loggningen är aktiverad, AI-crawlers brukar dyka upp inom dagar (mätfönster {crawl?.window_days ?? 30} dagar).
+            Ingen AI-tjänst har hämtat profilen ännu. Mätningen är igång — de brukar dyka upp inom några dagar (räknat över de senaste {crawl?.window_days ?? 30} dagarna).
           </div>
         ) : (
           <div>
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>
-              {crawl.bots_seen} AI-crawler(s) · {crawl.total_hits} hämtningar · senast {fmtRelative(crawl.last_crawl_at)}
+              {crawl.bots_seen} AI-tjänst{crawl.bots_seen === 1 ? '' : 'er'} har hämtat profilen {crawl.total_hits} gång{crawl.total_hits === 1 ? '' : 'er'} · senast {fmtRelative(crawl.last_crawl_at)}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {Object.entries(crawl.per_bot)
@@ -396,14 +408,17 @@ export default function LeveransPage() {
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '7px 0', borderTop: `1px solid ${C.border}` }}
                   >
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ color: C.text, fontWeight: 600, fontSize: 13 }}>{bot}</span>
+                      <span style={{ color: C.text, fontWeight: 600, fontSize: 13 }}>
+                        {b.owner}
+                        <span style={{ color: C.dim, fontWeight: 400, fontSize: 10, marginLeft: 6 }}>{bot}</span>
+                      </span>
                       <span style={{ color: C.dim, fontSize: 11 }}>
-                        {b.category_label}{b.artifacts.length ? ` · ${b.artifacts.join(', ')}` : ''}
+                        {b.category_label}{b.artifacts.length ? ` · läste ${artifactNames(b.artifacts)}` : ''}
                       </span>
                     </div>
                     <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      <span style={{ color: C.text, fontWeight: 600, fontSize: 13 }}>{b.hits}×</span>
-                      <span style={{ color: C.dim, fontSize: 11, marginLeft: 8 }}>{fmtRelative(b.last_seen)}</span>
+                      <span style={{ color: C.text, fontWeight: 600, fontSize: 13 }}>{b.hits} besök</span>
+                      <span style={{ color: C.dim, fontSize: 11, marginLeft: 8 }}>senast {fmtRelative(b.last_seen)}</span>
                     </div>
                   </div>
                 ))}

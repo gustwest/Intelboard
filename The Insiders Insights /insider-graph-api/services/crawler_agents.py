@@ -54,6 +54,35 @@ CATEGORY_LABELS = {
     "ai_training": "Tränings-/korpus-crawler",
 }
 
+# Vänligt ägarnamn (ON7) per tekniskt bot-namn — för konsumenter som vill leda med
+# AI-tjänsten i stället för UA-strängen. Frontend har sin egen, rikare mappning; detta
+# är en stabil server-side-fallback (t.ex. för rapport/mejl).
+_OWNER = {
+    "GPTBot": "OpenAI",
+    "OAI-SearchBot": "OpenAI",
+    "ChatGPT-User": "OpenAI",
+    "ClaudeBot": "Anthropic",
+    "anthropic-ai": "Anthropic",
+    "Claude-Web": "Anthropic",
+    "PerplexityBot": "Perplexity",
+    "Perplexity-User": "Perplexity",
+    "Google-Extended": "Google",
+    "Applebot-Extended": "Apple",
+    "Meta-ExternalAgent": "Meta",
+    "Bytespider": "ByteDance",
+    "Amazonbot": "Amazon",
+    "cohere-ai": "Cohere",
+    "YouBot": "You.com",
+    "DuckAssistBot": "DuckDuckGo",
+    "CCBot": "Common Crawl",
+}
+
+
+def owner_of(bot_name: str) -> str:
+    """Vänligt ägarnamn (OpenAI, Anthropic …) för ett tekniskt bot-namn; faller
+    tillbaka på bot-namnet självt om okänt."""
+    return _OWNER.get(bot_name, bot_name)
+
 
 def identify(user_agent: str | None) -> tuple[str, str] | None:
     """UA-sträng → (kanoniskt bot-namn, kategori), eller None om ingen känd AI-bot."""
