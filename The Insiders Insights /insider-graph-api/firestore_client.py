@@ -261,6 +261,12 @@ def trust_gap_doc(client_id: str):
     return client_doc(client_id).collection("trust_gap").document("latest")
 
 
+def crawl_health_doc(client_id: str):
+    """Crawl-health (P2 passivt lager): AI-crawler-träffar på den hostade profilsidan.
+    Ett dok per kund, överskrivs av jobs/crawl_health ur GCS usage-loggar."""
+    return client_doc(client_id).collection("crawl_health").document("latest")
+
+
 def trust_gap_snapshots_col(client_id: str):
     return client_doc(client_id).collection("trust_gap_snapshots")
 

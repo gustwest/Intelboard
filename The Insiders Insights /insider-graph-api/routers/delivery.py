@@ -46,6 +46,21 @@ def get_delivery_health(client_id: str) -> dict[str, object]:
     return result
 
 
+@router.get("/{client_id}/crawl-health")
+def get_crawl_health(client_id: str) -> dict[str, object]:
+    """P2 passivt lager — hämtar AI-motorernas crawlers den hostade profilsidan? Läser
+    det persisterade aggregatet (jobs/crawl_health ur GCS usage-loggar). Saknas doket
+    ännu (jobbet ej kört / inga loggar) → 0-svar så frontend kan visa 'Inväntar första
+    crawl' i stället för ett fel."""
+    if not fs.client_doc(client_id).get().exists:
+        raise HTTPException(404, f"client not found: {client_id}")
+    snap = fs.crawl_health_doc(client_id).get()
+    if snap.exists:
+        return {"client_id": client_id, "measured": True, **(snap.to_dict() or {})}
+    return {"client_id": client_id, "measured": False, "total_hits": 0,
+            "bots_seen": 0, "per_bot": {}, "last_crawl_at": None}
+
+
 @router.get("/{client_id}/install-kit", response_class=HTMLResponse)
 def get_install_kit(client_id: str) -> HTMLResponse:
     """Installationskitet som självständig HTML-sida (B1) — utskrivbar till PDF."""

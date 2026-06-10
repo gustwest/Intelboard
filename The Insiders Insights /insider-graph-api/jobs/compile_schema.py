@@ -25,6 +25,16 @@ log = logging.getLogger("jobs.compile_schema")
 # Hur många changelog-poster vi behåller per kund (kapad lista → obegränsad tillväxt undviks).
 _HISTORY_CAP = 20
 
+# Cache-policy för den färskhets-kritiska leveransytan (schema.json/index.html/llms.txt).
+# `no-cache` = Cloud CDN revaliderar mot origin vid VARJE request i stället för att servera
+# en cachad (potentiellt timmar gammal) kopia. Två syften: (1) crawlers får alltid den
+# senast kompilerade sanningssidan — vi lovar "löpande uppdaterad" och dateModified är en
+# citerbarhets-signal; (2) varje crawler-träff når origin och blir loggbar (crawl-health,
+# P2). CDN är fortfarande PÅ (spik-/skala-väg kvar) — vi tillåter bara inte stale serving.
+# Se diskussion om "mellanvägen": färskhet + mätbarhet väger tyngre än edge-cache vid
+# nuvarande volym. robots.txt/sitemap.xml (compile_all_schemas) får cacha som förr.
+PROFILE_CACHE_CONTROL = "no-cache"
+
 
 def run(client_id: str) -> None:
     with record_run("compile_schema", client_id) as r:
@@ -65,19 +75,19 @@ def run(client_id: str) -> None:
             log.info("no change for %s — skipping upload, refreshing metadata only", client_id)
         else:
             schema_blob.upload_from_string(payload, content_type="application/ld+json")
-            schema_blob.cache_control = "public, max-age=300"
+            schema_blob.cache_control = PROFILE_CACHE_CONTROL
             schema_blob.patch()
 
             # Profilsidan (lager 2): statisk HTML bredvid schema.json, samma render-modell.
             page_blob = bucket.blob(urls.page_object(client_id))
             page_blob.upload_from_string(profile_html, content_type="text/html; charset=utf-8")
-            page_blob.cache_control = "public, max-age=300"
+            page_blob.cache_control = PROFILE_CACHE_CONTROL
             page_blob.patch()
 
             # llms.txt: markdown-summering för AI-crawlers (discoverability).
             llms_blob = bucket.blob(urls.llms_object(client_id))
             llms_blob.upload_from_string(llms_txt, content_type="text/plain; charset=utf-8")
-            llms_blob.cache_control = "public, max-age=300"
+            llms_blob.cache_control = PROFILE_CACHE_CONTROL
             llms_blob.patch()
 
         # Versionering/changelog (P3): bumpa en monoton version + spara innehållshash +

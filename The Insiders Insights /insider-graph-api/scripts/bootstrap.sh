@@ -55,6 +55,10 @@ CDN_BASE_URL="${CDN_BASE_URL:-https://storage.googleapis.com/${BUCKET}}"
 # vid cutover, tillsammans med CDN_BASE_URL → egen domän. Default false = path-style.
 CDN_CLEAN_URLS="${CDN_CLEAN_URLS:-false}"
 
+# Crawl-health (P2 passivt lager): GCS usage-loggar för CDN-bucketen samlas här och
+# läses av jobs/crawl_health. EU-only (IP/UA stannar i europe-north1). Se §crawl-health.
+USAGE_LOG_BUCKET="${USAGE_LOG_BUCKET:-insider-graph-usage-logs-${PROJECT_ID}}"
+
 # Utgående mejl (Brevo, EU). NOTIFY_FROM_EMAIL = verifierad avsändare i Brevo, krävs
 # för att B1/B2-kundmejlen ska skicka (annars self-no-op). OPS_NOTIFY_EMAIL = internt
 # mottagar-team för kvartals-påminnelsen (tom = den no-op:ar). Sätts som env (ej secret)
@@ -130,6 +134,29 @@ JSON
 gsutil lifecycle set lifecycle.json "gs://$BACKUP_BUCKET"
 rm lifecycle.json
 
+# ---- 3c. Crawl-health: GCS usage-loggar för CDN-bucketen ------------------
+# P2 passivt lager: varje crawler-request på profilen (mellanvägen serverar med no-cache,
+# se compile_schema.PROFILE_CACHE_CONTROL + cache-mode i 3b) når origin och loggas här.
+# jobs/crawl_health läser loggarna. EU-only: bucketen i samma region (IP/UA = persondata).
+if ! gsutil ls -b "gs://$USAGE_LOG_BUCKET" >/dev/null 2>&1; then
+  echo "==> Skapar usage-log-bucket: gs://$USAGE_LOG_BUCKET"
+  gcloud storage buckets create "gs://$USAGE_LOG_BUCKET" --location="$REGION" \
+    --uniform-bucket-level-access --project="$PROJECT_ID"
+fi
+# Radera loggar efter 90 dagar (crawl_health-fönstret är 30).
+cat > lifecycle.json <<JSON
+{"lifecycle":{"rule":[{"action":{"type":"Delete"},"condition":{"age":90}}]}}
+JSON
+gsutil lifecycle set lifecycle.json "gs://$USAGE_LOG_BUCKET"
+rm lifecycle.json
+# GCS-log-leveransgruppen måste få skriva usage-loggarna; runtime-SA:n måste få läsa dem.
+gcloud storage buckets add-iam-policy-binding "gs://$USAGE_LOG_BUCKET" \
+  --member="group:cloud-storage-analytics@google.com" --role="roles/storage.objectCreator" --project="$PROJECT_ID" >/dev/null || true
+gcloud storage buckets add-iam-policy-binding "gs://$USAGE_LOG_BUCKET" \
+  --member="serviceAccount:$SA_EMAIL" --role="roles/storage.objectViewer" --project="$PROJECT_ID" >/dev/null || true
+# Slå på usage-logging på CDN-bucketen → loggarna landar i usage-log-bucketen.
+gcloud storage buckets update "gs://$BUCKET" --log-bucket="gs://$USAGE_LOG_BUCKET" --log-object-prefix="usage" --project="$PROJECT_ID" || true
+
 # ---- 3b. Clean-URL: HTTPS-LB + Cloud CDN på egen domän --------------------
 # Provisioneras bara om PROFILE_DOMAIN är satt. Ger snygga, migrations-säkra
 # profil-URL:er (https://$PROFILE_DOMAIN/clients/<id>/) i stället för den råa
@@ -153,12 +180,17 @@ if [[ -n "$PROFILE_DOMAIN" ]]; then
   fi
   LB_IP="$(gcloud compute addresses describe "$LB_IP_NAME" --global --project="$PROJECT_ID" --format='value(address)')"
 
-  # Backend-bucket med Cloud CDN aktiverat.
+  # Backend-bucket med Cloud CDN aktiverat. cache-mode=USE_ORIGIN_HEADERS gör att CDN
+  # följer objektens Cache-Control strikt: profil-objekten (no-cache) revalideras mot
+  # origin varje request → alltid färska + varje crawler-träff loggas (crawl-health,
+  # "mellanvägen"). robots/sitemap (max-age=3600) cachas fortfarande per sin header.
   if ! gcloud compute backend-buckets describe "$LB_BACKEND" --project="$PROJECT_ID" >/dev/null 2>&1; then
     echo "==> Skapar backend-bucket (CDN): $LB_BACKEND"
     gcloud compute backend-buckets create "$LB_BACKEND" \
-      --gcs-bucket-name="$BUCKET" --enable-cdn --project="$PROJECT_ID"
+      --gcs-bucket-name="$BUCKET" --enable-cdn --cache-mode=USE_ORIGIN_HEADERS --project="$PROJECT_ID"
   fi
+  # Idempotent: säkerställ cache-mode även på en redan skapad backend-bucket.
+  gcloud compute backend-buckets update "$LB_BACKEND" --cache-mode=USE_ORIGIN_HEADERS --project="$PROJECT_ID" >/dev/null || true
 
   # URL-map → backend-bucket.
   if ! gcloud compute url-maps describe "$LB_URLMAP" --project="$PROJECT_ID" >/dev/null 2>&1; then
@@ -251,7 +283,7 @@ create_or_update_job() {
       --service-account="$SA_EMAIL" \
       --command="python" --args="-m,$CMD" \
       --tasks="$TASKS" --parallelism="$PARALLELISM" --task-timeout="$TASK_TIMEOUT" \
-      --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS},NOTIFY_FROM_EMAIL=${NOTIFY_FROM_EMAIL},OPS_NOTIFY_EMAIL=${OPS_NOTIFY_EMAIL}" \
+      --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS},NOTIFY_FROM_EMAIL=${NOTIFY_FROM_EMAIL},OPS_NOTIFY_EMAIL=${OPS_NOTIFY_EMAIL},USAGE_LOG_BUCKET=${USAGE_LOG_BUCKET}" \
       --update-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,PERPLEXITY_API_KEY=insider-graph-perplexity-api-key:latest,ANTHROPIC_API_KEY=insider-graph-anthropic-api-key:latest,BREVO_API_KEY=insider-graph-brevo-api-key:latest,ADMIN_API_KEY=insider-graph-admin-api-key:latest"
   else
     echo "==> Skapar job: $NAME (tasks=$TASKS parallelism=$PARALLELISM timeout=$TASK_TIMEOUT)"
@@ -261,7 +293,7 @@ create_or_update_job() {
       --command="python" --args="-m,$CMD" \
       --tasks="$TASKS" --parallelism="$PARALLELISM" --task-timeout="$TASK_TIMEOUT" \
       --max-retries=1 \
-      --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS},NOTIFY_FROM_EMAIL=${NOTIFY_FROM_EMAIL},OPS_NOTIFY_EMAIL=${OPS_NOTIFY_EMAIL}" \
+      --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS},NOTIFY_FROM_EMAIL=${NOTIFY_FROM_EMAIL},OPS_NOTIFY_EMAIL=${OPS_NOTIFY_EMAIL},USAGE_LOG_BUCKET=${USAGE_LOG_BUCKET}" \
       --set-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,PERPLEXITY_API_KEY=insider-graph-perplexity-api-key:latest,ANTHROPIC_API_KEY=insider-graph-anthropic-api-key:latest,BREVO_API_KEY=insider-graph-brevo-api-key:latest,ADMIN_API_KEY=insider-graph-admin-api-key:latest"
   fi
 }
@@ -289,6 +321,9 @@ create_or_update_job monthly-report-all       jobs.monthly_report_all      1 1 1
 # Spår B2: kund-säkert månadsmejl till varje kunds kontakt (self-no-op utan
 # Brevo-konfig/kontakt). Körs efter monthly-report-all så rapporten finns.
 create_or_update_job customer-report-email-all jobs.customer_report_email_all 1 1 1800s
+# Crawl-health (P2 passivt): aggregerar AI-crawler-träffar ur GCS usage-loggar → per kund.
+# Globalt jobb (loggen är gemensam), lätt (CSV-parsning) → seriellt.
+create_or_update_job crawl-health             jobs.crawl_health            1 1 1800s
 # Modell-drift: greppar repot + jämför services/model_registry mot latest_known.
 # Lätt jobb (ren IO + ett par regex-pass) → seriellt + kort timeout.
 create_or_update_job model-drift-scan         jobs.model_drift_scan        1 1 600s
@@ -336,6 +371,8 @@ schedule_job scrape-active-daily     "0 4 * * *"  scrape-active
 schedule_job extract-all-claims-daily "45 4 * * *" extract-all-claims
 schedule_job compile-all-daily       "0 5 * * *"  compile-all-schemas
 schedule_job polling-weekly-tue      "0 6 * * 2"  polling-weekly
+# Crawl-health dagligen 05:30 (efter compile-all 05:00; gårdagens usage-loggar levererade).
+schedule_job crawl-health-daily      "30 5 * * *" crawl-health
 # Jobfeed-pipelinen: xml-sync dagligen 03:30 (före compile-all så stängningar hinner
 # slå igenom), sunset-skills måndagar 02:00, kvartals-To-Do-check dagligen 07:00
 # (idempotent — skapar bara To-Do när det gått ~90 dagar).

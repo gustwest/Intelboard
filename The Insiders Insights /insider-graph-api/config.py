@@ -123,6 +123,9 @@ class Settings(BaseSettings):
     # spec §4.2). EU-only: ska INTE vara den publika CDN-bucketen. Tom → underlaget
     # lagras inte (endast filnamnet sparas, som tidigare).
     upload_bucket: str = ""
+    # GCS usage-log-bucket för CDN-bucketen (crawl-health, P2 passivt lager). Tom →
+    # crawl_health-jobbet no-op:ar. EU-only: loggarna (IP/UA) ligger i europe-north1.
+    usage_log_bucket: str = ""
 
     # Shared secret för ops-alerts-webhooken (services/ops_alerts, routers/ops).
     # Verifieras som ?token=... query-param eftersom Pub/Sub push inte enkelt kan

@@ -40,9 +40,9 @@ steps:
       - '-c'
       - |
         IMAGE=europe-north1-docker.pkg.dev/$PROJECT_ID/insider-graph-repo/insider-graph-api:$COMMIT_SHA
-        for JOB in scrape-active scrape-website extract-all-claims compile-all-schemas polling-weekly xml-sync sunset-skills quarterly-linkedin-todo compute-trust-gap trust-gap-report warmth-probes risk-detect-all monthly-report-all customer-report-email-all model-drift-scan model-availability-check cost-rollup lang-probe; do
+        for JOB in scrape-active scrape-website extract-all-claims compile-all-schemas polling-weekly xml-sync sunset-skills quarterly-linkedin-todo compute-trust-gap trust-gap-report warmth-probes risk-detect-all monthly-report-all customer-report-email-all crawl-health model-drift-scan model-availability-check cost-rollup lang-probe; do
           gcloud run jobs update $$JOB --image=$$IMAGE --region=europe-north1 \
-            --update-env-vars=CDN_BASE_URL=https://profiles.geogiraph.com,CDN_CLEAN_URLS=true,NOTIFY_FROM_EMAIL=noreply@geogiraph.com \
+            --update-env-vars=CDN_BASE_URL=https://profiles.geogiraph.com,CDN_CLEAN_URLS=true,NOTIFY_FROM_EMAIL=noreply@geogiraph.com,USAGE_LOG_BUCKET=insider-graph-usage-logs-$PROJECT_ID \
             --update-secrets=BREVO_API_KEY=insider-graph-brevo-api-key:latest || \
             echo "job $$JOB not yet created — run scripts/bootstrap.sh first"
         done
