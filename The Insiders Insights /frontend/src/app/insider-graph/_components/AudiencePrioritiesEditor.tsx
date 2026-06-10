@@ -168,7 +168,7 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
     <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: C.text }}>
-          <Target size={16} color={C.accent} /> Persona-targets (output-kvalitet)
+          <Target size={16} color={C.accent} /> Målgrupps-prioritet (output-kvalitet)
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button

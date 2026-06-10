@@ -149,8 +149,8 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
             Fyller platshållarna i default-frågebatteriet. Lämna tomt → generiska formuleringar (&quot;branschen&quot; m.fl.).
           </p>
 
-          {/* Personas som riskloopen mäter */}
-          <UI.FieldLabel>Personas i riskloopen</UI.FieldLabel>
+          {/* Målgrupper som riskloopen ställer frågor som */}
+          <UI.FieldLabel>Målgrupper i riskloopen</UI.FieldLabel>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
             {PERSONAS.map((p) => {
               const on = personas.includes(p.id);
@@ -166,7 +166,7 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
             })}
           </div>
           {personas.length === 0 && (
-            <p style={{ fontSize: 11, color: C.dim, margin: '-12px 0 18px' }}>Ingen vald → alla tre personas mäts (default).</p>
+            <p style={{ fontSize: 11, color: C.dim, margin: '-12px 0 18px' }}>Ingen vald → alla tre målgrupper mäts (default).</p>
           )}
 
           {/* Egna pollingfrågor per kategori (tomt = default-batteriet) */}

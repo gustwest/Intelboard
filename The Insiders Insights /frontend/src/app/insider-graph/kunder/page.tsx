@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Users, Plus, X, AlertCircle, CheckCircle2, ExternalLink, RefreshCw, Search, Check } from 'lucide-react';
+import { Users, Plus, X, AlertCircle, CheckCircle2, ExternalLink, RefreshCw, Search, Check, ChevronRight } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import PipelineStatus, { type PipelineStep } from '../_components/PipelineStatus';
 import * as UI from '../_components/ui';
@@ -350,16 +350,21 @@ function PendingChip({
   border: string;
   onClick: (e: React.MouseEvent) => void;
 }) {
+  // KU6: chippen ÄR en knapp till rätt yta, inte en passiv räknare. Pil-ikon + hover-ring
+  // gör interaktiviteten uppenbar (tidigare såg den ut som en badge).
+  const [hover, setHover] = useState(false);
   return (
     <button
       type="button"
       title={title}
       onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: 4,
-        padding: '2px 8px',
+        gap: 2,
+        padding: '2px 5px 2px 8px',
         borderRadius: 10,
         background: bg,
         color,
@@ -368,9 +373,12 @@ function PendingChip({
         fontWeight: 700,
         cursor: 'pointer',
         whiteSpace: 'nowrap',
+        boxShadow: hover ? `0 0 0 2px ${border}` : 'none',
+        transition: 'box-shadow .12s',
       }}
     >
       {label}
+      <ChevronRight size={11} style={{ transform: hover ? 'translateX(1px)' : 'none', transition: 'transform .12s' }} />
     </button>
   );
 }
