@@ -572,5 +572,25 @@ class CompileTimeVoiceTest(unittest.TestCase):
         self.assertNotIn("engagerade följare", self.desc)
 
 
+class OptedOutPersonTest(unittest.TestCase):
+    """GDPR: opt-out gäller personens hela närvaro — ingen Person-nod i publika grafen."""
+
+    def test_employee_becomes_person_node(self):
+        _graph_setup()
+        persons = _nodes(compile_client("acme"), "Person")
+        self.assertEqual(len(persons), 1)
+        self.assertEqual(persons[0]["name"], "Anna Svensson")
+
+    def test_opted_out_employee_has_no_person_node(self):
+        _graph_setup(employees={
+            "emp_1": {"name": "Anna Svensson", "title": "VD"},
+            "emp_2": {"name": "Bo Berg", "title": "CTO", "opted_out": True},
+        })
+        persons = _nodes(compile_client("acme"), "Person")
+        names = [p["name"] for p in persons]
+        self.assertIn("Anna Svensson", names)
+        self.assertNotIn("Bo Berg", names)  # opt:ad → får ALDRIG publiceras
+
+
 if __name__ == "__main__":
     unittest.main()

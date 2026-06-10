@@ -183,6 +183,9 @@ def build_render_model(client_id: str) -> RenderModel:
     org_id = f"{base}#org"
 
     same_as = list(external_same_as(data))
+    # GDPR: opt-out gäller hela personens närvaro — en opt:ad medarbetare får ALDRIG en
+    # Person-nod i den publika grafen (inte bara stoppad datainsamling). Nästa kompilering
+    # efter opt-out tar bort noden.
     persons = [
         {
             "@type": "Person",
@@ -192,6 +195,7 @@ def build_render_model(client_id: str) -> RenderModel:
             "worksFor": {"@id": org_id},
         }
         for emp_id, emp in fs.iter_employees(client_id)
+        if not emp.get("opted_out")
     ]
 
     sources: dict[str, Source] = {}  # item_id → Source (bevarar ordning)
