@@ -88,6 +88,24 @@ const HEALTH_SV: Record<Health['verdict'], { label: string; tone: 'ok' | 'warn' 
   missing: { label: 'ej hittad', tone: 'err' },
 };
 
+// Crawl-hälsa (P2 passivt lager) — services/crawl_health.py. Hämtar AI-motorernas
+// crawlers faktiskt den hostade profilsidan? Nästa steg efter "Live".
+type CrawlBot = {
+  hits: number;
+  last_seen: string | null;
+  category: string;
+  category_label: string;
+  artifacts: string[];
+};
+type CrawlHealth = {
+  measured: boolean;
+  total_hits: number;
+  bots_seen: number;
+  last_crawl_at?: string | null;
+  window_days?: number;
+  per_bot: Record<string, CrawlBot>;
+};
+
 type Theme = 'light' | 'dark';
 type Variant = 'footer' | 'pill';
 type DeliveryMode = 'static' | 'js';
@@ -103,6 +121,7 @@ export default function LeveransPage() {
   const [attested, setAttested] = useState<{ key: string; label: string; included: number; staged: number }[] | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
+  const [crawl, setCrawl] = useState<CrawlHealth | null>(null);
   const { latest, active: jobActive, trigger: runJob } = useJobRuns(selected);
 
   // Badge-kontroller
@@ -145,6 +164,18 @@ export default function LeveransPage() {
       .then((d) => { if (!cancelled) setHealth(d); })
       .catch(() => { if (!cancelled) setHealth(null); })
       .finally(() => { if (!cancelled) setHealthLoading(false); });
+    return () => { cancelled = true; };
+  }, [selected, refreshTick]);
+
+  // P2 passivt lager: hämtar AI-crawlers profilsidan? Läser persisterat aggregat
+  // (jobs/crawl_health ur GCS usage-loggar). Egen felhantering.
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
+    setCrawl(null);
+    graphFetch<CrawlHealth>(`/api/delivery/${selected}/crawl-health`)
+      .then((d) => { if (!cancelled) setCrawl(d); })
+      .catch(() => { if (!cancelled) setCrawl(null); });
     return () => { cancelled = true; };
   }, [selected, refreshTick]);
 
@@ -337,6 +368,48 @@ export default function LeveransPage() {
             setRefreshTick((t) => t + 1);
           }}
         />
+      </UI.Card>
+
+      {/* Crawl-hälsa (P2 passivt): hämtar AI-motorernas crawlers profilsidan? */}
+      <UI.Card
+        padding="18px 22px"
+        style={{ marginBottom: 16 }}
+        title="Crawl-hälsa"
+        hint="Hämtar AI-motorernas crawlers faktiskt den hostade profilsidan? Passiv mätning ur serverloggarna — nästa steg efter 'Live' i kedjan publicerad → installerad → läst."
+      >
+        {!crawl || !crawl.measured || crawl.total_hits === 0 ? (
+          <div style={{ color: C.muted, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Clock size={13} />
+            Inväntar första crawl — loggningen är aktiverad, AI-crawlers brukar dyka upp inom dagar (mätfönster {crawl?.window_days ?? 30} dagar).
+          </div>
+        ) : (
+          <div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>
+              {crawl.bots_seen} AI-crawler(s) · {crawl.total_hits} hämtningar · senast {fmtRelative(crawl.last_crawl_at)}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {Object.entries(crawl.per_bot)
+                .sort((a, b) => b[1].hits - a[1].hits)
+                .map(([bot, b]) => (
+                  <div
+                    key={bot}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '7px 0', borderTop: `1px solid ${C.border}` }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ color: C.text, fontWeight: 600, fontSize: 13 }}>{bot}</span>
+                      <span style={{ color: C.dim, fontSize: 11 }}>
+                        {b.category_label}{b.artifacts.length ? ` · ${b.artifacts.join(', ')}` : ''}
+                      </span>
+                    </div>
+                    <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <span style={{ color: C.text, fontWeight: 600, fontSize: 13 }}>{b.hits}×</span>
+                      <span style={{ color: C.dim, fontSize: 11, marginLeft: 8 }}>{fmtRelative(b.last_seen)}</span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
       </UI.Card>
 
       {/* Överlämning (B1): installationskit till kundkontakten */}
