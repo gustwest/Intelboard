@@ -108,21 +108,16 @@ def make_email_extractor_gemini():
 
 
 def make_email_extractor_openai():
-    """Email-fritext → Schema.org Event. FALLBACK sedan 2026-06-03.
+    """AVVECKLAD 2026-06-10 — returnerar alltid None (ingen US-väg).
 
-    Används när Gemini-primären faller (Vertex-fel, kvot, etc). Direkt mot OpenAI
-    — bryter mot EU-residenskravet men acceptabelt som tillfällig fallback medan
-    den primära Vertex-vägen är nere; alternativet vore att tappa email-event-
-    flödet helt. None om OPENAI_API_KEY saknas.
+    Var tidigare en OpenAI-fallback (US) för email→Event-extraktion. Mailtext är
+    kunddata och får inte lämna EU/EES (DPA §6.1); email-extraktionen kör nu
+    uteslutande Gemini via Vertex EU (se email_extraction._pick_llm). Funktionen är
+    hårdneutraliserad till en no-op så att ingen kodväg kan återinföra US-routning —
+    wira inte in OpenAI igen utan EU-residens/överföringsmekanism och uppdaterad
+    subprocessor-lista.
     """
-    if not settings.openai_api_key:
-        return None
-    from langchain_openai import ChatOpenAI
-    mid = model_registry.get_id("email_extractor_openai")
-    return token_meter.track(
-        ChatOpenAI(api_key=settings.openai_api_key, model=mid, temperature=0, timeout=30),
-        mid,
-    )
+    return None
 
 
 # Konstruktions-sömmar (lazy import → modulen kan importeras utan SDK; patchas i tester).

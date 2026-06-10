@@ -92,24 +92,22 @@ def extract(text: str) -> ExtractedEvent | None:
 
 
 def _pick_llm():
-    """Gemini primär (Vertex EU för EU-residens på mailinnehåll), OpenAI fallback.
+    """Gemini via Vertex EU — enda vägen. Ingen US-fallback (EU-residens, DPA §6.1).
 
     Mailen innehåller ofta personnamn, kontaktuppgifter och kalenderdetaljer som
-    räknas som kunddata enligt vår EU-policy — därför kör Gemini via Vertex EU,
-    inte google_genai-direktklienten (USA-routning). OpenAI ligger kvar som
-    fallback för dual-provider-resiliens; flippat-ordning sedan 2026-06-03.
+    räknas som kunddata. Därför körs extraktionen uteslutande på Vertex EU; den
+    tidigare OpenAI-fallbacken (US) togs bort 2026-06-10 eftersom den hade skickat
+    personuppgifter utanför EU/EES. Faller Vertex-vägen returneras None → email-
+    extraktionen hoppas över (loggas i extract()), aldrig en tredjelandsöverföring.
 
-    Båda factories returnerar token_meter.track-omslagna instanser så cost_budget-
-    enforcement (Fas 1.6) gäller även email-extraktionen. Vid Vertex-init-fel
-    faller vi tyst tillbaka till OpenAI.
+    Instansen är token_meter.track-omsluten så cost_budget-enforcement (Fas 1.6)
+    gäller även email-extraktionen.
     """
     try:
-        gemini = llm_factory.make_email_extractor_gemini()
-        if gemini is not None:
-            return gemini
+        return llm_factory.make_email_extractor_gemini()
     except Exception as exc:  # noqa: BLE001 — Vertex-strul ska inte stoppa email-flödet
-        log.warning("Vertex Gemini email-extractor init failed: %s — faller till OpenAI", exc)
-    return llm_factory.make_email_extractor_openai()
+        log.warning("Vertex Gemini email-extractor init failed: %s — hoppar över (ingen US-fallback)", exc)
+        return None
 
 
 def _validate_date(value: Any) -> str | None:
