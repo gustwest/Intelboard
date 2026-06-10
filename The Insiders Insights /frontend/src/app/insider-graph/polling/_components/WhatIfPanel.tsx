@@ -42,17 +42,21 @@ export function WhatIfPanel({ clientId, conf, detected }: {
     // i denna fil) — förra resultatet ligger kvar tills det nya landar, ingen blink.
     if (!hasInput) return;
     let cancelled = false;
-    graphFetch<WhatIfResult>(`/api/forecast/${encodeURIComponent(clientId)}/confidence/whatif`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        resolve_finding_ids: Array.from(selected),
-        simulate_full_coverage: broaden,
-      }),
-    })
-      .then((r) => { if (!cancelled) { setResult(r); setError(null); } })
-      .catch((e) => { if (!cancelled) setError(String(e.message || e)); });
-    return () => { cancelled = true; };
+    // WC3/F3-3: debounce — kryssar man i flera risker snabbt blir det ETT anrop när
+    // man stannar, inte ett per klick (tidigare flimrade delta och spammade endpointen).
+    const timer = setTimeout(() => {
+      graphFetch<WhatIfResult>(`/api/forecast/${encodeURIComponent(clientId)}/confidence/whatif`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          resolve_finding_ids: Array.from(selected),
+          simulate_full_coverage: broaden,
+        }),
+      })
+        .then((r) => { if (!cancelled) { setResult(r); setError(null); } })
+        .catch((e) => { if (!cancelled) setError(String(e.message || e)); });
+    }, 350);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [clientId, selected, broaden, hasInput]);
 
   if (openFindings.length === 0 && !canBroaden) return null;
@@ -110,6 +114,17 @@ export function WhatIfPanel({ clientId, conf, detected }: {
       )}
 
       {hasInput && result && <WhatIfOutcome result={result} />}
+
+      {/* WC3/F3-3: led ut ur återvändsgränden. Risk-findings åtgärdas i Granska-fliken
+          (samma destination som riskloop-statusens "agera i Granska"), inte här. */}
+      {hasInput && result && selected.size > 0 && (
+        <a
+          href={`/insider-graph/review?client=${encodeURIComponent(clientId)}`}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 12, padding: '7px 14px', fontSize: 12, fontWeight: 600, color: C.accent, background: 'rgba(224, 142, 121,0.08)', border: `1px solid ${C.accent}`, borderRadius: 8, textDecoration: 'none' }}
+        >
+          Åtgärda dessa risker i Granska →
+        </a>
+      )}
     </div>
   );
 }

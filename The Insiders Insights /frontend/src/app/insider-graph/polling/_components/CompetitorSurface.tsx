@@ -6,6 +6,7 @@ import {
   PollingWeek,
   CompetitorTrend,
   buildCompetitorAnalytics,
+  competitorTrend,
   CATEGORY_SV,
   cardStyle,
   pct,
@@ -86,7 +87,9 @@ export function CompetitorSurface({ weeks }: { weeks: PollingWeek[] }) {
         <span>Över tid</span>
       </div>
 
-      <LeaderRow name="Ni" share={active.clientAvgShare} series={active.clientSeries} trend="flat" highlight />
+      {/* WC4/F3-4: er egen trend beräknas nu med SAMMA regel som konkurrenternas
+          (competitorTrend: >10pp över ≥2v) — inte längre hårdkodad "—". */}
+      <LeaderRow name="Ni" share={active.clientAvgShare} series={active.clientSeries} trend={competitorTrend(active.clientSeries)} highlight />
       {active.competitors.map((c) => (
         <LeaderRow key={c.name} name={c.name} share={c.avgShare} series={c.series} trend={c.trend} weeksPresent={c.weeksPresent} />
       ))}
@@ -130,7 +133,7 @@ function LeaderRow({ name, share, series, trend, weeksPresent, highlight }: {
         </div>
         <span style={{ color: C.muted, fontFamily: 'ui-monospace, monospace', minWidth: 36, textAlign: 'right' }}>{Math.round(pctVal)}%</span>
       </div>
-      <span style={{ color: highlight ? C.dim : t.color, fontSize: 13 }}>{highlight ? '—' : t.arrow}</span>
+      <span style={{ color: t.color, fontSize: 13 }}>{t.arrow}</span>
       <Sparkline series={series} />
     </div>
   );
