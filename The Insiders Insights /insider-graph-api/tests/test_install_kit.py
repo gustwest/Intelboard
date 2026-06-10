@@ -44,7 +44,7 @@ class InstallKitSendTest(unittest.TestCase):
             "company_name": "Acme AB", "website": "https://acme.se", "contact_email": "vd@acme.se",
         })
         sent: list = []
-        notifications._deliver = lambda to, subject, body, html=None: sent.append((to, subject, html))
+        notifications._deliver = lambda to, subject, body, html=None, cc=None: sent.append((to, subject, html))
         result = delivery_router.send_install_kit("acme")
         self.assertTrue(result["sent"])
         self.assertEqual(result["to"], "vd@acme.se")

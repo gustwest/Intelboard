@@ -12,7 +12,7 @@ import logging
 
 import firestore_client as fs
 from jobs._run_tracker import record_run
-from services import notifications
+from services import contacts, notifications
 from services.monthly_report import current_month, render_customer_email
 
 log = logging.getLogger("jobs.customer_report_email")
@@ -33,7 +33,8 @@ def run(client_id: str, month: str | None = None) -> dict:
             model, lang=data.get("language"), contact_name=data.get("contact_name"),
         )
         result = notifications.send_customer_email(
-            data.get("contact_email"), subject, html_body, text_body,
+            contacts.primary_email(data), subject, html_body, text_body,
+            cc=contacts.secondary_emails(data),  # N2: cc sekundärkontakter
         )
         r.summary = {**result, "month": month}
         return r.summary

@@ -43,25 +43,31 @@ def send_quarterly_reminder(client_id: str, client: dict, message: str) -> dict[
 
 def send_customer_email(
     to_email: str | None, subject: str, html_body: str, text_body: str,
+    cc: list[str] | None = None,
 ) -> dict[str, Any]:
     """Skicka ett KUND-vänt mejl (Spår B: installationskit, månadsmejl).
 
     Till skillnad från kvartals-påminnelsen går detta till kundens kontakt, inte ops.
     Self-no-op + felsäkert (samma mönster): saknad Brevo-konfig eller mottagare
-    loggas bara; ett mejlfel fäller aldrig anroparen."""
+    loggas bara; ett mejlfel fäller aldrig anroparen.
+
+    `cc` (N2): sekundärkontakter (t.ex. webbansvarig). Tomma + dubblett av to_email
+    rensas; tom cc → vanligt en-mottagar-utskick."""
     if not (settings.brevo_api_key and settings.notify_from_email):
         log.info("customer-email (ej skickat — saknar Brevo-konfig): %s", subject)
         return {"sent": False, "reason": "not_configured"}
     if not to_email:
         log.info("customer-email (ej skickat — ingen kundkontakt): %s", subject)
         return {"sent": False, "reason": "no_contact"}
+    cc = [e for e in (cc or []) if e and e != to_email]
     try:
-        _deliver(to_email, subject, text_body, html=html_body)
+        _deliver(to_email, subject, text_body, html=html_body, cc=cc or None)
     except Exception as exc:  # ett mejlfel får inte fälla anroparen
         log.warning("customer-email till %s: Brevo-fel: %s", mask_email(to_email), exc)
         return {"sent": False, "reason": "send_failed"}
-    log.info("customer-email: skickade '%s' till %s", subject, mask_email(to_email))
-    return {"sent": True, "to": to_email}
+    log.info("customer-email: skickade '%s' till %s%s", subject, mask_email(to_email),
+             f" (cc {len(cc)})" if cc else "")
+    return {"sent": True, "to": to_email, "cc": cc}
 
 
 # Konstruktions-söm (patchas i tester så inget nätverksanrop sker). Brevo
@@ -69,7 +75,8 @@ def send_customer_email(
 BREVO_SEND_URL = "https://api.brevo.com/v3/smtp/email"
 
 
-def _deliver(to_email: str, subject: str, body: str, html: str | None = None) -> None:
+def _deliver(to_email: str, subject: str, body: str, html: str | None = None,
+             cc: list[str] | None = None) -> None:
     import httpx
 
     payload: dict[str, Any] = {
@@ -78,6 +85,8 @@ def _deliver(to_email: str, subject: str, body: str, html: str | None = None) ->
         "subject": subject,
         "textContent": body,
     }
+    if cc:  # N2: sekundärkontakter
+        payload["cc"] = [{"email": e} for e in cc]
     if html:  # None → bara plain-text
         payload["htmlContent"] = html
     resp = httpx.post(

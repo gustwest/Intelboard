@@ -82,6 +82,12 @@ _EMAIL_I18N: dict[str, dict[str, Any]] = {
                           "rättvist om er när någon frågar inför ett beslut.",
         "footer": "Profilen uppdaterar vi åt er löpande — ni behöver inte göra något. "
                   "Frågor? Svara på det här mejlet.",
+        # N2 — bekräftelse när en (ny) huvudkontakt registreras.
+        "confirm_subject": "Ni är nu kontakt för {name}:s AI-rapporter",
+        "confirm_lead": "Den här adressen är nu registrerad som kontakt för {name}:s "
+                        "AI-synlighetsrapporter.",
+        "confirm_detail": "Ni får installationskitet och det löpande månadsmejlet hit. "
+                          "Ni behöver inte göra något — vi sköter mätningen åt er.",
         "method_title": "Så läser du siffran",
         "method": "Siffran visar hur ofta dagens AI nämner er när någon frågar — mätt över "
                   "flera körningar, med en felmarginal. Den speglar vad AI:n kan om er från "
@@ -113,6 +119,11 @@ _EMAIL_I18N: dict[str, dict[str, Any]] = {
                           "fairly about you when someone asks ahead of a decision.",
         "footer": "We keep your profile updated for you — nothing you need to do. "
                   "Questions? Just reply to this email.",
+        "confirm_subject": "You're now a contact for {name}'s AI reports",
+        "confirm_lead": "This address is now registered as a contact for {name}'s "
+                        "AI visibility reports.",
+        "confirm_detail": "You'll receive the installation kit and the recurring monthly "
+                          "email here. Nothing for you to do — we handle the measurement for you.",
         "method_title": "How to read this number",
         "method": "The number shows how often today's AI mentions you when asked — measured "
                   "across several runs, with a margin of error. It reflects what AI knows about "
@@ -808,7 +819,7 @@ def render_customer_email(model: dict[str, Any], lang: str | None = None, contac
     # "vad ändrats" ovan, så beviset lyfter en styrka för att inte upprepa samma sak.
     proof = strengths[0] if strengths else None
 
-    html_body = f"""<!doctype html><html lang="{html.escape((lang or model.get("language") or "sv").lower())}"><body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1a1a1a;max-width:620px;margin:0 auto;line-height:1.6">
+    html_body = f"""<!doctype html><html lang="{html.escape((lang or model.get("language") or "sv").lower())}"><head><meta charset="utf-8"></head><body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1a1a1a;max-width:620px;margin:0 auto;line-height:1.6">
 <p>{html.escape(greeting)}</p>
 <h2 style="font-size:1.2rem">{html.escape(heading)}</h2>
 <p style="color:#666;margin-top:-.5rem">{html.escape(month_label)}</p>
@@ -842,6 +853,32 @@ def render_customer_email(model: dict[str, Any], lang: str | None = None, contac
         text_lines += ["", f"{t['profile_cta']}: {profile_link}"]
     text_lines += ["", t["footer"], "", f"{t['method_title']}: {t['method']}"]
     return subject, html_body, "\n".join(text_lines)
+
+
+def render_contact_confirmation_email(company_name: str | None, lang: str | None = None) -> tuple[str, str, str]:
+    """N2: kort bekräftelse till en (ny) huvudkontakt → (subject, html, text). Skickas
+    best-effort från config-spara när huvudkontaktens adress ändras, så fel-adresser
+    fångas direkt. Innehåller inget känsligt — bara att adressen nu är mottagare."""
+    t = _email_strings(lang)
+    name = company_name or ""
+    subject = t["confirm_subject"].format(name=name)
+    greeting = t["greeting_generic"]
+    lead = t["confirm_lead"].format(name=name)
+    detail = t["confirm_detail"]
+    lang_attr = html.escape((lang or "sv").lower())
+    html_body = (
+        f'<!doctype html><html lang="{lang_attr}"><head><meta charset="utf-8"></head>'
+        '<body style="font-family:-apple-system,'
+        'Segoe UI,Roboto,sans-serif;color:#1a1a1a;max-width:620px;margin:0 auto;line-height:1.6">'
+        f"<p>{html.escape(greeting)}</p>"
+        f"<p>{html.escape(lead)}</p>"
+        f"<p>{html.escape(detail)}</p>"
+        '<hr style="border:none;border-top:1px solid #eee;margin:1.5rem 0">'
+        f'<p style="color:#666;font-size:.9rem">{html.escape(t["footer"])}</p>'
+        "</body></html>"
+    )
+    text = "\n".join([greeting, "", lead, "", detail, "", t["footer"]])
+    return subject, html_body, text
 
 
 def _scale_bar(conf: dict) -> str:

@@ -87,7 +87,7 @@ class CustomerEmailSendTest(unittest.TestCase):
             monthly_reports={"2026-05": MODEL},
         )
         sent: list = []
-        notifications._deliver = lambda to, subject, body, html=None: sent.append((to, body, html))
+        notifications._deliver = lambda to, subject, body, html=None, cc=None: sent.append((to, body, html))
         result = reports_router.send_customer_report("acme", "2026-05")
         self.assertTrue(result["sent"])
         self.assertEqual(result["to"], "vd@acme.se")
@@ -100,6 +100,23 @@ class CustomerEmailSendTest(unittest.TestCase):
         result = reports_router.send_customer_report("acme", "2026-05")
         self.assertFalse(result["sent"])
         self.assertEqual(result["reason"], "no_contact")
+
+    def test_ccs_secondary_contacts(self):
+        # N2: huvudkontakten = to, sekundärkontakter cc:as.
+        fakefs.reset(
+            client={"company_name": "Acme AB", "contact_email": "vd@acme.se", "contact_name": "Anna",
+                    "contacts": [
+                        {"email": "vd@acme.se", "name": "Anna", "role": None, "is_primary": True},
+                        {"email": "webb@acme.se", "name": "Bo", "role": "webbansvarig", "is_primary": False},
+                    ]},
+            monthly_reports={"2026-05": MODEL},
+        )
+        sent: list = []
+        notifications._deliver = lambda to, subject, body, html=None, cc=None: sent.append((to, cc))
+        result = reports_router.send_customer_report("acme", "2026-05")
+        self.assertTrue(result["sent"])
+        self.assertEqual(result["to"], "vd@acme.se")
+        self.assertEqual(sent[0][1], ["webb@acme.se"])  # sekundär cc:ad
 
 
 class CustomerEmailJobTest(unittest.TestCase):
@@ -117,7 +134,7 @@ class CustomerEmailJobTest(unittest.TestCase):
             client={"company_name": "Acme AB", "contact_email": "vd@acme.se"},
             monthly_reports={"2026-05": MODEL},
         )
-        notifications._deliver = lambda to, subject, body, html=None: None
+        notifications._deliver = lambda to, subject, body, html=None, cc=None: None
         result = job.run("acme", "2026-05")
         self.assertTrue(result["sent"])
         self.assertEqual(result["month"], "2026-05")
@@ -135,7 +152,7 @@ class CustomerEmailJobTest(unittest.TestCase):
             client={"company_name": "Acme AB", "contact_email": "vd@acme.se"},
             monthly_reports={monthly_report.current_month(): MODEL},
         )
-        notifications._deliver = lambda to, subject, body, html=None: None
+        notifications._deliver = lambda to, subject, body, html=None, cc=None: None
         fanout.run()  # ska inte kasta; fan-out över alla kunder
 
 

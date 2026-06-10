@@ -11,7 +11,7 @@ import firestore_client as fs
 from schema_org.badge import profile_url
 from schema_org.delivery import render_identity_snippet
 from schema_org.install_kit import render_install_kit, render_install_kit_email
-from services import delivery_health, notifications
+from services import contacts, delivery_health, notifications
 
 router = APIRouter(prefix="/api/delivery", tags=["delivery"])
 
@@ -64,6 +64,7 @@ def send_install_kit(client_id: str) -> dict[str, object]:
     data = snap.to_dict() or {}
     subject, html_body, text_body = render_install_kit_email(client_id)
     result = notifications.send_customer_email(
-        data.get("contact_email"), subject, html_body, text_body,
+        contacts.primary_email(data), subject, html_body, text_body,
+        cc=contacts.secondary_emails(data),  # N2: cc sekundärkontakter (t.ex. webbansvarig)
     )
     return {"client_id": client_id, **result}

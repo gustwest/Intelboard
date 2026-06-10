@@ -62,7 +62,7 @@ class NotificationsTest(unittest.TestCase):
     def test_customer_email_sends_html_to_contact(self):
         self._configure()
         sent: list = []
-        n._deliver = lambda to, subject, body, html=None: sent.append((to, body, html))
+        n._deliver = lambda to, subject, body, html=None, cc=None: sent.append((to, body, html))
         result = n.send_customer_email("vd@acme.se", "sub", "<b>h</b>", "ren text")
         self.assertTrue(result["sent"])
         self.assertEqual(result["to"], "vd@acme.se")
@@ -70,6 +70,18 @@ class NotificationsTest(unittest.TestCase):
         self.assertEqual(to, "vd@acme.se")
         self.assertEqual(body, "ren text")   # plain-text fallback
         self.assertEqual(html, "<b>h</b>")   # html-variant
+
+    def test_customer_email_cc_secondary_contacts(self):
+        # N2: sekundärkontakter cc:as; dubblett av huvudkontakten rensas.
+        self._configure()
+        sent: list = []
+        n._deliver = lambda to, subject, body, html=None, cc=None: sent.append((to, cc))
+        result = n.send_customer_email(
+            "vd@acme.se", "sub", "<b>h</b>", "t", cc=["webb@acme.se", "vd@acme.se", ""],
+        )
+        self.assertTrue(result["sent"])
+        self.assertEqual(result["cc"], ["webb@acme.se"])  # dedupe mot to + tomma bort
+        self.assertEqual(sent[0][1], ["webb@acme.se"])
 
 
 if __name__ == "__main__":

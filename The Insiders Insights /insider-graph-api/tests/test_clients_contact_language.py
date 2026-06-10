@@ -134,6 +134,28 @@ class MultiContactTest(unittest.TestCase):
         fakefs.reset(client={"company_name": "Acme AB"})
         self.assertEqual(clients_router.get_client("acme")["contacts"], [])
 
+    def test_primary_change_sends_confirmation(self):
+        # N2: byte av huvudkontakt → bekräftelse till ny (cc gamla), best-effort.
+        from config import settings
+        from services import notifications
+        orig = (settings.brevo_api_key, settings.notify_from_email, notifications._deliver)
+        settings.brevo_api_key, settings.notify_from_email = "SG.x", "noreply@geogiraph.com"
+        sent: list = []
+        notifications._deliver = lambda to, subject, body, html=None, cc=None: sent.append((to, subject, cc))
+        try:
+            fakefs.reset(client={"company_name": "Acme AB", "contact_email": "old@acme.se"})
+            self._save([{"email": "ny@acme.se", "name": "Ny", "is_primary": True}])
+            self.assertEqual(len(sent), 1)
+            to, subject, cc = sent[0]
+            self.assertEqual(to, "ny@acme.se")
+            self.assertIn("Acme AB", subject)
+            self.assertEqual(cc, ["old@acme.se"])  # gamla kontakten cc:ad
+            # Oförändrad huvudkontakt → ingen ny bekräftelse.
+            self._save([{"email": "ny@acme.se", "name": "Ny", "is_primary": True}])
+            self.assertEqual(len(sent), 1)
+        finally:
+            settings.brevo_api_key, settings.notify_from_email, notifications._deliver = orig
+
 
 if __name__ == "__main__":
     unittest.main()

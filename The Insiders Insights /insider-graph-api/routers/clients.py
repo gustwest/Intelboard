@@ -16,7 +16,7 @@ import ttl_cache
 from config import settings
 from routers.inbox import _count_client  # samma "väntar på människa"-räkning som inkorgen
 from schema_org import urls
-from services import audience_personas, blob_storage, persona_derivation, persona_registry
+from services import audience_personas, blob_storage, contacts as contacts_svc, persona_derivation, persona_registry
 from services.discovery import _normalize_org_number
 from services.identity_enrichment import apply_identity_metadata
 from services.output_quality import AudiencePriority
@@ -165,7 +165,7 @@ def get_client(client_id: str) -> dict[str, Any]:
         "contact_email": data.get("contact_email"),
         "contact_name": data.get("contact_name"),
         # Flera kontakter med huvudkontakt (N2). Migreras-on-read ur legacy om contacts[] saknas.
-        "contacts": _contacts_for_response(data),
+        "contacts": contacts_svc.all_contacts(data),
         # Profilsidans språk — default sv om aldrig satt.
         "language": data.get("language") or DEFAULT_LANGUAGE,
         # Output-kvalitets-personor (audience_priorities). Sätt av användaren eller
@@ -183,10 +183,14 @@ def update_client_config(client_id: str, payload: ClientConfigUpdate) -> dict[st
     """Spara per-kund mätkonfiguration. Top-level-fält på client-doc (så polling.py +
     risk_detector.py läser dem direkt). Validerar personas och frågekategorier."""
     ref = fs.client_doc(client_id)
-    if not ref.get().exists:
+    existing_snap = ref.get()
+    if not existing_snap.exists:
         raise HTTPException(404, f"client not found: {client_id}")
+    existing = existing_snap.to_dict() or {}
 
     update: dict[str, Any] = {}
+    # N2: (ny_huvudkontakt, gammal_huvudkontakt) sätts om huvudkontakten byts → bekräftelse.
+    contact_change: tuple[str, str | None] | None = None
     for field in ("industry", "topic", "service_area"):
         val = getattr(payload, field)
         if val is not None:
@@ -274,8 +278,12 @@ def update_client_config(client_id: str, payload: ClientConfigUpdate) -> dict[st
         update["contacts"] = cleaned_contacts
         update["contacts_updated_at"] = now_iso  # byte loggas (vem-fältet kan tillkomma)
         primary = next((c for c in cleaned_contacts if c["is_primary"]), None)
-        update["contact_email"] = primary["email"] if primary else None
+        new_primary_email = primary["email"] if primary else None
+        update["contact_email"] = new_primary_email
         update["contact_name"] = primary["name"] if primary else None
+        old_primary_email = existing.get("contact_email")
+        if new_primary_email and new_primary_email != old_primary_email:
+            contact_change = (new_primary_email, old_primary_email)
 
     if payload.language is not None:
         lang = payload.language.strip().lower()
@@ -285,7 +293,28 @@ def update_client_config(client_id: str, payload: ClientConfigUpdate) -> dict[st
 
     if update:
         ref.update(update)
+    if contact_change:
+        _send_contact_confirmation(client_id, existing, update, *contact_change)
     return {"status": "ok", **update}
+
+
+def _send_contact_confirmation(client_id: str, existing: dict[str, Any],
+                               update: dict[str, Any], new_primary: str,
+                               old_primary: str | None) -> None:
+    """N2: best-effort-bekräftelse till en ny huvudkontakt (cc gamla) så fel-adresser
+    fångas direkt. Ett fel/utebliven mejlkonfig fäller ALDRIG spara (samma mönster som
+    övriga kundutskick). Lazy import undviker cykel clients↔services."""
+    try:
+        from services import notifications
+        from services.monthly_report import render_contact_confirmation_email
+
+        company = existing.get("company_name") or client_id
+        lang = update.get("language") or existing.get("language")
+        subject, html_body, text_body = render_contact_confirmation_email(company, lang)
+        cc = [old_primary] if old_primary and old_primary != new_primary else None
+        notifications.send_customer_email(new_primary, subject, html_body, text_body, cc=cc)
+    except Exception:  # noqa: BLE001 — bekräftelse är aldrig kritisk
+        log.debug("kontakt-bekräftelse kunde inte skickas för %s", client_id, exc_info=True)
 
 
 @router.post("/{client_id}/enrich-identity")
@@ -631,20 +660,6 @@ def _normalize_contacts(contacts: list[ContactInput]) -> list[dict[str, Any]]:
     for i, c in enumerate(cleaned):
         c["is_primary"] = (i == primary_idx)
     return cleaned
-
-
-def _contacts_for_response(data: dict[str, Any]) -> list[dict[str, Any]]:
-    """Kontakter för get_client. Härled ur lagrad contacts[] om den finns; annars
-    migrera-on-read en enda huvudkontakt ur legacy contact_email/contact_name så
-    UI:t alltid ser en enhetlig lista."""
-    contacts = data.get("contacts")
-    if contacts:
-        return contacts
-    email = data.get("contact_email")
-    if email:
-        return [{"email": email, "name": data.get("contact_name"),
-                 "role": None, "is_primary": True}]
-    return []
 
 
 def _iso(value: Any) -> str | None:
