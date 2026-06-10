@@ -36,11 +36,18 @@ type Alert = {
 type Resp = { alerts: Alert[]; total: number; open_count?: number };
 
 const KIND_LABEL: Record<string, string> = {
-  job_failed: 'Jobb-failure',
+  job_failed: 'Jobb misslyckades',
   budget_threshold: 'Budget-tröskel',
-  llm_engine_down: 'LLM-motor nere',
+  llm_engine_down: 'AI-motor nere',
   model_drift: 'Modelldrift',
-  uptime: 'Uptime',
+  uptime: 'Drifttid',
+};
+
+// TC4: råa severity-enums (critical/warning/info) → vedertagna svenska etiketter.
+const SEVERITY_LABEL: Record<string, string> = {
+  critical: 'Kritisk',
+  warning: 'Varning',
+  info: 'Info',
 };
 
 function relative(iso: string | null): string {
@@ -214,12 +221,12 @@ function AlertRow({
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <UI.Badge tone={alert.severity === 'critical' ? 'err' : alert.severity === 'warning' ? 'warn' : 'info'}>
-            {alert.severity}
+            {SEVERITY_LABEL[alert.severity] || alert.severity}
           </UI.Badge>
           <span style={{ fontSize: 11, color: C.dim }}>{KIND_LABEL[alert.kind] || alert.kind}</span>
           {alert.status === 'acked' && (
             <span style={{ fontSize: 11, color: '#6366f1' }}>
-              ackad av {alert.ack_by || '?'} {alert.ack_at && `· ${relative(alert.ack_at)}`}
+              kvitterad av {alert.ack_by || '?'} {alert.ack_at && `· ${relative(alert.ack_at)}`}
             </span>
           )}
           {alert.status === 'resolved' && (
@@ -272,7 +279,7 @@ function AlertRow({
               style={btn('ghost')}
               title="Markera 'någon tar tag i detta' — försvinner inte ur listan"
             >
-              Acka
+              Kvittera
             </button>
           )}
           <button
@@ -281,7 +288,7 @@ function AlertRow({
             style={btn('primary')}
             title="Markera löst — försvinner ur listan, återkommer auto om problemet kommer tillbaka"
           >
-            Resolva
+            Markera löst
           </button>
         </div>
       )}
@@ -328,7 +335,7 @@ function severityStyle(s: Alert['severity']) {
 
 function labelForStatus(s: 'open' | 'acked' | 'resolved' | 'all'): string {
   if (s === 'open') return 'Öppna';
-  if (s === 'acked') return 'Ackade';
+  if (s === 'acked') return 'Kvitterade';
   if (s === 'resolved') return 'Lösta';
   return 'Alla';
 }

@@ -757,10 +757,25 @@ function IconBox({ children }: { children: React.ReactNode }) {
   );
 }
 
+// AR4/TC4: humanisera maskinens säkerhet — band (Låg/Medel/Hög) i st f rå float "conf 0.42",
+// med exakt värde + tröskelförklaring i tooltip (svensk decimal). Tröskeln 0,70 är gränsen
+// under vilken en post hamnar i granskningskön (per-connector justerbar på Output-kvalitet).
+function confBand(c: number | null): { label: string; tone: 'err' | 'warn' | 'ok' | 'neutral'; title: string } {
+  if (c == null) return { label: 'Okänd säkerhet', tone: 'neutral', title: 'Maskinens säkerhet saknas för den här posten.' };
+  const raw = c.toFixed(2).replace('.', ',');
+  const title = `Maskinens säkerhet: ${raw} (skala 0–1). Poster under tröskeln 0,70 hamnar här för manuell granskning.`;
+  if (c < 0.4) return { label: 'Låg säkerhet', tone: 'err', title };
+  if (c < 0.7) return { label: 'Medel säkerhet', tone: 'warn', title };
+  return { label: 'Hög säkerhet', tone: 'ok', title };
+}
+
 function Actions({ confidence, busy, onApprove, onReject }: { confidence: number | null; busy: boolean; onApprove: () => void; onReject: () => void }) {
+  const band = confBand(confidence);
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-      <UI.Badge tone="warn">conf {confidence != null ? confidence.toFixed(2) : '?'}</UI.Badge>
+      <span title={band.title} style={{ display: 'inline-flex' }}>
+        <UI.Badge tone={band.tone}>{band.label}</UI.Badge>
+      </span>
       <button onClick={onApprove} disabled={busy} title="Godkänn" style={approveBtn}>
         <Check size={12} /> Godkänn
       </button>
