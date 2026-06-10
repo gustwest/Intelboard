@@ -5,7 +5,9 @@ För varje kund:
   2. Skicka till GPT-4o och Gemini parallellt.
   3. Räkna Share of Voice (andel svar där kunden nämns).
   4. För svar med omnämnande: be en LLM-domare bedöma sentiment.
-  5. Parity Index: andel kvinnliga personer av alla personer som rekommenderas.
+  5. Parity Index v2: sannolikhetsvägd andel kvinnor bland personer motorerna
+     själva namnger (öppen person-NER på Vertex EU + SCB-namnestimering, se
+     docs/parity-index-spec.md), jämfört mot kundens ledningsbaseline → gap.
   6. Skriv till clients/{id}/polling_results/{YYYY-Www}.
 
 Utan OPENAI_API_KEY / GEMINI_API_KEY hoppas modellerna över — körningen
@@ -31,17 +33,23 @@ import firestore_client as fs
 from config import settings
 from services import llm as llm_factory
 from services import model_registry
+from services import name_gender
 from services import probe_guard
 
 # Konkurrent-extraktion via judge-LLM (gemini). Kan stängas av om gRPC-klienten hänger
 # i prod — fältet category_competitors blir tomt men polling-jobbet fortsätter.
 POLLING_EXTRACT_ORGS = os.environ.get("POLLING_EXTRACT_ORGS", "1") not in ("0", "false", "False", "")
+# Person-NER för Parity Index v2. Körs på Vertex EU-motorn (generator), ALDRIG på
+# judge/probe-motorerna — svarstexten kan innehålla personnamn (personuppgift) och
+# får inte efterbehandlas utanför EU/EES (DPA §6.1, docs/parity-index-spec.md).
+POLLING_EXTRACT_PERSONS = os.environ.get("POLLING_EXTRACT_PERSONS", "1") not in ("0", "false", "False", "")
 # Per-anrop-timeouter — polling-jobbet får ALDRIG hänga, oavsett LLM-läge. Justera via env.
 # 2026-06-03: ORG-timeout höjd 8→20 (Gemini Vertex EU svarar typiskt på 3-4s men 6-8s vid
 # cold start, vilket gav timeout-storm i prod), JUDGE-timeout 12→20 av samma skäl.
 POLLING_ASK_TIMEOUT_SEC = float(os.environ.get("POLLING_ASK_TIMEOUT_SEC", "30"))
 POLLING_JUDGE_TIMEOUT_SEC = float(os.environ.get("POLLING_JUDGE_TIMEOUT_SEC", "20"))
 POLLING_ORG_TIMEOUT_SEC = float(os.environ.get("POLLING_ORG_TIMEOUT_SEC", "20"))
+POLLING_PERSON_TIMEOUT_SEC = float(os.environ.get("POLLING_PERSON_TIMEOUT_SEC", "20"))
 
 T = TypeVar("T")
 
@@ -222,6 +230,15 @@ class PollingResult:
     # web_rag = "AI Live Signal"). De mäter olika fördelningar och får aldrig
     # medeltalas; det poolade share_of_voice ovan behålls bara för trend-kontinuitet.
     sov_by_source: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Parity v2 (docs/parity-index-spec.md): porträtterad paritet ur öppen person-NER
+    # + SCB-namnestimering. parity_index ovan behålls som alias = parity_portrayed
+    # (trend-kontinuitet). Endast aggregat — aldrig namn eller per-person-kön.
+    parity_portrayed: float | None = None
+    parity_n: int = 0                      # antal namn som kunde estimeras
+    parity_unknown_share: float = 0.0      # andel AI-nämnda namn utan estimat
+    parity_ci95: list[float] | None = None # Wilson-intervall [lo, hi] — grindar trendpilar
+    parity_baseline: dict[str, Any] | None = None  # snapshot {value, source, as_of}
+    parity_gap: float | None = None        # portrayed − baseline.value
 
 
 def run_for_client(client_id: str) -> PollingResult | None:
@@ -244,20 +261,22 @@ def run_for_client(client_id: str) -> PollingResult | None:
     company_name = client.get("company_name") or client_id
     employees = list(fs.iter_employees(client_id))
     employee_names = [emp.get("name", "") for _, emp in employees if emp.get("name")]
-    employee_gender = {emp.get("name", ""): emp.get("gender") for _, emp in employees}
 
     runs = _runs_per_query()
     answers = _collect_answers(questions, models, runs)
 
     for ans in answers:
         ans.mentioned = _has_mention(ans.answer, company_name, employee_names)
-        ans.persons_mentioned = _extract_persons(ans.answer, employee_names)
 
     # Dyra anrop (sentiment + org-NER) körs 1× per (fråga × motor) på det
     # representativa svaret (run_idx 0) — P0 multiplicerar bara de billiga ask-anropen.
     # Mention-detektering (gratis substring) körs däremot på ALLA körningar ovan, så att
     # Share of Voice blir en samplad rate med standardfel.
     judge = next(iter(models.values()))
+    # Person-NER på EU-motorn (Vertex EU-generator) — ALDRIG judge/probe-motorn, som kan
+    # vara US-routad. Svarstexten kan innehålla personnamn = personuppgift (DPA §6.1).
+    # None (GCP ej konfigurerat) → paritet hoppas över, ingen US-väg finns.
+    eu_ner = llm_factory.make_generator() if POLLING_EXTRACT_PERSONS else None
     for ans in answers:
         if ans.run_idx != 0:
             continue
@@ -272,8 +291,17 @@ def run_for_client(client_id: str) -> PollingResult | None:
                 default=[],
                 what="extract_orgs",
             )
+        # Parity v2: vilka PERSONER lyfter motorn fram? Öppen NER (inte uppslag mot
+        # uppladdade anställda) — namnen lever bara i minnet tills aggregatet räknats.
+        if eu_ner is not None and ans.answer and len(ans.answer.strip()) >= 20:
+            ans.persons_mentioned = _call_with_timeout(
+                lambda: _extract_persons(eu_ner, ans.answer),
+                timeout=POLLING_PERSON_TIMEOUT_SEC,
+                default=[],
+                what="extract_persons",
+            )
 
-    result = _aggregate(client_id, company_name, answers, employee_gender, runs)
+    result = _aggregate(client_id, company_name, answers, client.get("parity_baseline"), runs)
     _write(result)
     return result
 
@@ -436,10 +464,42 @@ def _has_mention(answer: str, company_name: str, employee_names: list[str]) -> b
     return any(probe_guard.text_mentions(answer, name) for name in employee_names if name)
 
 
-def _extract_persons(answer: str, employee_names: list[str]) -> list[str]:
-    if not answer:
+def _extract_persons(llm: Any, answer: str) -> list[str]:
+    """Öppen person-NER för Parity v2: vilka personer namnger motorn — oavsett om
+    de är uppladdade anställda eller inte? (Det gamla uppslaget mot employee_names
+    kunde per konstruktion inte se personer vi inte laddat upp.)
+
+    KÖRS ENDAST PÅ EU-MOTOR (Vertex EU) — personnamn är personuppgift och får inte
+    efterbehandlas utanför EU/EES (DPA §6.1). Namnen persisteras aldrig; de
+    konsumeras av name_gender.aggregate i _aggregate och slängs (DPA §6.2/§7.2).
+
+    Soft-signal: robust mot icke-JSON-utgångar, tom lista vid fel/kort text."""
+    if not answer or len(answer.strip()) < 20:
         return []
-    return [name for name in employee_names if name and probe_guard.text_mentions(answer, name)]
+    prompt = [
+        SystemMessage(
+            content=(
+                "Du är NER-extraktor. Returnera ETT JSON-objekt med formatet "
+                '{"persons": ["Förnamn Efternamn", ...]} — bara namn på verkliga '
+                "personer som faktiskt nämns i texten, med det namn texten använder. "
+                "INTE företagsnamn. INTE produkter. INTE roller utan namn ('vd:n', "
+                "'grundaren'). Tom lista om inga finns. Returnera bara JSON."
+            )
+        ),
+        HumanMessage(content=f"Text:\n{answer[:2200]}"),
+    ]
+    try:
+        resp = llm.invoke(prompt)
+        raw = resp.content if hasattr(resp, "content") else str(resp)
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if not match:
+            return []
+        data = json.loads(match.group(0))
+        persons = data.get("persons") or []
+        return [str(p).strip() for p in persons if str(p).strip()][:25]
+    except Exception as exc:
+        log.warning("person extraction failed: %s", exc)
+        return []
 
 
 def _safe_judge_sentiment(llm: Any, answer: str, company_name: str) -> float | None:
@@ -530,7 +590,7 @@ def _aggregate(
     client_id: str,
     company_name: str,
     answers: list[QuestionAnswer],
-    employee_gender: dict[str, str | None],
+    parity_baseline: dict[str, Any] | None = None,
     runs: int = 1,
 ) -> PollingResult:
     total = len(answers)                                   # alla sampling-körningar
@@ -567,8 +627,19 @@ def _aggregate(
     sentiments = [a.sentiment for a in reps if a.mentioned and a.sentiment is not None]
     avg_sentiment = (sum(sentiments) / len(sentiments)) if sentiments else None
 
+    # Parity v2: namnen konsumeras här och persisteras ALDRIG (DPA §6.2/§7.2) —
+    # bara det anonyma aggregatet + osäkerhet skrivs.
     all_persons = [name for a in reps for name in a.persons_mentioned]
-    parity = _calculate_parity(all_persons, employee_gender)
+    parity_agg = name_gender.aggregate(all_persons)
+    parity = parity_agg["parity"]
+    parity_n = int(parity_agg["n"])
+    parity_ci = _wilson_ci95(parity, parity_n)
+
+    baseline = parity_baseline if isinstance(parity_baseline, dict) else None
+    baseline_value = baseline.get("value") if baseline else None
+    if not isinstance(baseline_value, (int, float)) or not (0.0 <= float(baseline_value) <= 1.0):
+        baseline_value = None
+    gap = (parity - float(baseline_value)) if (parity is not None and baseline_value is not None) else None
 
     category_results: dict[str, dict[str, float]] = {}
     category_competitors: dict[str, list[dict[str, Any]]] = {}
@@ -609,6 +680,8 @@ def _aggregate(
     # raw_responses behåller ALLA körningar (så routerns per-motor-SoV också blir samplad),
     # men den stora svarstexten + sentiment/orgs bärs bara av run_idx 0 — övriga körningar
     # lagras kompakt (bara mention-flaggan) för att hålla Firestore-dokumentet under 1 MB.
+    # OBS: persons_mentioned skrivs MEDVETET inte — öppna NER-namn (inkl. tredje part)
+    # i Firestore vore persisterad personuppgift (DPA §6.2/§7.2, parity-index-spec).
     raw_responses = [
         {
             "category": a.category,
@@ -617,7 +690,6 @@ def _aggregate(
             "answer": a.answer if a.run_idx == 0 else "",
             "mentioned": a.mentioned,
             "sentiment": a.sentiment if a.run_idx == 0 else None,
-            "persons_mentioned": a.persons_mentioned if a.run_idx == 0 else [],
             "orgs_mentioned": a.orgs_mentioned if a.run_idx == 0 else [],
             "run_idx": a.run_idx,
         }
@@ -640,19 +712,29 @@ def _aggregate(
         sov_ci95=sov_ci95,
         runs_per_query=max(1, runs),
         sov_by_source=sov_by_source,
+        parity_portrayed=parity,
+        parity_n=parity_n,
+        parity_unknown_share=round(float(parity_agg["unknown_share"]), 4),
+        parity_ci95=parity_ci,
+        parity_baseline=baseline,
+        parity_gap=gap,
     )
 
 
-def _calculate_parity(persons: list[str], gender_map: dict[str, str | None]) -> float | None:
-    counts = {"kvinna": 0, "man": 0}
-    for name in persons:
-        g = (gender_map.get(name) or "").lower()
-        if g in counts:
-            counts[g] += 1
-    total = counts["kvinna"] + counts["man"]
-    if total == 0:
+def _wilson_ci95(p: float | None, n: int, z: float = 1.96) -> list[float] | None:
+    """Wilson-konfidensintervall [lo, hi] för en andel — paritetens motsvarighet
+    till sov_ci95. Tre nämnda personer ska inte ge en tvärsäker trendpil: vid små
+    n blir intervallet brett och UI/rapport grindar på det. None om underlag saknas.
+
+    Wilson i stället för normalapproximation: beter sig korrekt nära 0/1 och vid
+    små n (det vanliga läget — AI namnger ofta bara en handfull personer)."""
+    if p is None or n <= 0:
         return None
-    return counts["kvinna"] / total
+    z2 = z * z
+    denom = 1 + z2 / n
+    center = (p + z2 / (2 * n)) / denom
+    half = z * ((p * (1 - p) / n + z2 / (4 * n * n)) ** 0.5) / denom
+    return [round(max(0.0, center - half), 4), round(min(1.0, center + half), 4)]
 
 
 def _current_week_id() -> str:
@@ -666,7 +748,14 @@ def _write(result: PollingResult) -> None:
         {
             "share_of_voice": result.share_of_voice,
             "sentiment_score": result.sentiment_score,
-            "parity_index": result.parity_index,
+            "parity_index": result.parity_index,  # alias = parity_portrayed (trend-kontinuitet)
+            # Parity v2 — enbart anonyma aggregat; namn/kön per person skrivs aldrig (DPA).
+            "parity_portrayed": result.parity_portrayed,
+            "parity_n": result.parity_n,
+            "parity_unknown_share": result.parity_unknown_share,
+            "parity_ci95": result.parity_ci95,
+            "parity_baseline": result.parity_baseline,
+            "parity_gap": result.parity_gap,
             "category_results": result.category_results,
             "category_competitors": result.category_competitors,
             "models_used": result.models_used,

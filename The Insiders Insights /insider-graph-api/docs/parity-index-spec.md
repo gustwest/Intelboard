@@ -1,6 +1,9 @@
 # GEO Parity Index v2 — porträttering vs baseline (DPA-säkrad)
 
-*Spec 2026-06-10. Status: Fas 0 byggd; Fas 1–7 ej påbörjade.*
+*Spec 2026-06-10. Status: Fas 0 ✅, Fas 1+2 ✅ (öppen person-NER på Vertex EU,
+nya aggregatfält, ingen namn-persistens), Fas 6 backend-delen ✅ (router
+exponerar fälten). Kvar: Fas 3 (baseline-inmatning UI+router), Fas 5
+(månadsrapportens gap-narrativ), Fas 6 frontend, Fas 7 löpande.*
 
 ## Principändring
 

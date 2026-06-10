@@ -91,11 +91,11 @@ def make_esg_reasoner():
 
 
 def make_email_extractor_gemini():
-    """Email-fritext → Schema.org Event. PRIMÄR sedan 2026-06-03 (flippat från OpenAI).
+    """Email-fritext → Schema.org Event. ENDA vägen sedan 2026-06-10 (US-fallback borttagen).
 
     Via Vertex AI EU så mail-innehållet (kunddata: personnamn, kontakter, kalender-
     detaljer) stannar i europe-west1. None om Vertex inte är konfigurerat — då
-    faller email_extraction tillbaka till OpenAI-versionen.
+    hoppar email_extraction över extraktionen (ingen US-fallback, DPA §6.1).
     """
     if not settings.gcp_project:
         log.warning("EU-only: GCP-projekt ej satt — email_extractor_gemini otillgänglig")

@@ -150,6 +150,13 @@ def list_results(client_id: str, limit: int = 12) -> dict[str, Any]:
                 "sov_by_source": data.get("sov_by_source"),
                 "sentiment_score": data.get("sentiment_score"),
                 "parity_index": data.get("parity_index"),
+                # Parity v2 — anonyma aggregat (None/0 för veckor före omläggningen)
+                "parity_portrayed": data.get("parity_portrayed"),
+                "parity_n": data.get("parity_n"),
+                "parity_unknown_share": data.get("parity_unknown_share"),
+                "parity_ci95": data.get("parity_ci95"),
+                "parity_baseline": data.get("parity_baseline"),
+                "parity_gap": data.get("parity_gap"),
                 "category_results": data.get("category_results"),
                 "category_competitors": data.get("category_competitors") or {},
                 "total_answers": data.get("total_answers"),
