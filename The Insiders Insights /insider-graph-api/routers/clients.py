@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 import firestore_client as fs
@@ -16,7 +16,7 @@ import ttl_cache
 from config import settings
 from routers.inbox import _count_client  # samma "väntar på människa"-räkning som inkorgen
 from schema_org import urls
-from services import audience_personas, blob_storage, contacts as contacts_svc, persona_derivation, persona_registry
+from services import audience_personas, blob_storage, contacts as contacts_svc, persona_derivation, persona_registry, person_expertise
 from services.discovery import _normalize_org_number
 from services.identity_enrichment import apply_identity_metadata
 from services.output_quality import AudiencePriority
@@ -134,6 +134,8 @@ def get_client(client_id: str) -> dict[str, Any]:
     data = snap.to_dict() or {}
 
     employees = []
+    # R1: expertis-status per medarbetare (en claims-iteration) för Medarbetare-boxen.
+    expertise = person_expertise.expertise_status_by_employee(client_id)
     for emp_id, emp in fs.iter_employees(client_id):
         employees.append(
             {
@@ -143,6 +145,9 @@ def get_client(client_id: str) -> dict[str, Any]:
                 "linkedin_url": emp.get("linkedin_url"),
                 "gender": emp.get("gender"),
                 "opted_out": bool(emp.get("opted_out")),
+                # R1: samtyckes-intyg + expertis-claims-status (in_review/included/rejected).
+                "consent_attested_at": emp.get("consent_attested_at"),
+                "expertise": expertise.get(emp_id) or {"in_review": 0, "included": 0, "rejected": 0},
             }
         )
     employees.sort(key=lambda e: e.get("name") or "")
@@ -545,8 +550,9 @@ def _latest_polling_week(client_id: str) -> str | None:
 def patch_employee(client_id: str, employee_id: str, payload: EmployeePatch) -> dict[str, Any]:
     """Uppdatera en medarbetare. Idag: opt-out-toggle.
 
-    opt-out stoppar bara framtida hämtning (scrape-jobben hoppar över hen) —
-    redan insamlad data ligger kvar tills den raderas explicit.
+    opt-out stoppar framtida hämtning (scrape-jobben hoppar över hen) OCH tar bort
+    personens Person-nod + expertis ur den publika grafen vid nästa kompilering.
+    Redan insamlad rådata ligger kvar internt tills den raderas explicit.
     """
     ref = fs.employee_doc(client_id, employee_id)
     if not ref.get().exists:
@@ -557,6 +563,42 @@ def patch_employee(client_id: str, employee_id: str, payload: EmployeePatch) -> 
     if update:
         ref.update(update)
     return {"status": "ok", "employee_id": employee_id, **update}
+
+
+@router.post("/{client_id}/employees/{employee_id}/expertise")
+async def upload_person_expertise(
+    client_id: str,
+    employee_id: str,
+    file: UploadFile,
+    consent_attested: bool = Form(...),
+) -> dict[str, Any]:
+    """R1: ladda upp CV/bio för en medarbetare → smal LLM-extraktion → person-claims i
+    granskningskön. Kräver samtyckes-intyg (personens eget samtycke, dokumenterat hos
+    kunden). Ersätter personens tidigare expertis vid omkörning."""
+    from services.upload_limits import read_capped
+
+    raw = await read_capped(file)
+    try:
+        return {
+            "client_id": client_id, "employee_id": employee_id,
+            **person_expertise.ingest_person_expertise(
+                client_id, employee_id, file.filename, raw,
+                consent_attested=consent_attested,
+            ),
+        }
+    except ValueError as exc:
+        status = 404 if "not found" in str(exc) else 400
+        raise HTTPException(status, str(exc)) from exc
+
+
+@router.delete("/{client_id}/employees/{employee_id}/expertise")
+def delete_person_expertise(client_id: str, employee_id: str) -> dict[str, Any]:
+    """R1: ta bort personens expertis-claims (kö + leverans). Kör omkompilering separat
+    (Återpublicera) för att rensa redan publicerad graf."""
+    if not fs.client_doc(client_id).get().exists:
+        raise HTTPException(404, f"client not found: {client_id}")
+    removed = person_expertise.clear_person_expertise(client_id, employee_id)
+    return {"status": "ok", "employee_id": employee_id, "removed": removed}
 
 
 @router.delete("/{client_id}/employees/{employee_id}")

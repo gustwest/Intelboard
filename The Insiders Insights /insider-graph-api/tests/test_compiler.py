@@ -572,6 +572,56 @@ class CompileTimeVoiceTest(unittest.TestCase):
         self.assertNotIn("engagerade följare", self.desc)
 
 
+class PersonExpertiseProjectionTest(unittest.TestCase):
+    """R1: godkända person-claims → knowsAbout + Claim-noder på Person-noden."""
+
+    _PEX_CLAIMS = {
+        "pex-emp_1-x-a0": {
+            "claim_kind": "property", "subject_ref": "emp_1",
+            "predicate": "knowsAbout", "value": "inbyggda system",
+            "source": [{"kind": "attested", "label": "CV/biografi, uppgift från personen",
+                        "attested_at": "2026-06-10", "employee_id": "emp_1"}],
+            "included_in_output": True, "review_status": "approved",
+        },
+        "pex-emp_1-x-s0": {
+            "claim_kind": "narrative", "subject_ref": "emp_1",
+            "statement": "Anna Svensson har lett utvecklingsteam i 12 år.",
+            "source": [{"kind": "attested", "label": "CV/biografi, uppgift från personen",
+                        "attested_at": "2026-06-10", "employee_id": "emp_1"}],
+            "included_in_output": True, "review_status": "approved",
+        },
+    }
+
+    def test_approved_expertise_enriches_person_node(self):
+        _graph_setup(claims=dict(self._PEX_CLAIMS))
+        graph = compile_client("acme")
+        person = _nodes(graph, "Person")[0]
+        self.assertEqual(person["knowsAbout"], ["inbyggda system"])
+        person_claims = [c for c in _nodes(graph, "Claim")
+                         if c.get("about", {}).get("@id") == person["@id"]]
+        self.assertEqual(len(person_claims), 1)
+        self.assertIn("lett utvecklingsteam", person_claims[0]["text"])
+        self.assertIn("isBasedOn", person_claims[0])  # källförsedd som org-claims
+
+    def test_unapproved_expertise_stays_out(self):
+        pending = {k: {**v, "included_in_output": False, "review_status": None,
+                       "needs_review": True} for k, v in self._PEX_CLAIMS.items()}
+        _graph_setup(claims=pending)
+        graph = compile_client("acme")
+        self.assertNotIn("knowsAbout", _nodes(graph, "Person")[0])
+
+    def test_opted_out_person_expertise_never_published(self):
+        # GDPR: opt-out → varken nod eller expertis, även om claims är godkända.
+        _graph_setup(
+            employees={"emp_1": {"name": "Anna Svensson", "title": "VD", "opted_out": True}},
+            claims=dict(self._PEX_CLAIMS),
+        )
+        graph = compile_client("acme")
+        self.assertEqual(_nodes(graph, "Person"), [])
+        texts = [c.get("text", "") for c in _nodes(graph, "Claim")]
+        self.assertFalse(any("utvecklingsteam" in t for t in texts))
+
+
 class OptedOutPersonTest(unittest.TestCase):
     """GDPR: opt-out gäller personens hela närvaro — ingen Person-nod i publika grafen."""
 

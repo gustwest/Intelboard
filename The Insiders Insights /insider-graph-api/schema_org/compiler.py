@@ -147,6 +147,16 @@ class JobPosting:
 
 
 @dataclass
+class PersonClaim:
+    """R1: ett godkänt expertis-påstående om en namngiven person (subject_ref =
+    employee_id) — blir en Claim-nod med about → Person-noden i grafen."""
+
+    person_id: str  # @id för Person-noden
+    statement: str
+    footnotes: list[int]
+
+
+@dataclass
 class RenderModel:
     client_id: str
     base: str
@@ -160,6 +170,8 @@ class RenderModel:
     description: str | None
     last_updated: str | None
     job_postings: list[JobPosting] = field(default_factory=list)
+    # R1: godkända person-expertis-påståenden (Claim-noder med about → Person).
+    person_claims: list[PersonClaim] = field(default_factory=list)
     # Profilsidans språk (A1, BCP 47). Default sv. Väljer strängtabell + sätts som
     # html lang / inLanguage. Bärs på modellen så både compiler och profile_page
     # läser SAMMA språk.
@@ -197,6 +209,10 @@ def build_render_model(client_id: str) -> RenderModel:
         for emp_id, emp in fs.iter_employees(client_id)
         if not emp.get("opted_out")
     ]
+    # R1: index för person-claims-projektionen. Bara icke-opt:ade finns här →
+    # en opt:ad/raderad persons claims faller bort av sig själva nedan (GDPR).
+    person_by_emp_id = {p["@id"].rsplit("#person-", 1)[1]: p for p in persons}
+    person_claims: list[PersonClaim] = []
 
     sources: dict[str, Source] = {}  # item_id → Source (bevarar ordning)
     facts: list[Fact] = []
@@ -243,7 +259,26 @@ def build_render_model(client_id: str) -> RenderModel:
 
     for claim in _iter_output_claims(client_id):
         if claim.subject_ref != "org":
-            continue  # MVP: medarbetar-claims projiceras inte ännu
+            # R1: person-expertis (subject_ref = employee_id) projiceras på personens
+            # Person-nod. Saknas noden (opt-out/raderad) → claimet publiceras aldrig.
+            person_node = person_by_emp_id.get(claim.subject_ref)
+            if person_node is not None:
+                p_footnotes: list[int] = []
+                for src in claim.source:
+                    number, _label = resolve(src)
+                    if number is not None and number not in p_footnotes:
+                        p_footnotes.append(number)
+                if claim.claim_kind == "property" and claim.predicate == "knowsAbout" and claim.value:
+                    existing_ka = person_node.get("knowsAbout") or []
+                    if claim.value not in existing_ka:
+                        person_node["knowsAbout"] = [*existing_ka, claim.value]
+                elif claim.claim_kind == "narrative" and claim.statement:
+                    person_claims.append(PersonClaim(
+                        person_id=person_node["@id"],
+                        statement=claim.statement.strip(),
+                        footnotes=sorted(p_footnotes),
+                    ))
+            continue
         footnotes: list[int] = []
         manual_label: str | None = None
         for src in claim.source:
@@ -313,6 +348,7 @@ def build_render_model(client_id: str) -> RenderModel:
         description=description,
         last_updated=last_updated,
         job_postings=_gather_job_postings(client_id, base),
+        person_claims=person_claims,
         language=language,
         lead=_build_lead(data.get("company_name") or client_id, facts, prose, language),
     )
@@ -530,6 +566,20 @@ def compile_client(client_id: str) -> dict[str, Any]:
         review = _claim_review(client_id, claim_id, idx, model.base, entry, verif_cache)
         if review is not None:
             review_nodes.append(review)
+
+    # R1: person-expertis — godkända påståenden om namngivna personer blir Claim-noder
+    # med about → Person-noden (inte org). Samma källförsedda form som org-claims.
+    for i, pc in enumerate(model.person_claims):
+        node = {
+            "@type": "Claim",
+            "@id": f"{model.base}#claim-person-{i}",
+            "text": pc.statement,
+            "about": {"@id": pc.person_id},
+        }
+        based_on = [{"@id": by_number[n].sid} for n in pc.footnotes if n in by_number]
+        if based_on:
+            node["isBasedOn"] = based_on if len(based_on) > 1 else based_on[0]
+        claim_nodes.append(node)
 
     faq_nodes: list[dict[str, Any]] = []
     faq = build_faq(model)

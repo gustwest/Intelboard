@@ -27,6 +27,9 @@ type Employee = {
   linkedin_url: string | null;
   gender: string | null;
   opted_out: boolean;
+  // R1: person-expertis — samtyckes-intyg + claims-status (driver raden i Medarbetare-boxen).
+  consent_attested_at: string | null;
+  expertise: { in_review: number; included: number; rejected: number };
 };
 
 type ClientDetail = {
@@ -103,6 +106,45 @@ export default function ClientDetailPage() {
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // R1: CV/bio-uppladdning per medarbetare. En aktiv uppladdning åt gången; samtyckes-
+  // intyget (personens eget samtycke, dokumenterat hos kunden) är en hård grind före POST.
+  const [expUpload, setExpUpload] = useState<{ empId: string; file: File | null; consent: boolean; busy: boolean } | null>(null);
+  const [expMsg, setExpMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+
+  async function submitExpertise() {
+    if (!expUpload?.file || !expUpload.consent) return;
+    setExpUpload((u) => (u ? { ...u, busy: true } : u));
+    setExpMsg(null);
+    try {
+      const form = new FormData();
+      form.append('file', expUpload.file);
+      form.append('consent_attested', 'true');
+      const res = await graphFetch<{ claims_created: number }>(
+        `/api/clients/${clientId}/employees/${expUpload.empId}/expertise`,
+        { method: 'POST', body: form },
+      );
+      setExpMsg({ tone: 'ok', text: `${res.claims_created} expertis-påståenden extraherade — granska och godkänn i Granska-fliken.` });
+      setExpUpload(null);
+      await load();
+    } catch (e) {
+      setExpMsg({ tone: 'err', text: e instanceof Error ? e.message : String(e) });
+      setExpUpload((u) => (u ? { ...u, busy: false } : u));
+    }
+  }
+
+  async function deleteExpertise(empId: string) {
+    setBusy(empId);
+    setExpMsg(null);
+    try {
+      await graphFetch(`/api/clients/${clientId}/employees/${empId}/expertise`, { method: 'DELETE' });
+      await load();
+    } catch (e) {
+      setExpMsg({ tone: 'err', text: e instanceof Error ? e.message : String(e) });
     } finally {
       setBusy(null);
     }
@@ -293,9 +335,16 @@ export default function ClientDetailPage() {
           {tab === 'oversikt' && (<>
           {/* Medarbetare */}
           <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 4 }}>
               Medarbetare ({client.employees.length})
             </div>
+            <p style={{ fontSize: 11, color: C.dim, margin: '0 0 14px' }}>
+              Navet för person-data: opt-out/radering, och expertis via CV/biografi — extraherad smalt
+              (bara yrkesexpertis, aldrig persondata), granskas i Granska, publiceras på personens nod i AI-profilen.
+            </p>
+            {expMsg && (
+              <UI.StatusBanner tone={expMsg.tone} style={{ marginBottom: 12 }}>{expMsg.text}</UI.StatusBanner>
+            )}
             {client.employees.length === 0 ? (
               <UI.Empty>Inga medarbetare.</UI.Empty>
             ) : (
@@ -304,14 +353,18 @@ export default function ClientDetailPage() {
                   <div
                     key={emp.employee_id}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 12,
                       padding: '10px 12px',
                       border: `1px solid ${C.border}`,
                       borderRadius: 8,
                       opacity: emp.opted_out ? 0.6 : 1,
+                    }}
+                  >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 12,
                     }}
                   >
                     <div style={{ minWidth: 0 }}>
@@ -354,6 +407,79 @@ export default function ClientDetailPage() {
                         <Trash2 size={14} />
                       </button>
                     </div>
+                  </div>
+
+                  {/* R1: person-expertis — uppladdning, samtyckes-intyg och claims-status per person */}
+                  {!emp.opted_out && (
+                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${C.border}`, fontSize: 11 }}>
+                      {expUpload?.empId === emp.employee_id ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <input
+                            type="file"
+                            accept=".pdf,.txt,.md"
+                            onChange={(e) => setExpUpload((u) => (u ? { ...u, file: e.target.files?.[0] || null } : u))}
+                            style={{ fontSize: 11, color: C.text }}
+                          />
+                          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, color: C.text, cursor: 'pointer', lineHeight: 1.5 }}>
+                            <input
+                              type="checkbox"
+                              checked={expUpload.consent}
+                              onChange={(e) => setExpUpload((u) => (u ? { ...u, consent: e.target.checked } : u))}
+                              style={{ marginTop: 2 }}
+                            />
+                            <span>
+                              Kunden intygar att <strong>{emp.name || 'personen'}</strong> själv har lämnat samtycke till att
+                              yrkesexpertis ur dokumentet publiceras på den publika AI-profilen. Endast yrkesrelaterad
+                              expertis extraheras — persondata (adress, födelsedatum m.m.) slängs vid källan.
+                            </span>
+                          </label>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button
+                              onClick={submitExpertise}
+                              disabled={!expUpload.file || !expUpload.consent || expUpload.busy}
+                              title={!expUpload.consent ? 'Samtyckes-intyget krävs innan uppladdning' : !expUpload.file ? 'Välj en fil (PDF/text)' : 'Extrahera expertis till granskningskön'}
+                              style={{ padding: '5px 12px', background: expUpload.file && expUpload.consent ? 'rgba(224, 142, 121,0.16)' : 'transparent', color: expUpload.file && expUpload.consent ? C.accent : C.dim, border: `1px solid ${expUpload.file && expUpload.consent ? C.accent : C.border}`, borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: expUpload.busy ? 'wait' : 'pointer' }}
+                            >
+                              {expUpload.busy ? 'Extraherar…' : 'Extrahera expertis'}
+                            </button>
+                            <button onClick={() => setExpUpload(null)} disabled={expUpload.busy} style={{ padding: '5px 10px', background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 11, cursor: 'pointer' }}>
+                              Avbryt
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', color: C.muted }}>
+                          <span style={{ fontWeight: 600, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: 10 }}>Expertis</span>
+                          {emp.expertise.in_review > 0 && (
+                            <a href={`/insider-graph/review?client=${encodeURIComponent(clientId)}`} style={{ color: '#b45309', fontWeight: 600 }}>
+                              {emp.expertise.in_review} i granskning →
+                            </a>
+                          )}
+                          {emp.expertise.included > 0 && <span style={{ color: '#16a34a', fontWeight: 600 }}>{emp.expertise.included} publicerade</span>}
+                          {emp.expertise.in_review === 0 && emp.expertise.included === 0 && <span style={{ fontStyle: 'italic' }}>ingen ännu</span>}
+                          {emp.consent_attested_at && (
+                            <span title="Samtyckes-intyg mottaget (personens eget samtycke, dokumenterat hos kunden)">samtycke intygat {emp.consent_attested_at.slice(0, 10)}</span>
+                          )}
+                          <button
+                            onClick={() => { setExpUpload({ empId: emp.employee_id, file: null, consent: false, busy: false }); setExpMsg(null); }}
+                            style={{ padding: '3px 10px', background: 'transparent', color: C.accent, border: `1px solid ${C.accent}`, borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                          >
+                            + Ladda upp CV/bio
+                          </button>
+                          {(emp.expertise.in_review > 0 || emp.expertise.included > 0) && (
+                            <button
+                              onClick={() => deleteExpertise(emp.employee_id)}
+                              disabled={busy === emp.employee_id}
+                              title="Ta bort personens expertis-claims (kö + leverans)"
+                              style={{ padding: '3px 10px', background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 11, cursor: 'pointer' }}
+                            >
+                              Ta bort expertis
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   </div>
                 ))}
               </div>

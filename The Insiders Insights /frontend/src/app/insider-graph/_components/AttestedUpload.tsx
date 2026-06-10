@@ -94,7 +94,10 @@ export default function AttestedUpload({ clientId }: { clientId: string }) {
         <div style={{ fontSize: 12, color: C.muted }}>Laddar…</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {sources.map((st) => (
+          {/* R1: people_bio pensionerad ur UI:t — person-dokument laddas upp PER MEDARBETARE
+              i Medarbetare-boxen (Översikt) med samtyckes-intyg + smal extraktion. Källtypen
+              finns kvar i backend för redan inläst data. */}
+          {sources.filter((st) => st.key !== 'people_bio').map((st) => (
             <SourceUploader key={st.key} clientId={clientId} source={st} onDone={load} />
           ))}
         </div>
