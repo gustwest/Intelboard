@@ -135,6 +135,21 @@ def reset(
 # --- firestore_client-API (samma signaturer som riktiga firestore_client) ---
 
 
+class _DB:
+    """Ad-hoc Firestore-klient (fs.db()) för moduler som når godtyckliga collections
+    direkt, t.ex. connector_trust (ops_config/connector-trust). Backas av STATE så
+    set→get fungerar inom ett test; STATE.clear() i reset() ger fresh state per test."""
+
+    def collection(self, name: str) -> _Col:
+        cols = STATE.setdefault("db_collections", {})
+        docs = cols.setdefault(name, {})
+        return _Col(docs, deletable=True, writable=True)
+
+
+def db() -> _DB:
+    return _DB()
+
+
 def client_doc(client_id: str) -> _DocRef:
     return _DocRef(
         client_id,
