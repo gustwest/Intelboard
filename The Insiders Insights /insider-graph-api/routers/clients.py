@@ -38,6 +38,16 @@ class EmployeePatch(BaseModel):
     opted_out: bool | None = None
 
 
+class ContactInput(BaseModel):
+    """En kundkontakt (N2). `is_primary` markerar huvudkontakten — exakt en sådan
+    upprätthålls vid spara. `role` är valfri fritext (t.ex. "webbansvarig") som senare
+    kan styra cc-routing av kit/utskick."""
+    email: str
+    name: str | None = None
+    role: str | None = None
+    is_primary: bool = False
+
+
 class ClientConfigUpdate(BaseModel):
     """Per-kund mätkonfiguration (AI-synlighet). Alla fält valfria — utelämnade rörs ej.
 
@@ -70,6 +80,10 @@ class ClientConfigUpdate(BaseModel):
     # Felnotiser går ALDRIG hit — de stannar internt hos ops. Tom sträng = rensa.
     contact_email: str | None = None
     contact_name: str | None = None
+    # Flera kontaktpersoner med en huvudkontakt (N2). När satt driver den
+    # contact_email/contact_name (huvudkontakten speglas dit) så alla befintliga läsare
+    # (kit, månadsmejl, reports) fungerar oförändrat. None = rör inte kontakterna.
+    contacts: list[ContactInput] | None = None
     # Profilsidans språk (BCP 47-bas). Default sv. Driver i18n + inLanguage på
     # profilsida/JSON-LD. Tom sträng = återgå till default (sv).
     language: str | None = None
@@ -147,8 +161,11 @@ def get_client(client_id: str) -> dict[str, Any]:
         # Konkurrenter (GEO-riskloop §5.1 svaga ledtrådar). [] om aldrig satt.
         "competitors": data.get("competitors") or [],
         # Kundkontakt för leverans-utskick (Spår B). None om aldrig satt.
+        # contact_email/contact_name = legacy-spegling av huvudkontakten (bakåtkompat).
         "contact_email": data.get("contact_email"),
         "contact_name": data.get("contact_name"),
+        # Flera kontakter med huvudkontakt (N2). Migreras-on-read ur legacy om contacts[] saknas.
+        "contacts": _contacts_for_response(data),
         # Profilsidans språk — default sv om aldrig satt.
         "language": data.get("language") or DEFAULT_LANGUAGE,
         # Output-kvalitets-personor (audience_priorities). Sätt av användaren eller
@@ -249,6 +266,16 @@ def update_client_config(client_id: str, payload: ClientConfigUpdate) -> dict[st
 
     if payload.contact_name is not None:
         update["contact_name"] = payload.contact_name.strip() or None
+
+    if payload.contacts is not None:
+        # N2: flera kontakter med exakt en huvudkontakt. Spegla huvudkontakten till
+        # legacy contact_email/contact_name så kit/månadsmejl/reports fungerar oförändrat.
+        cleaned_contacts = _normalize_contacts(payload.contacts)
+        update["contacts"] = cleaned_contacts
+        update["contacts_updated_at"] = now_iso  # byte loggas (vem-fältet kan tillkomma)
+        primary = next((c for c in cleaned_contacts if c["is_primary"]), None)
+        update["contact_email"] = primary["email"] if primary else None
+        update["contact_name"] = primary["name"] if primary else None
 
     if payload.language is not None:
         lang = payload.language.strip().lower()
@@ -574,6 +601,50 @@ def _purge_employee_from_claims(client_id: str, employee_id: str) -> tuple[int, 
             fs.claim_doc(client_id, claim_id).update({"source": kept})
             sources_pruned += 1
     return claims_removed, sources_pruned
+
+
+def _normalize_contacts(contacts: list[ContactInput]) -> list[dict[str, Any]]:
+    """Sanera kontaktlistan (N2): strippa, kräv giltig e-post, dedupa på e-post (skiftläges-
+    okänsligt, bevara ordning), och upprätthåll EXAKT en huvudkontakt (markerad → den;
+    ingen markerad → första; flera → första vinner). Tom lista = inga kontakter."""
+    cleaned: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for c in contacts:
+        email = (c.email or "").strip()
+        if not email:
+            continue
+        if "@" not in email:
+            raise HTTPException(400, f"ogiltig kontakt-epost: {email}")
+        key = email.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append({
+            "email": email,
+            "name": (c.name or "").strip() or None,
+            "role": (c.role or "").strip() or None,
+            "is_primary": bool(c.is_primary),
+        })
+    if not cleaned:
+        return []
+    primary_idx = next((i for i, c in enumerate(cleaned) if c["is_primary"]), 0)
+    for i, c in enumerate(cleaned):
+        c["is_primary"] = (i == primary_idx)
+    return cleaned
+
+
+def _contacts_for_response(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Kontakter för get_client. Härled ur lagrad contacts[] om den finns; annars
+    migrera-on-read en enda huvudkontakt ur legacy contact_email/contact_name så
+    UI:t alltid ser en enhetlig lista."""
+    contacts = data.get("contacts")
+    if contacts:
+        return contacts
+    email = data.get("contact_email")
+    if email:
+        return [{"email": email, "name": data.get("contact_name"),
+                 "role": None, "is_primary": True}]
+    return []
 
 
 def _iso(value: Any) -> str | None:

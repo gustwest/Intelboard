@@ -61,5 +61,79 @@ class ContactLanguageConfigTest(unittest.TestCase):
         self.assertEqual(clients_router.get_client("acme")["language"], "sv")
 
 
+class MultiContactTest(unittest.TestCase):
+    """N2: flera kontaktpersoner med exakt en huvudkontakt; huvudkontakten speglas till
+    legacy contact_email/contact_name så kit/månadsmejl fungerar oförändrat."""
+
+    def _save(self, contacts):
+        clients_router.update_client_config(
+            "acme", clients_router.ClientConfigUpdate(
+                contacts=[clients_router.ContactInput(**c) for c in contacts]
+            ),
+        )
+        return fakefs.STATE["client"]
+
+    def test_saves_contacts_and_mirrors_primary(self):
+        fakefs.reset(client={"company_name": "Acme AB"})
+        stored = self._save([
+            {"email": "vd@acme.se", "name": "Anna", "is_primary": True},
+            {"email": "webb@acme.se", "name": "Bo", "role": "webbansvarig"},
+        ])
+        self.assertEqual(len(stored["contacts"]), 2)
+        # Huvudkontakten speglas till legacy-fälten (befintliga läsare oförändrade).
+        self.assertEqual(stored["contact_email"], "vd@acme.se")
+        self.assertEqual(stored["contact_name"], "Anna")
+        self.assertTrue(stored["contacts"][0]["is_primary"])
+        self.assertFalse(stored["contacts"][1]["is_primary"])
+        self.assertEqual(stored["contacts"][1]["role"], "webbansvarig")
+
+    def test_no_primary_marked_first_becomes_primary(self):
+        fakefs.reset(client={"company_name": "Acme AB"})
+        stored = self._save([{"email": "a@acme.se"}, {"email": "b@acme.se"}])
+        self.assertTrue(stored["contacts"][0]["is_primary"])
+        self.assertEqual(stored["contact_email"], "a@acme.se")
+
+    def test_multiple_primaries_collapse_to_one(self):
+        fakefs.reset(client={"company_name": "Acme AB"})
+        stored = self._save([
+            {"email": "a@acme.se", "is_primary": True},
+            {"email": "b@acme.se", "is_primary": True},
+        ])
+        primaries = [c for c in stored["contacts"] if c["is_primary"]]
+        self.assertEqual(len(primaries), 1)
+        self.assertEqual(primaries[0]["email"], "a@acme.se")
+
+    def test_dedup_and_invalid_email(self):
+        fakefs.reset(client={"company_name": "Acme AB"})
+        stored = self._save([
+            {"email": "a@acme.se", "is_primary": True},
+            {"email": "A@acme.se"},  # dubblett (skiftläge) → tas bort
+        ])
+        self.assertEqual(len(stored["contacts"]), 1)
+        with self.assertRaises(HTTPException) as ctx:
+            self._save([{"email": "inte-en-epost"}])
+        self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_empty_contacts_clears_legacy(self):
+        fakefs.reset(client={"company_name": "Acme AB", "contact_email": "old@acme.se",
+                             "contact_name": "Old"})
+        stored = self._save([])
+        self.assertEqual(stored["contacts"], [])
+        self.assertIsNone(stored["contact_email"])
+        self.assertIsNone(stored["contact_name"])
+
+    def test_get_client_migrates_legacy_to_contacts(self):
+        fakefs.reset(client={"company_name": "Acme AB", "contact_email": "vd@acme.se",
+                             "contact_name": "Anna"})
+        out = clients_router.get_client("acme")
+        self.assertEqual(len(out["contacts"]), 1)
+        self.assertEqual(out["contacts"][0]["email"], "vd@acme.se")
+        self.assertTrue(out["contacts"][0]["is_primary"])
+
+    def test_get_client_empty_when_no_contact(self):
+        fakefs.reset(client={"company_name": "Acme AB"})
+        self.assertEqual(clients_router.get_client("acme")["contacts"], [])
+
+
 if __name__ == "__main__":
     unittest.main()
