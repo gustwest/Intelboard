@@ -42,7 +42,7 @@ class NotificationsTest(unittest.TestCase):
     def test_send_failure_is_caught(self):
         self._configure()
         def boom(*a):
-            raise RuntimeError("sendgrid nere")
+            raise RuntimeError("brevo nere")
         n._deliver = boom
         result = n.send_quarterly_reminder("acme", {"company_name": "Acme AB"}, "msg")
         self.assertEqual(result, {"sent": False, "reason": "send_failed"})

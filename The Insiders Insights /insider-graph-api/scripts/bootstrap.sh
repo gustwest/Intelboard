@@ -55,6 +55,13 @@ CDN_BASE_URL="${CDN_BASE_URL:-https://storage.googleapis.com/${BUCKET}}"
 # vid cutover, tillsammans med CDN_BASE_URL → egen domän. Default false = path-style.
 CDN_CLEAN_URLS="${CDN_CLEAN_URLS:-false}"
 
+# Utgående mejl (Brevo, EU). NOTIFY_FROM_EMAIL = verifierad avsändare i Brevo, krävs
+# för att B1/B2-kundmejlen ska skicka (annars self-no-op). OPS_NOTIFY_EMAIL = internt
+# mottagar-team för kvartals-påminnelsen (tom = den no-op:ar). Sätts som env (ej secret)
+# på BÅDE service och jobb — annars raderas de av --set-env-vars vid omkörning.
+NOTIFY_FROM_EMAIL="${NOTIFY_FROM_EMAIL:-noreply@geogiraph.com}"
+OPS_NOTIFY_EMAIL="${OPS_NOTIFY_EMAIL:-}"
+
 # Egen domän för profilsidorna (clean-URL via HTTPS-LB + Cloud CDN). LB-sektionen
 # nedan provisioneras bara om PROFILE_DOMAIN är satt. Lämna tom för att hoppa över.
 PROFILE_DOMAIN="${PROFILE_DOMAIN:-}"
@@ -219,7 +226,7 @@ echo "==> Uppdaterar service-env för $SERVICE"
 OPS_WEBHOOK_TOKEN_ENV="${OPS_WEBHOOK_TOKEN:-}"
 gcloud run services update "$SERVICE" --region="$REGION" --project="$PROJECT_ID" \
   --service-account="$SA_EMAIL" \
-  --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS},OPS_WEBHOOK_TOKEN=${OPS_WEBHOOK_TOKEN_ENV}" \
+  --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS},OPS_WEBHOOK_TOKEN=${OPS_WEBHOOK_TOKEN_ENV},NOTIFY_FROM_EMAIL=${NOTIFY_FROM_EMAIL},OPS_NOTIFY_EMAIL=${OPS_NOTIFY_EMAIL}" \
   --update-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,PERPLEXITY_API_KEY=insider-graph-perplexity-api-key:latest,ANTHROPIC_API_KEY=insider-graph-anthropic-api-key:latest,BREVO_API_KEY=insider-graph-brevo-api-key:latest,ADMIN_API_KEY=insider-graph-admin-api-key:latest" \
   || echo "==> Service finns ej ännu — kör cloudbuild först"
 
@@ -244,7 +251,7 @@ create_or_update_job() {
       --service-account="$SA_EMAIL" \
       --command="python" --args="-m,$CMD" \
       --tasks="$TASKS" --parallelism="$PARALLELISM" --task-timeout="$TASK_TIMEOUT" \
-      --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS}" \
+      --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS},NOTIFY_FROM_EMAIL=${NOTIFY_FROM_EMAIL},OPS_NOTIFY_EMAIL=${OPS_NOTIFY_EMAIL}" \
       --update-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,PERPLEXITY_API_KEY=insider-graph-perplexity-api-key:latest,ANTHROPIC_API_KEY=insider-graph-anthropic-api-key:latest,BREVO_API_KEY=insider-graph-brevo-api-key:latest,ADMIN_API_KEY=insider-graph-admin-api-key:latest"
   else
     echo "==> Skapar job: $NAME (tasks=$TASKS parallelism=$PARALLELISM timeout=$TASK_TIMEOUT)"
@@ -254,7 +261,7 @@ create_or_update_job() {
       --command="python" --args="-m,$CMD" \
       --tasks="$TASKS" --parallelism="$PARALLELISM" --task-timeout="$TASK_TIMEOUT" \
       --max-retries=1 \
-      --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS}" \
+      --set-env-vars="FIRESTORE_PROJECT_ID=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},CDN_BUCKET=${BUCKET},CDN_BASE_URL=${CDN_BASE_URL},CDN_CLEAN_URLS=${CDN_CLEAN_URLS},NOTIFY_FROM_EMAIL=${NOTIFY_FROM_EMAIL},OPS_NOTIFY_EMAIL=${OPS_NOTIFY_EMAIL}" \
       --set-secrets="OPENAI_API_KEY=insider-graph-openai-api-key:latest,GEMINI_API_KEY=insider-graph-gemini-api-key:latest,PERPLEXITY_API_KEY=insider-graph-perplexity-api-key:latest,ANTHROPIC_API_KEY=insider-graph-anthropic-api-key:latest,BREVO_API_KEY=insider-graph-brevo-api-key:latest,ADMIN_API_KEY=insider-graph-admin-api-key:latest"
   fi
 }
@@ -280,7 +287,7 @@ create_or_update_job warmth-probes            jobs.warmth_probes           5 5 3
 create_or_update_job risk-detect-all          jobs.risk_detect_all         5 5 3600s
 create_or_update_job monthly-report-all       jobs.monthly_report_all      1 1 1800s
 # Spår B2: kund-säkert månadsmejl till varje kunds kontakt (self-no-op utan
-# SendGrid-konfig/kontakt). Körs efter monthly-report-all så rapporten finns.
+# Brevo-konfig/kontakt). Körs efter monthly-report-all så rapporten finns.
 create_or_update_job customer-report-email-all jobs.customer_report_email_all 1 1 1800s
 # Modell-drift: greppar repot + jämför services/model_registry mot latest_known.
 # Lätt jobb (ren IO + ett par regex-pass) → seriellt + kort timeout.

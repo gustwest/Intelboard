@@ -37,7 +37,6 @@ anthropic==0.104.1
 langchain-anthropic==0.3.13
 trafilatura==2.0.0
 pypdf==6.12.1
-sendgrid==6.11.0
 openpyxl==3.1.5
 xlrd==2.0.1
 defusedxml==0.7.1

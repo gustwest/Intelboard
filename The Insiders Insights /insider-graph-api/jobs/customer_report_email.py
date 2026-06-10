@@ -4,7 +4,7 @@ Skickar en KUND-säker månadssammanfattning till kundens kontaktperson, destill
 den redan persisterade månadsrapporten (clients/{cid}/monthly_reports/{YYYY-MM}). Körs
 EFTER monthly_report (samma kadens) eller manuellt.
 
-Self-no-op: saknas rapport / kundkontakt / SendGrid-konfig loggas det bara — inget fel.
+Self-no-op: saknas rapport / kundkontakt / Brevo-konfig loggas det bara — inget fel.
 Felnotiser går aldrig den här vägen; det här är värde-/statusutskick till kunden.
 """
 import argparse

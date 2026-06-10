@@ -1,9 +1,9 @@
 """Webhooks — externa system som skickar data till Insider Graph.
 
-SendGrid Inbound Parse:
-  - MX-record på `inbox.insidergraph.io` pekar mot mx.sendgrid.net.
+Inkommande mejl (inbound parse):
+  - MX-record på `inbox.insidergraph.io` pekar mot inbound-providerns MX.
   - Episodiska noder har adress `{client_id}.{employee_id}@inbox.insidergraph.io`.
-  - SendGrid POSTar multipart/form-data hit när mail kommer in.
+  - Providern POSTar multipart/form-data hit när mail kommer in.
 
 Confidence-tröskel: items med confidence < 0.7 sparas men markeras
 `needs_review=True` och `included_in_output=False`.
@@ -30,8 +30,8 @@ ADDRESS_RE = re.compile(r"^([a-z0-9\-]+)\.([a-z0-9\-]+)@", re.IGNORECASE)
 CONFIDENCE_THRESHOLD = 0.7
 
 
-@router.post("/sendgrid")
-async def sendgrid_inbound(
+@router.post("/inbound")
+async def inbound_mail(
     token: str = Query(""),
     to: str = Form(""),
     sender: str = Form("", alias="from"),
@@ -44,7 +44,7 @@ async def sendgrid_inbound(
     # Kräver en delad token (`?token=`) mot inbound-secreten; tom secret = avvisa allt
     # (säker default, jfr ops-webhooken). Återaktiveras genom att sätta secreten och
     # låta inbound-providern POSTa med token.
-    if not settings.sendgrid_webhook_secret or token != settings.sendgrid_webhook_secret:
+    if not settings.inbound_webhook_secret or token != settings.inbound_webhook_secret:
         raise HTTPException(403, "inbound mail webhook disabled")
     log.info("inbound mail to=%s from=%s subject=%s", mask_email(to), mask_email(sender), subject)
 

@@ -58,7 +58,7 @@ def get_report_html(client_id: str, month: str) -> HTMLResponse:
 @router.post("/{client_id}/{month}/send-customer-email")
 def send_customer_report(client_id: str, month: str) -> dict[str, Any]:
     """Mejla en kund-säker månadssammanfattning till kundkontakten (B2). Self-no-op
-    om kontakt/SendGrid saknas. Endast ofarliga fält (beslutssäkerhet/trend/styrkor/
+    om kontakt/Brevo saknas. Endast ofarliga fält (beslutssäkerhet/trend/styrkor/
     förbättringar) — aldrig motor-citat, harm-koder eller det interna utkastet."""
     report = _load(client_id, month)
     data = fs.client_doc(client_id).get().to_dict() or {}

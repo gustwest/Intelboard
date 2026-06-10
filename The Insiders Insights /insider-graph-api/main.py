@@ -1,6 +1,6 @@
 """Insider Graph — API entry point.
 
-Webhooks (SendGrid Inbound Parse) and admin endpoints. Background work runs as
+Webhooks (inbound mail parse) and admin endpoints. Background work runs as
 separate Cloud Run Jobs — see jobs/.
 """
 import logging

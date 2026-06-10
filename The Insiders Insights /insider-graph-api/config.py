@@ -79,7 +79,7 @@ class Settings(BaseSettings):
     # osynliga Unicode-tecken vid laddning. Förhindrar 'Illegal header value' (httpx)
     # och gRPC UNAUTHENTICATED-fel som orsakas av kontaminerade env-värden.
     # Se docs/api-key-rotation-runbook.md.
-    @field_validator("openai_api_key", "gemini_api_key", "perplexity_api_key", "anthropic_api_key", "sendgrid_api_key", "brevo_api_key", "admin_api_key", mode="before")
+    @field_validator("openai_api_key", "gemini_api_key", "perplexity_api_key", "anthropic_api_key", "brevo_api_key", "admin_api_key", mode="before")
     @classmethod
     def _strip_api_keys(cls, v: str, info) -> str:
         return _sanitize_api_key(v, info.field_name) if isinstance(v, str) else v
@@ -103,12 +103,13 @@ class Settings(BaseSettings):
 
     # Brevo (EU-baserad mejlleverantör) — transaktionsmejl (B1/B2 + intern påminnelse).
     # EU-val 2026-06-07: persondata (kontaktadresser) stannar i EU, konsekvent med
-    # Vertex-EU-beslutet ovan. sendgrid_api_key behålls som död config för bakåtkompat.
+    # Vertex-EU-beslutet ovan. Enda utgående mejl-vägen (services/notifications.py).
     brevo_api_key: str = ""
-    sendgrid_api_key: str = ""
 
     admin_api_key: str = ""
-    sendgrid_webhook_secret: str = ""
+    # Inkommande mejl-parse-webhook (routers/webhooks.py). Delad token; tom = avvisa
+    # allt (säker default). Provider-neutralt — valfri inbound-parse-leverantör.
+    inbound_webhook_secret: str = ""
     # Kvartals-påminnelsen (spec §4.1) är INTERN — vi samlar in LinkedIn-datan själva.
     # notify_from_email = avsändare, ops_notify_email = vårt interna mottagar-team.
     # Saknas någon → inget mejl skickas (To-Do:n i dashboarden skapas ändå).

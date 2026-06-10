@@ -29,7 +29,7 @@ insider-graph-api/
 │   ├── onboard.py          /api/onboard (CSV → Firestore)
 │   ├── polling.py          /api/polling/{client_id}
 │   ├── review.py           /api/review/{client_id} (godkänn/avvisa items)
-│   └── webhooks.py         /api/webhooks/sendgrid (inbound mail)
+│   └── webhooks.py         /api/webhooks/inbound (inbound mail)
 ├── services/
 │   ├── brightdata.py       Bright Data Datasets API
 │   ├── claim_extraction.py LLM-extraktion: fritext → narrative-claims + validering
@@ -77,8 +77,9 @@ Alla bygger från samma image. Service och jobs kör olika `command` (uvicorn vs
   ("Dual-Source Truth"). `quarterly-linkedin-todo` påminner ops-teamet var ~90:e dag.
 
 Valfri config (alla self-no-op om de saknas): `NOTIFY_FROM_EMAIL` + `OPS_NOTIFY_EMAIL`
-+ `SENDGRID_API_KEY` för den **interna** kvartals-påminnelsen, `UPLOAD_BUCKET` (privat
-GCS-bucket, **ej** publika CDN-bucketen) för uppladdat verifieringsunderlag.
++ `BREVO_API_KEY` för utgående mejl (Brevo, EU — kund-kit/månadsmejl + den **interna**
+kvartals-påminnelsen), `UPLOAD_BUCKET` (privat GCS-bucket, **ej** publika CDN-bucketen)
+för uppladdat verifieringsunderlag.
 
 ## Lokal körning
 
@@ -133,8 +134,8 @@ servicen faktiskt kör).
 | `BRIGHTDATA_LINKEDIN_PROFILE_DATASET_ID` | `insider-graph-brightdata-linkedin-profile-dataset-id` | LinkedIn person |
 | `BRIGHTDATA_LINKEDIN_COMPANY_DATASET_ID` | `insider-graph-brightdata-linkedin-company-dataset-id` | LinkedIn företag |
 
-Ej bundna på körande service idag: `ADMIN_API_KEY` (API-auth), `SENDGRID_API_KEY`,
-LinkedIn-posts-datasetet. Lägg till dem i `bootstrap.sh` igen vid behov.
+Ej bundna på körande service idag: LinkedIn-posts-datasetet. Lägg till det i
+`bootstrap.sh` igen vid behov.
 
 Skapa secrets så här:
 
@@ -169,11 +170,12 @@ gcloud builds submit --config cloudbuild.yaml .
 
 1. **DNS**
    - `cdn.insidergraph.io` → CNAME till `c.storage.googleapis.com` (alt. egen Cloud CDN-LB med managed cert).
-   - `inbox.insidergraph.io` → MX-record till `mx.sendgrid.net` (prio 10).
-2. **SendGrid Inbound Parse** (web-UI):
+   - `inbox.insidergraph.io` → MX-record till inbound-providerns MX (prio 10).
+2. **Inbound Parse** (inbound-providerns UI — t.ex. Brevo):
    - Add Host: `inbox.insidergraph.io`
-   - Destination URL: `https://insider-graph-api-…run.app/api/webhooks/sendgrid`
+   - Destination URL: `https://insider-graph-api-…run.app/api/webhooks/inbound`
    - POST raw MIME = av (vi använder fält-form-data).
+   - Sätt `INBOUND_WEBHOOK_SECRET` + låt providern POSTa med `?token=` (annars avvisas allt).
 3. **Bright Data**: skapa konto, generera API-key, hämta dataset-IDs för
    LinkedIn person/company/posts. Lägg in i Secret Manager (se ovan).
 4. **OpenAI + Gemini-keys** i Secret Manager.

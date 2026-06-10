@@ -5,7 +5,7 @@ kontaktperson. Körs den 1:a EFTER monthly-report-all (som bygger rapporterna), 
 underlaget finns. Per-kund-jobbet (jobs.customer_report_email) behålls för manuell
 sändning / endpoint.
 
-Self-no-op per kund: saknad rapport / kundkontakt / SendGrid-konfig hoppas tyst över.
+Self-no-op per kund: saknad rapport / kundkontakt / Brevo-konfig hoppas tyst över.
 Felnotiser går aldrig den här vägen — bara värde-/statusutskick till kunden.
 """
 import logging

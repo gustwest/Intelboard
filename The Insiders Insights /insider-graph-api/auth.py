@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 
 PUBLIC_PREFIXES = (
     "/health",
-    "/api/webhooks/",            # webhooks (SendGrid + ops-alerts) auth:ar separat
+    "/api/webhooks/",            # webhooks (inbound mail + ops-alerts) auth:ar separat
     "/api/jobs/compile-via-eventarc",
     "/api/badge/",               # trust-badgen embeddas på KUNDENS sajt → måste vara publik
     "/docs",

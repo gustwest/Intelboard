@@ -56,7 +56,7 @@ def get_install_kit(client_id: str) -> HTMLResponse:
 
 @router.post("/{client_id}/install-kit/send")
 def send_install_kit(client_id: str) -> dict[str, object]:
-    """Mejla installationskitet till kundkontakten (B1). Self-no-op om kontakt/SendGrid
+    """Mejla installationskitet till kundkontakten (B1). Self-no-op om kontakt/Brevo
     saknas — returnerar då bara {sent: False, reason: ...} (inget fel kastas)."""
     snap = fs.client_doc(client_id).get()
     if not snap.exists:
