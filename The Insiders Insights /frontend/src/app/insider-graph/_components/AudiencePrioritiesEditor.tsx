@@ -32,6 +32,7 @@ type AudiencePriority = {
 type ClientPayload = {
   audience_priorities: AudiencePriority[] | null;
   audience_priorities_set_at: string | null;
+  active_connectors: string[];  // ON3: "Auto-härled" kräver website- eller jobfeed-connectorn
 };
 
 /** Per-kund audience-priorities: driver output-kvalitets-rubric:en.
@@ -46,6 +47,7 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
   const [deriving, setDeriving] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error' | 'info'; text: string } | null>(null);
   const [derivedPreview, setDerivedPreview] = useState<AudiencePriority[] | null>(null);
+  const [connectors, setConnectors] = useState<string[]>([]);
   UI.useUnsavedWarning(dirty);
   UI.useAutoDismiss(msg?.tone === 'ok', () => setMsg(null));
 
@@ -56,6 +58,7 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
         if (cancelled) return;
         setPriorities(d.audience_priorities || []);
         setSetAt(d.audience_priorities_set_at);
+        setConnectors(d.active_connectors || []);
         setLoaded(true);
         setDirty(false);
       })
@@ -163,6 +166,9 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
   const inp: React.CSSProperties = { padding: '8px 12px', background: '#eceae3', color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none' };
 
   const missingAudiences = ORDER.filter((t) => !priorities.some((p) => p.audience_type === t));
+  // ON3: härledningen läser hemsida + jobbannonser → kräver minst en av de connectorerna.
+  // Visa det FÖRE klick (disable + hint) i st f ett 422/info-fel efteråt.
+  const canDerive = connectors.includes('website') || connectors.includes('jobfeed');
 
   return (
     <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
@@ -173,9 +179,9 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             onClick={deriveFromData}
-            disabled={deriving}
-            title="Härled ur hemsidedata + jobbannonser via LLM"
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: deriving ? 'wait' : 'pointer' }}
+            disabled={deriving || !canDerive}
+            title={!loaded ? '' : !canDerive ? 'Kräver webbplats- eller platsannons-connectorn — aktivera en under Datakällor först. Härledningen läser från hemsidan och jobbannonser.' : 'Härled ur hemsidedata + jobbannonser via LLM'}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: deriving ? 'wait' : !canDerive ? 'not-allowed' : 'pointer', opacity: loaded && !canDerive ? 0.55 : 1 }}
           >
             {deriving ? <Loader2 size={12} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Sparkles size={12} />}
             {deriving ? 'Härleder…' : 'Auto-härled'}

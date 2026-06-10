@@ -8,6 +8,7 @@ import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell'
 import PipelineStatus, { type PipelineStep } from '../_components/PipelineStatus';
 import * as UI from '../_components/ui';
 import { graphFetch } from '../_lib/api';
+import { connectorLabel } from '../_lib/connectors';
 import { fmtDateTime } from '@/lib/datetime';
 
 type ConnectorField = {
@@ -318,7 +319,7 @@ function ClientCard({ client, counts }: { client: Client; counts?: InboxCounts }
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 14, fontSize: 11, color: C.muted }}>
           <Row label="Medarbetare" value={`${client.employee_count} st`} />
-          <Row label="Connectors" value={client.active_connectors.join(', ') || '—'} />
+          <Row label="Connectors" value={client.active_connectors.map(connectorLabel).join(', ') || '—'} />
           <Row
             label="Senast kompilerad"
             value={client.last_compiled ? fmtDateTime(client.last_compiled) : 'Inte ännu'}
@@ -443,10 +444,10 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
       for (const f of conn.input_fields) {
         if (!f.required) continue;
         if (f.type === 'feed_list') {
-          if (!rssFeeds.some((r) => r.url.trim())) return `${conn.id}: minst en feed-URL krävs.`;
+          if (!rssFeeds.some((r) => r.url.trim())) return `${connectorLabel(conn.id)}: minst en feed-URL krävs.`;
         } else {
           const v = fieldValues[f.name];
-          if (typeof v !== 'string' || !v.trim()) return `${conn.id}: "${f.label}" krävs.`;
+          if (typeof v !== 'string' || !v.trim()) return `${connectorLabel(conn.id)}: "${f.label}" krävs.`;
         }
       }
     }
@@ -703,7 +704,7 @@ function ConnectorCard({
     >
       <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
         <input type="checkbox" checked={active} onChange={onToggle} />
-        <span style={{ fontSize: 13, fontWeight: 600, color: C.text, textTransform: 'capitalize' }}>{conn.id}</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{connectorLabel(conn.id)}</span>
         <span style={{ fontSize: 10, color: C.muted }}>· {conn.fetch_method} · {conn.frequency}</span>
       </label>
 

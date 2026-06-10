@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Plug, Plus, Trash2, Check, AlertCircle } from 'lucide-react';
 import { graphColors as C } from './GraphPageShell';
 import { graphFetch } from '../_lib/api';
+import { CONNECTOR_NAME as NAME } from '../_lib/connectors';
 import * as UI from './ui';
 
 type InputFieldMeta = { name: string; label: string; type: string; required: boolean; placeholder?: string; help?: string };
@@ -16,11 +17,6 @@ type State = {
   connector_params: Record<string, string | null>;
 };
 
-const NAME: Record<string, string> = {
-  linkedin: 'LinkedIn', linkedin_capacity: 'LinkedIn-kapacitet (kvartal)', rss: 'RSS-feeds',
-  jobfeed: 'Platsannonser (ATS)', website: 'Webbplats', gleif: 'GLEIF (org-data)',
-  wikipedia: 'Wikipedia/Wikidata',
-};
 const SCHEMA_OPTIONS = ['NewsArticle', 'JobPosting', 'PodcastEpisode', 'Event'];
 
 /** Per-kund connector-konfiguration (välj connectors + RSS-feeds). */

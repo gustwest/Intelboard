@@ -17,6 +17,7 @@ type ClientIdentity = {
   // Leverans (Spår B/C): kundkontakter för utskick + profilsidans språk (N2).
   contacts: Contact[];
   language: string;
+  active_connectors: string[];  // ON3: "Hämta automatiskt" kräver website-connectorn
 };
 
 type Contact = { email: string; name: string | null; role: string | null; is_primary: boolean };
@@ -153,6 +154,10 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
     }
   }
 
+  // ON3: auto-hämtningen läser från senaste webbplats-scrape → kräver att website-
+  // connectorn är aktiv. Visa det FÖRE klick (disable + hint) i st f 422/info efteråt.
+  const hasWebsite = !!identity?.active_connectors?.includes('website');
+
   return (
     <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -162,9 +167,9 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             onClick={fetchAuto}
-            disabled={fetching || !loaded}
-            title="Lyft logo/org.nr från senaste scrape-data (rör inte manuellt satta fält). Tunga om-scrapes körs via Uppdatera profil eller cron."
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: fetching || !loaded ? 'not-allowed' : 'pointer' }}
+            disabled={fetching || !loaded || !hasWebsite}
+            title={!loaded ? '' : !hasWebsite ? 'Kräver webbplats-connectorn — aktivera den under Datakällor först. Auto-hämtningen läser logo/org.nr från hemsidans scrape.' : 'Lyft logo/org.nr från senaste scrape-data (rör inte manuellt satta fält). Tunga om-scrapes körs via Uppdatera profil eller cron.'}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: fetching || !loaded || !hasWebsite ? 'not-allowed' : 'pointer', opacity: loaded && !hasWebsite ? 0.55 : 1 }}
           >
             {fetching ? <Loader2 size={12} className="spin" /> : <Download size={12} />}
             {fetching ? 'Hämtar…' : 'Hämta automatiskt'}
