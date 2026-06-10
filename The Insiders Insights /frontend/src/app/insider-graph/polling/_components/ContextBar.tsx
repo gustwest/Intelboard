@@ -221,7 +221,7 @@ export function EngineHealthBar({ data, onRefresh }: { data: EngineHealthResp; o
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
         <button
           onClick={async () => { setRefreshing(true); await onRefresh(); setTimeout(() => setRefreshing(false), 600); }}
-          title={`Senast kollat ${fmtTime(data.checked_at)} — klick för att probe på nytt`}
+          title={`Live just nu — svarar probe-motorerna? Senast kollat ${fmtTime(data.checked_at)} (klick för att probe på nytt). För versions-drift se Modell-hälsa, för incidenter se Drift-larm.`}
           style={{
             padding: '3px 8px', fontSize: 10, fontWeight: 600,
             color: refreshing ? C.accent : C.muted, background: 'transparent',

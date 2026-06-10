@@ -90,7 +90,7 @@ export default function ModelHealthPage() {
     <GraphPageShell
       title="Modell-hälsa"
       icon={<Cpu size={22} />}
-      subtitle="Vilka AI-modeller systemet kör, om de ligger efter senaste, och drift-flaggor. Auktoritativ källa: services/model_registry. Veckovis drift-scan + dagligt tillgänglighetstest matar denna vy."
+      subtitle="Använd denna när: en motor kan ha bytt version och påverkat jämförbarheten över tid. Visar vilka AI-modeller systemet kör, om de ligger efter senaste, och versions-drift — matas av en veckovis drift-scan + dagligt tillgänglighetstest. (Akuta incidenter → Drift-larm · live-status just nu → Motor-status i AI-synlighet.)"
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <HealthPill

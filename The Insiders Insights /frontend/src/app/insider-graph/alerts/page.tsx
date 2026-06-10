@@ -134,7 +134,7 @@ export default function AlertsPage() {
     <GraphPageShell
       title="Drift-larm"
       icon={<Bell size={22} />}
-      subtitle="System-interna notiser för jobb-failures, budget-trösklar och liknande. Lyckade körningar auto-stänger."
+      subtitle="Använd denna när: något har gått fel och kräver åtgärd — jobb-failures, budget-trösklar och liknande. Lyckade körningar auto-stänger. (Versions-drift mellan mätningar → Modell-hälsa · svarar motorerna just nu → Motor-status i AI-synlighet.)"
     >
       <SetupBanner setup={setup} busy={busySetup} onAck={ackBudget} />
 
