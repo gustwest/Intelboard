@@ -455,11 +455,19 @@ export default function LeveransPage() {
             borderRadius: 8,
             padding: 20,
             marginBottom: 16,
-            display: 'flex',
-            justifyContent: 'center',
           }}
-          dangerouslySetInnerHTML={{ __html: badge?.preview || '' }}
-        />
+        >
+          {/* AR8: rendera badge-HTML i en sandboxad iframe (sandbox="" → ingen script
+              körs, isolerad från sidan) i stället för dangerouslySetInnerHTML. Tar bort
+              XSS-ytan även om badge-endpointen någon gång inte är betrodd; backend
+              escapar redan fälten, detta är defense-in-depth. */}
+          <iframe
+            title="Badge-förhandsvisning"
+            sandbox=""
+            srcDoc={`<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:56px;background:transparent">${badge?.preview || ''}</body></html>`}
+            style={{ width: '100%', height: 80, border: 'none', background: 'transparent', display: 'block' }}
+          />
+        </div>
 
         <Row>
           <span style={{ fontSize: 12, color: C.muted }}>
