@@ -111,6 +111,11 @@ class Fact:
     # connector/ESG-claims) → ingen ClaimReview emitteras. Se _strongest_assurance.
     assurance_level: str | None = None
     verification_id: str | None = None
+    # Claim-nivå-citat (A2.1): footnotnummer → det VERIFIERADE verbatim-spann
+    # (ClaimSource.quote, deterministiskt grindat av services/claim_grounding) som
+    # stödjer JUST detta claims bruk av källan. Starkare än Source.excerpt (käll-nivå,
+    # A2) → visas inline vid claimet. Tom = visa bara namn+datum.
+    quotes: dict[int, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -124,6 +129,8 @@ class Prose:
     # behålls den starkaste nivån (se _merge_prose).
     assurance_level: str | None = None
     verification_id: str | None = None
+    # Claim-nivå-citat (A2.1) — som Fact. Vid dedup unionas mappen (se _merge_prose).
+    quotes: dict[int, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -281,10 +288,17 @@ def build_render_model(client_id: str) -> RenderModel:
             continue
         footnotes: list[int] = []
         manual_label: str | None = None
+        quotes: dict[int, str] = {}
         for src in claim.source:
             number, label = resolve(src)
             if number is not None and number not in footnotes:
                 footnotes.append(number)
+            # Claim-nivå-citat (A2.1): bevara källans verifierade verbatim-spann för
+            # JUST detta claim, nyckla på footnotnumret (första spannet per källa vinner).
+            if number is not None and number not in quotes:
+                q = (getattr(src, "quote", None) or "").strip()
+                if q:
+                    quotes[number] = q
             if label and manual_label is None:
                 manual_label = label
 
@@ -293,7 +307,7 @@ def build_render_model(client_id: str) -> RenderModel:
         if claim.claim_kind == "property" and claim.predicate:
             facts.append(Fact(claim.predicate, claim.value, claim.statement, footnotes,
                               manual_label, claim.confidence, audience,
-                              assurance_level, verification_id))
+                              assurance_level, verification_id, quotes))
         elif claim.claim_kind == "narrative" and claim.statement:
             statement = claim.statement.strip()
             # Undanta BARA attesterad demografi (andel av LinkedIn-följare/-besökare) —
@@ -312,7 +326,7 @@ def build_render_model(client_id: str) -> RenderModel:
             # claims renderas i tredje person vid recompile — utan re-extraktion.
             statement = claim_voice.neutralize(statement, data.get("company_name") or client_id)
             _merge_prose(prose_by_key, statement, footnotes, manual_label,
-                         audience, assurance_level, verification_id)
+                         audience, assurance_level, verification_id, quotes)
 
     # Starkast bevisade fakta först. Stabil sortering → värden med samma vikt
     # behåller upptäcktsordningen. Avgör ordningen på t.ex. knowsAbout-listan
@@ -719,6 +733,7 @@ def _merge_prose(
     bag: dict[str, "Prose"], statement: str, footnotes: list[int],
     manual_label: str | None, audience: list[str] | None = None,
     assurance_level: str | None = None, verification_id: str | None = None,
+    quotes: dict[int, str] | None = None,
 ) -> None:
     """Slå ihop snarlika narrative-claims (samma normaliserade text) och förena källor.
     Audience-fältet unionas — ett sammanslaget påstående är relevant för alla personor
@@ -727,14 +742,19 @@ def _merge_prose(
     och en är oberoende bestyrkt, ärver det förenade claimet den nivån."""
     key = _normalize(statement)
     audience = audience or []
+    quotes = quotes or {}
     existing = bag.get(key)
     if existing is None:
         bag[key] = Prose(statement, list(footnotes), manual_label, list(audience),
-                         assurance_level, verification_id)
+                         assurance_level, verification_id, dict(quotes))
         return
     for n in footnotes:
         if n not in existing.footnotes:
             existing.footnotes.append(n)
+    # Union av claim-nivå-citaten (A2.1): behåll första spannet per källa.
+    for n, q in quotes.items():
+        if n not in existing.quotes:
+            existing.quotes[n] = q
     if existing.manual_label is None and manual_label:
         existing.manual_label = manual_label
     for a in audience:

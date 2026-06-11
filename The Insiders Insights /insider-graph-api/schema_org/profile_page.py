@@ -328,7 +328,7 @@ def _evidence(entry, by_number, loc) -> str:
     så vi lyfter källan ur fotnotslistan i botten till synligt läge vid faktan. Fotnoten
     behålls som kompakt ankare till bibliografin."""
     out = _footnote_marks(entry.footnotes, loc)
-    inline = _inline_sources(entry.footnotes, by_number, loc)
+    inline = _inline_sources(entry.footnotes, by_number, loc, getattr(entry, "quotes", None))
     if inline:
         out += inline
     if entry.manual_label:
@@ -336,9 +336,15 @@ def _evidence(entry, by_number, loc) -> str:
     return out
 
 
-def _inline_sources(footnotes, by_number, loc) -> str:
-    """Bygg synlig källattribution (namn · datum · ev. citat) för en lista fotnoter.
-    Tom sträng om ingen av fotnoterna har en (länkbar) källa."""
+def _inline_sources(footnotes, by_number, loc, quotes=None) -> str:
+    """Bygg synlig källattribution (namn · datum · ev. claim-citat) för en lista fotnoter.
+    Tom sträng om ingen av fotnoterna har en (länkbar) källa.
+
+    A2.1: när claimet bär ett VERIFIERAT verbatim-spann för en källa (quotes[n], grindat
+    av claim_grounding så det bevisligen stödjer JUST detta påstående) visas det inline —
+    inbäddade citat är den starkaste citeringsspaken (deep research 2026-06-05). Det är
+    korrekt på claim-nivå, till skillnad från Source.excerpt (käll-nivå, bor i bibliografin)."""
+    quotes = quotes or {}
     parts: list[str] = []
     for n in footnotes:
         s = by_number.get(n)
@@ -350,11 +356,11 @@ def _inline_sources(footnotes, by_number, loc) -> str:
         if s.date:
             bits.append(_fmt_date(s.date, loc))
         label = ", ".join(bits) or loc["source_fallback"].format(n=n)
-        # Bara namn+datum inline — alltid korrekt för varje claim som citerar källan.
-        # Källans ordagranna utdrag (excerpt) är KÄLLnivå, inte claim-nivå: det visas i
-        # bibliografin (_source_item), inte här, så det aldrig felaktigt antyds styrka
-        # ett specifikt påstående det inte stöder. Claim-nivå-citat = uppföljning (A2.1).
-        parts.append(f'<a href="#src-{n}">{label}</a>')
+        cite = f'<a href="#src-{n}">{label}</a>'
+        q = (quotes.get(n) or "").strip()
+        if q:
+            cite += f' <span class="quote">”{html.escape(q[:200])}”</span>'
+        parts.append(cite)
     if not parts:
         return ""
     return f'<span class="cite"> — {" · ".join(parts)}</span>'

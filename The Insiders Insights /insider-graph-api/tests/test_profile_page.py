@@ -304,5 +304,53 @@ class LlmsTxtTest(unittest.TestCase):
         self.assertIn("### När grundades Acme AB?", txt)
 
 
+class ClaimLevelCitationTest(unittest.TestCase):
+    """A2.1: ett claims VERIFIERADE verbatim-spann (ClaimSource.quote, grindat av
+    claim_grounding vid persist) visas inline vid påståendet — den starkaste
+    citeringsformen, korrekt på claim-nivå (till skillnad från käll-excerpt i A2)."""
+
+    def _setup_with_quote(self):
+        fakefs.reset(
+            client={"company_name": "Acme AB", "website": "https://acme.se"},
+            company_items={
+                "bv1": {
+                    "schema_type": "Organization",
+                    "url": "https://www.allabolag.se/5566778899",
+                    "published_at": datetime(2024, 3, 1, tzinfo=timezone.utc),
+                    "included_in_output": True,
+                    "excerpt": "Marknadsledande inom inbyggda system",
+                    "extra": {"name": "Acme AB"},
+                }
+            },
+            claims={
+                "c1": {
+                    "claim_kind": "narrative",
+                    "subject_ref": "org",
+                    "statement": "Erbjuder sex månaders extra föräldralön utöver lag",
+                    "source": [{"kind": "item", "item_id": "bv1",
+                                "quote": "sex månaders extra föräldralön"}],
+                    "included_in_output": True,
+                }
+            },
+        )
+
+    def test_claim_quote_rendered_inline(self):
+        self._setup_with_quote()
+        html = render_profile_html("acme")
+        before_sources = html.split('class="sources"')[0]
+        # Claim-citatet syns INLINE vid påståendet (i cite-spannet), inte bara i botten.
+        self.assertIn("sex månaders extra föräldralön", before_sources)
+        self.assertIn('class="cite"', before_sources)
+        self.assertIn('class="quote"', before_sources)
+
+    def test_no_quote_means_no_inline_quote(self):
+        """Bakåtkompat: claim utan quote → bara namn+datum inline; käll-excerpt
+        läcker fortfarande inte upp till den inline-citerade attributionen."""
+        _setup()  # originalfixturet: claim-källa utan quote
+        html = render_profile_html("acme")
+        before_sources = html.split('class="sources"')[0]
+        self.assertNotIn("Marknadsledande", before_sources)
+
+
 if __name__ == "__main__":
     unittest.main()
