@@ -283,3 +283,31 @@ def aggregate_dimension(
         background.add_task(_recompile)
 
     return result
+
+
+@router.post("/dedup/{client_id}")
+def dedup_redundant(
+    client_id: str,
+    background: BackgroundTasks,
+    apply: bool = Query(False),
+) -> dict[str, Any]:
+    """Semantisk dedup: hitta near-duplicate narrative-claims (parafraser) och kollapsa
+    dem via aggregerings-maskineriet. Som /aggregate men klustringen är automatisk (en
+    validator-LLM-pass), inte operatörsvald. apply=false = preview; apply=true muterar
+    claims + triggar recompile."""
+    if not fs.client_doc(client_id).get().exists:
+        raise HTTPException(404, f"client not found: {client_id}")
+
+    from services.semantic_dedup import dedup_client
+
+    result = dedup_client(client_id, apply=apply)
+    if result.get("llm_unavailable"):
+        raise HTTPException(503, "validator-LLM otillgänglig (Vertex AI EU ej konfigurerad)")
+
+    if apply and result.get("clusters", 0) > 0:
+        def _recompile() -> None:
+            from jobs import compile_schema
+            compile_schema.run(client_id)
+        background.add_task(_recompile)
+
+    return result
