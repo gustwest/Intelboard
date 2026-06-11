@@ -27,13 +27,12 @@ import {
 } from './_shared';
 import { SectionHead, SectionDivider, StageScale, EmptyState } from './_components/common';
 import { StickyContextBar } from './_components/ContextBar';
-import { SchedulesPanel, ActivityFeed, PollingQuestionsPanel, RiskTable, TrendView } from './_components/Panels';
+import { SchedulesPanel, ActivityFeed, PollingQuestionsPanel, TrendView } from './_components/Panels';
 import { RiskLoopStatus, RiskQuestionsPanel } from './_components/RiskLoop';
 import { WeeklyVisibility } from './_components/WeeklyVisibility';
 import { CompetitorSurface } from './_components/CompetitorSurface';
 import { TrustGapCockpit } from './_components/TrustGapCockpit';
-import { RiskLifecycleTimeline } from './_components/RiskTimeline';
-import { WhatIfPanel } from './_components/WhatIfPanel';
+import { RiskBoard } from './_components/RiskBoard';
 
 export default function GraphRiskLoopPage() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -312,6 +311,12 @@ export default function GraphRiskLoopPage() {
   const conf = report?.decision_confidence ?? null;
   const exposure = report?.risk_exposure ?? null;
 
+  // R5: rapportens öppna risker visas som filter på RiskBoard istället för egen tabell.
+  const reportFindingIds = report
+    ? new Set(report.detected.map((f) => f.id).filter((id): id is string => !!id))
+    : null;
+  const reportOpenCount = report ? report.detected.filter((f) => (f.status || 'open') === 'open').length : 0;
+
   // Första laddningen för vald kund: inget per-kund-data har kommit än → visa
   // skelett istället för att sektionerna poppar in en och en.
   const initialLoading = !!selected && polling === null && riskTimeline === null && humanization === null && riskQuestions === null;
@@ -359,7 +364,7 @@ export default function GraphRiskLoopPage() {
           needsClient: true,
           onDone: () => setRefreshTick((t) => t + 1),
           title: 'Ställer kundens godkända risk-frågor till AI-motorerna (flera körningar per fråga), klassar svaren mot skademodellen och uppdaterar öppna risker + beslutssäkerheten. Tar några minuter.',
-          doneHint: { text: 'klart — se riskerna ↓', href: '#risk-livscykel' },
+          doneHint: { text: 'klart — se riskerna ↓', href: '#risk-board' },
         })}
         {renderJobBtn('Mät synlighet (polling)', 'polling', '/api/jobs/polling', 'polling', {
           onDone: () => setRefreshTick((t) => t + 1),
@@ -460,8 +465,18 @@ export default function GraphRiskLoopPage() {
         />
       )}
 
-      {/* Closed-loop tidslinje per risk — detektion → åtgärd → resolved, oberoende av månadsrapport */}
-      {riskTimeline && <div id="risk-livscykel"><RiskLifecycleTimeline data={riskTimeline} approvedQuestions={riskQuestions?.counts.approved ?? null} /></div>}
+      {/* Risk-centrerad yta (Etapp 1): kort per risk med livscykel, what-if-simulering
+          och åtgärda/avfärda — ersätter Riskens livscykel + What-if + Detekterade risker */}
+      {riskTimeline && (
+        <RiskBoard
+          data={riskTimeline}
+          approvedQuestions={riskQuestions?.counts.approved ?? null}
+          clientId={selected}
+          conf={conf}
+          reportFindingIds={reportFindingIds}
+          onChanged={() => setRefreshTick((t) => t + 1)}
+        />
+      )}
 
       {months?.length === 0 && (!polling || polling.length === 0) && <EmptyState />}
 
@@ -538,18 +553,23 @@ export default function GraphRiskLoopPage() {
             </div>
           )}
 
-          {/* 3. Detekterade risker */}
+          {/* 3. Risker vid rapporttillfället — pekare till RiskBoard (R5), ingen egen tabell */}
           <div style={{ ...cardStyle, marginBottom: 16 }}>
-            <SectionHead title="Detekterade risker" hint="De svar AI-motorerna ger som kan skada ett beslut — klassade mot skademodellen." />
+            <SectionHead title="Risker i rapporten" hint="Ögonblicksbilden vid rapporttillfället. Riskerna hanteras i risköversikten ovan — samma kort, hela livscykeln." />
             {report.detected.length === 0 ? (
               <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>Inga öppna risker i den här rapporten.</p>
             ) : (
-              <RiskTable findings={report.detected} />
+              <p style={{ fontSize: 13, color: C.text, margin: 0, lineHeight: 1.6 }}>
+                {report.detected.length} risk{report.detected.length === 1 ? '' : 'er'} ingick i rapporten
+                {reportOpenCount > 0 && reportOpenCount !== report.detected.length && ` (${reportOpenCount} fortfarande ${reportOpenCount === 1 ? 'öppen' : 'öppna'})`}
+                {reportOpenCount === 0 && ' — alla har hanterats sedan dess'}
+                {'. '}
+                <a href="#risk-board" style={{ color: C.accent, fontWeight: 600, textDecoration: 'none' }}>
+                  Visa i risköversikten (filter "I månadsrapporten") ↑
+                </a>
+              </p>
             )}
           </div>
-
-          {/* 3b. What-if — projicerad beslutssäkerhet före åtgärd */}
-          {selected && <WhatIfPanel clientId={selected} conf={conf} detected={report.detected} />}
 
           {/* 4. Vad mjukvaran gjorde */}
           {report.actions.length > 0 && (

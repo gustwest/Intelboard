@@ -7,21 +7,16 @@ import { fmtRelative } from '../../_lib/jobRuns';
 import { fmtDateTime } from '@/lib/datetime';
 import {
   ScheduleRow,
-  Finding,
   Trend,
   PollingQuestionsResp,
   ViewMode,
   S,
-  PERSONA_SV,
-  SEVERITY,
   CATEGORY_SV,
   JOB_LABEL,
   ACTIVITY_FEED_TYPES,
   cardStyle,
-  rowGrid,
   isStale,
   summaryBlurb,
-  harmLabel,
 } from '../_shared';
 import { SectionHead } from './common';
 
@@ -71,37 +66,6 @@ export function SchedulesPanel({ rows, onToggle }: { rows: ScheduleRow[]; onTogg
           );
         })}
       </div>
-    </div>
-  );
-}
-
-export function RiskTable({ findings }: { findings: Finding[] }) {
-  return (
-    <div>
-      <div style={{ ...rowGrid, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 8, marginBottom: 8 }}>
-        <span>Persona</span>
-        <span>Fråga</span>
-        <span>Motorn svarade</span>
-        <span>Skademodell</span>
-        <span>Allvarlighet</span>
-      </div>
-      {findings.map((f, i) => {
-        const sev = SEVERITY[f.severity || 'low'] || SEVERITY.low;
-        return (
-          <div key={i} style={{ ...rowGrid, padding: '10px 0', borderBottom: `1px solid ${C.border}`, fontSize: 12, alignItems: 'start' }}>
-            <span style={{ color: C.text }}>{f.persona ? PERSONA_SV[f.persona] || f.persona : '—'}</span>
-            <span style={{ color: C.text }}>
-              {f.question || '—'}
-              {f.via_follow_up && <span style={{ marginLeft: 6, fontSize: 10, color: C.dim }}>(följdfråga)</span>}
-            </span>
-            <span style={{ color: C.muted, fontStyle: 'italic' }}>{f.engine_excerpt ? `"${f.engine_excerpt}"` : '—'}</span>
-            <span style={{ color: C.text }}>{harmLabel(f.harm)}</span>
-            <span>
-              <span style={{ fontSize: 11, fontWeight: 600, color: sev.color, background: sev.bg, borderRadius: 6, padding: '3px 8px' }}>{sev.label}</span>
-            </span>
-          </div>
-        );
-      })}
     </div>
   );
 }
