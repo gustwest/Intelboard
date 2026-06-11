@@ -77,6 +77,17 @@ _EMAIL_I18N: dict[str, dict[str, Any]] = {
         "proof_lead": "Det här fungerar redan:",
         "next_step": "Nästa steg:",
         "profile_cta": "Se din AI-profil",
+        # Frivillig alignment-sektion: frågor AI-motorer ställer som profilen inte svarar
+        # på. Kunden informeras + får ett förslag och svarar via mejl-svarsloopen (laddar
+        # inte upp något, ops skriver inget eget). Coexisterar med footern "behöver inte
+        # göra något" genom att vara uttryckligen frivillig.
+        "align_title": "Frivilligt: stärk er profil",
+        "align_intro": "AI-assistenter får de här frågorna om er, men profilen svarar inte "
+                       "på dem ännu. Vill ni stärka bilden — svara på det här mejlet med svaret, "
+                       "så lägger vi in det källförsett. Ni behöver inte göra något om ni inte vill.",
+        "align_q": "Frågan AI får: ”{q}”",
+        "align_s": "Förslag på svar: {s}",
+        "align_more": "…och {n} till — svara så går vi igenom dem tillsammans.",
         "greeting": "Hej {name},",
         "greeting_generic": "Hej,",
         "confidence_def": "Beslutssäkerhet = hur säkert AI-motorerna idag svarar korrekt och "
@@ -114,6 +125,13 @@ _EMAIL_I18N: dict[str, dict[str, Any]] = {
         "proof_lead": "Already working in your favour:",
         "next_step": "Next step:",
         "profile_cta": "View your AI profile",
+        "align_title": "Optional: strengthen your profile",
+        "align_intro": "AI assistants get these questions about you, but your profile doesn't "
+                       "answer them yet. To strengthen the picture, reply to this email with the "
+                       "answer and we'll add it with a source. No obligation.",
+        "align_q": "Question AI gets: “{q}”",
+        "align_s": "Suggested answer: {s}",
+        "align_more": "…and {n} more — reply and we'll go through them together.",
         "greeting": "Hi {name},",
         "greeting_generic": "Hi,",
         "confidence_def": "Decision confidence = how reliably today's AI answers correctly and "
@@ -145,6 +163,26 @@ def current_month() -> str:
 
 
 # --- Render-modell ------------------------------------------------------------
+
+
+def _alignment_actions(client_id: str, limit: int = 3) -> dict[str, Any]:
+    """Kund-säkra åtgärdsförslag ur senaste alignment-auditen: frågor AI-motorer
+    ställer som profilen inte svarar på, + ett konkret förslag på svar. Exponerar
+    BARA neutrala frågan + förslaget — den adversariella vinkeln, rationale och
+    probe-jargongen stannar internt (samma princip som att kundmejlet aldrig visar
+    motor-citat/harm-koder). Tom lista om auditen aldrig körts → sektionen utelämnas
+    helt. `total` räknar alla gap-ordrar så mejlet kan säga '…och N till'."""
+    from services import alignment_audit
+    doc = alignment_audit.read_latest(client_id) or {}
+    orders = [
+        o for o in (doc.get("claim_orders") or [])
+        if (o.get("probe_neutral_q") or "").strip() and (o.get("suggested_statement") or "").strip()
+    ]
+    actions = [
+        {"question": o["probe_neutral_q"].strip(), "suggestion": o["suggested_statement"].strip()}
+        for o in orders[:limit]
+    ]
+    return {"actions": actions, "total": len(orders)}
 
 
 def build_report_model(client_id: str, month: str | None = None) -> dict[str, Any] | None:
@@ -208,6 +246,9 @@ def build_report_model(client_id: str, month: str | None = None) -> dict[str, An
         # Humaniseringstäckning som SEKTION i samma rapport (spec §10). None om trust_gap
         # ej beräknad än — sektionen visar då en upplysning, inte tomhet.
         "humanization": trust_gap_report.build_report_model(client_id),
+        # Frivilliga, kund-säkra åtgärdsförslag ur alignment-auditen (frågor profilen inte
+        # svarar på). Tom om auditen aldrig körts → kundmejlets sektion utelämnas.
+        "alignment": _alignment_actions(client_id),
     }
 
 
@@ -1086,6 +1127,35 @@ def render_customer_email(model: dict[str, Any], lang: str | None = None, contac
     # "vad ändrats" ovan, så beviset lyfter en styrka för att inte upprepa samma sak.
     proof = strengths[0] if strengths else None
 
+    # Frivillig alignment-sektion (N: kunddriven, ingen uppladdning). Utelämnas helt om
+    # auditen aldrig körts/inga gap. Visar frågan + förslag; kunden svarar via mejl.
+    align = model.get("alignment") or {}
+    align_actions = align.get("actions") or []
+    align_more = max(0, (align.get("total") or len(align_actions)) - len(align_actions))
+    align_html, align_text = "", []
+    if align_actions:
+        items_html = "".join(
+            '<li style="margin-bottom:.6rem">'
+            f'<span style="color:#1a1a1a">{html.escape(t["align_q"].format(q=a["question"]))}</span><br>'
+            f'<span style="color:#555">{html.escape(t["align_s"].format(s=a["suggestion"]))}</span></li>'
+            for a in align_actions
+        )
+        more_html = (
+            f'<p style="margin:.4rem 0 0;color:#777;font-size:.85rem">{html.escape(t["align_more"].format(n=align_more))}</p>'
+            if align_more else ""
+        )
+        align_html = (
+            '<div style="margin-top:1.4rem;padding:.9rem 1.1rem;background:#f0f6ff;border-left:3px solid #2563eb;border-radius:4px">'
+            f'<p style="margin:0 0 .4rem;font-weight:600">{html.escape(t["align_title"])}</p>'
+            f'<p style="margin:0 0 .6rem;color:#444;font-size:.9rem">{html.escape(t["align_intro"])}</p>'
+            f'<ul style="margin:0;padding-left:1.1rem;font-size:.9rem">{items_html}</ul>{more_html}</div>'
+        )
+        align_text = ["", t["align_title"], t["align_intro"], ""]
+        for a in align_actions:
+            align_text += [t["align_q"].format(q=a["question"]), t["align_s"].format(s=a["suggestion"]), ""]
+        if align_more:
+            align_text.append(t["align_more"].format(n=align_more))
+
     html_body = f"""<!doctype html><html lang="{html.escape((lang or model.get("language") or "sv").lower())}"><head><meta charset="utf-8"></head><body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1a1a1a;max-width:620px;margin:0 auto;line-height:1.6">
 <p>{html.escape(greeting)}</p>
 <h2 style="font-size:1.2rem">{html.escape(heading)}</h2>
@@ -1097,6 +1167,7 @@ def render_customer_email(model: dict[str, Any], lang: str | None = None, contac
 <p>{html.escape(focus_line)}</p>
 {f'<p><strong>{html.escape(t["proof_lead"])}</strong> {html.escape(proof)}</p>' if proof else ''}
 {f'<p style="margin:1.3rem 0"><a href="{html.escape(profile_link)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:.6rem 1.1rem;border-radius:8px;font-weight:600">{html.escape(t["profile_cta"])} &rarr;</a></p>' if profile_link else ''}
+{align_html}
 <hr style="border:none;border-top:1px solid #eee;margin:1.5rem 0">
 <p style="color:#666;font-size:.9rem">{html.escape(t["footer"])}</p>
 <div style="margin-top:1rem;padding:.7rem .9rem;background:#f7f7f8;border-left:3px solid #ccc;border-radius:4px">
@@ -1118,6 +1189,7 @@ def render_customer_email(model: dict[str, Any], lang: str | None = None, contac
         text_lines += ["", f"{t['proof_lead']} {proof}"]
     if profile_link:
         text_lines += ["", f"{t['profile_cta']}: {profile_link}"]
+    text_lines += align_text
     text_lines += ["", t["footer"], "", f"{t['method_title']}: {t['method']}"]
     return subject, html_body, "\n".join(text_lines)
 
