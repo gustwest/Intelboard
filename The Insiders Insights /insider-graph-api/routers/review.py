@@ -510,11 +510,17 @@ def decide(client_id: str, employee_id: str, item_id: str, action: ReviewAction)
         })
         return {"status": "ok", "decision": "reset"}
 
+    # review_status sätts explicit — INTE decision + "d" (det gav "rejectd" för
+    # reject, som inte matchar listfiltrets ("approved", "rejected") → avvisade
+    # items dök upp igen vid omladdning). Spegla decide_claim.
+    from datetime import datetime, timezone
     doc_ref.update(
         {
-            "review_status": action.decision + "d",
+            "review_status": "approved" if action.decision == "approve" else "rejected",
             "review_note": action.note,
-            "reviewed_at": firestore.SERVER_TIMESTAMP,
+            # ISO-sträng, inte SERVER_TIMESTAMP — samma skäl som claim-mutationerna
+            # (df96036df): en DatetimeWithNanoseconds vid läsning kan fälla compile.
+            "reviewed_at": datetime.now(timezone.utc).isoformat(),
             "included_in_output": action.decision == "approve",
             "needs_review": False,
         }

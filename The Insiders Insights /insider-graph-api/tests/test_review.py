@@ -1,5 +1,6 @@
 """Enhetstester för claims-review-endpoints (routers/review.py)."""
 import unittest
+from unittest import mock
 
 import fakefs  # installerar fake firestore_client — måste importeras först
 from routers import review
@@ -60,6 +61,49 @@ class ClaimReviewTest(unittest.TestCase):
         stored = fakefs.STATE["claims"]["c1"]
         self.assertFalse(stored["included_in_output"])
         self.assertEqual(stored["review_status"], "rejected")
+
+
+class ItemReviewTest(unittest.TestCase):
+    """Item-besluts-endpointen (decide). Låser regressionsfixarna: reject skriver
+    'rejected' (inte 'rejectd' — annars matchade det inte listfiltrets
+    ("approved","rejected") och avvisade items dök upp igen vid omladdning), och
+    reviewed_at är en ISO-sträng, inte en SERVER_TIMESTAMP-sentinel."""
+
+    def _capture(self, decision):
+        captured: dict = {}
+
+        class _Doc:
+            def get(self_inner):
+                return type("S", (), {"exists": True})()
+
+            def update(self_inner, payload):
+                captured.update(payload)
+
+        class _Col:
+            def document(self_inner, _id):
+                return _Doc()
+
+        fakefs.reset(client={"company_name": "Acme AB"})
+        with mock.patch.object(review.fs, "raw_items_col", return_value=_Col()):
+            res = review.decide("acme", "emp1", "it1", review.ReviewAction(decision=decision))
+        return res, captured
+
+    def test_reject_writes_rejected_not_rejectd(self):
+        res, captured = self._capture("reject")
+        self.assertEqual(res, {"status": "ok", "decision": "reject"})
+        self.assertEqual(captured["review_status"], "rejected")
+        self.assertFalse(captured["included_in_output"])
+
+    def test_approve_writes_approved_and_includes(self):
+        _, captured = self._capture("approve")
+        self.assertEqual(captured["review_status"], "approved")
+        self.assertTrue(captured["included_in_output"])
+
+    def test_reviewed_at_is_iso_string(self):
+        from datetime import datetime
+        _, captured = self._capture("approve")
+        self.assertIsInstance(captured["reviewed_at"], str)
+        datetime.fromisoformat(captured["reviewed_at"])  # parsbar → inte en sentinel
 
 
 def _pending_q(**over):
