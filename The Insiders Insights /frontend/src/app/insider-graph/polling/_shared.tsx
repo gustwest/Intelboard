@@ -234,6 +234,8 @@ export type PollingWeek = {
   total_answers: number | null;
   answers_with_mention: number | null;
   models_used: string[] | null;
+  // F3: frågesettets fingerprint — null för veckor före omläggningen
+  questions_fingerprint?: string | null;
 };
 
 // P1: är veckans SoV-förändring åtskild från run-to-run-brus? `comparable` = samma
@@ -418,6 +420,20 @@ function engineLabel(id: string): string {
   return ENGINE_SV[id] || id;
 }
 
+/** F3: detektera frågesetts-byten (mall-/substitutions-/custom-ändringar) ur
+ *  fingerprint-diff mellan veckor — samma jämförbarhetsprincip som modellbyten.
+ *  Returnerar index (i kronologisk serie) för veckan EFTER bytet. */
+export function detectQuestionBreaks(chronoWeeks: PollingWeek[]): number[] {
+  const out: number[] = [];
+  for (let i = 1; i < chronoWeeks.length; i++) {
+    const prev = chronoWeeks[i - 1].questions_fingerprint;
+    const curr = chronoWeeks[i].questions_fingerprint;
+    if (!prev || !curr) continue; // saknad proveniens → kan inte avgöra
+    if (prev !== curr) out.push(i);
+  }
+  return out;
+}
+
 /** Detektera modellbyten i en kronologisk (äldst→nyast) serie veckor. En brytning
  *  uppstår där veckans `models_used` skiljer sig från föregående veckas. */
 export function detectModelBreaks(chronoWeeks: PollingWeek[]): ModelBreak[] {
@@ -489,9 +505,24 @@ export type RiskTimelineResp = {
 
 export type RiskQuestionsResp = {
   client_id: string;
-  questions: { id: string; persona: string | null; type: string | null; text: string | null; status: string; custom?: boolean }[];
+  questions: { id: string; persona: string | null; type: string | null; text: string | null; status: string; custom?: boolean; quality_flags?: string[] }[];
   counts: { open: number; approved: number; rejected: number };
 };
+
+// F1 (frågedesign): flagg-id → svensk etikett. Håll i synk med backend
+// services/question_quality.FLAG_SV.
+export const QUALITY_FLAG_SV: Record<string, string> = {
+  negativ_presupposition: 'Förutsätter problemet',
+  superlativ_inramning: 'Superlativ/ranking-inramning',
+  emotivt_sprak: 'Emotivt laddade ord',
+  falsk_dikotomi: 'Antingen/eller-låsning',
+  flerledad: 'Flera frågor i en',
+  du_tilltal_utan_foretag: 'Du-tilltal utan företagsnamn',
+};
+
+export function qualityFlagLabels(flags: string[] | undefined): string {
+  return (flags || []).map((f) => QUALITY_FLAG_SV[f] || f).join(' · ');
+}
 
 // --- Probe-motorer-status (speglar routers/polling.engine_health) ---
 
@@ -520,6 +551,8 @@ export type PollingQuestionsResp = {
   substitutions: { industry: string; topic: string; service_area: string };
   by_category: Record<string, PollingQuestion[]>;
   total: number;
+  // F3: när mätkontexten senast sågs över (null = aldrig sedan fältet infördes)
+  config_updated_at?: string | null;
 };
 
 // --- Förtroendegap-cockpit (speglar services/trust_gap_report.py — översättningslagret §10.1) ---

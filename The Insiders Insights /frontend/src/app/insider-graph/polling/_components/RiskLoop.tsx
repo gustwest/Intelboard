@@ -10,7 +10,27 @@ import {
   PERSONA_SV,
   cardStyle,
   isStale,
+  qualityFlagLabels,
 } from '../_shared';
+
+// F1: kvalitetsflaggad fråga får ett ⚠-chip — en läsanvisning till granskaren
+// (ledande språk, flerledad m.m.), inget automatiskt underkännande.
+function QualityChip({ flags }: { flags?: string[] }) {
+  if (!flags || flags.length === 0) return null;
+  return (
+    <span
+      title={`Kvalitetsflaggor: ${qualityFlagLabels(flags)} — granska extra noga, flaggan blockerar inte.`}
+      style={{
+        marginLeft: 6, fontSize: 9, fontWeight: 600, color: S.waiting.fg,
+        background: S.waiting.bg, border: `1px solid ${S.waiting.border}`,
+        borderRadius: 4, padding: '1px 5px', cursor: 'help', whiteSpace: 'nowrap',
+        verticalAlign: 'middle',
+      }}
+    >
+      ⚠ {flags.length}
+    </span>
+  );
+}
 import { SectionHead, FormRow, LoopStat } from './common';
 
 export function RiskLoopStatus({ questions, findings, latestDetect, latestGenerate, clientId }: {
@@ -220,6 +240,7 @@ export function RiskQuestionsInlineApprover({ clientId, questions, onChanged }: 
               </span>
               <span style={{ color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={q.text || ''}>
                 {q.text || '(ingen text)'}
+                <QualityChip flags={q.quality_flags} />
                 {err && <span style={{ color: S.open.fg, marginLeft: 8 }}>· {err}</span>}
               </span>
               <span style={{ display: 'inline-flex', gap: 4 }}>
@@ -440,6 +461,7 @@ export function RiskQuestionsPanel({ questions, clientId, onChanged, onOpenPerso
                             Egen
                           </span>
                         )}
+                        <QualityChip flags={q.quality_flags} />
                       </span>
                       <button
                         onClick={() => reject(q.id)}

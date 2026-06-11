@@ -42,6 +42,7 @@ from schema_org.claims import derive_property_claims
 from services import audience_personas
 from services import llm as llm_factory
 from services import probe_guard
+from services import question_quality
 
 log = logging.getLogger(__name__)
 
@@ -239,7 +240,7 @@ def generate_and_store_questions(client_id: str) -> dict | None:
     written = 0
     for persona in _active_personas(client):
         for q in generate_questions(validator, persona, context, competitors, homonyms):
-            _persist_question(client_id, q, ctx_hash)
+            _persist_question(client_id, q, ctx_hash, company_name=context.company_name)
             written += 1
     log.info("risk loop %s: genererade %d frågor (väntar på review)", client_id, written)
     return {"client_id": client_id, "generated": written, "cached": 0}
@@ -666,7 +667,7 @@ def _ask_with_history(engine: Any, q1: str, a1: str, q2: str) -> str:
 # --- Persistens ---------------------------------------------------------------
 
 
-def _persist_question(client_id: str, q: Question, ctx_hash: str) -> None:
+def _persist_question(client_id: str, q: Question, ctx_hash: str, company_name: str | None = None) -> None:
     # Deterministiskt id ur (persona|track|text) → stabilt mellan körningar, så att
     # godkända frågor (och därmed findings) kan jämföras månad mot månad (skiva 4).
     qid = "q-" + hashlib.sha1(f"{q.persona}|{q.track}|{q.text}".encode("utf-8")).hexdigest()[:16]
@@ -682,6 +683,9 @@ def _persist_question(client_id: str, q: Question, ctx_hash: str) -> None:
             "status": "open",
             "needs_review": True,
             "context_hash": ctx_hash,
+            # F1: kvalitetsflaggor (ledande språk m.m.) — läsanvisning till granskaren,
+            # blockerar inte. Tom lista = inga anmärkningar.
+            "quality_flags": question_quality.assess(q.text, company_name),
             "generated_at": firestore.SERVER_TIMESTAMP,
         }
     )

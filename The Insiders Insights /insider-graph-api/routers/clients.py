@@ -236,6 +236,11 @@ def update_client_config(client_id: str, payload: ClientConfigUpdate) -> dict[st
                 cleaned[cat] = kept
         update["polling_questions"] = cleaned  # tomt dict = återgå till defaults
 
+    # F3 (frågedesign): stämpla när mätkontexten senast sågs över — driver
+    # staleness-flaggan i AI-synlighet ("substitutioner orörda >90 dagar").
+    if any(k in update for k in ("industry", "topic", "service_area", "polling_questions")):
+        update["measurement_config_updated_at"] = datetime.now(timezone.utc).isoformat()
+
     if payload.audience_priorities is not None:
         # Spara som dict-lista (Firestore hanterar inte Pydantic-modeller direkt).
         update["audience_priorities"] = [a.model_dump() for a in payload.audience_priorities]

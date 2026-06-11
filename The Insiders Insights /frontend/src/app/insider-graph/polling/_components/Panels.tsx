@@ -118,6 +118,12 @@ export function PollingQuestionsPanel({ data, clientId, mode, onOpenSettings }: 
   const [open, setOpen] = useState(false);
   const categories = Object.entries(data.by_category).sort((a, b) => a[0].localeCompare(b[0]));
   const editorUrl = `/insider-graph/kunder/${encodeURIComponent(clientId)}#measurement-config`;
+  // F3: staleness — kontext som inte setts över på >90 dagar kan ha glidit ifrån
+  // verkligheten (pivot, nya marknader). null = aldrig stämplad → ingen flagga.
+  const staleDays = data.config_updated_at
+    ? Math.floor((Date.now() - new Date(data.config_updated_at).getTime()) / 86_400_000)
+    : null;
+  const isStaleConfig = staleDays != null && staleDays > 90;
 
   return (
     <div style={{ ...cardStyle, marginBottom: 18 }}>
@@ -135,6 +141,14 @@ export function PollingQuestionsPanel({ data, clientId, mode, onOpenSettings }: 
 
       {open && (
         <>
+          {isStaleConfig && (
+            <div style={{ marginBottom: 14, padding: '10px 14px', background: 'rgba(245,158,11,0.06)', border: `1px solid ${S.waiting.border}`, borderRadius: 8, fontSize: 11, color: S.waiting.fg, lineHeight: 1.5 }}>
+              <strong>Mätkontexten är orörd sedan {staleDays} dagar.</strong>{' '}
+              Har kunden pivoterat, bytt fokus eller gått in i nya marknader sedan dess? Se över
+              industry/topic/service_area{onOpenSettings ? ' i Mätinställningar' : ''} — inaktuella
+              substitutioner mäter fel marknad.
+            </div>
+          )}
           {mode === 'ops' && !data.is_custom && (
             <div style={{ marginBottom: 14, padding: '10px 14px', background: 'rgba(224, 142, 121,0.04)', border: `1px solid ${S.inProgress.border}`, borderRadius: 8, fontSize: 11, color: C.muted, lineHeight: 1.5 }}>
               <strong style={{ color: C.text }}>Default-frågor ifyllda med kundens kontext:</strong>{' '}

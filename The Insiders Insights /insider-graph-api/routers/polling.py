@@ -162,6 +162,8 @@ def list_results(client_id: str, limit: int = 12) -> dict[str, Any]:
                 "total_answers": data.get("total_answers"),
                 "answers_with_mention": data.get("answers_with_mention"),
                 "models_used": data.get("models_used"),
+                # F3 — frågesettets fingerprint (None för veckor före omläggningen)
+                "questions_fingerprint": data.get("questions_fingerprint"),
                 "per_engine": _aggregate_per_engine(data.get("raw_responses") or []),
             }
         )

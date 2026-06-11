@@ -16,6 +16,7 @@ import {
   sentimentLabel,
   pct,
   detectModelBreaks,
+  detectQuestionBreaks,
   describeModelBreak,
 } from '../_shared';
 import { SectionHead, Stat, Sparkline } from './common';
@@ -71,9 +72,11 @@ export function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
       </div>
 
       {sovSeries.length > 1 && (() => {
-        // Kalibreringsbrytningar härledda ur models_used-diff. beforeIndex pekar på
-        // veckan EFTER bytet — vi ritar en lodrät markör i gapet före den stapeln.
+        // Kalibreringsbrytningar: models_used-diff (modellbyte) + questions_fingerprint-
+        // diff (F3, frågesettsbyte). beforeIndex pekar på veckan EFTER bytet — vi ritar
+        // en lodrät markör i gapet före den stapeln; tooltip förklarar vad som bröts.
         const breaks = detectModelBreaks(sovSeries);
+        const qBreaks = new Set(detectQuestionBreaks(sovSeries));
         const breakByIndex = new Map(breaks.map((b) => [b.beforeIndex, b]));
         return (
           <div>
@@ -82,20 +85,25 @@ export function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
               <span style={{ fontSize: 10, color: C.dim, fontWeight: 500 }}>
                 ╪ = brusband (95 %) · bleka staplar = rörelse inom bruset, ej säkerställd
               </span>
-              {breaks.length > 0 && (
+              {(breaks.length > 0 || qBreaks.size > 0) && (
                 <span style={{ fontSize: 10, color: C.dim, fontWeight: 500 }}>
-                  · ⋮ = modellbyte (ej jämförbart)
+                  · ⋮ = modell-/frågebyte (ej jämförbart över strecket)
                 </span>
               )}
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 90, borderBottom: `1px solid ${C.border}`, paddingBottom: 4 }}>
               {sovSeries.map((w, i) => {
                 const brk = breakByIndex.get(i);
+                const qBrk = qBreaks.has(i);
+                const breakTitle = [
+                  brk ? describeModelBreak(brk) : null,
+                  qBrk ? 'Frågesettet ändrades här (mall/substitution/egna frågor) — staplar före och efter mäter olika frågor och är inte jämförbara.' : null,
+                ].filter(Boolean).join(' ');
                 return (
-                  <div key={w.week_id} style={{ display: 'flex', alignItems: 'flex-end', flex: 1, maxWidth: brk ? 60 : 48 }}>
-                    {brk && (
+                  <div key={w.week_id} style={{ display: 'flex', alignItems: 'flex-end', flex: 1, maxWidth: (brk || qBrk) ? 60 : 48 }}>
+                    {(brk || qBrk) && (
                       <div
-                        title={describeModelBreak(brk)}
+                        title={breakTitle}
                         style={{
                           alignSelf: 'stretch', width: 0, marginRight: 8, borderLeft: `2px dashed ${C.accent}`,
                           position: 'relative', cursor: 'help', opacity: 0.7,

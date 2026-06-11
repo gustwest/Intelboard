@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 import firestore_client as fs
 from schemas import LinkedInStatus
-from services import audience_personas
+from services import audience_personas, question_quality
 
 router = APIRouter(prefix="/api/review", tags=["review"])
 
@@ -196,6 +196,7 @@ def list_pending_risk_questions(client_id: str, status: str = "open") -> dict[st
                 "type": q.get("type"),
                 "status": s,
                 "custom": bool(q.get("custom")),
+                "quality_flags": q.get("quality_flags") or [],
                 "generated_at": _iso(q.get("generated_at")),
             }
         )
@@ -229,7 +230,8 @@ def create_custom_risk_question(client_id: str, q: CustomRiskQuestion) -> dict[s
     Body: persona, text, ev. type/track/language/decision_criterion/harm_modes."""
     import hashlib
 
-    if not fs.client_doc(client_id).get().exists:
+    client_snap = fs.client_doc(client_id).get()
+    if not client_snap.exists:
         raise HTTPException(404, f"client not found: {client_id}")
     text = q.text.strip()
     if not text:
@@ -237,6 +239,11 @@ def create_custom_risk_question(client_id: str, q: CustomRiskQuestion) -> dict[s
     persona = audience_personas.normalize(q.persona)
     if persona not in audience_personas.CANONICAL:
         raise HTTPException(422, f"okänd persona: {q.persona}")
+    # F1: kvalitetsflagga frågan (blockerar inte) — egna frågor skippar review-grinden,
+    # så flaggan är enda kvalitetssignalen ops får på dem.
+    quality_flags = question_quality.assess(
+        text, (client_snap.to_dict() or {}).get("company_name")
+    )
 
     # Samma id-pattern som services/risk_detector._persist_question — stabilt över tid.
     qid = "q-" + hashlib.sha1(f"{persona}|{q.track}|{text}".encode("utf-8")).hexdigest()[:16]
@@ -256,11 +263,12 @@ def create_custom_risk_question(client_id: str, q: CustomRiskQuestion) -> dict[s
             "status": "approved",
             "needs_review": False,
             "custom": True,
+            "quality_flags": quality_flags,
             "generated_at": firestore.SERVER_TIMESTAMP,
             "reviewed_at": firestore.SERVER_TIMESTAMP,
         }
     )
-    return {"status": "ok", "id": qid, "persona": persona, "text": text}
+    return {"status": "ok", "id": qid, "persona": persona, "text": text, "quality_flags": quality_flags}
 
 
 @router.post("/{client_id}/risk-questions/{question_id}")

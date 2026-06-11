@@ -16,6 +16,7 @@ slutförs men markeras `skipped`.
 from __future__ import annotations
 
 import contextvars
+import hashlib
 import json
 import logging
 import os
@@ -239,6 +240,10 @@ class PollingResult:
     parity_ci95: list[float] | None = None # Wilson-intervall [lo, hi] — grindar trendpilar
     parity_baseline: dict[str, Any] | None = None  # snapshot {value, source, as_of}
     parity_gap: float | None = None        # portrayed − baseline.value
+    # F3 (frågedesign): fingerprint av det resolved frågesettet — ändras mallarna,
+    # substitutionerna eller custom-frågorna bryts trendjämförbarheten, och UI:t
+    # markerar bytet (samma princip som modellbyten via models_used).
+    questions_fingerprint: str | None = None
 
 
 def run_for_client(client_id: str) -> PollingResult | None:
@@ -302,8 +307,16 @@ def run_for_client(client_id: str) -> PollingResult | None:
             )
 
     result = _aggregate(client_id, company_name, answers, client.get("parity_baseline"), runs)
+    result.questions_fingerprint = _questions_fingerprint(questions)
     _write(result)
     return result
+
+
+def _questions_fingerprint(questions: list[tuple[str, str]]) -> str:
+    """F3: stabil hash av det resolved frågesettet (kategori|text, sorterat).
+    Ändras frågorna mellan veckor markerar UI:t ett jämförbarhetsbrott."""
+    joined = "\n".join(f"{cat}|{text}" for cat, text in sorted(questions))
+    return hashlib.sha1(joined.encode("utf-8")).hexdigest()[:16]
 
 
 def _build_questions(client: dict[str, Any]) -> list[tuple[str, str]]:
@@ -367,6 +380,9 @@ def resolve_polling_questions(client: dict[str, Any]) -> dict[str, Any]:
         "substitutions": substitutions,
         "by_category": by_category,
         "total": sum(len(v) for v in by_category.values()),
+        # F3: när mätkontexten senast sågs över (None = aldrig sedan fältet infördes)
+        # — driver staleness-flaggan i frågepanelen.
+        "config_updated_at": client.get("measurement_config_updated_at"),
     }
 
 
@@ -767,6 +783,8 @@ def _write(result: PollingResult) -> None:
             "sov_ci95": result.sov_ci95,
             "runs_per_query": result.runs_per_query,
             "sov_by_source": result.sov_by_source,  # P2: training vs web_rag, aldrig poolat
+            # F3 — frågesettets fingerprint: jämförbarhetsbrott markeras i UI vid byte
+            "questions_fingerprint": result.questions_fingerprint,
             "run_at": firestore.SERVER_TIMESTAMP,
         }
     )
