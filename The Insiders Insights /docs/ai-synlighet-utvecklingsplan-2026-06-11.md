@@ -21,9 +21,11 @@ Effort: **S** <½ dag · **M** ½–2 dagar · **L** >2 dagar.
 ---
 
 > **Status 2026-06-11 (samma dag, em):** Etapp 0 ✅ · Etapp 1 (R1–R5) ✅ `38b97838d` ·
-> E1+M2 ✅ `e39c60996` · M1 ✅ `dee4adc9b` · E2 ✅ `964b25286` · L1–L3 ✅ `bdd3dd707`.
-> **Kvar:** M3 (dokumentram), L4 (mätinställnings-drawer, samordna TC2), Etapp 5
-> (frågedesign F1–F7, start F3+F1), E1-kalibrering av bandtrösklarna mot historik.
+> E1+M2 ✅ `e39c60996` · M1 ✅ `dee4adc9b` · E2 ✅ `964b25286` · L1–L3 ✅ `bdd3dd707` ·
+> L4 ✅ `627a2be3f` · Etapp 5-start F1+F3+F7 ✅ `49b427e56` (principdok:
+> `docs/fragedesign-principer.md`).
+> **Kvar:** M3 (dokumentram), Etapp 5 forts (F2 kontrollfrågor, F4 sv/en, F5
+> domarstabilitet, F6 NER-audit), E1-kalibrering av bandtrösklarna mot historik.
 
 ## 1. Genomfört — Etapp 0 (2026-06-11, commit `eab56ec26`)
 
