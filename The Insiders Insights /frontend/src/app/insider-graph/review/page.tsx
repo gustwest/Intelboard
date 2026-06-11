@@ -128,6 +128,11 @@ export default function GraphReviewPage() {
   // så vi slipper härleda state i en effekt).
   const [inboxByClient, setInboxByClient] = useState<Record<string, { claims: number; items: number; linkedin: number }>>({});
   const [resolved, setResolved] = useState<Record<string, { claims: number; items: number; linkedin: number }>>({});
+  // Beslut som misslyckas (oftast transient: instans som startar/roterar vid deploy)
+  // visas som en TYDLIG botten-toast — inte bara den övre banner som ligger off-screen
+  // när man klickar på ett kort längre ned. Annars ser ett misslyckat "Godkänn" ut som
+  // att knappen inte gör något (kortet ligger kvar), fast det var ett nätverksfel.
+  const [actionError, setActionError] = useState<string | null>(null);
   // AR1: ångra-toast (mjuk-radering), bulk-markering och tangentbordsfokus.
   const [undo, setUndo] = useState<UndoState | null>(null);
   const [sel, setSel] = useState<Set<string>>(new Set());
@@ -210,6 +215,7 @@ export default function GraphReviewPage() {
     const cid = item.client_id ?? (selected === ALL ? null : selected);
     if (!cid) return;
     setBusyId(item.id);
+    setActionError(null);
     try {
       await graphFetch(`/api/review/${cid}/${item.employee_id}/${item.id}`, {
         method: 'POST',
@@ -220,7 +226,7 @@ export default function GraphReviewPage() {
       bumpResolved('items', cid);
       setUndo({ label: decision === 'approve' ? 'Godkänd' : 'Avvisad', kind: 'items', acted: [{ cid, path: `/api/review/${cid}/${item.employee_id}/${item.id}` }] });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setActionError(decideFailMsg(decision, e));
     } finally {
       setBusyId(null);
     }
@@ -230,6 +236,7 @@ export default function GraphReviewPage() {
     const cid = claim.client_id ?? (selected === ALL ? null : selected);
     if (!cid) return;
     setBusyId(claim.id);
+    setActionError(null);
     const edited = edits[claim.id];
     const body: Record<string, unknown> = { decision };
     if (decision === 'approve' && edited != null && edited !== claim.statement) {
@@ -248,7 +255,7 @@ export default function GraphReviewPage() {
       bumpResolved('claims', cid); // både godkänt och avvisat löser needs_review
       setUndo({ label: decision === 'approve' ? 'Godkänd' : 'Avvisad', kind: 'claims', acted: [{ cid, path: `/api/review/${cid}/claims/${claim.id}` }] });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setActionError(decideFailMsg(decision, e));
     } finally {
       setBusyId(null);
     }
@@ -258,6 +265,7 @@ export default function GraphReviewPage() {
     const cid = snap.client_id ?? (selected === ALL ? null : selected);
     if (!cid) return;
     setBusyId(snap.id);
+    setActionError(null);
     const body: Record<string, unknown> = { decision };
     if (decision === 'approve') {
       const edited = skillEdits[snap.id];
@@ -277,7 +285,7 @@ export default function GraphReviewPage() {
       bumpResolved('linkedin', cid);
       setUndo({ label: decision === 'approve' ? 'Verifierad' : 'Avvisad', kind: 'linkedin', acted: [{ cid, path: `/api/review/${cid}/linkedin/${snap.id}` }] });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setActionError(decideFailMsg(decision, e));
     } finally {
       setBusyId(null);
     }
@@ -336,6 +344,7 @@ export default function GraphReviewPage() {
     const chosen = currentList.filter((o) => sel.has(o.id));
     if (chosen.length === 0) return;
     setBusyId('__bulk__');
+    setActionError(null);
     const acted: UndoAct[] = [];
     try {
       for (const obj of chosen) {
@@ -346,7 +355,9 @@ export default function GraphReviewPage() {
       await load(selected, tab);
       if (acted.length) setUndo({ label: `${acted.length} ${decision === 'approve' ? 'godkända' : 'avvisade'}`, kind: tab, acted });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      // Delvis bulk kan ha gått igenom innan felet — räknaren/listan synkas av load().
+      const done = acted.length ? ` (${acted.length} hann sparas)` : '';
+      setActionError(`${decideFailMsg(decision, e)}${done}`);
       await load(selected, tab);
     } finally {
       setBusyId(null);
@@ -372,7 +383,7 @@ export default function GraphReviewPage() {
       });
       await load(selected, tab);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setActionError(`Kunde inte ångra: ${e instanceof Error ? e.message : String(e)}`);
       await load(selected, tab);
     }
   }
@@ -390,6 +401,13 @@ export default function GraphReviewPage() {
     const t = setTimeout(() => setUndo(null), 7000);
     return () => clearTimeout(t);
   }, [undo]);
+
+  // Fel-toasten ligger kvar längre (10 s) — ett misslyckat beslut ska hinna läsas.
+  useEffect(() => {
+    if (!actionError) return;
+    const t = setTimeout(() => setActionError(null), 10000);
+    return () => clearTimeout(t);
+  }, [actionError]);
 
   // Tangentbord: j/k navigera · a godkänn · r avvisa · x markera · ⌘/Ctrl+Enter godkänn.
   // Ingen deps-array → läser alltid färsk currentList/focusIdx (åter-prenumererar per render).
@@ -495,6 +513,16 @@ export default function GraphReviewPage() {
           <span>{undo.label}</span>
           <button onClick={doUndo} style={{ background: 'transparent', border: 'none', color: '#7dd3fc', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
             Ångra
+          </button>
+        </div>
+      )}
+
+      {actionError && (
+        <div style={{ position: 'fixed', left: '50%', bottom: undo ? 78 : 24, transform: 'translateX(-50%)', zIndex: 51, display: 'flex', alignItems: 'center', gap: 12, background: '#7f1d1d', color: '#fff', padding: '11px 16px', borderRadius: 10, boxShadow: '0 6px 24px rgba(0,0,0,0.3)', fontSize: 13, maxWidth: 'min(92vw, 560px)' }}>
+          <AlertCircle size={16} style={{ flexShrink: 0 }} />
+          <span style={{ minWidth: 0 }}>{actionError}</span>
+          <button onClick={() => setActionError(null)} style={{ background: 'transparent', border: 'none', color: '#fca5a5', fontWeight: 700, cursor: 'pointer', fontSize: 13, flexShrink: 0 }}>
+            Stäng
           </button>
         </div>
       )}
@@ -670,6 +698,15 @@ export default function GraphReviewPage() {
       </GroupedList>
     );
   }
+}
+
+// Tydlig, handlingsbar feltext för ett misslyckat beslut. graphFetch ger redan vänlig
+// copy (t.ex. "Kunde inte nå servern…") — vanligast vid en transient instans-rotation
+// (deploy/kallstart), då en omklickning oftast lyckas direkt.
+function decideFailMsg(decision: 'approve' | 'reject', e: unknown): string {
+  const verb = decision === 'approve' ? 'godkänna' : 'avvisa';
+  const msg = e instanceof Error ? e.message : String(e);
+  return `Kunde inte ${verb}: ${msg} — försök igen.`;
 }
 
 /* --- delade småkomponenter --- */
