@@ -317,6 +317,10 @@ create_or_update_job trust-gap-report         jobs.trust_gap_report        1 1 6
 # (justera mot LLM rate limits — ej linjär skalning).
 create_or_update_job warmth-probes            jobs.warmth_probes           5 5 3600s
 create_or_update_job risk-detect-all          jobs.risk_detect_all         5 5 3600s
+# Alignment-audit (probe → gap → claim-order, docs/leverans-arbetsplan.md): matcher-anrop
+# ≤ 5 personor × 6 dim = 30 LLM-anrop/kund → sharded som warmth/risk. Ad-hoc-trigg per kund
+# (POST /api/jobs/alignment-audit); ingen scheduler ännu. Gapen matar kundmejlets förslag.
+create_or_update_job alignment-audit          jobs.alignment_audit         5 5 3600s
 create_or_update_job monthly-report-all       jobs.monthly_report_all      1 1 1800s
 # Spår B2: kund-säkert månadsmejl till varje kunds kontakt (self-no-op utan
 # Brevo-konfig/kontakt). Körs efter monthly-report-all så rapporten finns.
