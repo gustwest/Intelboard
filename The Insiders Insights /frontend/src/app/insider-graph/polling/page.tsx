@@ -33,6 +33,8 @@ import { CompetitorSurface } from './_components/CompetitorSurface';
 import { TrustGapCockpit } from './_components/TrustGapCockpit';
 import { RiskBoard } from './_components/RiskBoard';
 import { ExposureScale } from './_components/ExposureScale';
+import { SettingsDrawer, SettingsTab } from './_components/SettingsDrawer';
+import { Settings2 } from 'lucide-react';
 
 export default function GraphRiskLoopPage() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -50,6 +52,7 @@ export default function GraphRiskLoopPage() {
   const [riskQuestions, setRiskQuestions] = useState<RiskQuestionsResp | null>(null);
   const [engineHealth, setEngineHealth] = useState<EngineHealthResp | null>(null);
   const [pollingQuestions, setPollingQuestions] = useState<PollingQuestionsResp | null>(null);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [softError, setSoftError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
@@ -377,6 +380,21 @@ export default function GraphRiskLoopPage() {
           title: 'Sammanställer månadens rapport (internt utkast): beslutssäkerhet, risker, åtgärder, trend och narrativ. Ersätter tidigare utkast för samma månad.',
           doneHint: { text: 'klart — rapporten nedan ↓', href: '#manadsrapport' },
         })}
+        <div style={{ flex: 1 }} />
+        {/* L4: mätinställningarna nås där arbetet sker — drawer, inget sidbyte */}
+        <button
+          onClick={() => setSettingsTab('questions')}
+          disabled={!selected}
+          title="Frågesubstitutioner, egna synlighets-frågor och persona-palett för vald kund — samma inställningar som på kundkortet"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px',
+            background: 'transparent', color: C.muted, border: `1px solid ${C.border}`,
+            borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: selected ? 'pointer' : 'not-allowed',
+          }}
+        >
+          <Settings2 size={12} />
+          Mätinställningar
+        </button>
       </div>
       <ActivityFeed runs={jobRuns} />
 
@@ -417,7 +435,7 @@ export default function GraphRiskLoopPage() {
 
       {/* Synlighets-frågor (Share of Voice) — transparens, direkt efter veckovis synlighet den driver */}
       {pollingQuestions && pollingQuestions.total > 0 && selected && (
-        <PollingQuestionsPanel data={pollingQuestions} clientId={selected} mode="ops" />
+        <PollingQuestionsPanel data={pollingQuestions} clientId={selected} mode="ops" onOpenSettings={() => setSettingsTab('questions')} />
       )}
 
       {/* ===== RISKER & ÅTGÄRDER — den slutna live-loopen samlad: upptäckt → åtgärd → löst (F3-2).
@@ -449,6 +467,7 @@ export default function GraphRiskLoopPage() {
           questions={riskQuestions.questions}
           clientId={selected}
           onChanged={() => setRefreshTick((t) => t + 1)}
+          onOpenPersonas={() => setSettingsTab('personas')}
         />
       )}
 
@@ -623,6 +642,16 @@ export default function GraphRiskLoopPage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* L4: mätinställnings-drawer — stängning triggar full refresh så att
+          ändrade frågor/personas speglas direkt i panelerna */}
+      {settingsTab && selected && (
+        <SettingsDrawer
+          clientId={selected}
+          initialTab={settingsTab}
+          onClose={() => { setSettingsTab(null); setRefreshTick((t) => t + 1); }}
+        />
       )}
     </GraphPageShell>
   );

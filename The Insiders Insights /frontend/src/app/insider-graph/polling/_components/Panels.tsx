@@ -114,7 +114,7 @@ export function TrendView({ trend, currentScore }: { trend: Trend; currentScore:
   );
 }
 
-export function PollingQuestionsPanel({ data, clientId, mode }: { data: PollingQuestionsResp; clientId: string; mode: ViewMode }) {
+export function PollingQuestionsPanel({ data, clientId, mode, onOpenSettings }: { data: PollingQuestionsResp; clientId: string; mode: ViewMode; onOpenSettings?: () => void }) {
   const [open, setOpen] = useState(false);
   const categories = Object.entries(data.by_category).sort((a, b) => a[0].localeCompare(b[0]));
   const editorUrl = `/insider-graph/kunder/${encodeURIComponent(clientId)}#measurement-config`;
@@ -182,18 +182,34 @@ export function PollingQuestionsPanel({ data, clientId, mode }: { data: PollingQ
               <span style={{ fontSize: 11, color: C.muted }}>
                 {data.is_custom ? 'Du har skräddarsydda frågor. Default-templates används inte.' : 'Vill du ersätta default-frågorna med egna?'}
               </span>
-              <a
-                href={editorUrl}
-                style={{
-                  padding: '6px 14px', fontSize: 11, fontWeight: 600,
-                  color: C.accent, background: 'rgba(224, 142, 121,0.08)',
-                  border: `1px solid ${S.inProgress.border}`, borderRadius: 6,
-                  textDecoration: 'none', letterSpacing: '0.02em',
-                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                }}
-              >
-                Redigera i Mätningskonfig →
-              </a>
+              {/* L4: redigera direkt här via drawer; kundkortet kvar som sekundär ingång */}
+              {onOpenSettings ? (
+                <button
+                  onClick={onOpenSettings}
+                  style={{
+                    padding: '6px 14px', fontSize: 11, fontWeight: 600,
+                    color: C.accent, background: 'rgba(224, 142, 121,0.08)',
+                    border: `1px solid ${S.inProgress.border}`, borderRadius: 6,
+                    cursor: 'pointer', letterSpacing: '0.02em',
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                  }}
+                >
+                  Redigera mätinställningar
+                </button>
+              ) : (
+                <a
+                  href={editorUrl}
+                  style={{
+                    padding: '6px 14px', fontSize: 11, fontWeight: 600,
+                    color: C.accent, background: 'rgba(224, 142, 121,0.08)',
+                    border: `1px solid ${S.inProgress.border}`, borderRadius: 6,
+                    textDecoration: 'none', letterSpacing: '0.02em',
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                  }}
+                >
+                  Redigera i Mätningskonfig →
+                </a>
+              )}
             </div>
           )}
         </>

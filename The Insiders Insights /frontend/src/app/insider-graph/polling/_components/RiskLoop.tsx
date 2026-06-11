@@ -285,10 +285,11 @@ function singleBtn(tone: { fg: string; bg: string; border: string }, disabled: b
 // Samlad frågevy med statusflikar: hela frågelivscykeln (väntar → godkänd →
 // avvisad) på ETT ställe, istället för godkännare i en box och godkänd lista i
 // en annan. RiskLoopStatus ankarlänkar hit (#risk-fragor).
-export function RiskQuestionsPanel({ questions, clientId, onChanged }: {
+export function RiskQuestionsPanel({ questions, clientId, onChanged, onOpenPersonas }: {
   questions: RiskQuestionsResp['questions'];
   clientId: string | null;
   onChanged: () => void;
+  onOpenPersonas?: () => void;
 }) {
   const pending = questions.filter((q) => q.status === 'open');
   const approved = questions.filter((q) => q.status === 'approved');
@@ -366,6 +367,20 @@ export function RiskQuestionsPanel({ questions, clientId, onChanged }: {
               </button>
             ))}
             <div style={{ flex: 1 }} />
+            {onOpenPersonas && (
+              <button
+                onClick={onOpenPersonas}
+                title="Persona-paletten styr vilka målgrupper warmth-proberna mäter — öppna mätinställningarna"
+                style={{
+                  padding: '5px 12px', fontSize: 11, fontWeight: 600,
+                  color: C.muted, background: 'transparent',
+                  border: `1px solid ${C.border}`, borderRadius: 6,
+                  cursor: 'pointer', letterSpacing: '0.02em',
+                }}
+              >
+                Persona-palett…
+              </button>
+            )}
             <button
               onClick={() => setAdding(true)}
               disabled={!clientId}
