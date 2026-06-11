@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { fmtDateTime } from '@/lib/datetime';
+import { useUnsavedGuard } from '@/lib/useUnsavedGuard';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
@@ -25,6 +26,20 @@ export default function NotesTab({ customerId }: { customerId: string }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({ title: '', body: '', note_type: 'note', author: '' });
+
+  // Osparat-skydd: jämför formuläret mot dess utgångsläge (tomt för nytt, original
+  // vid redigering). dirty → varna vid sidnavigering och vid stängning av formuläret.
+  const editingNote = editId ? notes.find(n => n.id === editId) : null;
+  const baseline = editingNote
+    ? { title: editingNote.title, body: editingNote.body, note_type: editingNote.note_type, author: editingNote.author }
+    : { title: '', body: '', note_type: 'note', author: '' };
+  const dirty = showForm && JSON.stringify(form) !== JSON.stringify(baseline);
+  useUnsavedGuard(dirty);
+
+  function closeForm() {
+    if (dirty && !confirm('Du har en påbörjad anteckning som inte sparats. Stäng utan att spara?')) return;
+    setShowForm(false); setEditId(null); setForm({ title: '', body: '', note_type: 'note', author: '' });
+  }
 
   async function fetchNotes() {
     const r = await fetch(`${API}/api/customers/${customerId}/notes`);
@@ -60,7 +75,7 @@ export default function NotesTab({ customerId }: { customerId: string }) {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h3 style={{ margin: 0, fontSize: 14 }}>Anteckningar ({notes.length})</h3>
-        <button onClick={() => { setShowForm(!showForm); setEditId(null); setForm({ title: '', body: '', note_type: 'note', author: '' }); }} style={btnStyle('accent')}>
+        <button onClick={() => { if (showForm) { closeForm(); } else { setEditId(null); setForm({ title: '', body: '', note_type: 'note', author: '' }); setShowForm(true); } }} style={btnStyle('accent')}>
           {showForm ? '✕ Stäng' : '+ Ny anteckning'}
         </button>
       </div>
@@ -76,7 +91,10 @@ export default function NotesTab({ customerId }: { customerId: string }) {
               {NOTE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
             <input value={form.author} onChange={e => setForm({ ...form, author: e.target.value })} placeholder="Författare" style={{ ...inputStyle, flex: 1 }} />
-            <button onClick={save} style={btnStyle('accent')}>{editId ? 'Spara' : 'Skapa'}</button>
+            <button onClick={save} style={{ ...btnStyle('accent'), display: 'flex', alignItems: 'center', gap: 7, ...(dirty ? { boxShadow: '0 1px 7px rgba(0,0,0,0.35)' } : {}) }}>
+              {dirty && <span aria-hidden style={{ width: 7, height: 7, borderRadius: '50%', background: '#fff', flexShrink: 0 }} />}
+              {editId ? 'Spara' : 'Skapa'}
+            </button>
           </div>
         </div>
       )}

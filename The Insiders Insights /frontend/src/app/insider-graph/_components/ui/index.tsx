@@ -10,6 +10,7 @@ import { CSSProperties, ReactNode, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Save, X, Loader2, Check, Play } from 'lucide-react';
 import { graphColors as C, statusColors, surfaces } from '../GraphPageShell';
+import { useUnsavedGuard } from '@/lib/useUnsavedGuard';
 
 type StatusTone = 'ok' | 'warn' | 'err' | 'info';
 
@@ -329,14 +330,12 @@ export function Collapsible({
 }
 
 // ── Form-UX-hooks ────────────────────────────────────────────────────────────
-// Varnar om osparade ändringar vid sidstängning/omladdning medan dirty=true.
+// Varnar om osparade ändringar medan dirty=true — både vid sidstängning/omladdning
+// OCH vid in-app-navigering (länkklick). Delegerar till den tema-oberoende
+// useUnsavedGuard så att samma skydd kan återanvändas i mörka vyer (Notes/Goals/
+// moduler) utan att dra in graph-stilen. Behåller namnet för bakåtkompatibilitet.
 export function useUnsavedWarning(dirty: boolean) {
-  useEffect(() => {
-    if (!dirty) return;
-    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [dirty]);
+  useUnsavedGuard(dirty);
 }
 
 // Avfärdar en notis automatiskt efter ms när `active` blir sant (t.ex. "Sparat").
@@ -367,14 +366,20 @@ export function SaveButton({
       disabled={!dirty || saving}
       title={!dirty && !saving ? (disabledReason ?? 'Inga ändringar att spara') : undefined}
       style={{
-        display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px',
-        background: dirty ? 'rgba(224, 142, 121,0.18)' : 'transparent',
-        color: dirty ? C.accent : C.muted,
-        border: `1px solid ${dirty ? 'rgba(224, 142, 121,0.3)' : C.border}`,
+        display: 'flex', alignItems: 'center', gap: 7, padding: '7px 14px',
+        // Dirty = fylld accent + prick + skugga (omöjlig att missa). Ren/sparar =
+        // dämpad/inaktiv. Tidigare var dirty bara en svag ton som lätt förbisågs.
+        background: dirty && !saving ? C.accent : 'transparent',
+        color: dirty && !saving ? '#fff' : C.muted,
+        border: `1px solid ${dirty && !saving ? C.accent : C.border}`,
+        boxShadow: dirty && !saving ? '0 1px 7px rgba(224, 142, 121,0.5)' : 'none',
         borderRadius: 8, fontSize: 12, fontWeight: 600,
         cursor: dirty && !saving ? 'pointer' : 'not-allowed', ...style,
       }}
     >
+      {dirty && !saving && (
+        <span aria-hidden style={{ width: 7, height: 7, borderRadius: '50%', background: '#fff', flexShrink: 0 }} />
+      )}
       <Save size={12} /> {saving ? savingLabel : label}
     </button>
   );

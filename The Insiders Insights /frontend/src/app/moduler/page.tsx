@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Ruler, Plus, Lightbulb } from 'lucide-react';
 import Gauge from '../../components/Gauge';
+import { useUnsavedGuard } from '@/lib/useUnsavedGuard';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const C = {
@@ -210,6 +211,19 @@ function ModuleEditor({ module, sources, customers, onClose, onSaved }: { module
   }, []);
   const otherModules = allModules.filter(m => !module || m.id !== module.id);
 
+  // Osparat-skydd: serialisera alla redigerbara fält, jämför mot pristine-snapshot
+  // (taget vid första render). Skyddar mot tyst förlust om man stänger modalen
+  // eller navigerar bort med osparade ändringar — modulen saknade detta helt.
+  const serialized = JSON.stringify({ name, abbr, category, description, expression, aggregations, moduleRefs, constants, customerId, inverted, thresholds, fieldRefs });
+  const [initialSnapshot] = useState(() => serialized); // pristine-läge fångat vid första render
+  const dirty = serialized !== initialSnapshot;
+  useUnsavedGuard(dirty);
+
+  function requestClose() {
+    if (dirty && !confirm('Du har osparade ändringar i modulen. Stäng utan att spara?')) return;
+    onClose();
+  }
+
   const allFields = useMemo(() => sources.flatMap(s => s.fields.map(f => ({ ...f, source_id: s.id, source_name: s.name, source_key: s.key }))), [sources]);
   const fieldById = Object.fromEntries(allFields.map(f => [f.id, f]));
 
@@ -284,13 +298,14 @@ function ModuleEditor({ module, sources, customers, onClose, onSaved }: { module
   }
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, padding: 20 }}>
+    <div onClick={requestClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, padding: 20 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24, width: '95%', maxWidth: 900, maxHeight: '92vh', overflow: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
           <h2 style={{ margin: 0 }}>{isNew ? 'Ny modul' : module!.name}</h2>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {dirty && <span style={{ fontSize: 11, fontWeight: 600, color: C.warning, display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: C.warning }} />Osparat</span>}
             {!isNew && <button type="button" onClick={(e) => { e.preventDefault(); remove(); }} style={btn('danger')}>Ta bort</button>}
-            <button onClick={onClose} style={btn('ghost')}>Stäng</button>
+            <button onClick={requestClose} style={btn('ghost')}>Stäng</button>
           </div>
         </div>
 
