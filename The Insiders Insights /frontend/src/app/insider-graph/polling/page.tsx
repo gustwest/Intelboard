@@ -34,6 +34,7 @@ import { CompetitorSurface } from './_components/CompetitorSurface';
 import { TrustGapCockpit } from './_components/TrustGapCockpit';
 import { RiskBoard } from './_components/RiskBoard';
 import { AlignmentPanel, AlignmentAuditResp } from './_components/AlignmentPanel';
+import { LangProbePanel, LangProbeResp } from './_components/LangProbePanel';
 import { ExposureScale } from './_components/ExposureScale';
 import { SettingsDrawer, SettingsTab } from './_components/SettingsDrawer';
 import { Settings2 } from 'lucide-react';
@@ -55,6 +56,7 @@ export default function GraphRiskLoopPage() {
   const [riskQuestions, setRiskQuestions] = useState<RiskQuestionsResp | null>(null);
   const [engineHealth, setEngineHealth] = useState<EngineHealthResp | null>(null);
   const [alignment, setAlignment] = useState<AlignmentAuditResp | null>(null);
+  const [langProbe, setLangProbe] = useState<LangProbeResp | null>(null);
   const [pollingQuestions, setPollingQuestions] = useState<PollingQuestionsResp | null>(null);
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -208,6 +210,16 @@ export default function GraphRiskLoopPage() {
     graphFetch<AlignmentAuditResp>(`/api/review/${selected}/alignment`)
       .then((d) => !cancelled && setAlignment(d))
       .catch(() => { if (!cancelled) setAlignment(null); });
+    return () => { cancelled = true; };
+  }, [selected, refreshTick]);
+
+  // C2 — sv-vs-en språkexperiment (polling_results/lang-probe-latest), matar C3.
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
+    graphFetch<LangProbeResp>(`/api/polling/${selected}/lang-probe`)
+      .then((d) => !cancelled && setLangProbe(d))
+      .catch(() => { if (!cancelled) setLangProbe(null); });
     return () => { cancelled = true; };
   }, [selected, refreshTick]);
 
@@ -508,6 +520,9 @@ export default function GraphRiskLoopPage() {
           onDone={() => setRefreshTick((t) => t + 1)}
         />
       )}
+
+      {/* C2 — mätspråk sv/en (matar språkbeslutet C3) */}
+      {langProbe && <LangProbePanel data={langProbe} clientId={selected} />}
 
       {/* Risk-centrerad yta (Etapp 1): kort per risk med livscykel, what-if-simulering
           och åtgärda/avfärda — ersätter Riskens livscykel + What-if + Detekterade risker */}

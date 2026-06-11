@@ -336,6 +336,38 @@ def trigger_alignment_audit(client_id: str, background: BackgroundTasks) -> dict
     }
 
 
+@router.post("/lang-probe/{client_id}")
+def trigger_lang_probe(client_id: str, background: BackgroundTasks, runs: int = 5) -> dict[str, Any]:
+    """C2 — riktat sv-vs-en språkexperiment för EN kund. Kör samma frågor på svenska
+    och engelska mot probe-motorerna, mäter omnämnandegrad per motor×språk + vinnande
+    språk (matar språkbeslutet C3). Resultatet persisteras i polling_results/lang-probe-latest.
+
+    Ad-hoc per kund (inget schemalagt fan-out). Primärt en riktig Cloud Run Job-execution
+    (garanterad CPU + probe-nycklar ur Secret Manager, som warmth/alignment); fallback till
+    BackgroundTask lokalt/utan Admin API (self-no-op utan nycklar)."""
+    if not fs.client_doc(client_id).get().exists:
+        raise HTTPException(404, "client not found")
+    from services import cloud_run_jobs
+
+    execution = cloud_run_jobs.run_job(
+        "lang-probe",
+        args=["-m", "jobs.lang_probe", "--client-id", client_id, "--runs", str(runs)],
+        task_count=1,
+    )
+    if execution:
+        return {
+            "status": "queued", "job": "lang_probe", "client_id": client_id,
+            "via": "cloud_run_job", "execution": execution, "runs": runs,
+        }
+
+    from jobs.lang_probe import run_one
+    background.add_task(run_one, client_id, runs)
+    return {
+        "status": "queued", "job": "lang_probe", "client_id": client_id,
+        "via": "background_task", "runs": runs,
+    }
+
+
 @router.post("/monthly-report/{client_id}")
 def trigger_monthly_report(client_id: str, background: BackgroundTasks, month: str | None = None) -> dict[str, Any]:
     """GEO-riskloop skiva 3 — bygg + persistera månadsrapporten (default innevarande månad)."""

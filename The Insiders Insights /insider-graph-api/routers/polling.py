@@ -219,6 +219,19 @@ def get_polling_questions(client_id: str) -> dict[str, Any]:
     return {"client_id": client_id, **resolved}
 
 
+@router.get("/{client_id}/lang-probe")
+def get_lang_probe(client_id: str) -> dict[str, Any]:
+    """C2-resultatet (sv-vs-en): omnämnandegrad + signifikans + vinnande språk per motor,
+    ur polling_results/lang-probe-latest. status=not_run om experimentet aldrig körts.
+    Läsväg för språkbeslutet C3 — annars ligger jobbresultatet oläst i Firestore."""
+    if not fs.client_doc(client_id).get().exists:
+        raise HTTPException(404, f"client not found: {client_id}")
+    snap = fs.polling_results_col(client_id).document("lang-probe-latest").get()
+    if not getattr(snap, "exists", False):
+        return {"client_id": client_id, "status": "not_run"}
+    return {"client_id": client_id, "status": "ok", **(snap.to_dict() or {})}
+
+
 @router.get("/{client_id}/{week_id}/raw")
 def get_raw_responses(client_id: str, week_id: str) -> dict[str, Any]:
     snap = fs.polling_results_col(client_id).document(week_id).get()
