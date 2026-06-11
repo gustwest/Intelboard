@@ -71,6 +71,26 @@ class JudgeVerdictCalibratedTest(unittest.TestCase):
         v = wp._judge_verdict_calibrated(_DeadJudge(), "Acme", "ethics", ["x"], runs=3)
         self.assertIsNone(v)
 
+    def test_direction_stable_when_first_last_close(self):
+        # F5: first=0.6, last=0.62 → rör sig < tröskeln → riktnings-stabil.
+        judge = _SequenceJudge([0.6, 0.4, 0.62])
+        v = wp._judge_verdict_calibrated(judge, "Acme", "ethics", ["x"], runs=3)
+        self.assertTrue(v["direction_stable"])
+        self.assertEqual(v["valence_runs"], [0.6, 0.4, 0.62])
+
+    def test_direction_unstable_when_first_last_drift(self):
+        # F5: first=0.3, last=0.8 → glider 0.5 > tröskeln 0.25 → riktnings-instabil,
+        # även om någon mellanliggande körning råkar ligga emellan.
+        judge = _SequenceJudge([0.3, 0.5, 0.8])
+        v = wp._judge_verdict_calibrated(judge, "Acme", "ethics", ["x"], runs=3)
+        self.assertFalse(v["direction_stable"])
+
+    def test_single_run_is_direction_stable(self):
+        judge = _SequenceJudge([0.7])
+        v = wp._judge_verdict_calibrated(judge, "Acme", "ethics", ["x"], runs=1)
+        self.assertTrue(v["direction_stable"])
+        self.assertEqual(v["valence_runs"], [0.7])
+
 
 class RunsConfigTest(unittest.TestCase):
     def test_default_is_three(self):
@@ -126,6 +146,23 @@ class VariancePropagationTest(unittest.TestCase):
         }
         agg = wp._aggregate_by_engine(by_engine)
         self.assertAlmostEqual(agg["valence_variance"], 0.4, places=2)
+
+    def test_direction_instability_propagates_any_engine(self):
+        # F5: en motor instabil i riktning → hela dimensionen flaggas instabil (AND).
+        by_engine = {
+            "gemini": {"salience": 0.7, "valence": 0.5, "confidence": 0.7, "direction_stable": True},
+            "chatgpt": {"salience": 0.7, "valence": 0.5, "confidence": 0.7, "direction_stable": False},
+        }
+        agg = wp._aggregate_by_engine(by_engine)
+        self.assertFalse(agg["direction_stable"])
+
+    def test_direction_stable_when_all_engines_stable(self):
+        by_engine = {
+            "gemini": {"salience": 0.7, "valence": 0.5, "confidence": 0.7, "direction_stable": True},
+            "chatgpt": {"salience": 0.7, "valence": 0.52, "confidence": 0.7, "direction_stable": True},
+        }
+        agg = wp._aggregate_by_engine(by_engine)
+        self.assertTrue(agg["direction_stable"])
 
 
 class CostDisciplineTest(unittest.TestCase):

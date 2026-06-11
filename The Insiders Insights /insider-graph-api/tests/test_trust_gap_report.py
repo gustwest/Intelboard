@@ -157,5 +157,27 @@ class TrustGapReportTest(unittest.TestCase):
         self.assertIn("målgrupp", wb["why"])
 
 
+class ConfidenceNoteTest(unittest.TestCase):
+    """F5: riktningsinstabilitet surfas som konfidensnot per dimension."""
+
+    def test_direction_unstable_adds_note(self):
+        note = tgr._confidence_note({"perceived": {"confidence": 0.9, "direction_stable": False}})
+        self.assertIsNotNone(note)
+        self.assertIn("skiftade riktning", note)
+
+    def test_direction_stable_no_note(self):
+        note = tgr._confidence_note({"perceived": {"confidence": 0.9, "direction_stable": True}})
+        self.assertIsNone(note)
+
+    def test_not_visible_never_notes(self):
+        note = tgr._confidence_note({"perceived": {"status": "not_visible", "direction_stable": False}})
+        self.assertIsNone(note)
+
+    def test_low_conf_and_direction_combine(self):
+        note = tgr._confidence_note({"perceived": {"confidence": 0.0, "direction_stable": False}})
+        self.assertIn("osäkert underlag", note)
+        self.assertIn("skiftade riktning", note)
+
+
 if __name__ == "__main__":
     unittest.main()

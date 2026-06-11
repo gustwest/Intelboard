@@ -44,6 +44,11 @@ log = logging.getLogger(__name__)
 
 PROMPT_VERSION = "v2-persona"   # v1 = pre-persona-templates; v2 = persona-axel via registry
 _SALIENCE_MIN_FOR_VALENCE = 0.1  # motor som inget vet bidrar ej till valens-snittet
+# F5 — riktningsstabilitet: hur långt domarens valens (0–1) får röra sig mellan FÖRSTA
+# och SISTA körningen innan vi kallar mätningen riktnings-instabil. valence_variance
+# (pstdev) fångar symmetriskt brus; en systematisk first→last-glidning fångas inte av
+# variansen lika tydligt, så vi mäter den separat och surfar den som en konfidensnot.
+_DIRECTION_DELTA_MAX = 0.25
 
 
 def _probe_runs_per_query() -> int:
@@ -191,12 +196,20 @@ def _judge_verdict_calibrated(
     sals = [v["salience"] for v in verdicts]
     vals = [v["valence"] for v in verdicts]
     confs = [v["confidence"] for v in verdicts]
+    # F5 — riktningsstabilitet: rörde sig domaren systematiskt mellan första och sista
+    # körningen? (komplement till valence_variance, som är symmetriskt brus). Stabil om
+    # first→last-rörelsen ryms inom tröskeln. En enda körning räknas som stabil.
+    direction_stable = abs(vals[-1] - vals[0]) <= _DIRECTION_DELTA_MAX if len(vals) > 1 else True
     return {
         "salience": round(statistics.median(sals), 3),
         "valence": round(statistics.median(vals), 3),
         "confidence": round(statistics.median(confs), 3),
         # Mätstabilitet: spridning i valens över körningarna. 0 = perfekt stabilt.
         "valence_variance": round(statistics.pstdev(vals), 3) if len(vals) > 1 else 0.0,
+        # F5: full fördelning + riktningsstabilitet — loggas i warmth-resultatet och
+        # surfas som konfidensnot i cockpiten.
+        "valence_runs": [round(v, 3) for v in vals],
+        "direction_stable": direction_stable,
         "n_runs": len(verdicts),
     }
 
@@ -229,6 +242,10 @@ def _aggregate_by_engine(by_engine_for_dim: dict[str, dict | None]) -> dict[str,
     ]
     within_engine_var = max(run_variances) if run_variances else 0.0
     between_engine_var = statistics.pstdev(vals) if len(vals) > 1 else 0.0
+    # F5: dimensionen är riktnings-stabil bara om ALLA bidragande motorer var det —
+    # en enda motor som glider mellan första och sista körningen gör mätningen osäker
+    # (samma konservativa princip som varianstaket: maskera aldrig instabilitet).
+    direction_stable = all(x.get("direction_stable", True) for x in per.values())
     return {
         "salience": salience,
         "valence": valence,
@@ -238,6 +255,7 @@ def _aggregate_by_engine(by_engine_for_dim: dict[str, dict | None]) -> dict[str,
         # Total mätosäkerhet — max av brus-källorna (konservativt: vi underskattar
         # aldrig instabiliteten genom att medelvärda bort en av dem).
         "valence_variance": round(max(within_engine_var, between_engine_var), 3),
+        "direction_stable": direction_stable,
     }
 
 
@@ -300,6 +318,14 @@ def _aggregate_with_personas(
                 "confidence": round(statistics.fmean(confs), 3) if confs else 0.0,
             }
         top = _aggregate_by_engine(engine_aggregates)
+        # F5: toppnivåns direction_stable kan inte härledas ur engine_aggregates (de bär
+        # bara sal/val/conf) — beräkna den direkt ur alla poolade leaf-verdicts: instabil
+        # om NÅGON (motor × persona)-mätning glidit mellan första och sista körningen.
+        top["direction_stable"] = all(
+            v.get("direction_stable", True)
+            for verdicts in pooled_by_engine.values()
+            for v in verdicts
+        )
         top["per_persona"] = per_persona
         dims[d] = top
 

@@ -180,10 +180,10 @@ Eget fokuserat arbetsspår: forskningsbaserat och optimerat över tid. Tre fråg
 - Åtgärd: språkval per kund i mätkonfig; engelska varianter av default-mallarna; resultat taggas med språk och medeltalas aldrig över språk (samma princip som bas-kunskap vs live-signal).
 - Filer: BE `services/polling.py`, `persona_registry.py` (en-prober), FE `MeasurementConfigEditor`.
 
-**F5 — Domarstabilitet synliggjord** `[P2 · S]`
+**F5 — Domarstabilitet synliggjord** `[P2 · S]` ✅ (2026-06-11)
 - Problem: median + varians över 3 domarkörningar döljer riktningen (systematiska skift mellan körningar syns inte).
-- Åtgärd: logga och exponera riktningsstabilitet (första-mot-sista-verdikt) + full distribution i warmth-resultatet; visa i cockpiten som konfidensnot.
-- Filer: BE `services/warmth_probes.py` (`_judge_verdict_calibrated`), FE `TrustGapCockpit.tsx`.
+- Åtgärd: `_judge_verdict_calibrated` loggar nu `valence_runs` (full fördelning) + `direction_stable` (första-mot-sista-verdikt inom tröskeln `_DIRECTION_DELTA_MAX=0.25`). Instabiliteten propageras konservativt (AND över motorer/personor) upp till `perceived` och surfas som konfidensnot i cockpiten via `_confidence_note` ("Domaren skiftade riktning mellan körningarna…"). Cockpiten renderade redan `confidence_note` — ingen FE-ändring krävdes.
+- Filer: BE `services/warmth_probes.py` (`_judge_verdict_calibrated`, `_aggregate_by_engine`, `_aggregate_with_personas`), `services/trust_gap_report.py` (`_confidence_note`). Tester: `test_warmth_probes_calibration.py`, `test_trust_gap_report.py`.
 
 **F6 — Parity-NER-kvalitet** `[P2 · S]`
 - Problem: person-NER:ns träffsäkerhet (särskilt icke-svenska namn) är oauditerad; brus går rakt in i Parity-siffran.

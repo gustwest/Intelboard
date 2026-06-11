@@ -111,10 +111,15 @@ def _confidence_note(e: dict[str, Any]) -> str | None:
     p = e.get("perceived") or {}
     if p.get("status") == "not_visible":
         return None
+    notes: list[str] = []
     conf = p.get("confidence")
     if conf is not None and conf < hc.FLAG_CONFIDENCE_MIN:
-        return "För osäkert underlag för att dra slutsats — vi flaggar, inte bedömer."
-    return None
+        notes.append("För osäkert underlag för att dra slutsats — vi flaggar, inte bedömer.")
+    # F5: domaren skiftade riktning mellan första och sista körningen (systematisk glidning,
+    # inte bara brus) → perceptionen är inte stabilt uppmätt. Surfas som konfidensnot.
+    if p.get("direction_stable") is False:
+        notes.append("Domaren skiftade riktning mellan körningarna — perceptionen är inte stabilt uppmätt ännu.")
+    return " ".join(notes) if notes else None
 
 
 def _action_priority(e: dict[str, Any], flag_kinds: set[str]) -> tuple[int, str] | None:
