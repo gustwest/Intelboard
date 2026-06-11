@@ -237,6 +237,196 @@ _INVESTOR_PROBES_EN: dict[str, tuple[str, str]] = {
 }
 
 
+_PARTNER_PROBES_EN: dict[str, tuple[str, str]] = {
+    "inclusion": (
+        "As a prospective partner, how does {company} work with diversity among its partners and suppliers?",
+        "As a prospective partner, does {company} have a history of favouring certain partners or excluding others?",
+    ),
+    "wellbeing": (
+        "As a prospective partner, how stable is {company}'s workforce — does it affect their ability to deliver?",
+        "As a prospective partner, could internal problems at {company} jeopardise joint commitments?",
+    ),
+    "transparency": (
+        "As a prospective partner, how clear is {company} about contracts, royalties and commercial terms?",
+        "As a prospective partner, is there a history of ambiguity or disputes in {company}'s partnerships?",
+    ),
+    "ethics": (
+        "As a prospective partner, how well does {company} honour its commitments to partners?",
+        "As a prospective partner, are there reports of missed commitments, breach of contract or unethical conduct by {company}?",
+    ),
+    "development": (
+        "As a prospective partner, how does {company} grow its partnerships over time?",
+        "As a prospective partner, does {company}'s partner engagement feel transactional and short-term?",
+    ),
+    "community": (
+        "As a prospective partner, how does {company} engage with the wider industry and ecosystem?",
+        "As a prospective partner, is {company} an isolated player or an ecosystem builder?",
+    ),
+}
+
+_MEDIA_PROBES_EN: dict[str, tuple[str, str]] = {
+    "inclusion": (
+        "As a journalist, how does {company} handle representation and diversity in its communication and organisation?",
+        "As a journalist, is there a history of inaccurate, stereotyped or exclusionary communication from {company}?",
+    ),
+    "wellbeing": (
+        "As a journalist, what is the media picture of the work environment at {company}?",
+        "As a journalist, has {company} been scrutinised over its work environment, bullying or staff treatment?",
+    ),
+    "transparency": (
+        "As a journalist, how accessible is {company} to the media and how transparently does it communicate difficult topics?",
+        "As a journalist, is there a history of censorship, secrecy or PR spin from {company}?",
+    ),
+    "ethics": (
+        "As a journalist, does {company} have a history of ethical scandals, regulatory cases or investigations?",
+        "As a journalist, has {company} covered up or downplayed negative events in its media contacts?",
+    ),
+    "development": (
+        "As a journalist, what is {company} doing that is new, newsworthy and worth telling?",
+        "As a journalist, is {company} static and without a story to tell compared with competitors?",
+    ),
+    "community": (
+        "As a journalist, how does {company} engage with societal issues of public interest?",
+        "As a journalist, is there greenwashing or PR-driven societal messaging from {company}?",
+    ),
+}
+
+_REGULATOR_PROBES_EN: dict[str, tuple[str, str]] = {
+    "inclusion": (
+        "As a regulator, does {company} comply with rules on diversity and anti-discrimination?",
+        "As a regulator, are there open cases or a history of breaches of equal-treatment law by {company}?",
+    ),
+    "wellbeing": (
+        "As a regulator, does {company} comply with rules on work environment, working hours and psychosocial health?",
+        "As a regulator, does {company} have a history of work-environment citations, sanctions or accidents?",
+    ),
+    "transparency": (
+        "As a regulator, how well does {company} meet its reporting requirements and disclosure obligations?",
+        "As a regulator, are there open investigations into {company} over reporting failures or lack of accessibility?",
+    ),
+    "ethics": (
+        "As a regulator, how well does {company} comply with the rules of its industry?",
+        "As a regulator, is there a history of rule-breaking, fines or sanctions against {company}?",
+    ),
+    "development": (
+        "As a regulator, how up to date is {company} with upcoming regulatory changes and industry standards?",
+        "As a regulator, does {company} risk falling behind upcoming regulations or standards?",
+    ),
+    "community": (
+        "As a regulator, how does {company} contribute to the societal goals its industry's rules are tied to?",
+        "As a regulator, does {company}'s conduct work against the public interests the rules protect?",
+    ),
+}
+
+_PATIENT_PROBES_EN: dict[str, tuple[str, str]] = {
+    "inclusion": (
+        "As a prospective patient, does {company} meet different patient groups with the same quality and respect?",
+        "As a prospective patient, are there warning signs of discriminatory or unequal treatment from {company}?",
+    ),
+    "wellbeing": (
+        "As a prospective patient, how does {company} look after the patient experience and wellbeing in care?",
+        "As a prospective patient, are there reports of poor care or low patient safety at {company}?",
+    ),
+    "transparency": (
+        "As a prospective patient, how transparent is {company} about treatment outcomes, waiting times and risks?",
+        "As a prospective patient, are there hidden costs, unclear treatment terms or poor information from {company}?",
+    ),
+    "ethics": (
+        "As a prospective patient, how ethical are {company}'s care and information practices?",
+        "As a prospective patient, are there reports of over-treatment, mis-prioritisation or unethical handling by {company}?",
+    ),
+    "development": (
+        "As a prospective patient, how does {company} invest in better treatments, technology and evidence-based care?",
+        "As a prospective patient, is {company} behind other providers in methods, equipment or research collaboration?",
+    ),
+    "community": (
+        "As a prospective patient, how does {company} contribute to public health and medical research?",
+        "As a prospective patient, are there signals that {company} prioritises profit over patient value and public health?",
+    ),
+}
+
+_STUDENT_PROBES_EN: dict[str, tuple[str, str]] = {
+    "inclusion": (
+        "As a student or applicant, how does {company} work with diversity among students, faculty and course content?",
+        "As a student or applicant, are there warning signs of exclusion, glass ceilings or a dominant student culture at {company}?",
+    ),
+    "wellbeing": (
+        "As a student or applicant, how does {company} look after students' wellbeing, mental health and pace of study?",
+        "As a student or applicant, are there reports of high stress, dropouts or poor student support at {company}?",
+    ),
+    "transparency": (
+        "As a student or applicant, how transparent is {company} about admission requirements, completion rates and costs?",
+        "As a student or applicant, are there hidden fees, unclear requirements or vague promises from {company}?",
+    ),
+    "ethics": (
+        "As a student or applicant, does {company} act ethically in marketing, admissions and grading?",
+        "As a student or applicant, are there reports of unethical research or teaching practices at {company}?",
+    ),
+    "development": (
+        "As a student or applicant, how well does {company} prepare its students for the job market and continued growth?",
+        "As a student or applicant, is {company}'s course content outdated or disconnected from real-world needs?",
+    ),
+    "community": (
+        "As a student or applicant, how does {company} engage with society and how does the education contribute to wider value?",
+        "As a student or applicant, is {company}'s alumni network and societal connection thin or non-existent?",
+    ),
+}
+
+_DONOR_PROBES_EN: dict[str, tuple[str, str]] = {
+    "inclusion": (
+        "As a prospective donor, how does {company}'s work reach different groups in need fairly?",
+        "As a prospective donor, is there a history of disadvantaging or selectively serving recipients at {company}?",
+    ),
+    "wellbeing": (
+        "As a prospective donor, how does {company} look after its volunteers, staff and recipients?",
+        "As a prospective donor, are there reports of poor care or work-environment problems within {company}?",
+    ),
+    "transparency": (
+        "As a prospective donor, how transparent is {company} about how funds are used and accounted for?",
+        "As a prospective donor, are there reports that {company} has poor accounting, high overhead costs or unclear use of capital?",
+    ),
+    "ethics": (
+        "As a prospective donor, does {company} act ethically in fundraising, communication and aid work?",
+        "As a prospective donor, does {company} have a history of unethical fundraising, misuse of funds or scandals?",
+    ),
+    "development": (
+        "As a prospective donor, how does {company} develop its work to get more impact per krona raised?",
+        "As a prospective donor, is {company} behind other organisations in methods, efficiency or impact measurement?",
+    ),
+    "community": (
+        "As a prospective donor, how does {company} create real societal change and how does it measure impact?",
+        "As a prospective donor, is {company}'s impact reporting unclear, exaggerated or without credible methodology?",
+    ),
+}
+
+_CITIZEN_PROBES_EN: dict[str, tuple[str, str]] = {
+    "inclusion": (
+        "As a citizen, how does {company} work with representation and inclusion of different groups in society?",
+        "As a citizen, are there reports that {company} overlooks, disadvantages or excludes certain groups in society?",
+    ),
+    "wellbeing": (
+        "As a citizen, how does {company} affect society's wellbeing, environment and public health?",
+        "As a citizen, are there warning signs that {company} causes environmental, health or social harm?",
+    ),
+    "transparency": (
+        "As a citizen, how open is {company} about decisions, costs and consequences for society?",
+        "As a citizen, is there a history of secrecy, corrupt conduct or poor information from {company}?",
+    ),
+    "ethics": (
+        "As a citizen, does {company} act ethically in relation to society and its interests?",
+        "As a citizen, does {company} have a history of aggressive lobbying, tax avoidance or other questionable conduct?",
+    ),
+    "development": (
+        "As a citizen, how does {company}'s work contribute to society's development and prosperity?",
+        "As a citizen, are there signals that {company} prioritises self-interest over broader public benefit?",
+    ),
+    "community": (
+        "As a citizen, how does {company} engage locally and in broader societal issues?",
+        "As a citizen, is {company}'s community engagement genuine or forced by PR/regulatory pressure?",
+    ),
+}
+
+
 _PARTNER_PROBES: dict[str, tuple[str, str]] = {
     "inclusion": (
         "Som potentiell partner, hur arbetar {company} med mångfald hos sina samarbetspartners och leverantörer?",
@@ -433,6 +623,200 @@ _CITIZEN_PROBES: dict[str, tuple[str, str]] = {
 }
 
 
+# --- F4b-content: engelska probe-varianter för palett-personorna -------------
+# Trogna översättningar av de svenska paletten ovan — samma neutral/adversariell
+# parning och {company}-substitution. Komplett en-täckning: alla 10 personor kan nu
+# mätas på engelska utan att hoppas över.
+_PARTNER_PROBES_EN: dict[str, tuple[str, str]] = {
+    "inclusion": (
+        "As a prospective partner, how does {company} work with diversity among its partners and suppliers?",
+        "As a prospective partner, does {company} have a history of favouring certain types of partners or excluding others?",
+    ),
+    "wellbeing": (
+        "As a prospective partner, how stable is {company}'s workforce — does it affect their ability to deliver?",
+        "As a prospective partner, do internal problems at {company} risk harming joint commitments?",
+    ),
+    "transparency": (
+        "As a prospective partner, how clear is {company} about contracts, royalties and commercial terms?",
+        "As a prospective partner, is there a history of ambiguities or disputes in {company}'s partnerships?",
+    ),
+    "ethics": (
+        "As a prospective partner, how well does {company} honour its commitments to partners?",
+        "As a prospective partner, are there reports of missed commitments, contract breaches or unethical behaviour by {company}?",
+    ),
+    "development": (
+        "As a prospective partner, how does {company} develop its partnerships over time?",
+        "As a prospective partner, does {company}'s partner engagement feel transactional and short-term?",
+    ),
+    "community": (
+        "As a prospective partner, how does {company} engage with the wider industry and ecosystem?",
+        "As a prospective partner, is {company} an isolated player or an ecosystem builder?",
+    ),
+}
+
+_MEDIA_PROBES_EN: dict[str, tuple[str, str]] = {
+    "inclusion": (
+        "As a journalist, how does {company} handle representation and diversity in its communication and in its organisation?",
+        "As a journalist, is there a history of imprecise, stereotyped or exclusionary communication from {company}?",
+    ),
+    "wellbeing": (
+        "As a journalist, what is the media picture of the work environment at {company}?",
+        "As a journalist, has {company} been scrutinised over its work environment, bullying or staff treatment?",
+    ),
+    "transparency": (
+        "As a journalist, how accessible is {company} to media and how transparently do they communicate difficult topics?",
+        "As a journalist, is there a history of censorship, secrecy or PR spin from {company}?",
+    ),
+    "ethics": (
+        "As a journalist, does {company} have a history of ethical scandals, regulatory cases or investigations?",
+        "As a journalist, has {company} covered up or downplayed negative events in its media contacts?",
+    ),
+    "development": (
+        "As a journalist, what is {company} doing that is new, newsworthy and worth telling?",
+        "As a journalist, is {company} static and without a story to tell compared with competitors?",
+    ),
+    "community": (
+        "As a journalist, how does {company} engage with societal issues of public interest?",
+        "As a journalist, is there greenwashing or PR-driven societal communication from {company}?",
+    ),
+}
+
+_REGULATOR_PROBES_EN: dict[str, tuple[str, str]] = {
+    "inclusion": (
+        "As a regulator, does {company} comply with rules on diversity and anti-discrimination?",
+        "As a regulator, are there open cases or a history of breaches of equal-treatment legislation by {company}?",
+    ),
+    "wellbeing": (
+        "As a regulator, does {company} comply with rules on work environment, working hours and psychosocial health?",
+        "As a regulator, does {company} have a history of work-environment remarks, sanctions or accidents?",
+    ),
+    "transparency": (
+        "As a regulator, how well does {company} meet its reporting requirements and transparency obligations?",
+        "As a regulator, are there open investigations into {company} over reporting failures or lack of disclosure?",
+    ),
+    "ethics": (
+        "As a regulator, how well does {company} comply with the rules of its industry?",
+        "As a regulator, is there a history of rule-breaking, fines or sanctions against {company}?",
+    ),
+    "development": (
+        "As a regulator, how up to date is {company} with upcoming regulatory changes and industry standards?",
+        "As a regulator, does {company} risk falling behind upcoming regulations or standards?",
+    ),
+    "community": (
+        "As a regulator, how does {company} contribute to the societal goals its industry's rules are tied to?",
+        "As a regulator, does {company}'s conduct work against the public interests the rules protect?",
+    ),
+}
+
+_PATIENT_PROBES_EN: dict[str, tuple[str, str]] = {
+    "inclusion": (
+        "As a prospective patient, does {company} meet different patient groups with the same quality and respect?",
+        "As a prospective patient, are there warning signs of discriminatory or unequal treatment from {company}?",
+    ),
+    "wellbeing": (
+        "As a prospective patient, how does {company} look after the patient experience and wellbeing in care?",
+        "As a prospective patient, are there reports of poor care or low patient safety at {company}?",
+    ),
+    "transparency": (
+        "As a prospective patient, how transparent is {company} about treatment outcomes, waiting times and risks?",
+        "As a prospective patient, are there hidden costs, unclear treatment terms or lacking information from {company}?",
+    ),
+    "ethics": (
+        "As a prospective patient, how ethical are {company}'s care and information practices?",
+        "As a prospective patient, are there reports of over-treatment, mis-prioritisation or unethical handling by {company}?",
+    ),
+    "development": (
+        "As a prospective patient, how does {company} invest in better treatment methods, technology and evidence-based care?",
+        "As a prospective patient, is {company} behind other providers in methods, equipment or research collaborations?",
+    ),
+    "community": (
+        "As a prospective patient, how does {company} contribute to public health and medical research?",
+        "As a prospective patient, are there signals that {company} prioritises profit over patient value and public health?",
+    ),
+}
+
+_STUDENT_PROBES_EN: dict[str, tuple[str, str]] = {
+    "inclusion": (
+        "As a student or applicant, how does {company} work with diversity among students, faculty and course content?",
+        "As a student or applicant, are there warning signs of exclusion, glass ceilings or a dominant student culture at {company}?",
+    ),
+    "wellbeing": (
+        "As a student or applicant, how does {company} look after students' wellbeing, mental health and study pace?",
+        "As a student or applicant, are there reports of high stress levels, dropouts or lacking student support at {company}?",
+    ),
+    "transparency": (
+        "As a student or applicant, how transparent is {company} about admission requirements, graduation rates and costs?",
+        "As a student or applicant, are there hidden fees, unclear requirements or vague promises from {company}?",
+    ),
+    "ethics": (
+        "As a student or applicant, does {company} act ethically in marketing, admissions and grading?",
+        "As a student or applicant, are there reports of unethical research or teaching practices from {company}?",
+    ),
+    "development": (
+        "As a student or applicant, how well does {company} prepare its students for the job market and continued growth?",
+        "As a student or applicant, is {company}'s curriculum outdated or disconnected from real-world needs?",
+    ),
+    "community": (
+        "As a student or applicant, how does {company} engage with society and how does the education contribute to wider benefit?",
+        "As a student or applicant, is {company}'s alumni network and societal connection thin or non-existent?",
+    ),
+}
+
+_DONOR_PROBES_EN: dict[str, tuple[str, str]] = {
+    "inclusion": (
+        "As a prospective donor, how does {company}'s work reach different groups in need fairly?",
+        "As a prospective donor, is there a history of disadvantaging or selective recipient selection at {company}?",
+    ),
+    "wellbeing": (
+        "As a prospective donor, how does {company} look after its volunteers, employees and beneficiaries?",
+        "As a prospective donor, are there reports of poor care or work-environment problems within {company}?",
+    ),
+    "transparency": (
+        "As a prospective donor, how transparent is {company} about how funds are used and accounted for?",
+        "As a prospective donor, are there reports that {company} has poor accounting, high overhead costs or unclear use of capital?",
+    ),
+    "ethics": (
+        "As a prospective donor, does {company} act ethically in fundraising, communication and aid work?",
+        "As a prospective donor, does {company} have a history of unethical fundraising, misuse of funds or scandals?",
+    ),
+    "development": (
+        "As a prospective donor, how does {company} develop its work to achieve more impact per donated krona?",
+        "As a prospective donor, is {company} behind other organisations in methods, efficiency or impact measurement?",
+    ),
+    "community": (
+        "As a prospective donor, how does {company} create real societal change and how do they measure impact?",
+        "As a prospective donor, is {company}'s impact reporting unclear, exaggerated or without credible methodology?",
+    ),
+}
+
+_CITIZEN_PROBES_EN: dict[str, tuple[str, str]] = {
+    "inclusion": (
+        "As a citizen, how does {company} work with representation and inclusion of different societal groups?",
+        "As a citizen, are there reports that {company} overlooks, disadvantages or excludes certain societal groups?",
+    ),
+    "wellbeing": (
+        "As a citizen, how does {company} affect society's wellbeing, the environment and public health?",
+        "As a citizen, are there warning signs that {company} causes environmental, health or social harm?",
+    ),
+    "transparency": (
+        "As a citizen, how open is {company} about decisions, costs and consequences for society?",
+        "As a citizen, is there a history of secrecy, corrupt conduct or lacking information from {company}?",
+    ),
+    "ethics": (
+        "As a citizen, does {company} act ethically in relation to society and its interests?",
+        "As a citizen, does {company} have a history of aggressive lobbying, tax avoidance or other questionable conduct?",
+    ),
+    "development": (
+        "As a citizen, how does {company}'s work contribute to society's development and prosperity?",
+        "As a citizen, are there signals that {company} prioritises self-interest over wider societal benefit?",
+    ),
+    "community": (
+        "As a citizen, how does {company} engage locally and in wider societal issues?",
+        "As a citizen, is {company}'s community engagement genuine or forced by PR/regulatory pressure?",
+    ),
+}
+
+
 # --- Default-kanaler per persona (för receptmotorns Lager A) -----------------
 # Kanal-konstanterna definieras i services/gap_recipes.CHANNEL_* — vi använder
 # strängarna direkt här för att undvika cirkulär modulimport. Strängarna måste
@@ -487,6 +871,7 @@ _REGISTRY: tuple[CanonicalPersona, ...] = (
         description_sv="Återförsäljare, integratörer, leverantörer och samarbeten.",
         schema_audience_type="BusinessAudience",
         probe_templates=_PARTNER_PROBES,
+        probe_templates_en=_PARTNER_PROBES_EN,
         default_channels=(_CH_WEBSITE, _CH_PRESS, _CH_RSS, _CH_LINKEDIN),
         is_default=False,
     ),
@@ -496,6 +881,7 @@ _REGISTRY: tuple[CanonicalPersona, ...] = (
         description_sv="Journalister, branschanalytiker och bloggare.",
         schema_audience_type="MediaAudience",
         probe_templates=_MEDIA_PROBES,
+        probe_templates_en=_MEDIA_PROBES_EN,
         default_channels=(_CH_PRESS, _CH_RSS, _CH_ATTESTED, _CH_WIKIPEDIA),
         is_default=False,
     ),
@@ -505,6 +891,7 @@ _REGISTRY: tuple[CanonicalPersona, ...] = (
         description_sv="Tillsynsorgan, revisorer och branschorgan.",
         schema_audience_type="GovernmentAudience",
         probe_templates=_REGULATOR_PROBES,
+        probe_templates_en=_REGULATOR_PROBES_EN,
         default_channels=(_CH_ATTESTED, _CH_PRESS, _CH_WEBSITE),
         is_default=False,
     ),
@@ -514,6 +901,7 @@ _REGISTRY: tuple[CanonicalPersona, ...] = (
         description_sv="Personer som tar emot er vård eller behandling (vårdkontext).",
         schema_audience_type="Patient",
         probe_templates=_PATIENT_PROBES,
+        probe_templates_en=_PATIENT_PROBES_EN,
         default_channels=(_CH_WEBSITE, _CH_PRESS, _CH_ATTESTED),
         is_default=False,
     ),
@@ -523,6 +911,7 @@ _REGISTRY: tuple[CanonicalPersona, ...] = (
         description_sv="Sökande, nuvarande studenter och alumni (utbildningskontext).",
         schema_audience_type="EducationalAudience",
         probe_templates=_STUDENT_PROBES,
+        probe_templates_en=_STUDENT_PROBES_EN,
         default_channels=(_CH_WEBSITE, _CH_LINKEDIN, _CH_PRESS, _CH_ATTESTED),
         is_default=False,
     ),
@@ -532,6 +921,7 @@ _REGISTRY: tuple[CanonicalPersona, ...] = (
         description_sv="Filantropi, stiftelser och ideellt engagemang.",
         schema_audience_type="Donor",
         probe_templates=_DONOR_PROBES,
+        probe_templates_en=_DONOR_PROBES_EN,
         default_channels=(_CH_WEBSITE, _CH_PRESS, _CH_ATTESTED),
         is_default=False,
     ),
@@ -541,6 +931,7 @@ _REGISTRY: tuple[CanonicalPersona, ...] = (
         description_sv="Politiker, väljare och kommun-/regiondialog (offentlig sektor).",
         schema_audience_type="Citizen",
         probe_templates=_CITIZEN_PROBES,
+        probe_templates_en=_CITIZEN_PROBES_EN,
         default_channels=(_CH_PRESS, _CH_WEBSITE, _CH_RSS, _CH_ATTESTED),
         is_default=False,
     ),

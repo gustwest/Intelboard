@@ -25,10 +25,10 @@ Effort: **S** <½ dag · **M** ½–2 dagar · **L** >2 dagar.
 > L4 ✅ `627a2be3f` · Etapp 5-start F1+F3+F7 ✅ `49b427e56` · **F2 kontrollfrågor ✅**
 > `6ac9eb882` · **M3 dokumentram ✅** · **F5 domarstabilitet ✅** · **F6 NER-kvalitet ✅** ·
 > **F4 polling-språk sv/en ✅** · **F4b warmth-språkinfra ✅** (default-personor + språk-
-> nycklade warmth/baseline-dok) (principdok: `docs/fragedesign-principer.md`).
-> **Kvar (datagrindat/innehåll):** F4b-content (en-prober för 7 palett-personor),
-> E1-kalibrering av bandtrösklarna mot historik, F2:s inflationssiffra in i rapporten
-> när underlaget vuxit (≥4 kontrollbärande veckor).
+> nycklade warmth/baseline-dok) · **F4b-content ✅** (full en-täckning, alla 10 personor)
+> (principdok: `docs/fragedesign-principer.md`).
+> **Kvar (enbart datagrindat):** E1-kalibrering av bandtrösklarna mot historik, F2:s
+> inflationssiffra in i rapporten när underlaget vuxit (≥4 kontrollbärande veckor).
 
 ## 1. Genomfört — Etapp 0 (2026-06-11, commit `eab56ec26`)
 
@@ -182,7 +182,7 @@ Eget fokuserat arbetsspår: forskningsbaserat och optimerat över tid. Tre fråg
 - Åtgärd: språkval per kund i mätkonfig; engelska varianter av default-mallarna; resultat taggas med språk och medeltalas aldrig över språk (samma princip som bas-kunskap vs live-signal).
 - Status: **polling-spåret i drift.** `measurement_language` (sv/en) per kund i mätkonfig (skilt från profilspråket), engelska default- + kontrollfrågemallar (geografin "Swedish" behålls = samma marknad), engelsk systemram i `_ask`, resultat taggat med `language` och språk invävt i `questions_fingerprint` (språkbyte = jämförbarhetsbrott). Custom-frågor är språkagnostiska.
 - **F4b — warmth-spåret i drift (default-personor).** `persona_registry` har nu engelska prober för de tre default-personorna (customer/talent/investor); `probes_for(persona, lang)` väljer språk med sv-fallback. `warmth_probes` läser `measurement_language`, ställer engelska prober + canary + systemram, och persisterar till **språk-nyckladt** warmth-dokument (`{WARMTH_PROBE_DOC}-en`); EWMA-baselines lagras språk-separerat (`engine-baselines-en`) så engelsk perception aldrig kalibreras mot svensk baseline; `compute_trust_gap` läser rätt språkdokument. En en-mätning hoppar över personor utan en-prober (loggat) så spåret förblir rent. Svenska vägen byte-identisk (default sv → samma doknamn). De engelska baselines konvergerar automatiskt över veckor (EWMA-uppvärmning, inget manuellt).
-- **F4b-content (kvar):** engelska prober för de 7 palett-personorna (partner/media/regulator/patient/student/donor/citizen) — ren innehållsuppföljning; tills dess hoppas de över i en-mätningar.
+- **F4b-content ✅ (2026-06-11):** engelska prober för alla 7 palett-personorna (partner/media/regulator/patient/student/donor/citizen) — full en-täckning för hela paletten (10 personor × 6 dim × 2 vinklar). Ingen persona hoppas längre över i en-mätningar. `probes_for`-fallbacken är kvar som säkerhetsnät för framtida personor utan en-prober.
 - Filer: BE `services/polling.py` (DEFAULT_QUESTIONS_EN, CONTROL_QUESTIONS_EN, `_measurement_language`, `_substitutions`, språk i ask/fingerprint/PollingResult), `routers/clients.py` (measurement_language), `routers/polling.py`; FE `MeasurementConfigEditor.tsx` (språkväljare), `_shared.tsx`, `Panels.tsx`. Tester: `test_polling_sampling.py`, `test_clients_contact_language.py`.
 
 **F5 — Domarstabilitet synliggjord** `[P2 · S]` ✅ (2026-06-11)

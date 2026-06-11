@@ -70,10 +70,13 @@ class WarmthLanguageTest(unittest.TestCase):
         self.assertEqual(doc["measurement"]["language"], "sv")
         self.assertIn(hc.WARMTH_PROBE_DOC, fakefs.STATE["polling_results"])
 
-    def test_persona_without_english_probes_skipped(self):
-        # partner har inga en-prober → hoppas över i en-mätningen så spåret förblir rent.
-        doc, _ = _run(["customer", "partner"], language="en")
-        self.assertEqual(doc["measurement"]["personas"], ["customer"])
+    def test_palette_personas_fully_covered_in_english(self):
+        # F4b-content: alla palett-personor har nu en-prober → ingen hoppas över.
+        doc, engine = _run(["customer", "partner", "media"], language="en")
+        self.assertEqual(doc["measurement"]["personas"], ["customer", "partner", "media"])
+        all_q = " | ".join(engine.received_questions).lower()
+        self.assertIn("prospective partner", all_q)
+        self.assertIn("as a journalist", all_q)
 
     def test_english_canary_questions(self):
         _, engine = _run(["customer"], language="en")

@@ -53,10 +53,10 @@ frågor om synlighet — inte mallar som råkar ligga i koden.
   fingerprintet gör varje byte spårbart.
 - **Svenska först.** Engelska varianter (F4) införs som separat mätspår, aldrig
   poolat med svenska. **Polling- OCH warmth-spåren är i drift** (`measurement_language`
-  sv/en): engelska fråge-/kontrollmallar + engelska warmth-prober för default-personorna,
-  resultat taggade med språk. sv/en lagras i **skilda dokument** (warmth + EWMA-baselines
-  språk-nycklade) så perception aldrig kalibreras mot fel språks baseline. En-prober för
-  de 7 palett-personorna är en innehållsuppföljning (hoppas över i en-mätningar tills dess).
+  sv/en): engelska fråge-/kontrollmallar + engelska warmth-prober för HELA paletten
+  (alla 10 personor), resultat taggade med språk. sv/en lagras i **skilda dokument**
+  (warmth + EWMA-baselines språk-nycklade) så perception aldrig kalibreras mot fel språks
+  baseline. Full sv/en-täckning för både polling- och warmth-spåret.
 - **Domarstabilitet (F5) och person-NER-kvalitet i Parity (F6) är i drift** —
   `direction_stable` + full valens-fördelning surfas som konfidensnot; NER-kvalitet
   spåras anonymt (`parity_ner_quality`) med konfidensgrind på könsestimaten.
@@ -84,4 +84,7 @@ frågor om synlighet — inte mallar som råkar ligga i koden.
 - 2026-06-11: **F4b warmth-språkinfra i drift.** Engelska warmth-prober för default-
   personorna, `probes_for(persona, lang)` med sv-fallback, språk-nycklade warmth- och
   baseline-dokument (`-en`), `compute_trust_gap` läser rätt språk. Svenska vägen
-  byte-identisk. Kvar: en-prober för de 7 palett-personorna (innehåll).
+  byte-identisk.
+- 2026-06-11: **F4b-content i drift** — engelska prober för alla 7 palett-personorna
+  (partner/media/regulator/patient/student/donor/citizen). Full en-täckning: hela
+  paletten (10 personor × 6 dim × 2 vinklar) kan mätas på engelska.

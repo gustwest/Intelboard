@@ -163,20 +163,30 @@ class FirestoreSeedTest(unittest.TestCase):
 
 
 class ProbesForLanguageTest(unittest.TestCase):
-    """F4b: probes_for väljer mätspråk; default-personor har en-prober, övriga faller till sv."""
+    """F4b/F4b-content: probes_for väljer mätspråk; ALLA personor har nu en-prober,
+    och en persona utan en-prober faller tillbaka till sv."""
 
-    def test_default_personas_have_english(self):
-        for pid in ("customer", "talent", "investor"):
-            templates, eff = pr.probes_for(pr.get(pid), "en")
-            self.assertEqual(eff, "en", pid)
-            for _dim, (neutral, _adversarial) in templates.items():
+    def test_all_personas_have_full_english_coverage(self):
+        for persona in pr.all_personas():
+            templates, eff = pr.probes_for(persona, "en")
+            self.assertEqual(eff, "en", persona.id)
+            # Alla 6 dimensioner × neutral/adversariell, engelsk text, {company} kvar.
+            self.assertEqual(set(templates.keys()), set(hc.DIMENSIONS), persona.id)
+            for _dim, (neutral, adversarial) in templates.items():
                 self.assertIn("{company}", neutral)
-                self.assertNotIn("Som potentiell", neutral)
+                self.assertIn("{company}", adversarial)
+                self.assertNotIn("Som ", neutral)  # ingen svensk ramning kvar
 
-    def test_non_default_persona_falls_back_to_sv(self):
-        templates, eff = pr.probes_for(pr.get("partner"), "en")
+    def test_persona_without_english_falls_back_to_sv(self):
+        # Syntetisk persona utan en-prober → fallback till sv (säkerhetsnätet).
+        bare = pr.CanonicalPersona(
+            id="x", label_sv="X", description_sv="", schema_audience_type="Customer",
+            probe_templates={"ethics": ("sv neutral?", "sv adv?")},
+            default_channels=(), is_default=False,
+        )
+        templates, eff = pr.probes_for(bare, "en")
         self.assertEqual(eff, "sv")
-        self.assertIs(templates, pr.get("partner").probe_templates)
+        self.assertIs(templates, bare.probe_templates)
 
     def test_swedish_always_returns_swedish(self):
         templates, eff = pr.probes_for(pr.get("customer"), "sv")
