@@ -44,6 +44,28 @@ export function TrustGapCockpit({
   const trend = model.trend;
   // Kund-läge: defaulta kollapsad (mindre brus); Ops-läge: öppen (man behöver dykningen).
   const [open, setOpen] = useState(mode === 'ops');
+  const [showExplainer, setShowExplainer] = useState(false);
+
+  // E2: sortera dimensionerna efter |gap| (mest att göra överst); omätbara sist.
+  // Gap = AI:s valens − belagd evidens, samma kvantiteter som over-claim/möjlighets-
+  // badgarna använder, så sortering och badge alltid pekar åt samma håll.
+  const gapOf = (d: HumanizationDim): number | null => {
+    const raw = d.raw || {};
+    const demonstrated = typeof raw.demonstrated === 'number' ? raw.demonstrated : null;
+    const valence = typeof raw.perceived?.valence === 'number' ? raw.perceived.valence : null;
+    if (demonstrated == null || valence == null || raw.perceived?.status === 'not_visible') return null;
+    return valence - demonstrated;
+  };
+  const sortedDims = [...dims].sort((a, b) => {
+    const ga = gapOf(a), gb = gapOf(b);
+    if (ga == null && gb == null) return 0;
+    if (ga == null) return 1;
+    if (gb == null) return -1;
+    return Math.abs(gb) - Math.abs(ga);
+  });
+  const measurable = dims.map((d) => ({ d, gap: gapOf(d) })).filter((x): x is { d: HumanizationDim; gap: number } => x.gap != null);
+  const worstOver = measurable.filter((x) => x.gap > 0.2).sort((a, b) => b.gap - a.gap)[0] || null;
+  const bestOpp = measurable.filter((x) => x.gap < -0.2).sort((a, b) => a.gap - b.gap)[0] || null;
   // Recept per dimension för per-rad-badge i DimensionRow.
   const recipeByDimension = new Map<string, Recipe>();
   (recipes?.recipes || []).forEach((r) => {
@@ -62,14 +84,43 @@ export function TrustGapCockpit({
     <div style={{ ...cardStyle, marginBottom: 18 }}>
       <SectionHead
         title="Förtroendegap — säger, belägger, AI uppfattar"
-        hint={open ? "Tre lager per dimension: vad ni SÄGER om er själva, vad ni BELÄGGER med oberoende underlag, och hur AI UPPFATTAR er. Gap där emellan är handlingen — perception vägs aldrig in i poängen." : `${dims.length} dimensioner · ${ranked.length} öppna åtgärder`}
+        hint={open ? "Gapet mellan vad ni säger om er själva, vad ni kan bevisa och hur AI beskriver er. Positivt gap = AI överdriver er bild (trovärdighetsrisk om någon granskar); negativt gap = ni gör mer än som syns (berätta, så hinner AI ikapp)." : `${dims.length} dimensioner · ${ranked.length} öppna åtgärder`}
         collapsible
         open={open}
         onToggle={() => setOpen((o) => !o)}
       />
       {!open ? null : (
       <>
-      <p style={{ fontSize: 13, color: C.text, margin: '0 0 14px', lineHeight: 1.6 }}>{model.coverage_plain}</p>
+      <p style={{ fontSize: 13, color: C.text, margin: '0 0 8px', lineHeight: 1.6 }}>{model.coverage_plain}</p>
+
+      {/* E2: förklaringslager — modellen i klartext bakom en rad, för den som inte sett måttet förr */}
+      <button
+        onClick={() => setShowExplainer((s) => !s)}
+        style={{ padding: 0, marginBottom: 12, fontSize: 11, fontWeight: 600, color: C.muted, background: 'transparent', border: 'none', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3 }}
+      >
+        {showExplainer ? 'Dölj förklaringen' : 'Så funkar måttet ▾'}
+      </button>
+      {showExplainer && (
+        <div style={{ marginBottom: 14, padding: '10px 14px', background: 'rgba(106,126,138,0.05)', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, color: C.text, lineHeight: 1.6 }}>
+          <p style={{ margin: '0 0 6px' }}><strong>Säger</strong> (✓/—): finns det överhuvudtaget ett claim där ni påstår detta om er själva? Binärt.</p>
+          <p style={{ margin: '0 0 6px' }}><strong>Belägger</strong> (●): hur mycket <em>verifierad evidens</em> som finns — varje belagt claim viktas efter försäkringsnivå (oberoende verifierat väger mest, självdeklarerat minst).</p>
+          <p style={{ margin: '0 0 6px' }}><strong>AI uppfattar</strong> (○): hur varmt motorerna faktiskt beskriver er på dimensionen, mätt via persona-frågor och kalibrerat så att motorernas generella optimism räknas bort.</p>
+          <p style={{ margin: 0 }}>Pilen mellan ● och ○ är gapet. <span style={{ color: '#b45309', fontWeight: 600 }}>AI över beläggen</span> = trovärdighetsrisk — bilden håller inte om någon granskar. <span style={{ color: '#0e7490', fontWeight: 600 }}>Beläggen över AI</span> = möjlighet — ni underkommunicerar. Perception vägs aldrig in i beslutssäkerhets-poängen.</p>
+        </div>
+      )}
+
+      {/* E2: topp-sammanfattning — var ska man börja? */}
+      {(worstOver || bestOpp) && (
+        <div style={{ marginBottom: 14, padding: '10px 14px', background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.18)', borderRadius: 8, fontSize: 12, color: C.text, lineHeight: 1.6 }}>
+          {worstOver && (
+            <span><strong style={{ color: '#b45309' }}>Största trovärdighetsrisk:</strong> {worstOver.d.label}</span>
+          )}
+          {worstOver && bestOpp && <span style={{ color: C.dim }}> · </span>}
+          {bestOpp && (
+            <span><strong style={{ color: '#0e7490' }}>Största outnyttjade möjlighet:</strong> {bestOpp.d.label}</span>
+          )}
+        </div>
+      )}
 
       {trend?.previous_date && (
         <div style={{ fontSize: 12, color: C.muted, margin: '0 0 14px', lineHeight: 1.5 }}>
@@ -115,7 +166,7 @@ export function TrustGapCockpit({
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {dims.map((d) => (
+        {sortedDims.map((d) => (
           <DimensionRow
             key={d.dimension}
             dim={d}
@@ -135,11 +186,9 @@ export function DimensionRow({ dim, mode, recipe }: { dim: HumanizationDim; mode
   const declared = typeof raw.declared === 'number' ? raw.declared : null;
   const demonstrated = typeof raw.demonstrated === 'number' ? raw.demonstrated : null;
   const perceived = raw.perceived || null;
-  // Perceived som "AI ser er" = salience × valens-mappad till 0..1 (valens 0.5 = neutralt, 1 = positivt, 0 = svalt).
-  // Salience-golv 0.25 → annars "not visible" och inga staplar.
+  // Salience-golv 0.25 → annars "not visible" och inget gap att visa.
   const salience = typeof perceived?.salience === 'number' ? perceived.salience : null;
   const valence = typeof perceived?.valence === 'number' ? perceived.valence : null;
-  const perceivedBar = salience != null && salience >= 0.25 && valence != null ? salience * valence : null;
   const overClaim = demonstrated != null && perceived?.status !== 'not_visible' && valence != null && (valence - (demonstrated ?? 0)) > 0.2;
   const opportunity = demonstrated != null && valence != null && ((demonstrated ?? 0) - valence) > 0.2;
   return (
@@ -156,18 +205,17 @@ export function DimensionRow({ dim, mode, recipe }: { dim: HumanizationDim; mode
           )}
         </div>
       </div>
-      {mode === 'ops' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 10 }}>
-          <TrustBar label="Säger" value={declared} hint="0 / 1" tone="declared" />
-          <TrustBar label="Belägger" value={demonstrated} hint="0 → 1" tone="demonstrated" />
-          <TrustBar
-            label="AI uppfattar"
-            value={perceivedBar}
-            hint={perceived?.status === 'not_visible' ? 'AI ser er inte här ännu' : valence != null ? `salience ${salience?.toFixed(2) ?? '—'} · valens ${valence?.toFixed(2) ?? '—'}` : 'för lite synlighet'}
-            tone="perceived"
-          />
-        </div>
-      )}
+      {/* E2: gapet ÄR visualiseringen — dumbbell Belägger ● → AI uppfattar ○,
+          färgad efter riktning. "Säger" är binär i datat och visas som ✓/—. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10, flexWrap: 'wrap' }}>
+        <span
+          title="Säger: finns ett claim där ni påstår detta om er själva? (binärt)"
+          style={{ fontSize: 11, fontWeight: 600, color: declared ? C.text : C.dim, whiteSpace: 'nowrap', cursor: 'help' }}
+        >
+          Säger {declared ? '✓' : '—'}
+        </span>
+        <GapDumbbell demonstrated={demonstrated} valence={valence} salience={salience} notVisible={perceived?.status === 'not_visible'} />
+      </div>
       <div style={{ fontSize: 12, color: C.text, marginTop: 4, lineHeight: 1.5 }}>{dim.evidence_plain}</div>
       <div style={{ fontSize: 12, color: C.muted, marginTop: 4, lineHeight: 1.5 }}>{dim.perception_plain}</div>
       {dim.perception_by_engine.length > 0 && (() => {
@@ -432,22 +480,57 @@ export function InterventionStatusView({ intervention }: { intervention: Interve
   );
 }
 
-export function TrustBar({ label, value, hint, tone }: { label: string; value: number | null; hint?: string; tone: 'declared' | 'demonstrated' | 'perceived' }) {
-  const colors = {
-    declared: { fill: '#6b6e7e', track: 'rgba(106,126,138,0.14)' },
-    demonstrated: { fill: C.accent, track: 'rgba(224, 142, 121,0.14)' },
-    perceived: { fill: '#0e7490', track: 'rgba(14,116,144,0.14)' },
-  }[tone];
-  const pctVal = value != null ? Math.max(0, Math.min(1, value)) * 100 : 0;
+/**
+ * E2: dumbbell-diagram — en punkt för Belägger (●, evidens), en för AI uppfattar
+ * (○, kalibrerad valens), pilen mellan dem ÄR gapet. Färg efter riktning:
+ * AI över beläggen = trovärdighetsrisk (varning), beläggen över AI = möjlighet,
+ * i linje = neutral/grön. Inga råa 0–1-tal — riktningen sägs i ord.
+ */
+export function GapDumbbell({ demonstrated, valence, salience, notVisible }: {
+  demonstrated: number | null;
+  valence: number | null;
+  salience: number | null;
+  notVisible: boolean;
+}) {
+  if (notVisible || valence == null || salience == null || salience < 0.25) {
+    return (
+      <span style={{ fontSize: 11, color: C.dim, fontStyle: 'italic' }}>
+        AI ser er inte här ännu — inget gap att mäta förrän dimensionen blir synlig.
+      </span>
+    );
+  }
+  if (demonstrated == null) {
+    return <span style={{ fontSize: 11, color: C.dim, fontStyle: 'italic' }}>Evidensläget är inte beräknat för dimensionen.</span>;
+  }
+  const d = Math.max(0, Math.min(1, demonstrated));
+  const v = Math.max(0, Math.min(1, valence));
+  const gap = v - d;
+  const overClaim = gap > 0.2;
+  const opportunity = gap < -0.2;
+  const color = overClaim ? '#b45309' : opportunity ? '#0e7490' : '#16a34a';
+  const word = overClaim ? 'AI överdriver er bild här' : opportunity ? 'ni underkommunicerar — berätta mer' : 'bild och belägg i linje';
+  const leftPct = Math.min(d, v) * 100;
+  const widthPct = Math.abs(gap) * 100;
   return (
-    <div>
-      <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginBottom: 4 }}>{label}</div>
-      <div style={{ height: 8, background: colors.track, borderRadius: 4, overflow: 'hidden' }}>
-        {value != null && (
-          <div style={{ width: `${pctVal}%`, height: '100%', background: colors.fill, borderRadius: 4, transition: 'width .3s' }} />
+    <div style={{ flex: 1, minWidth: 220 }}>
+      <div style={{ position: 'relative', height: 14 }}>
+        <div style={{ position: 'absolute', top: 6, left: 0, right: 0, height: 2, background: 'rgba(106,126,138,0.18)', borderRadius: 1 }} />
+        {widthPct > 0.5 && (
+          <div style={{ position: 'absolute', top: 6, left: `${leftPct}%`, width: `${widthPct}%`, height: 2, background: color, borderRadius: 1 }} />
         )}
+        <span
+          title="Belägger — verifierad evidens (viktas efter försäkringsnivå)"
+          style={{ position: 'absolute', top: 3, left: `calc(${d * 100}% - 4px)`, width: 8, height: 8, borderRadius: '50%', background: C.accent, cursor: 'help' }}
+        />
+        <span
+          title="AI uppfattar — kalibrerad valens ur persona-proberna"
+          style={{ position: 'absolute', top: 2, left: `calc(${v * 100}% - 5px)`, width: 10, height: 10, borderRadius: '50%', background: '#fff', border: '2px solid #0e7490', boxSizing: 'border-box', cursor: 'help' }}
+        />
       </div>
-      <div style={{ fontSize: 10, color: C.dim, marginTop: 4 }}>{hint}</div>
+      <div style={{ fontSize: 10, color: C.dim, marginTop: 2 }}>
+        <span style={{ color: C.accent }}>●</span> Belägger · <span style={{ color: '#0e7490' }}>○</span> AI uppfattar ·{' '}
+        <span style={{ color, fontWeight: 600 }}>{word}</span>
+      </div>
     </div>
   );
 }
