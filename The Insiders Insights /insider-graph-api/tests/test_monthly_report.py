@@ -116,6 +116,35 @@ class BuildModelTest(unittest.TestCase):
         self.assertEqual(len(m["actions"]), 1)              # bara actioned
         self.assertEqual(m["actions"][0]["ammo_claim_ids"], ["corr-abc"])
 
+    def test_risk_block_one_canonical_list(self):
+        # M1 (beslut B3): EN risklista med statuskolumn — öppna först (efter allvar),
+        # sedan åtgärdade; avfärdade ingår aldrig.
+        _setup()
+        m = mr.build_report_model("acme", "2026-05")
+        block = m["risk_block"]
+        self.assertEqual([r["status"] for r in block], ["open", "open", "actioned"])
+        self.assertEqual(block[0]["severity"], "high")
+        self.assertIn("korrigering", block[2]["what_we_did"].lower())
+        self.assertIn("Ännu ej åtgärdad", block[0]["what_we_did"])
+
+    def test_html_renders_one_risk_block(self):
+        _setup()
+        m = mr.build_report_model("acme", "2026-05")
+        out = mr.render_report_html(m)
+        self.assertIn("Risker &amp; åtgärder", out)
+        self.assertIn("Vad vi gjorde", out)
+        self.assertNotIn("Detekterade risker", out)       # gamla dubbeltabellerna borta
+        self.assertNotIn("Vad vår mjukvara gjorde", out)
+
+    def test_html_old_report_without_block_falls_back(self):
+        # Äldre persisterade rapporter saknar risk_block → gamla tabellerna renderas.
+        _setup()
+        m = mr.build_report_model("acme", "2026-05")
+        m.pop("risk_block")
+        out = mr.render_report_html(m)
+        self.assertIn("Detekterade risker", out)
+        self.assertIn("Vad vår mjukvara gjorde", out)
+
     def test_parity_from_latest_week(self):
         _setup()
         m = mr.build_report_model("acme", "2026-05")
@@ -379,7 +408,8 @@ class RenderHtmlTest(unittest.TestCase):
         self.assertIn("God grund", html_out)                  # graderad nivå, ej binärt
         self.assertIn("Nästa steg", html_out)                 # alltid framåtblick
         self.assertIn("Tvister kring Acme?", html_out)        # detekterad risk
-        self.assertIn("reinforced_claim", html_out)           # åtgärd
+        # M1: åtgärden i klartext i riskblocket — inte den råa enum-koden (TC4)
+        self.assertIn("Källförsedd korrigering publicerad", html_out)
         self.assertIn("Förbättringsmöjligheter", html_out)    # alltid med
 
     def test_html_shows_resolved_and_series(self):

@@ -21,7 +21,6 @@ import {
   PERSONA_SV,
   LS_CLIENT,
   buildHero,
-  harmLabel,
   cardStyle,
   errorStyle,
 } from './_shared';
@@ -558,39 +557,26 @@ export default function GraphRiskLoopPage() {
             </div>
           )}
 
-          {/* 3. Risker vid rapporttillfället — pekare till RiskBoard (R5), ingen egen tabell */}
+          {/* 3. Risker & åtgärder i rapporten — ETT block (M1). HTML-rapporten har den
+              fulla kanoniska tabellen; fliken visar summeringen och pekar till RiskBoard
+              (R5) där samma kort hanteras. Ersätter "Detekterade risker" + "Vad mjukvaran
+              gjorde" som separata boxar. */}
           <div style={{ ...cardStyle, marginBottom: 16 }}>
-            <SectionHead title="Risker i rapporten" hint="Ögonblicksbilden vid rapporttillfället. Riskerna hanteras i risköversikten ovan — samma kort, hela livscykeln." />
-            {report.detected.length === 0 ? (
-              <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>Inga öppna risker i den här rapporten.</p>
+            <SectionHead title="Risker & åtgärder i rapporten" hint="Ögonblicksbilden vid rapporttillfället: öppna, åtgärdade och lösta i samma block. Den fulla tabellen finns i utskriftsvyn; korten hanteras i risköversikten ovan." />
+            {report.detected.length === 0 && report.resolved.count === 0 ? (
+              <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>Inga risker i den här rapporten — motorerna svarade säkert på alla godkända frågor.</p>
             ) : (
               <p style={{ fontSize: 13, color: C.text, margin: 0, lineHeight: 1.6 }}>
-                {report.detected.length} risk{report.detected.length === 1 ? '' : 'er'} ingick i rapporten
-                {reportOpenCount > 0 && reportOpenCount !== report.detected.length && ` (${reportOpenCount} fortfarande ${reportOpenCount === 1 ? 'öppen' : 'öppna'})`}
-                {reportOpenCount === 0 && ' — alla har hanterats sedan dess'}
+                <strong>{reportOpenCount} öppn{reportOpenCount === 1 ? 'en' : 'a'}</strong>
+                {' · '}{report.actions.length} åtgärdad{report.actions.length === 1 ? '' : 'e'}
+                {' · '}{report.resolved.count} löst{report.resolved.count === 1 ? '' : 'a'}
                 {'. '}
                 <a href="#risk-board" style={{ color: C.accent, fontWeight: 600, textDecoration: 'none' }}>
-                  Visa i risköversikten (filter "I månadsrapporten") ↑
+                  Visa korten i risköversikten (filter "I månadsrapporten") ↑
                 </a>
               </p>
             )}
           </div>
-
-          {/* 4. Vad mjukvaran gjorde */}
-          {report.actions.length > 0 && (
-            <div style={{ ...cardStyle, marginBottom: 16 }}>
-              <SectionHead title="Vad vår mjukvara gjorde" hint="Källförsedda korrigeringar som mött detekterade risker — publicerade i JSON-LD, FAQ och profilsida." />
-              {report.actions.map((a, i) => (
-                <div key={i} style={{ padding: '10px 0', borderBottom: i < report.actions.length - 1 ? `1px solid ${C.border}` : 'none' }}>
-                  <div style={{ fontSize: 13, color: C.text }}>{a.question || '—'}</div>
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
-                    {a.persona ? PERSONA_SV[a.persona] || a.persona : '—'} · {harmLabel(a.harm)} · {a.action_taken || 'åtgärdad'}
-                    {a.action_at ? ` · ${a.action_at.slice(0, 10)}` : ''}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
 
           {/* 5. Effekt över tid */}
           <div style={{ ...cardStyle, marginBottom: 16 }}>

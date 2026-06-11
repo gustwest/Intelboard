@@ -199,6 +199,11 @@ def build_report_model(client_id: str, month: str | None = None) -> dict[str, An
         "detected": detected,
         "actions": actions,
         "resolved": {"count": len(resolved_f), "items": [_finding_row(d) for d in resolved_f]},
+        # M1 (beslut B3): EN kanonisk risklista med statuskolumn — ersätter
+        # detected/actions/resolved som tre separata renderingar i rapporten.
+        # detected/actions/resolved behålls i modellen för bakåtkompatibilitet
+        # (frontendens what-if-koppling och äldre läsare).
+        "risk_block": _risk_block(open_f, actioned_f, resolved_f),
         "trend": trend,
         # Humaniseringstäckning som SEKTION i samma rapport (spec §10). None om trust_gap
         # ej beräknad än — sektionen visar då en upplysning, inte tomhet.
@@ -516,6 +521,38 @@ def _exposure(open_findings: list[dict], answers_by_persona: dict[str, int]) -> 
     return {"per_persona": per_persona, "total": total}
 
 
+RISK_BLOCK_STATUS_SV = {"open": "Öppen", "actioned": "Åtgärdad", "resolved": "Löst"}
+
+
+def _risk_block(open_f: list[dict], actioned_f: list[dict], resolved_f: list[dict]) -> list[dict[str, Any]]:
+    """M1: rapportens kanoniska riskblock — en rad per risk med status och "vad vi
+    gjorde", oavsett var i livscykeln den är. Avfärdade (sanna negativ) ingår inte;
+    de är ett internt beslut, inte en kundleverans. Sortering: öppna först (efter
+    allvar), sedan åtgärdade, sist lösta — läsordningen är att-göra → gjort → bevis."""
+    rows = []
+    for d in open_f + actioned_f + resolved_f:
+        status = d.get("status") if d.get("status") in ("actioned", "resolved") else "open"
+        if status == "actioned":
+            when = _iso(d.get("action_at"))
+            what = "Källförsedd korrigering publicerad" + (f" {when[:10]}" if when else "")
+        elif status == "resolved":
+            what = "Löst — motorn svarar nu säkert (två rena mätcykler i rad)"
+        else:
+            what = "Ännu ej åtgärdad"
+        rows.append({
+            "id": d.get("_id"),
+            "question": d.get("question"),
+            "persona": d.get("persona"),
+            "severity": d.get("severity"),
+            "harm": d.get("harm"),
+            "status": status,
+            "what_we_did": what,
+        })
+    order = {"open": 0, "actioned": 1, "resolved": 2}
+    rows.sort(key=lambda r: (order[r["status"]], -SEVERITY_WEIGHTS.get(r["severity"], 0)))
+    return rows
+
+
 def _finding_row(d: dict) -> dict[str, Any]:
     return {
         "id": d.get("_id"),  # låter UI:t peka ut en specifik risk att simulera (what-if)
@@ -677,6 +714,10 @@ Regler:
   aldrig garanti.
 - Exponera inget känsligt om kund eller tredje part.
 - Bygg ENBART på underlaget nedan — hitta inte på fakta.
+- När du nämner en risk: REFERERA den med dess fråga (citerad eller lätt förkortad) så
+  att läsaren hittar samma rad i rapportens risktabell — beskriv aldrig en risk i andra
+  ordalag än tabellens. Räkna inte upp alla risker i prosa; tabellen är inventariet,
+  narrativet förklarar de viktigaste.
 Returnera ENDAST JSON: {"narrative":"...text i markdown..."}"""
 
 
@@ -796,25 +837,59 @@ def render_report_html(report: dict[str, Any]) -> str:
     else:
         parity_line = "—."
 
-    detected_rows = "".join(
-        f"<tr><td>{PERSONA_SV.get(r.get('persona'), r.get('persona') or '')}</td>"
-        f"<td>{html.escape(r.get('question') or '')}</td>"
-        f"<td>{html.escape(r.get('engine') or '')}</td>"
-        f"<td>{_harm_label(r.get('harm'))}{' ↻' if r.get('via_follow_up') else ''}</td>"
-        f"<td>{html.escape(r.get('severity') or '')}</td>"
-        f"<td>{html.escape((r.get('engine_excerpt') or '')[:240])}</td>"
-        f"<td>{html.escape(r.get('status') or '')}</td></tr>"
-        for r in (report.get("detected") or [])
-    ) or "<tr><td colspan='7'>Inga detekterade risker.</td></tr>"
-    action_rows = "".join(
-        f"<tr><td>{PERSONA_SV.get(a.get('persona'), a.get('persona') or '')}</td>"
-        f"<td>{html.escape(a.get('question') or '')}</td>"
-        f"<td>{_harm_label(a.get('harm'))}</td>"
-        f"<td>{html.escape(a.get('action_taken') or '')}</td>"
-        f"<td>{html.escape(', '.join(a.get('ammo_claim_ids') or []))}</td>"
-        f"<td>{html.escape(a.get('action_at') or '')}</td></tr>"
-        for a in (report.get("actions") or [])
-    ) or "<tr><td colspan='6'>Inga åtgärder ännu.</td></tr>"
+    # M1 (beslut B3): ETT riskblock — Risk · Persona · Allvar · Status · Vad vi
+    # gjorde — istället för separata tabeller för detekterat/åtgärdat/löst.
+    # Äldre persisterade rapporter utan risk_block faller tillbaka på de gamla.
+    sev_sv = {"high": "Hög", "medium": "Medel", "low": "Låg"}
+    risk_block = report.get("risk_block")
+    if risk_block is not None:
+        block_rows = "".join(
+            f"<tr><td>{html.escape(r.get('question') or '')}"
+            f"<br><span class='note'>{_harm_label(r.get('harm'))}</span></td>"
+            f"<td>{PERSONA_SV.get(r.get('persona'), r.get('persona') or '')}</td>"
+            f"<td>{sev_sv.get(r.get('severity'), r.get('severity') or '—')}</td>"
+            f"<td>{RISK_BLOCK_STATUS_SV.get(r.get('status'), r.get('status') or '')}</td>"
+            f"<td>{html.escape(r.get('what_we_did') or '')}</td></tr>"
+            for r in risk_block
+        ) or "<tr><td colspan='5'>Inga risker den här månaden — motorerna svarade säkert på alla godkända frågor.</td></tr>"
+        risk_section = (
+            "<h2>Risker &amp; åtgärder</h2>"
+            "<p class='note'>Samtliga risker i rapporten — öppna, åtgärdade och lösta — i ett block. "
+            "Narrativet ovan refererar riskerna med deras fråga.</p>"
+            "<table><thead><tr><th>Risk (frågan motorn fick)</th><th>Persona</th><th>Allvar</th>"
+            "<th>Status</th><th>Vad vi gjorde</th></tr></thead>"
+            f"<tbody>{block_rows}</tbody></table>"
+        )
+    else:
+        detected_rows = "".join(
+            f"<tr><td>{PERSONA_SV.get(r.get('persona'), r.get('persona') or '')}</td>"
+            f"<td>{html.escape(r.get('question') or '')}</td>"
+            f"<td>{html.escape(r.get('engine') or '')}</td>"
+            f"<td>{_harm_label(r.get('harm'))}{' ↻' if r.get('via_follow_up') else ''}</td>"
+            f"<td>{html.escape(r.get('severity') or '')}</td>"
+            f"<td>{html.escape((r.get('engine_excerpt') or '')[:240])}</td>"
+            f"<td>{html.escape(r.get('status') or '')}</td></tr>"
+            for r in (report.get("detected") or [])
+        ) or "<tr><td colspan='7'>Inga detekterade risker.</td></tr>"
+        action_rows = "".join(
+            f"<tr><td>{PERSONA_SV.get(a.get('persona'), a.get('persona') or '')}</td>"
+            f"<td>{html.escape(a.get('question') or '')}</td>"
+            f"<td>{_harm_label(a.get('harm'))}</td>"
+            f"<td>{html.escape(a.get('action_taken') or '')}</td>"
+            f"<td>{html.escape(', '.join(a.get('ammo_claim_ids') or []))}</td>"
+            f"<td>{html.escape(a.get('action_at') or '')}</td></tr>"
+            for a in (report.get("actions") or [])
+        ) or "<tr><td colspan='6'>Inga åtgärder ännu.</td></tr>"
+        risk_section = (
+            "<h2>Detekterade risker</h2>"
+            "<table><thead><tr><th>Persona</th><th>Fråga</th><th>Motor</th><th>Skademodell</th>"
+            "<th>Allvar</th><th>Motorn sa</th><th>Status</th></tr></thead>"
+            f"<tbody>{detected_rows}</tbody></table>"
+            "<h2>Vad vår mjukvara gjorde</h2>"
+            "<table><thead><tr><th>Persona</th><th>Fråga</th><th>Skademodell</th><th>Åtgärd</th>"
+            "<th>Ammunition (claims)</th><th>Datum</th></tr></thead>"
+            f"<tbody>{action_rows}</tbody></table>"
+        )
 
     trend = report.get("trend") or {}
     resolved_count = trend.get("resolved_count", 0)
@@ -926,13 +1001,7 @@ GEO Parity Index (separat): {parity_line}</p>
 
 {narrative_html}
 
-<h2>Detekterade risker</h2>
-<table><thead><tr><th>Persona</th><th>Fråga</th><th>Motor</th><th>Skademodell</th><th>Allvar</th><th>Motorn sa</th><th>Status</th></tr></thead>
-<tbody>{detected_rows}</tbody></table>
-
-<h2>Vad vår mjukvara gjorde</h2>
-<table><thead><tr><th>Persona</th><th>Fråga</th><th>Skademodell</th><th>Åtgärd</th><th>Ammunition (claims)</th><th>Datum</th></tr></thead>
-<tbody>{action_rows}</tbody></table>
+{risk_section}
 
 <h2>Förbättringsmöjligheter</h2>
 {improvements_html}
