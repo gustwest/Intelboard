@@ -687,8 +687,6 @@ def _humanization_context(h: dict[str, Any] | None) -> dict[str, Any] | None:
 def render_report_html(report: dict[str, Any]) -> str:
     name = html.escape(report.get("company_name") or "")
     month = report.get("month") or ""
-    exp = report.get("risk_exposure") or {}
-    total = (exp.get("total") or {})
     # Parity v2: gap-rad när baseline finns; annars porträtterat tal; annars —.
     par = report.get("parity") or {}
     if par.get("gap") is not None:
@@ -708,11 +706,6 @@ def render_report_html(report: dict[str, Any]) -> str:
     else:
         parity_line = "—."
 
-    persona_rows = "".join(
-        f"<tr><td>{PERSONA_SV.get(p, p)}</td><td class='num'>{_fmt_score(v.get('score'))}</td>"
-        f"<td class='num'>{v.get('weighted', 0)}</td><td class='num'>{v.get('answers', 0)}</td></tr>"
-        for p, v in (exp.get("per_persona") or {}).items()
-    )
     detected_rows = "".join(
         f"<tr><td>{PERSONA_SV.get(r.get('persona'), r.get('persona') or '')}</td>"
         f"<td>{html.escape(r.get('question') or '')}</td>"
@@ -833,11 +826,8 @@ ledningsgruppsrapport utanför verktyget. Inga kausalitetspåståenden — formu
 <p>{verdict}</p>
 <p><strong>Nästa steg:</strong> {html.escape(conf.get('next_step') or '')}</p>
 <p class="note">Graderad skala 0–100 (högre är bättre). Toppen (100) hålls medvetet öppen —
-GEO är aldrig "klart" eftersom AI-motorerna ständigt uppdateras. Tekniskt undermått
-Risk Exposure: {_fmt_score(total.get('score'))} (lägre är bättre).
+GEO är aldrig "klart" eftersom AI-motorerna ständigt uppdateras.
 GEO Parity Index (separat): {parity_line}</p>
-<table><thead><tr><th>Persona</th><th class="num">Risk Exposure</th><th class="num">Vägt</th><th class="num">Svar</th></tr></thead>
-<tbody>{persona_rows}</tbody></table>
 
 <h2>Styrkor (uppsida)</h2>
 {strengths_html}
@@ -1020,10 +1010,6 @@ def _ul(items: list | None, empty: str) -> str:
 
 def _fmt_int(v: Any) -> str:
     return "—" if v is None else str(v)
-
-
-def _fmt_score(s: Any) -> str:
-    return "—" if s is None else f"{s:.3f}".rstrip("0").rstrip(".")
 
 
 def _harm_label(harm: Any) -> str:
