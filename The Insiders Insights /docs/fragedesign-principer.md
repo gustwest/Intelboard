@@ -52,8 +52,13 @@ frågor om synlighet — inte mallar som råkar ligga i koden.
   skiften; kvartalsvis mallöversyn med arkiverad motivering är rutinen (F3),
   fingerprintet gör varje byte spårbart.
 - **Svenska först.** Engelska varianter (F4) införs som separat mätspår, aldrig
-  poolat med svenska.
-- **Domarstabilitet** (F5) och **person-NER-kvalitet i Parity** (F6) återstår.
+  poolat med svenska. **Polling-spåret är i drift** (`measurement_language` sv/en,
+  engelska default-/kontrollfrågemallar, resultat taggat med språk, språk i fingerprint).
+  Warmth-proberna (F4b) mäts tills vidare på svenska — engelska kräver författade prober
+  + egna per-motor-baselines (språkspecifika), ett eget mätspår som inte poolas.
+- **Domarstabilitet (F5) och person-NER-kvalitet i Parity (F6) är i drift** —
+  `direction_stable` + full valens-fördelning surfas som konfidensnot; NER-kvalitet
+  spåras anonymt (`parity_ner_quality`) med konfidensgrind på könsestimaten.
 
 ## Rutin
 
@@ -69,5 +74,9 @@ frågor om synlighet — inte mallar som råkar ligga i koden.
 - 2026-06-11: **F2 i drift** — kontrollfrågor (egen `kontroll`-kategori) mäts varje
   vecka, exkluderas ur rubrik-SoV/per-motor/sentiment/paritet, och inflationen
   summeras över ≥4 veckor (`services/sov_inflation.py`) med underlagsgrind. Visas som
-  läsanvisning i cockpiten. Kvar: F4 (sv/en), F5 (domarstabilitet), F6 (NER-audit) +
-  inflationssiffran in i rapporten när underlaget vuxit.
+  läsanvisning i cockpiten.
+- 2026-06-11: **F5 + F6 + F4 (polling-spåret) i drift.** F5: domarstabilitet
+  (`direction_stable`, `valence_runs`) → konfidensnot. F6: anonymt NER-kvalitetsaggregat
+  + konfidensgrind (`CONFIDENT_BEARERS`). F4: `measurement_language` sv/en med engelska
+  fråge-/kontrollmallar, taggat resultat, språk i fingerprint. Kvar: F4b (engelska
+  warmth-prober + en-baselines) + inflationssiffran in i rapporten när underlaget vuxit.

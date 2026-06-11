@@ -212,6 +212,47 @@ CONTROL_QUESTIONS: list[str] = [
     "Beskriv marknaden för {service_area} i Sverige.",
 ]
 
+# F4 — engelska frågespår. Citerbarhet är motor- och språkspecifik (GEO-evidensen):
+# samma kund kan ge en annan synlighetsbild på engelska. Geografin ("Swedish") behålls
+# så att det är SAMMA marknad mätt på ett annat språk. Resultaten taggas med språk och
+# medeltalas ALDRIG över språk (samma princip som bas-kunskap vs live-signal). Custom-
+# frågor är språkagnostiska (kund-författade) och påverkas inte av språkvalet.
+DEFAULT_QUESTIONS_EN: dict[str, list[str]] = {
+    "affar": [
+        "Which are the leading Swedish companies in {industry}?",
+        "Which companies would you recommend for {service_area}?",
+        "Who are the experts to follow within {topic} in Sweden?",
+    ],
+    "finans": [
+        "Which are the best investment opportunities in {industry} in Sweden right now?",
+        "Which Swedish companies have the strongest growth within {topic}?",
+        "Which companies in {industry} are worth following from a financial perspective?",
+    ],
+    "innovation": [
+        "Who are the pioneers within {topic} in Sweden?",
+        "Which companies are driving development within {industry}?",
+        "Which Swedish startups or companies work with {topic}?",
+    ],
+    "hr": [
+        "Which are the most attractive employers in {industry} in Sweden?",
+        "Which companies offer the best career opportunities within {topic}?",
+        "Which Swedish companies in {industry} are known for a strong company culture?",
+    ],
+}
+CONTROL_QUESTIONS_EN: list[str] = [
+    "Which companies operate within {industry} in Sweden?",
+    "What can you tell me about {topic} in Sweden?",
+    "Describe the market for {service_area} in Sweden.",
+]
+
+SUPPORTED_MEASUREMENT_LANGUAGES = ("sv", "en")
+
+
+def _measurement_language(client: dict[str, Any]) -> str:
+    """Kundens mätspråk för polling (sv default). Skilt från profilspråket (identitet)."""
+    lang = client.get("measurement_language")
+    return lang if lang in SUPPORTED_MEASUREMENT_LANGUAGES else "sv"
+
 
 @dataclass
 class QuestionAnswer:
@@ -267,6 +308,9 @@ class PollingResult:
     # F6 (frågedesign): anonymt NER-/könsestimat-kvalitetsaggregat (inga namn) — recognized,
     # low_confidence, low_confidence_share, unknown_share, names_seen. Audit-signal för paritet.
     parity_ner_quality: dict[str, Any] | None = None
+    # F4 (frågedesign): mätspråk (sv/en) frågorna ställdes på. Resultat medeltalas ALDRIG
+    # över språk — språkbyte bryter jämförbarheten (ingår i questions_fingerprint).
+    language: str = "sv"
 
 
 def run_for_client(client_id: str) -> PollingResult | None:
@@ -290,8 +334,9 @@ def run_for_client(client_id: str) -> PollingResult | None:
     employees = list(fs.iter_employees(client_id))
     employee_names = [emp.get("name", "") for _, emp in employees if emp.get("name")]
 
+    language = _measurement_language(client)
     runs = _runs_per_query()
-    answers = _collect_answers(questions, models, runs)
+    answers = _collect_answers(questions, models, runs, language)
 
     for ans in answers:
         ans.mentioned = _has_mention(ans.answer, company_name, employee_names)
@@ -330,16 +375,17 @@ def run_for_client(client_id: str) -> PollingResult | None:
             )
 
     result = _aggregate(client_id, company_name, answers, client.get("parity_baseline"), runs)
-    result.questions_fingerprint = _questions_fingerprint(questions)
+    result.language = language
+    result.questions_fingerprint = _questions_fingerprint(questions, language)
     _write(result)
     return result
 
 
-def _questions_fingerprint(questions: list[tuple[str, str]]) -> str:
-    """F3: stabil hash av det resolved frågesettet (kategori|text, sorterat).
-    Ändras frågorna mellan veckor markerar UI:t ett jämförbarhetsbrott."""
+def _questions_fingerprint(questions: list[tuple[str, str]], language: str = "sv") -> str:
+    """F3: stabil hash av det resolved frågesettet (kategori|text, sorterat) + språk (F4).
+    Ändras frågorna ELLER språket mellan veckor markerar UI:t ett jämförbarhetsbrott."""
     joined = "\n".join(f"{cat}|{text}" for cat, text in sorted(questions))
-    return hashlib.sha1(joined.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha1(f"{language}\n{joined}".encode("utf-8")).hexdigest()[:16]
 
 
 def _build_questions(client: dict[str, Any]) -> list[tuple[str, str]]:
@@ -366,26 +412,38 @@ def _build_questions(client: dict[str, Any]) -> list[tuple[str, str]]:
         out.extend(_control_questions(client))
         return out
 
-    industry = client.get("industry") or "branschen"
-    topic = client.get("topic") or "deras områden"
-    service_area = client.get("service_area") or "deras tjänster"
-    substitutions = {"industry": industry, "topic": topic, "service_area": service_area}
+    lang = _measurement_language(client)
+    substitutions = _substitutions(client)
 
+    templates = DEFAULT_QUESTIONS_EN if lang == "en" else DEFAULT_QUESTIONS
     out = []
-    for category, qs in DEFAULT_QUESTIONS.items():
+    for category, qs in templates.items():
         for q in qs:
             out.append((category, q.format(**substitutions)))
     out.extend(_control_questions(client))
     return out
 
 
+def _substitutions(client: dict[str, Any]) -> dict[str, str]:
+    """Substitutionsvärden för frågemallarna, med språkanpassade fallbacks (F4)."""
+    if _measurement_language(client) == "en":
+        return {
+            "industry": client.get("industry") or "their industry",
+            "topic": client.get("topic") or "their areas",
+            "service_area": client.get("service_area") or "their services",
+        }
+    return {
+        "industry": client.get("industry") or "branschen",
+        "topic": client.get("topic") or "deras områden",
+        "service_area": client.get("service_area") or "deras tjänster",
+    }
+
+
 def _control_questions(client: dict[str, Any]) -> list[tuple[str, str]]:
-    """F2: de neutralt inramade kontrollfrågorna med substitutioner ifyllda."""
-    industry = client.get("industry") or "branschen"
-    topic = client.get("topic") or "deras områden"
-    service_area = client.get("service_area") or "deras tjänster"
-    substitutions = {"industry": industry, "topic": topic, "service_area": service_area}
-    return [(CONTROL_CATEGORY, q.format(**substitutions)) for q in CONTROL_QUESTIONS]
+    """F2: de neutralt inramade kontrollfrågorna med substitutioner ifyllda (F4: språkval)."""
+    substitutions = _substitutions(client)
+    templates = CONTROL_QUESTIONS_EN if _measurement_language(client) == "en" else CONTROL_QUESTIONS
+    return [(CONTROL_CATEGORY, q.format(**substitutions)) for q in templates]
 
 
 def resolve_polling_questions(client: dict[str, Any]) -> dict[str, Any]:
@@ -395,10 +453,10 @@ def resolve_polling_questions(client: dict[str, Any]) -> dict[str, Any]:
     custom_raw = client.get("polling_questions")
     is_custom = isinstance(custom_raw, dict) and any(custom_raw.values()) if custom_raw else False
 
-    industry = client.get("industry") or "branschen"
-    topic = client.get("topic") or "deras områden"
-    service_area = client.get("service_area") or "deras tjänster"
-    substitutions = {"industry": industry, "topic": topic, "service_area": service_area}
+    lang = _measurement_language(client)
+    substitutions = _substitutions(client)
+    default_templates = DEFAULT_QUESTIONS_EN if lang == "en" else DEFAULT_QUESTIONS
+    control_templates = CONTROL_QUESTIONS_EN if lang == "en" else CONTROL_QUESTIONS
 
     by_category: dict[str, list[dict[str, Any]]] = {}
     if is_custom:
@@ -407,7 +465,7 @@ def resolve_polling_questions(client: dict[str, Any]) -> dict[str, Any]:
             for q in (qs or []):
                 by_category[category].append({"text": q, "source": "custom"})
     else:
-        for category, qs in DEFAULT_QUESTIONS.items():
+        for category, qs in default_templates.items():
             by_category[category] = [
                 {"text": q.format(**substitutions), "source": "default"} for q in qs
             ]
@@ -415,7 +473,7 @@ def resolve_polling_questions(client: dict[str, Any]) -> dict[str, Any]:
     # F2: kontrollfrågorna mäts alltid (egen kategori, källa "control") — visas i panelen
     # så ops ser att inflationen mäts och med vilka neutrala frågor.
     by_category[CONTROL_CATEGORY] = [
-        {"text": q.format(**substitutions), "source": "control"} for q in CONTROL_QUESTIONS
+        {"text": q.format(**substitutions), "source": "control"} for q in control_templates
     ]
 
     return {
@@ -426,6 +484,8 @@ def resolve_polling_questions(client: dict[str, Any]) -> dict[str, Any]:
         # F3: när mätkontexten senast sågs över (None = aldrig sedan fältet infördes)
         # — driver staleness-flaggan i frågepanelen.
         "config_updated_at": client.get("measurement_config_updated_at"),
+        # F4: mätspråk (sv/en) — visas i panelen; custom-frågor är språkagnostiska.
+        "language": lang,
     }
 
 
@@ -447,6 +507,7 @@ def _collect_answers(
     questions: list[tuple[str, str]],
     models: dict[str, Any],
     runs: int = 1,
+    language: str = "sv",
 ) -> list[QuestionAnswer]:
     """Parallell ask-fas med per-anrop-timeout. Worker-tråden anropar _safe_ask som
     daemon-skyddar den faktiska LLM-anropet — om gpt-4o/gemini hänger kommer worker
@@ -471,7 +532,7 @@ def _collect_answers(
         futures = {}
         for category, q, model_name, llm, run_idx in tasks:
             task_ctx = contextvars.copy_context()
-            fut = pool.submit(task_ctx.run, _safe_ask, q, llm, model_name)
+            fut = pool.submit(task_ctx.run, _safe_ask, q, llm, model_name, language)
             futures[fut] = (category, q, model_name, run_idx)
         for fut in as_completed(futures):
             category, question, model_name, run_idx = futures[fut]
@@ -489,24 +550,34 @@ def _collect_answers(
     return results
 
 
-def _safe_ask(question: str, llm: Any, model_name: str) -> str:
+def _safe_ask(question: str, llm: Any, model_name: str, language: str = "sv") -> str:
     """Timeout-skyddat _ask. Returnerar "" om LLM-klienten hänger eller felar."""
     return _call_with_timeout(
-        lambda: _ask(question, llm),
+        lambda: _ask(question, llm, language),
         timeout=POLLING_ASK_TIMEOUT_SEC,
         default="",
         what=f"ask[{model_name}]",
     )
 
 
-def _ask(question: str, llm: Any) -> str:
+# F4: systemramen på mätspråket. Geografin ("Swedish/svensk") behålls så att en engelsk
+# mätning gäller samma marknad, bara på ett annat språk (citerbarhet är språkspecifik).
+_ASK_SYSTEM = {
+    "sv": (
+        "Du är en sakkunnig svensk affärsanalytiker. Svara koncist (max 200 ord), "
+        "konkret och lista de mest relevanta bolagen och personerna med namn."
+    ),
+    "en": (
+        "You are a knowledgeable business analyst covering the Swedish market. Answer "
+        "concisely (max 200 words), concretely, and list the most relevant companies and "
+        "people by name."
+    ),
+}
+
+
+def _ask(question: str, llm: Any, language: str = "sv") -> str:
     msg = [
-        SystemMessage(
-            content=(
-                "Du är en sakkunnig svensk affärsanalytiker. Svara koncist (max 200 ord), "
-                "konkret och lista de mest relevanta bolagen och personerna med namn."
-            )
-        ),
+        SystemMessage(content=_ASK_SYSTEM.get(language, _ASK_SYSTEM["sv"])),
         HumanMessage(content=question),
     ]
     resp = llm.invoke(msg)
@@ -872,6 +943,8 @@ def _write(result: PollingResult) -> None:
             "framing_inflation": result.framing_inflation,
             # F6 — anonymt NER-/könsestimat-kvalitetsaggregat (audit-signal, inga namn)
             "parity_ner_quality": result.parity_ner_quality,
+            # F4 — mätspråk frågorna ställdes på (sv/en); aldrig poolat över språk
+            "language": result.language,
             "run_at": firestore.SERVER_TIMESTAMP,
         }
     )

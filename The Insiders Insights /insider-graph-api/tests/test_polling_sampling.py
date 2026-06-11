@@ -177,6 +177,42 @@ class ControlQuestionInflationTest(unittest.TestCase):
         self.assertIn(polling.CONTROL_CATEGORY, cats)
 
 
+class MeasurementLanguageTest(unittest.TestCase):
+    """F4: sv/en-frågespår per kund; resultat taggas och medeltalas aldrig över språk."""
+
+    def test_default_language_is_sv(self):
+        self.assertEqual(polling._measurement_language({}), "sv")
+        self.assertEqual(polling._measurement_language({"measurement_language": "de"}), "sv")
+        self.assertEqual(polling._measurement_language({"measurement_language": "en"}), "en")
+
+    def test_english_uses_english_templates(self):
+        sv = polling._build_questions({"industry": "fintech"})
+        en = polling._build_questions({"industry": "fintech", "measurement_language": "en"})
+        sv_text = " ".join(t for _, t in sv)
+        en_text = " ".join(t for _, t in en)
+        self.assertIn("Vilka", sv_text)
+        self.assertIn("Which", en_text)
+        self.assertNotIn("Vilka", en_text)
+        # Samma struktur (kategorier + kontroll), bara annat språk.
+        self.assertEqual({c for c, _ in sv}, {c for c, _ in en})
+
+    def test_english_control_questions_neutral(self):
+        en = polling._control_questions({"industry": "fintech", "measurement_language": "en"})
+        self.assertTrue(all(c == polling.CONTROL_CATEGORY for c, _ in en))
+        self.assertTrue(any("Which companies operate" in t for _, t in en))
+
+    def test_fingerprint_differs_by_language(self):
+        qs_sv = polling._build_questions({"industry": "x"})
+        qs_en = polling._build_questions({"industry": "x", "measurement_language": "en"})
+        fp_sv = polling._questions_fingerprint(qs_sv, "sv")
+        fp_en = polling._questions_fingerprint(qs_en, "en")
+        self.assertNotEqual(fp_sv, fp_en)
+
+    def test_resolve_reports_language(self):
+        resolved = polling.resolve_polling_questions({"industry": "x", "measurement_language": "en"})
+        self.assertEqual(resolved["language"], "en")
+
+
 class SourceSplitTest(unittest.TestCase):
     """P2: SoV separeras per knowledge_source (training vs web_rag), aldrig poolat till ETT tal."""
 

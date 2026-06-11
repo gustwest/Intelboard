@@ -132,7 +132,7 @@ export function PollingQuestionsPanel({ data, clientId, mode, onOpenSettings }: 
         title={data.is_custom ? 'Synlighets-frågor — mäter Share of Voice (egna)' : 'Synlighets-frågor — mäter Share of Voice (default)'}
         hint={open
           ? "Veckovis polling kör dessa frågor mot AI-motorerna och mäter hur ofta kunden nämns — de driver Share of Voice (skilt från risk-frågorna ovan som mäter beslutssäkerhet). Default-frågorna fylls med kundens industry/topic/service_area — du kan ersätta dem med egna via Mätningskonfig på kunddetalj."
-          : `${data.total} synlighets-${data.total === 1 ? 'fråga' : 'frågor'} mäts varje vecka · ${categories.length} kategorier${data.is_custom ? ' · egna' : ' · default-templates'}`
+          : `${data.total} synlighets-${data.total === 1 ? 'fråga' : 'frågor'} mäts varje vecka · ${categories.length} kategorier${data.is_custom ? ' · egna' : ' · default-templates'}${data.language === 'en' ? ' · på engelska' : ''}`
         }
         collapsible
         open={open}

@@ -583,6 +583,8 @@ export type PollingQuestionsResp = {
   total: number;
   // F3: när mätkontexten senast sågs över (null = aldrig sedan fältet infördes)
   config_updated_at?: string | null;
+  // F4: mätspråk frågorna ställs på (sv/en). Default sv.
+  language?: 'sv' | 'en';
 };
 
 // --- Förtroendegap-cockpit (speglar services/trust_gap_report.py — översättningslagret §10.1) ---

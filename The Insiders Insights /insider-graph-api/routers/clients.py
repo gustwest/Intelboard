@@ -97,6 +97,9 @@ class ClientConfigUpdate(BaseModel):
     # Profilsidans språk (BCP 47-bas). Default sv. Driver i18n + inLanguage på
     # profilsida/JSON-LD. Tom sträng = återgå till default (sv).
     language: str | None = None
+    # F4 — mätspråk för polling (sv/en), skilt från profilspråket ovan. Styr vilka
+    # default-frågemallar som ställs varje vecka. Tom sträng = återgå till default (sv).
+    measurement_language: str | None = None
     # Paritets-baseline (Parity v2): polling snapshotar fältet varje vecka och
     # räknar parity_gap = porträtterad − baseline. None = rör inte fältet;
     # {value: None} = rensa.
@@ -177,6 +180,8 @@ def get_client(client_id: str) -> dict[str, Any]:
         "service_area": data.get("service_area"),
         "risk_personas": data.get("risk_personas") or list(MEASUREMENT_PERSONAS),
         "polling_questions": data.get("polling_questions") or {},
+        # F4 — mätspråk för polling (sv/en), skilt från profilspråket ovan. Default sv.
+        "measurement_language": data.get("measurement_language") or DEFAULT_LANGUAGE,
         # Konkurrenter (GEO-riskloop §5.1 svaga ledtrådar). [] om aldrig satt.
         "competitors": data.get("competitors") or [],
         # Kundkontakt för leverans-utskick (Spår B). None om aldrig satt.
@@ -316,6 +321,15 @@ def update_client_config(client_id: str, payload: ClientConfigUpdate) -> dict[st
         if lang and lang not in SUPPORTED_LANGUAGES:
             raise HTTPException(400, f"unsupported language: {lang}")
         update["language"] = lang or None  # tom = återgå till default (sv)
+
+    if payload.measurement_language is not None:
+        mlang = payload.measurement_language.strip().lower()
+        if mlang and mlang not in SUPPORTED_LANGUAGES:
+            raise HTTPException(400, f"unsupported measurement_language: {mlang}")
+        # F4: byte av mätspråk är en mätkonfig-ändring → stämpla så staleness/fingerprint
+        # speglar det (frågesettet byter språk = jämförbarhetsbrott i veckovyn).
+        update["measurement_language"] = mlang or None  # tom = återgå till default (sv)
+        update["measurement_config_updated_at"] = datetime.now(timezone.utc).isoformat()
 
     if payload.parity_baseline is not None:
         pb = payload.parity_baseline

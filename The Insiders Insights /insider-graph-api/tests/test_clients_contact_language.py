@@ -61,6 +61,40 @@ class ContactLanguageConfigTest(unittest.TestCase):
         self.assertEqual(clients_router.get_client("acme")["language"], "sv")
 
 
+class MeasurementLanguageConfigTest(unittest.TestCase):
+    """F4: mätspråk (sv/en) per kund, skilt från profilspråket."""
+
+    def test_default_is_sv(self):
+        fakefs.reset(client={"company_name": "Acme AB"})
+        out = clients_router.get_client("acme")
+        self.assertEqual(out["measurement_language"], "sv")
+
+    def test_save_measurement_language(self):
+        fakefs.reset(client={"company_name": "Acme AB"})
+        clients_router.update_client_config(
+            "acme", clients_router.ClientConfigUpdate(measurement_language="en")
+        )
+        stored = fakefs.STATE["client"]
+        self.assertEqual(stored["measurement_language"], "en")
+        # Språkbyte stämplar mätkonfig (staleness/fingerprint).
+        self.assertIn("measurement_config_updated_at", stored)
+
+    def test_rejects_unsupported(self):
+        fakefs.reset(client={"company_name": "Acme AB"})
+        with self.assertRaises(HTTPException) as ctx:
+            clients_router.update_client_config(
+                "acme", clients_router.ClientConfigUpdate(measurement_language="de")
+            )
+        self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_independent_from_profile_language(self):
+        # Profilspråk en, mätspråk sv (default) — de är skilda fält.
+        fakefs.reset(client={"company_name": "Acme AB", "language": "en"})
+        out = clients_router.get_client("acme")
+        self.assertEqual(out["language"], "en")
+        self.assertEqual(out["measurement_language"], "sv")
+
+
 class MultiContactTest(unittest.TestCase):
     """N2: flera kontaktpersoner med exakt en huvudkontakt; huvudkontakten speglas till
     legacy contact_email/contact_name så kit/månadsmejl fungerar oförändrat."""

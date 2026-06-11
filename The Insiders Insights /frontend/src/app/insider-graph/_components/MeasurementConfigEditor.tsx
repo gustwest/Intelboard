@@ -25,6 +25,7 @@ type ClientConfig = {
   service_area: string | null;
   risk_personas: string[];
   polling_questions: Record<string, string[]>;
+  measurement_language?: string | null;
 };
 
 /** Per-kund mätkonfiguration (AI-synlighet): bransch-platshållare, personas, egna pollingfrågor. */
@@ -33,6 +34,7 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
   const [industry, setIndustry] = useState('');
   const [topic, setTopic] = useState('');
   const [serviceArea, setServiceArea] = useState('');
+  const [language, setLanguage] = useState('sv');  // F4: mätspråk för polling
   const [personas, setPersonas] = useState<string[]>([]);
   const [questions, setQuestions] = useState<Record<string, string[]>>({});
   const [dirty, setDirty] = useState(false);
@@ -49,6 +51,7 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
         setIndustry(d.industry || '');
         setTopic(d.topic || '');
         setServiceArea(d.service_area || '');
+        setLanguage(d.measurement_language || 'sv');
         setPersonas(d.risk_personas || []);
         setQuestions(d.polling_questions || {});
         setLoaded(true);
@@ -94,6 +97,7 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
           service_area: serviceArea,
           risk_personas: PERSONAS.map((p) => p.id).filter((id) => personas.includes(id)),
           polling_questions: cleaned,
+          measurement_language: language,
         }),
       });
       setDirty(false);
@@ -130,6 +134,23 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
         <div style={{ fontSize: 12, color: C.muted }}>Laddar…</div>
       ) : (
         <>
+          {/* F4: mätspråk — styr vilket default-frågebatteri (sv/en) som ställs varje vecka.
+              Skilt från profilsidans språk. Byte markeras som jämförbarhetsbrott i veckovyn. */}
+          <div style={{ marginBottom: 18 }}>
+            <UI.FieldLabel>Mätspråk (frågespråk)</UI.FieldLabel>
+            <select
+              value={language}
+              onChange={(e) => { setLanguage(e.target.value); setDirty(true); }}
+              style={{ ...inp, width: 220, cursor: 'pointer' }}
+            >
+              <option value="sv">Svenska</option>
+              <option value="en">Engelska</option>
+            </select>
+            <p style={{ fontSize: 11, color: C.dim, margin: '6px 0 0' }}>
+              Citerbarhet är språkspecifik — engelska kan ge en annan synlighetsbild. Resultat medeltalas aldrig över språk; byte bryter trendjämförbarheten. Egna frågor nedan är språkagnostiska.
+            </p>
+          </div>
+
           {/* Bransch-platshållare — fyller {industry}/{topic}/{service_area} i default-frågorna */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 18 }}>
             <div>

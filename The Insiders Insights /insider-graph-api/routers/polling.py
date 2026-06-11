@@ -172,6 +172,8 @@ def list_results(client_id: str, limit: int = 12) -> dict[str, Any]:
                 "framing_inflation": data.get("framing_inflation"),
                 # F6 — anonymt NER-kvalitetsaggregat (None för veckor före omläggningen)
                 "parity_ner_quality": data.get("parity_ner_quality"),
+                # F4 — mätspråk frågorna ställdes på (default sv för veckor före omläggningen)
+                "language": data.get("language") or "sv",
                 "per_engine": _aggregate_per_engine(data.get("raw_responses") or []),
             }
         )
