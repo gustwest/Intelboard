@@ -412,33 +412,108 @@ def _improvements(open_findings, answers_by_persona, parity=None) -> list[str]:
     return out
 
 
+# --- Exponerings-band (E1, utvecklingsplan 2026-06-11, beslut B2) -------------
+#
+# Kvoten poäng/svar är obegränsad (kan bli 14+) och lästes som procent. Den
+# klassas därför i BAND med en insiktsmening i klartext — kvoten exponeras
+# aldrig som siffra mot användare. Trösklarna nedan är dokumenterade start-
+# värden på poäng-per-svar (en (1) hög-risk per 4 svar ≈ "Hög"); kalibrering
+# mot historisk fördelning över kunder är planerad uppföljning (E1-kalibrering).
+EXPOSURE_MIN_ANSWERS = 5  # färre svar → "insufficient": klassa aldrig på tunt underlag
+EXPOSURE_BANDS: tuple[tuple[float, str, str], ...] = (
+    (0.25, "low", "Låg"),
+    (0.75, "elevated", "Förhöjd"),
+    (1.50, "high", "Hög"),
+    (float("inf"), "critical", "Kritisk"),
+)
+
+
+def _exposure_band(ratio: float) -> tuple[str, str]:
+    for limit, band, label in EXPOSURE_BANDS:
+        if ratio < limit:
+            return band, label
+    return "critical", "Kritisk"  # pragma: no cover — inf-gränsen täcker allt
+
+
+def _sev_phrase(sev: dict[str, int]) -> str:
+    parts = []
+    if sev["high"]:
+        parts.append(f"{sev['high']} allvarlig{'a' if sev['high'] != 1 else ''}")
+    if sev["medium"]:
+        parts.append(f"{sev['medium']} medel")
+    if sev["low"]:
+        parts.append(f"{sev['low']} låg{'a' if sev['low'] != 1 else ''}")
+    return " och ".join([", ".join(parts[:-1]), parts[-1]]) if len(parts) > 1 else (parts[0] if parts else "")
+
+
+def _persona_exposure_entry(weighted: int, answers: int, sev: dict[str, int]) -> dict[str, Any]:
+    """Ett per-persona-block: rådatat (bakåtkompatibelt) + band + insikt (E1)."""
+    entry: dict[str, Any] = {
+        "weighted": weighted,
+        "answers": answers,
+        "score": round(weighted / answers, 3) if answers else None,
+        "severities": sev,
+    }
+    if answers == 0:
+        entry.update(band="unmeasured", band_label="Ej mätt",
+                     insight="Ingen mätning än — personan har inga uppmätta svar.")
+        return entry
+    if answers < EXPOSURE_MIN_ANSWERS:
+        entry.update(band="insufficient", band_label="Otillräckligt mätt",
+                     insight=f"Bara {answers} svar uppmätt{'a' if answers != 1 else ''} — för tunt underlag "
+                             "för att klassa exponeringen. Godkänn fler frågor eller kör fler mätcykler.")
+        return entry
+    ratio = weighted / answers
+    band, label = _exposure_band(ratio)
+    entry.update(band=band, band_label=label)
+    n_open = sum(sev.values())
+    if n_open == 0:
+        entry["insight"] = f"Inga öppna risker på {answers} svar."
+        return entry
+    insight = f"{_sev_phrase(sev)} öppen risk{'er' if n_open != 1 else ''} på {answers} svar."
+    # Projektion: vart tar bandet vägen om de allvarliga riskerna löses?
+    if sev["high"]:
+        projected_band, projected_label = _exposure_band(
+            (weighted - SEVERITY_WEIGHTS["high"] * sev["high"]) / answers
+        )
+        if projected_band != band:
+            insight += f" Att lösa de allvarliga tar exponeringen till {projected_label}."
+    entry["insight"] = insight
+    return entry
+
+
 def _exposure(open_findings: list[dict], answers_by_persona: dict[str, int]) -> dict[str, Any]:
-    """Severity-vägd andel svar med skademodell, per persona och totalt. Andel kräver
-    en denominator (körningens svar); saknas den redovisas vikten utan andel (score=None)."""
+    """Severity-vägd exponering per persona och totalt: rådata (weighted/answers/score,
+    bakåtkompatibelt) + band och insiktsmening (E1) — UI och rapport visar bandet och
+    insikten, aldrig den obegränsade kvoten."""
     weighted = {p: 0 for p in PERSONAS}
+    severities = {p: {"high": 0, "medium": 0, "low": 0} for p in PERSONAS}
     for d in open_findings:
         p = d.get("persona")
         if p in weighted:
+            sev = d.get("severity") if d.get("severity") in ("high", "medium", "low") else "low"
             weighted[p] += SEVERITY_WEIGHTS.get(d.get("severity"), 1)
+            severities[p][sev] += 1
 
-    per_persona = {}
-    for p in PERSONAS:
-        denom = int(answers_by_persona.get(p, 0) or 0)
-        per_persona[p] = {
-            "weighted": weighted[p],
-            "answers": denom,
-            "score": round(weighted[p] / denom, 3) if denom else None,
-        }
-    total_weighted = sum(weighted.values())
-    total_answers = sum(int(v or 0) for v in answers_by_persona.values())
-    return {
-        "per_persona": per_persona,
-        "total": {
-            "weighted": total_weighted,
-            "answers": total_answers,
-            "score": round(total_weighted / total_answers, 3) if total_answers else None,
-        },
+    per_persona = {
+        p: _persona_exposure_entry(weighted[p], int(answers_by_persona.get(p, 0) or 0), severities[p])
+        for p in PERSONAS
     }
+    total_weighted = sum(weighted.values())
+    total_sev = {
+        k: sum(severities[p][k] for p in PERSONAS) for k in ("high", "medium", "low")
+    }
+    total_answers = sum(int(v or 0) for v in answers_by_persona.values())
+    total = _persona_exposure_entry(total_weighted, total_answers, total_sev)
+    # Koncentrations-insikt på totalen: pekar ut personan som bär huvuddelen av vikten.
+    if total_weighted > 0:
+        dominant = max(PERSONAS, key=lambda p: weighted[p])
+        if weighted[dominant] / total_weighted > 0.6:
+            total["insight"] = (
+                f"Exponeringen är koncentrerad till {PERSONA_SV.get(dominant, dominant)}: "
+                f"{weighted[dominant]} av {total_weighted} riskpoäng. " + (total.get("insight") or "")
+            ).strip()
+    return {"per_persona": per_persona, "total": total}
 
 
 def _finding_row(d: dict) -> dict[str, Any]:
@@ -687,6 +762,21 @@ def _humanization_context(h: dict[str, Any] | None) -> dict[str, Any] | None:
 def render_report_html(report: dict[str, Any]) -> str:
     name = html.escape(report.get("company_name") or "")
     month = report.get("month") or ""
+    # M2 steg 2 (E1): exponering som band + insikt i klartext — aldrig den
+    # obegränsade kvoten. Äldre rapporter utan band-fält får ingen sektion alls.
+    exp = report.get("risk_exposure") or {}
+    exposure_rows = "".join(
+        f"<li><strong>{PERSONA_SV.get(p, p)}: {html.escape(v.get('band_label') or '—')}</strong>"
+        f"{' — ' + html.escape(v['insight']) if v.get('insight') else ''}</li>"
+        for p, v in (exp.get("per_persona") or {}).items()
+        if v.get("band")
+    )
+    exposure_html = (
+        "<h2>Risk-exponering</h2>"
+        "<p class='note'>Öppna riskers allvarlighet vägd mot mätunderlaget, klassad "
+        "Låg–Kritisk. Klassas inte alls på tunt underlag.</p>"
+        f"<ul>{exposure_rows}</ul>"
+    ) if exposure_rows else ""
     # Parity v2: gap-rad när baseline finns; annars porträtterat tal; annars —.
     par = report.get("parity") or {}
     if par.get("gap") is not None:
@@ -828,6 +918,8 @@ ledningsgruppsrapport utanför verktyget. Inga kausalitetspåståenden — formu
 <p class="note">Graderad skala 0–100 (högre är bättre). Toppen (100) hålls medvetet öppen —
 GEO är aldrig "klart" eftersom AI-motorerna ständigt uppdateras.
 GEO Parity Index (separat): {parity_line}</p>
+
+{exposure_html}
 
 <h2>Styrkor (uppsida)</h2>
 {strengths_html}

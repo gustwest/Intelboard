@@ -112,7 +112,18 @@ export type WhatIfResult = {
   resolved_count: number;
 };
 
-export type PersonaExposure = { weighted: number; answers: number; score: number | null };
+// E1: band + insikt genereras i backend (monthly_report._exposure); rapporter byggda
+// före E1 saknar fälten → UI:t faller tillbaka på riskpoäng/svar-visningen.
+export type ExposureBand = 'unmeasured' | 'insufficient' | 'low' | 'elevated' | 'high' | 'critical';
+export type PersonaExposure = {
+  weighted: number;
+  answers: number;
+  score: number | null;
+  band?: ExposureBand;
+  band_label?: string;
+  insight?: string;
+  severities?: { high: number; medium: number; low: number };
+};
 
 export type Finding = {
   id: string | null;

@@ -59,6 +59,55 @@ class BuildModelTest(unittest.TestCase):
         self.assertEqual(exp["total"]["weighted"], 5)
         self.assertEqual(exp["total"]["score"], 0.333)
 
+    def test_exposure_bands_and_insights(self):
+        # E1 (beslut B2): kvoten klassas i band + insiktsmening, exponeras aldrig rå.
+        _setup()
+        m = mr.build_report_model("acme", "2026-05")
+        exp = m["risk_exposure"]
+        # investor: 1 hög (0.3 poäng/svar) → Förhöjd; projektionen visar vägen till Låg
+        inv = exp["per_persona"]["investor"]
+        self.assertEqual(inv["band"], "elevated")
+        self.assertEqual(inv["severities"], {"high": 1, "medium": 0, "low": 0})
+        self.assertIn("Låg", inv["insight"])
+        # customer: 5 svar = precis nog underlag; 0.4 → Förhöjd
+        self.assertEqual(exp["per_persona"]["customer"]["band"], "elevated")
+        # talent: inga svar → Ej mätt
+        self.assertEqual(exp["per_persona"]["talent"]["band"], "unmeasured")
+
+    def test_exposure_insufficient_on_thin_data(self):
+        # 14 riskpoäng på 1 svar (gamla "1413%") klassas INTE — flaggas som tunt underlag.
+        findings = [
+            {"persona": "investor", "severity": "high"} for _ in range(4)
+        ] + [{"persona": "investor", "severity": "medium"}]
+        out = mr._exposure(findings, {"investor": 1})
+        inv = out["per_persona"]["investor"]
+        self.assertEqual(inv["band"], "insufficient")
+        self.assertIn("tunt underlag", inv["insight"])
+
+    def test_exposure_clean_run_is_low(self):
+        out = mr._exposure([], {"investor": 10, "customer": 8, "talent": 6})
+        self.assertEqual(out["per_persona"]["investor"]["band"], "low")
+        self.assertIn("Inga öppna risker", out["per_persona"]["investor"]["insight"])
+        self.assertEqual(out["total"]["band"], "low")
+
+    def test_exposure_concentration_in_total(self):
+        findings = [
+            {"persona": "investor", "severity": "high"},
+            {"persona": "investor", "severity": "high"},
+            {"persona": "customer", "severity": "low"},
+        ]
+        out = mr._exposure(findings, {"investor": 10, "customer": 10, "talent": 0})
+        self.assertIn("koncentrerad", out["total"]["insight"])
+
+    def test_html_exposure_shows_band_never_raw_ratio(self):
+        _setup()
+        m = mr.build_report_model("acme", "2026-05")
+        out = mr.render_report_html(m)
+        self.assertIn("Risk-exponering", out)
+        self.assertIn("Förhöjd", out)
+        self.assertNotIn("Risk Exposure", out)   # gamla undermåtts-raden borta
+        self.assertNotIn("0.333", out)           # kvoten läcker inte ut
+
     def test_detected_and_actions(self):
         _setup()
         m = mr.build_report_model("acme", "2026-05")

@@ -33,6 +33,7 @@ import { WeeklyVisibility } from './_components/WeeklyVisibility';
 import { CompetitorSurface } from './_components/CompetitorSurface';
 import { TrustGapCockpit } from './_components/TrustGapCockpit';
 import { RiskBoard } from './_components/RiskBoard';
+import { ExposureScale } from './_components/ExposureScale';
 
 export default function GraphRiskLoopPage() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -515,37 +516,41 @@ export default function GraphRiskLoopPage() {
             )}
           </div>
 
-          {/* 2. Risk-exponering per persona. OBS: backendens score = allvarlighets-
-              poäng/svar — en OBEGRÄNSAD kvot, inte en procentandel (kan bli 14+ vid
-              få svar). Visas därför som poäng + underlag, aldrig som %, med
-              tunt-underlag-flagg när nämnaren är liten (UX-audit p.11). */}
+          {/* 2. Risk-exponering per persona — bandskala + insikt (E1, beslut B2).
+              Rapporter byggda före E1 saknar band → fallback: riskpoäng + underlag.
+              Den obegränsade kvoten visas aldrig. */}
           {exposure && (
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginBottom: 8 }}>
                 Risk-exponering per persona
                 <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: 8 }}>
-                  — öppna riskers allvarlighetspoäng (hög 3 · medel 2 · låg 1) mot antal uppmätta svar
+                  — öppna riskers allvarlighet vägd mot mätunderlaget; klassas inte på tunt underlag
                 </span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
                 {PERSONAS.map((p) => {
                   const e = exposure.per_persona[p];
-                  const measured = !!e && e.answers > 0;
-                  const thin = measured && e.answers < 5;
                   return (
                     <div key={p} style={cardStyle}>
                       <div style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>
                         {PERSONA_SV[p]}
                       </div>
-                      <div style={{ fontSize: 28, fontWeight: 600, color: C.text, marginTop: 8, letterSpacing: '-0.02em' }}>
-                        {measured ? e.weighted : '—'}
-                        {measured && <span style={{ fontSize: 13, fontWeight: 500, color: C.muted, marginLeft: 6 }}>riskpoäng</span>}
-                      </div>
-                      <div style={{ fontSize: 12, color: thin ? '#b45309' : C.dim, marginTop: 4 }}>
-                        {measured
-                          ? `på ${e.answers} svar${thin ? ' · tunt underlag — tolka med försiktighet' : ''}`
-                          : 'Ej mätt än'}
-                      </div>
+                      {e?.band ? (
+                        <ExposureScale exposure={e} />
+                      ) : (
+                        // Äldre rapport utan band — interimsvisning (aldrig %)
+                        <>
+                          <div style={{ fontSize: 28, fontWeight: 600, color: C.text, marginTop: 8, letterSpacing: '-0.02em' }}>
+                            {e && e.answers > 0 ? e.weighted : '—'}
+                            {e && e.answers > 0 && <span style={{ fontSize: 13, fontWeight: 500, color: C.muted, marginLeft: 6 }}>riskpoäng</span>}
+                          </div>
+                          <div style={{ fontSize: 12, color: C.dim, marginTop: 4 }}>
+                            {e && e.answers > 0
+                              ? `på ${e.answers} svar${e.answers < 5 ? ' · tunt underlag — tolka med försiktighet' : ''}`
+                              : 'Ej mätt än'}
+                          </div>
+                        </>
+                      )}
                     </div>
                   );
                 })}
