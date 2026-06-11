@@ -170,6 +170,8 @@ def list_results(client_id: str, limit: int = 12) -> dict[str, Any]:
                 "questions_fingerprint": data.get("questions_fingerprint"),
                 # F2 — synlighetsinflation denna vecka (None för veckor före omläggningen)
                 "framing_inflation": data.get("framing_inflation"),
+                # F6 — anonymt NER-kvalitetsaggregat (None för veckor före omläggningen)
+                "parity_ner_quality": data.get("parity_ner_quality"),
                 "per_engine": _aggregate_per_engine(data.get("raw_responses") or []),
             }
         )

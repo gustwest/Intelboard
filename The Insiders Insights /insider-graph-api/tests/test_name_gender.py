@@ -82,6 +82,47 @@ class AggregateTest(unittest.TestCase):
         self.assertNotIn("anna", flat)
         self.assertNotIn("svensson", flat)
 
+    def test_quality_fields_present(self):
+        # F6: kvalitetsaggregatet finns och är konsekvent (recognized = n + low_confidence).
+        agg = name_gender.aggregate(["Anna", "Erik", "Xqzylophant"])
+        self.assertEqual(agg["recognized"], agg["n"] + agg["low_confidence"])
+        self.assertAlmostEqual(agg["unknown_share"], 1 / 3)  # 1 av 3 okänd
+        self.assertIn("low_confidence_share", agg)
+
+    def test_quality_fields_carry_no_names(self):
+        agg = name_gender.aggregate(["Anna Svensson", "Erik Berg"])
+        flat = repr(agg).casefold()
+        for token in ("anna", "erik", "svensson", "berg"):
+            self.assertNotIn(token, flat)
+
+
+class ConfidenceGateTest(unittest.TestCase):
+    """F6: lågkonfidenta (för få bärare) hålls utanför pariteten, spåras separat."""
+
+    def test_low_bearer_name_excluded_from_parity(self):
+        # Hitta ett namn i datan med bärartal i [MIN_BEARERS, CONFIDENT_BEARERS).
+        table = name_gender._load()
+        rare = next(
+            (nm for nm, (w, m) in table.items()
+             if name_gender.MIN_BEARERS <= (w + m) < name_gender.CONFIDENT_BEARERS),
+            None,
+        )
+        self.assertIsNotNone(rare, "förväntade minst ett tunt namn i SCB-datan")
+        # estimate() ger fortfarande ett värde (bakåtkompat), men aggregate räknar det
+        # som lågkonfident och utanför pariteten.
+        self.assertIsNotNone(name_gender.estimate(rare))
+        agg = name_gender.aggregate([rare])
+        self.assertEqual(agg["n"], 0)
+        self.assertEqual(agg["low_confidence"], 1)
+        self.assertEqual(agg["recognized"], 1)
+        self.assertIsNone(agg["parity"])
+        self.assertEqual(agg["unknown_share"], 0.0)  # igenkänd, inte okänd
+
+    def test_confident_name_still_counts(self):
+        agg = name_gender.aggregate(["Anna"])
+        self.assertEqual(agg["n"], 1)
+        self.assertEqual(agg["low_confidence"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

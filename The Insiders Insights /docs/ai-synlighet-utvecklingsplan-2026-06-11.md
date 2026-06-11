@@ -185,10 +185,10 @@ Eget fokuserat arbetsspår: forskningsbaserat och optimerat över tid. Tre fråg
 - Åtgärd: `_judge_verdict_calibrated` loggar nu `valence_runs` (full fördelning) + `direction_stable` (första-mot-sista-verdikt inom tröskeln `_DIRECTION_DELTA_MAX=0.25`). Instabiliteten propageras konservativt (AND över motorer/personor) upp till `perceived` och surfas som konfidensnot i cockpiten via `_confidence_note` ("Domaren skiftade riktning mellan körningarna…"). Cockpiten renderade redan `confidence_note` — ingen FE-ändring krävdes.
 - Filer: BE `services/warmth_probes.py` (`_judge_verdict_calibrated`, `_aggregate_by_engine`, `_aggregate_with_personas`), `services/trust_gap_report.py` (`_confidence_note`). Tester: `test_warmth_probes_calibration.py`, `test_trust_gap_report.py`.
 
-**F6 — Parity-NER-kvalitet** `[P2 · S]`
+**F6 — Parity-NER-kvalitet** `[P2 · S]` ✅ (2026-06-11)
 - Problem: person-NER:ns träffsäkerhet (särskilt icke-svenska namn) är oauditerad; brus går rakt in i Parity-siffran.
-- Åtgärd: periodiskt anonymiserat stickprov av extraherade namn (kvalitetskontroll inom DPA-ramen — aggregat, inga persisterade namn) + konfidenströskel på könsestimat (droppa lågkonfidenta).
-- Filer: BE `services/polling.py` (`_extract_persons`), `name_gender`-aggregatet.
+- Åtgärd: (a) `name_gender.aggregate` returnerar nu ett anonymt kvalitetsaggregat (`recognized`, `low_confidence`, `low_confidence_share`, `unknown_share`) — inga namn, persisteras som `parity_ner_quality` i veckoresultatet + i routern; en spik i `unknown_share` (>50 %) loggar en audit-varning. (b) Konfidensgrind `CONFIDENT_BEARERS=25`: igenkända men tunt underbyggda estimat hålls utanför pariteten (det är bärartalet, inte unisex-graden, som avgör — unisexa namn med gott om bärare behålls och sannolikhetsvägs som förut).
+- Filer: BE `services/name_gender.py` (`_estimate_detail`, konfidensgrind i `aggregate`), `services/polling.py` (`parity_ner_quality` + audit-logg), `routers/polling.py`. Tester: `test_name_gender.py`.
 
 **F7 — Forskningsbas & dokumenterade principer** `[P1 · S, sedan löpande]`
 - Problem: frågedesignens principer finns bara implicit i koden.

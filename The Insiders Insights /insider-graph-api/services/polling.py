@@ -264,6 +264,9 @@ class PollingResult:
     # framed_n, control_n}. Batteri-SoV mot neutralt kontroll-SoV; summeras över ≥4 veckor
     # i services/sov_inflation.py till en läsanvisning. None för veckor före omläggningen.
     framing_inflation: dict[str, Any] | None = None
+    # F6 (frågedesign): anonymt NER-/könsestimat-kvalitetsaggregat (inga namn) — recognized,
+    # low_confidence, low_confidence_share, unknown_share, names_seen. Audit-signal för paritet.
+    parity_ner_quality: dict[str, Any] | None = None
 
 
 def run_for_client(client_id: str) -> PollingResult | None:
@@ -712,6 +715,23 @@ def _aggregate(
     parity_n = int(parity_agg["n"])
     parity_ci = _wilson_ci95(parity, parity_n)
 
+    # F6 — anonymt NER-/estimat-kvalitetsstickprov (inga namn): hur stor andel av de
+    # AI-nämnda namnen som matchade SCB, var lågkonfidenta (utanför pariteten) resp.
+    # var helt okända. En spik i unknown_share signalerar NER-brus eller många icke-
+    # svenska namn → trigger för audit. Bara aggregat — namnen är redan släppta.
+    parity_ner_quality = {
+        "recognized": int(parity_agg.get("recognized", parity_n)),
+        "low_confidence": int(parity_agg.get("low_confidence", 0)),
+        "low_confidence_share": round(float(parity_agg.get("low_confidence_share", 0.0)), 4),
+        "unknown_share": round(float(parity_agg.get("unknown_share", 0.0)), 4),
+        "names_seen": len(all_persons),
+    }
+    if parity_ner_quality["unknown_share"] > 0.5 and len(all_persons) >= 5:
+        log.warning(
+            "polling %s: hög andel okända person-namn (%.0f%% av %d) — NER-kvalitet bör auditeras",
+            client_id, parity_ner_quality["unknown_share"] * 100, len(all_persons),
+        )
+
     baseline = parity_baseline if isinstance(parity_baseline, dict) else None
     baseline_value = baseline.get("value") if baseline else None
     if not isinstance(baseline_value, (int, float)) or not (0.0 <= float(baseline_value) <= 1.0):
@@ -796,6 +816,7 @@ def _aggregate(
         parity_baseline=baseline,
         parity_gap=gap,
         framing_inflation=framing_inflation,
+        parity_ner_quality=parity_ner_quality,
     )
 
 
@@ -849,6 +870,8 @@ def _write(result: PollingResult) -> None:
             "questions_fingerprint": result.questions_fingerprint,
             # F2 — synlighetsinflation (batteri vs neutral kontroll) denna vecka
             "framing_inflation": result.framing_inflation,
+            # F6 — anonymt NER-/könsestimat-kvalitetsaggregat (audit-signal, inga namn)
+            "parity_ner_quality": result.parity_ner_quality,
             "run_at": firestore.SERVER_TIMESTAMP,
         }
     )

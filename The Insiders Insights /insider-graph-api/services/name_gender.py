@@ -36,6 +36,15 @@ _DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "scb_fornamn_2022
 # bärare ger ingen statistiskt meningsfull könsfördelning.
 MIN_BEARERS = 5
 
+# F6 — konfidensgrind för paritetsaggregatet. Ett estimat som vilar på få bärare är
+# statistiskt opålitligt ÄVEN om proportionen råkar vara skarp (5 bärare 5/0 → "1.0"
+# men en enda till bärare kan vippa den). Det är BÄRARTALET, inte unisex-graden, som
+# avgör konfidensen — unisexa namn med gott om bärare (Kim) behålls och sannolikhetsvägs,
+# precis som modulens grunddesign. Namn mellan MIN_BEARERS och detta tak räknas som
+# igenkända men lågkonfidenta och hålls utanför pariteten (spåras i kvalitetsaggregatet
+# för NER-audit). Tröskeln är medvetet konservativ — släpper bara genuint tunna estimat.
+CONFIDENT_BEARERS = 25
+
 _lock = threading.Lock()
 _table: dict[str, tuple[int, int]] | None = None  # namn → (kvinnor, män)
 
@@ -66,12 +75,9 @@ def _first_name(name: str) -> str:
     return unicodedata.normalize("NFC", token).casefold()
 
 
-def estimate(name: str) -> float | None:
-    """P(kvinna) för personens förnamn, eller None om namnet är okänt.
-
-    0.0 ≈ säkert man, 1.0 ≈ säkert kvinna, däremellan unisex. None betyder
-    "räkna som okänd" (utländskt namn, för få bärare, tom sträng) — aldrig
-    en gissning."""
+def _estimate_detail(name: str) -> tuple[float, int] | None:
+    """(P(kvinna), antal bärare) för förnamnet, eller None om okänt/under golvet.
+    Bärartalet behövs för F6:s konfidensgrind i aggregate()."""
     key = _first_name(name)
     if not key:
         return None
@@ -82,24 +88,53 @@ def estimate(name: str) -> float | None:
     total = women + men
     if total < MIN_BEARERS:
         return None
-    return women / total
+    return women / total, total
+
+
+def estimate(name: str) -> float | None:
+    """P(kvinna) för personens förnamn, eller None om namnet är okänt.
+
+    0.0 ≈ säkert man, 1.0 ≈ säkert kvinna, däremellan unisex. None betyder
+    "räkna som okänd" (utländskt namn, för få bärare, tom sträng) — aldrig
+    en gissning."""
+    detail = _estimate_detail(name)
+    return detail[0] if detail is not None else None
 
 
 def aggregate(names: list[str]) -> dict[str, float | int | None]:
     """Sannolikhetsvägt paritetsaggregat över en lista namn (t.ex. AI-nämnda).
 
     Returnerar:
-      parity      — vägd andel kvinnor bland namn som kunde estimeras (None om 0)
-      n           — antal namn som ingick i estimatet
-      unknown_share — andel av inkommande namn som inte kunde estimeras
+      parity      — vägd andel kvinnor bland KONFIDENTA namn (None om 0)
+      n           — antal konfidenta namn som ingick i estimatet
+      unknown_share — andel inkommande namn som inte kunde estimeras alls (ingen SCB-match)
+      recognized  — antal namn som matchade SCB (konfidenta + lågkonfidenta) [F6]
+      low_confidence — antal igenkända men lågkonfidenta namn (under CONFIDENT_BEARERS) [F6]
+      low_confidence_share — andel av inkommande namn som var lågkonfidenta [F6]
 
-    Endast aggregatet är tänkt att persisteras — aldrig namnen eller per-namn-
-    estimaten (DPA: dataminimering, anonymt aggregat)."""
-    probs = [p for p in (estimate(n) for n in names) if p is not None]
+    F6: lågkonfidenta estimat (för få bärare) hålls UTANFÖR pariteten men spåras i
+    kvalitetsfälten ovan — ett anonymt NER-/estimat-kvalitetsstickprov för audit, helt
+    utan namn. Endast aggregatet persisteras — aldrig namnen eller per-namn-estimaten
+    (DPA: dataminimering, anonymt aggregat)."""
     total_in = len(names)
-    n = len(probs)
+    confident: list[float] = []
+    low_conf = 0
+    for nm in names:
+        detail = _estimate_detail(nm)
+        if detail is None:
+            continue  # ingen SCB-match → okänd
+        p, bearers = detail
+        if bearers < CONFIDENT_BEARERS:
+            low_conf += 1   # igenkänd men för tunt underlag → utanför pariteten
+        else:
+            confident.append(p)
+    n = len(confident)
+    recognized = n + low_conf
     return {
-        "parity": (sum(probs) / n) if n else None,
+        "parity": (sum(confident) / n) if n else None,
         "n": n,
-        "unknown_share": ((total_in - n) / total_in) if total_in else 0.0,
+        "unknown_share": ((total_in - recognized) / total_in) if total_in else 0.0,
+        "recognized": recognized,
+        "low_confidence": low_conf,
+        "low_confidence_share": (low_conf / total_in) if total_in else 0.0,
     }
