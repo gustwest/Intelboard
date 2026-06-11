@@ -12,6 +12,7 @@ type Client = {
   company_name: string | null;
   profile_url: string | null;
   cdn_url: string | null;
+  tier?: string | null;
 };
 
 // Speglar den faktiska claims-baserade outputen: Organization-rot med
@@ -72,6 +73,12 @@ type Delivery = {
 type Badge = { snippet: string; preview: string };
 
 // P2 — leverans-hälsa (services/delivery_health.py)
+type PremiumDomainVerdict = 'live' | 'redirect' | 'mismatch' | 'missing' | 'not_premium';
+type PremiumDomainHealth = {
+  verdict: PremiumDomainVerdict;
+  domain: string | null;
+  is_live: boolean;
+};
 type Health = {
   verdict: 'live' | 'stale' | 'mismatch' | 'missing';
   reachable: boolean;
@@ -79,6 +86,9 @@ type Health = {
   identity_match: boolean;
   fresh: boolean;
   url: string;
+  // Premium (Väg A): verifiering av att kundens EGNA domän serverar profilen via en
+  // äkta reverse-proxy. Finns bara för premium-kund (annars utelämnad/'not_premium').
+  premium_domain?: PremiumDomainHealth;
 };
 
 const HEALTH_SV: Record<Health['verdict'], { label: string; tone: 'ok' | 'warn' | 'err' }> = {
@@ -86,6 +96,16 @@ const HEALTH_SV: Record<Health['verdict'], { label: string; tone: 'ok' | 'warn' 
   stale: { label: 'live, saknar datum', tone: 'warn' },
   mismatch: { label: 'fel entitet i JSON-LD', tone: 'warn' },
   missing: { label: 'ej hittad', tone: 'err' },
+};
+
+// Premium-domän-verdikt (Väg A reverse-proxy). 'redirect' = proxyn är en redirect,
+// inte en äkta proxy → förstaparts tappas; hint är den actionable rättningen.
+const PREMIUM_DOMAIN_SV: Record<PremiumDomainVerdict, { label: string; tone: 'ok' | 'warn' | 'err'; hint?: string }> = {
+  live: { label: 'live på egen domän', tone: 'ok' },
+  redirect: { label: 'redirect — inte en äkta proxy', tone: 'err', hint: 'Kundens domän skickar vidare till oss (301/302). Be dem byta till en ÄKTA reverse-proxy så adressen stannar på deras domän — annars tappas förstaparts-värdet.' },
+  mismatch: { label: 'fel/saknad profil på domänen', tone: 'warn', hint: 'Domänen svarar men serverar inte rätt profil. Kontrollera att proxyn pekar på rätt hostad URL.' },
+  missing: { label: 'svarar inte än', tone: 'err', hint: 'Kundens domän/proxy svarar inte. Inte uppsatt än, eller fel mål.' },
+  not_premium: { label: '—', tone: 'warn' },
 };
 
 // Crawl-hälsa (P2 passivt lager) — services/crawl_health.py. Hämtar AI-motorernas
@@ -393,6 +413,44 @@ export default function LeveransPage() {
               </>
             )}
           </span>
+          {/* Premium (Väg A): egen-domän-proxy-status — BARA för premium-kund. */}
+          {selectedClient?.tier === 'premium' && (
+            <span
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: C.muted }}
+              title={
+                health?.premium_domain && PREMIUM_DOMAIN_SV[health.premium_domain.verdict].hint
+                  ? PREMIUM_DOMAIN_SV[health.premium_domain.verdict].hint
+                  : 'Premium (Väg A): verifierar att kundens egen domän serverar profilen via en äkta reverse-proxy (inte en redirect).'
+              }
+            >
+              <strong style={{ color: C.text, fontWeight: 600 }}>Egen domän:</strong>
+              {healthLoading ? (
+                <span style={{ color: C.dim }}>verifierar…</span>
+              ) : !health?.premium_domain || health.premium_domain.verdict === 'not_premium' ? (
+                <span style={{ color: C.dim }}>—</span>
+              ) : (
+                <>
+                  {health.premium_domain.verdict === 'live' ? (
+                    <Check size={12} color="#16a34a" />
+                  ) : health.premium_domain.verdict === 'redirect' || health.premium_domain.verdict === 'missing' ? (
+                    <X size={12} color="#dc2626" />
+                  ) : null}
+                  <span
+                    style={{
+                      color:
+                        PREMIUM_DOMAIN_SV[health.premium_domain.verdict].tone === 'ok'
+                          ? '#16a34a'
+                          : PREMIUM_DOMAIN_SV[health.premium_domain.verdict].tone === 'warn'
+                          ? '#b45309'
+                          : '#dc2626',
+                    }}
+                  >
+                    {PREMIUM_DOMAIN_SV[health.premium_domain.verdict].label}
+                  </span>
+                </>
+              )}
+            </span>
+          )}
         </div>
         <UI.JobRunButton
           status={jobActive['compile'] || 'idle'}

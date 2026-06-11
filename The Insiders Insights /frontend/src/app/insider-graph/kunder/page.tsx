@@ -559,21 +559,33 @@ function OnboardModal({ onClose }: { onClose: () => void }) {
             value={tier}
             onChange={setTier}
             style={{ marginTop: 6, marginLeft: 12, verticalAlign: 'middle' }}
-            options={([['default', 'Default (Geogiraph)'], ['premium', 'Premium (egen domän)']] as ['default' | 'premium', string][]).map(([v, label]) => ({
+            options={([['default', 'Standard (vår domän)'], ['premium', 'Premium (kundens domän)']] as ['default' | 'premium', string][]).map(([v, label]) => ({
               value: v,
               label,
             }))}
           />
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 8, lineHeight: 1.5, maxWidth: 560 }}>
+            {tier === 'premium' ? (
+              <>Profilen frontas på <strong>kundens egen domän</strong> via en reverse-proxy. Innehållet
+              ligger kvar hos oss och uppdateras löpande; kundens domän visar det. Egen domän = förstaparts
+              = starkast AI-auktoritet. Kräver en proxy-uppsättning hos kunden — installationskitet (Leverans-fliken)
+              ger de exakta stegen, och hälsokollen där verifierar att den är rätt satt.</>
+            ) : (
+              <>Profilen ligger på <strong>vår domän</strong> (profiles.geogiraph.com) — friktionsfritt, inget
+              kunden behöver göra med sin egen domän. Standardvalet för de flesta.</>
+            )}
+          </div>
           {tier === 'premium' && (
             <div style={{ marginTop: 12 }}>
               <Field
-                label="Profilsidans bas-URL (kundens domän)"
+                label="Kundens domän för profilen"
                 value={profileBaseUrl}
                 onChange={setProfileBaseUrl}
                 placeholder="https://profil.kund.se"
               />
-              <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
-                Sätter @id-basen för JSON-LD. Kräver CNAME → vår tjänst (se Leverans).
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 4, lineHeight: 1.5 }}>
+                Kundens subdomän där profilen ska ligga. Sätter @id/kanonik på deras domän → förstaparts-auktoritet.
+                Kunden pekar den hit via en reverse-proxy (de exakta stegen finns i installationskitet).
               </div>
             </div>
           )}
