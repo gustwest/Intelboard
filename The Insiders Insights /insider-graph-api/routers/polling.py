@@ -15,7 +15,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 import firestore_client as fs
 from services import llm as llm_factory
-from services.polling import sov_change_significance
+from services import sov_inflation
+from services.polling import CONTROL_CATEGORY, sov_change_significance
 
 router = APIRouter(prefix="/api/polling", tags=["polling"])
 
@@ -31,9 +32,12 @@ _health_lock = threading.Lock()
 
 
 def _aggregate_per_engine(raw_responses: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Grupera raw_responses per motor → SoV/sentiment + mention-räknare. Tom dict om data saknas."""
+    """Grupera raw_responses per motor → SoV/sentiment + mention-räknare. Tom dict om data saknas.
+    F2: kontrollfrågorna (egen kategori) exkluderas — de poolas aldrig in i SoV-måtten."""
     by_engine: dict[str, dict[str, list[Any]]] = defaultdict(lambda: {"answers": [], "mentions": [], "sentiments": []})
     for r in raw_responses or []:
+        if r.get("category") == CONTROL_CATEGORY:
+            continue
         model = r.get("model") or "okänd"
         by_engine[model]["answers"].append(r)
         if r.get("mentioned"):
@@ -164,6 +168,8 @@ def list_results(client_id: str, limit: int = 12) -> dict[str, Any]:
                 "models_used": data.get("models_used"),
                 # F3 — frågesettets fingerprint (None för veckor före omläggningen)
                 "questions_fingerprint": data.get("questions_fingerprint"),
+                # F2 — synlighetsinflation denna vecka (None för veckor före omläggningen)
+                "framing_inflation": data.get("framing_inflation"),
                 "per_engine": _aggregate_per_engine(data.get("raw_responses") or []),
             }
         )
@@ -188,7 +194,11 @@ def list_results(client_id: str, limit: int = 12) -> dict[str, Any]:
             if not trend["comparable"]:
                 trend["significant"] = False
         w["sov_trend"] = trend
-    return {"client_id": client_id, "weeks": weeks[:limit]}
+    # F2: kanonisk summering av synlighetsinflationen över de kontrollbärande veckorna
+    # (en läsanvisning för SoV — grindad på ≥4 veckors underlag). Räknas över ALLA veckor,
+    # inte bara de `limit` som returneras, så fönstret inte krymper med UI:ts sidstorlek.
+    inflation = sov_inflation.summarize(weeks)
+    return {"client_id": client_id, "weeks": weeks[:limit], "framing_inflation_summary": inflation}
 
 
 @router.get("/{client_id}/questions")

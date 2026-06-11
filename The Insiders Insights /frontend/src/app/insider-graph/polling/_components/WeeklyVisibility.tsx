@@ -7,6 +7,8 @@ import {
   PollingWeek,
   CategoryResult,
   Competitor,
+  FramingInflationSummary,
+  CONTROL_CATEGORY,
   ENGINE_SV,
   CATEGORY_SV,
   cardStyle,
@@ -21,14 +23,18 @@ import {
 } from '../_shared';
 import { SectionHead, Stat, Sparkline } from './common';
 
-export function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
+export function WeeklyVisibility({ weeks, inflation }: { weeks: PollingWeek[]; inflation?: FramingInflationSummary | null }) {
   const latest = weeks[0];
   // Trenden ritas äldst → nyast (API:t ger nyast först).
   const chrono = [...weeks].reverse();
   const sovSeries = chrono.filter((w) => w.share_of_voice != null) as (PollingWeek & { share_of_voice: number })[];
   const sent = sentimentLabel(latest.sentiment_score);
+  // F2: kontroll-kategorin är ett mätinstrument, inte en tävlande kategori — den filtreras
+  // bort ur kategorivyerna och visas i stället som inflations-läsanvisning nedan.
   const cats = latest.category_results
-    ? Object.entries(latest.category_results).sort((a, b) => b[1].share_of_voice - a[1].share_of_voice)
+    ? Object.entries(latest.category_results)
+        .filter(([cat]) => cat !== CONTROL_CATEGORY)
+        .sort((a, b) => b[1].share_of_voice - a[1].share_of_voice)
     : [];
 
   // Per-kategori-trend (12v): plocka SoV per vecka för varje kategori.
@@ -70,6 +76,9 @@ export function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
         Speglar AI:s tränade minne av kunden (bas-kunskap), inte vad en live-groundad användare ser — Live-signal redovisas separat nedan. Mätt över flera körningar per fråga
         {latest.sov_ci95 != null ? `, ±${Math.round(latest.sov_ci95 * 100)} pp brusband` : ''}; vecka-mot-vecka-rörelser inom bandet är inte säkerställda.
       </div>
+
+      <InflationNote inflation={inflation} />
+
 
       {sovSeries.length > 1 && (() => {
         // Kalibreringsbrytningar: models_used-diff (modellbyte) + questions_fingerprint-
@@ -198,6 +207,34 @@ export function WeeklyVisibility({ weeks }: { weeks: PollingWeek[] }) {
           </Block>
         );
       })()}
+    </div>
+  );
+}
+
+/** F2 — synlighetsinflation: hur mycket av Share of Voice som drivs av ledande
+ * frågeinramning, mätt mot neutrala kontrollfrågor över ≥4 veckor. Backend har redan
+ * tolkat siffrorna och grindat på underlag (services/sov_inflation.py) — vi visar bara
+ * `insight` med en färgton efter nivå. "collecting" = underlag saknas ännu. */
+function InflationNote({ inflation }: { inflation?: FramingInflationSummary | null }) {
+  if (!inflation) return null;
+  const tone =
+    inflation.status === 'ready' && inflation.level === 'high'
+      ? C.accent
+      : inflation.status === 'ready' && inflation.level === 'moderate'
+        ? '#d97706'
+        : C.dim;
+  const heading =
+    inflation.status === 'collecting'
+      ? 'Inflationsmått — samlar data. '
+      : inflation.status === 'no_inflation'
+        ? 'Frågekonstruktion — ingen inflation. '
+        : 'Frågekonstruktion lyfter synligheten. ';
+  return (
+    <div
+      style={{ fontSize: 10, color: C.dim, lineHeight: 1.5, margin: '0 0 14px', padding: '7px 10px', borderLeft: `2px solid ${tone}`, borderRadius: 4 }}
+    >
+      <span style={{ fontWeight: 600, color: tone === C.dim ? C.muted : tone }}>{heading}</span>
+      {inflation.insight}
     </div>
   );
 }

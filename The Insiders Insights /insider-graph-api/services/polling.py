@@ -196,6 +196,22 @@ DEFAULT_QUESTIONS: dict[str, list[str]] = {
     ],
 }
 
+# F2 — Kontrollfrågor (inflations-A/B). De ordinarie battericellerna är ledande-inramade
+# ("de *ledande*/*bästa*/*mest attraktiva* …") — superlativ/ranking primar motorn på
+# konkurrenslandskapet och kan blåsa upp Share of Voice. Kontrollfrågorna ställer SAMMA
+# domän neutralt ("vilka företag *finns*", "berätta om", "beskriv") utan ledande inramning.
+# Skillnaden i nämn-frekvens mot batteriet = den del av synligheten som drivs av
+# frågekonstruktionen snarare än verklig synlighet. Frågorna mäts varje vecka men poolas
+# ALDRIG in i rubrik-SoV:t (skulle bryta trendkontinuiteten) — de lever i en egen kategori
+# och jämförs över ≥4 veckor (services/sov_inflation.py). Avsiktligt formulerade så att de
+# INTE triggar question_quality:s superlativ-flagga, till skillnad från batteriet.
+CONTROL_CATEGORY = "kontroll"
+CONTROL_QUESTIONS: list[str] = [
+    "Vilka företag finns inom {industry} i Sverige?",
+    "Vad kan du berätta om {topic} i Sverige?",
+    "Beskriv marknaden för {service_area} i Sverige.",
+]
+
 
 @dataclass
 class QuestionAnswer:
@@ -244,6 +260,10 @@ class PollingResult:
     # substitutionerna eller custom-frågorna bryts trendjämförbarheten, och UI:t
     # markerar bytet (samma princip som modellbyten via models_used).
     questions_fingerprint: str | None = None
+    # F2 (frågedesign): synlighetsinflation denna vecka — {framed_sov, control_sov, delta,
+    # framed_n, control_n}. Batteri-SoV mot neutralt kontroll-SoV; summeras över ≥4 veckor
+    # i services/sov_inflation.py till en läsanvisning. None för veckor före omläggningen.
+    framing_inflation: dict[str, Any] | None = None
 
 
 def run_for_client(client_id: str) -> PollingResult | None:
@@ -337,6 +357,10 @@ def _build_questions(client: dict[str, Any]) -> list[tuple[str, str]]:
                         q,
                     )
                 out.append((category, q))
+        # F2: lägg ALLTID till de neutrala kontrollfrågorna — även för custom-kunder mäts
+        # inflationen (custom-inramning vs neutral kontroll), annars vet vi inte hur mycket
+        # av synligheten som är frågekonstruktion. Substitutionerna nedan gäller även här.
+        out.extend(_control_questions(client))
         return out
 
     industry = client.get("industry") or "branschen"
@@ -348,7 +372,17 @@ def _build_questions(client: dict[str, Any]) -> list[tuple[str, str]]:
     for category, qs in DEFAULT_QUESTIONS.items():
         for q in qs:
             out.append((category, q.format(**substitutions)))
+    out.extend(_control_questions(client))
     return out
+
+
+def _control_questions(client: dict[str, Any]) -> list[tuple[str, str]]:
+    """F2: de neutralt inramade kontrollfrågorna med substitutioner ifyllda."""
+    industry = client.get("industry") or "branschen"
+    topic = client.get("topic") or "deras områden"
+    service_area = client.get("service_area") or "deras tjänster"
+    substitutions = {"industry": industry, "topic": topic, "service_area": service_area}
+    return [(CONTROL_CATEGORY, q.format(**substitutions)) for q in CONTROL_QUESTIONS]
 
 
 def resolve_polling_questions(client: dict[str, Any]) -> dict[str, Any]:
@@ -374,6 +408,12 @@ def resolve_polling_questions(client: dict[str, Any]) -> dict[str, Any]:
             by_category[category] = [
                 {"text": q.format(**substitutions), "source": "default"} for q in qs
             ]
+
+    # F2: kontrollfrågorna mäts alltid (egen kategori, källa "control") — visas i panelen
+    # så ops ser att inflationen mäts och med vilka neutrala frågor.
+    by_category[CONTROL_CATEGORY] = [
+        {"text": q.format(**substitutions), "source": "control"} for q in CONTROL_QUESTIONS
+    ]
 
     return {
         "is_custom": is_custom,
@@ -609,20 +649,40 @@ def _aggregate(
     parity_baseline: dict[str, Any] | None = None,
     runs: int = 1,
 ) -> PollingResult:
-    total = len(answers)                                   # alla sampling-körningar
-    with_mention = [a for a in answers if a.mentioned]
+    # F2: kontrollfrågorna är ett separat mätinstrument (inflations-A/B) och poolas ALDRIG
+    # in i rubrik-SoV:t eller något annat huvudmått — bara batteriet (framed) driver dem,
+    # exakt som historiken (som saknade kontrollfrågor) så trendkontinuiteten hålls intakt.
+    control = [a for a in answers if a.category == CONTROL_CATEGORY]
+    framed = [a for a in answers if a.category != CONTROL_CATEGORY]
+
+    total = len(framed)                                    # alla sampling-körningar (batteriet)
+    with_mention = [a for a in framed if a.mentioned]
 
     sov = (len(with_mention) / total) if total else 0.0
     # P1-förfining: prompt-klustrat brusband (run-to-run inom (fråga×motor)), inte naiv
     # binomial över alla körningar — den senare överskattar bruset på fixerade frågor.
-    sov_se = _runtorun_se(answers)
+    sov_se = _runtorun_se(framed)
     sov_ci95 = round(1.96 * sov_se, 4)
+
+    # F2: synlighetsinflation — andel batteri-svar som nämner kunden mot andel neutrala
+    # kontroll-svar som gör det. Skillnaden = den del av SoV:t som drivs av ledande
+    # frågeinramning. En vecka är brusig; services/sov_inflation.py summerar över ≥4 veckor.
+    c_total = len(control)
+    c_with = sum(1 for a in control if a.mentioned)
+    control_sov = (c_with / c_total) if c_total else 0.0
+    framing_inflation = {
+        "framed_sov": round(sov, 4),
+        "control_sov": round(control_sov, 4),
+        "delta": round(sov - control_sov, 4),
+        "framed_n": total,
+        "control_n": c_total,
+    }
 
     # P2: separera "AI Base Knowledge" (training) från "AI Live Signal" (web_rag).
     # Ett poolat SoV blandar parametriskt minne med live-webb-RAG — olika fördelningar
     # som inte ska medeltalas, och som dessutom skiftar om en motors tillgänglighet ändras.
     by_source: dict[str, list[QuestionAnswer]] = {}
-    for a in answers:
+    for a in framed:
         by_source.setdefault(model_registry.knowledge_source_for(a.model), []).append(a)
     sov_by_source: dict[str, dict[str, Any]] = {}
     for src, src_answers in by_source.items():
@@ -637,8 +697,9 @@ def _aggregate(
 
     # Representativa svar (run_idx 0) — ett per (fråga × motor). Sentiment, paritet och
     # konkurrent-NER körs bara på dessa (P0: dyra anrop multipliceras inte), så deras
-    # nämnare är stabila och identiska med det gamla n=1-beteendet.
-    reps = [a for a in answers if a.run_idx == 0]
+    # nämnare är stabila och identiska med det gamla n=1-beteendet. F2: kontrollfrågorna
+    # exkluderas även här — de ska inte rubba sentiment/paritet, bara mäta inflationen.
+    reps = [a for a in framed if a.run_idx == 0]
 
     sentiments = [a.sentiment for a in reps if a.mentioned and a.sentiment is not None]
     avg_sentiment = (sum(sentiments) / len(sentiments)) if sentiments else None
@@ -734,6 +795,7 @@ def _aggregate(
         parity_ci95=parity_ci,
         parity_baseline=baseline,
         parity_gap=gap,
+        framing_inflation=framing_inflation,
     )
 
 
@@ -785,6 +847,8 @@ def _write(result: PollingResult) -> None:
             "sov_by_source": result.sov_by_source,  # P2: training vs web_rag, aldrig poolat
             # F3 — frågesettets fingerprint: jämförbarhetsbrott markeras i UI vid byte
             "questions_fingerprint": result.questions_fingerprint,
+            # F2 — synlighetsinflation (batteri vs neutral kontroll) denna vecka
+            "framing_inflation": result.framing_inflation,
             "run_at": firestore.SERVER_TIMESTAMP,
         }
     )

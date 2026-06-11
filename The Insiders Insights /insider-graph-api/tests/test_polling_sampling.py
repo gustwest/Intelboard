@@ -117,6 +117,66 @@ class AggregateSamplingTest(unittest.TestCase):
         self.assertEqual(comp[0]["share"], 1.0)  # 1 par, Beta i det → 1/1, ej 1/5
 
 
+class ControlQuestionInflationTest(unittest.TestCase):
+    """F2: kontrollfrågorna mäts men poolas aldrig in i rubrik-SoV; inflationen rapporteras."""
+
+    def _ans(self, category, mentioned, model="gpt-4o", run_idx=0):
+        return QuestionAnswer(category=category, question="Q?", model=model,
+                              answer="svar" if run_idx == 0 else "",
+                              mentioned=mentioned, run_idx=run_idx)
+
+    def test_control_excluded_from_headline_sov(self):
+        # Batteriet: 2/2 nämnda (SoV 1.0). Kontroll: 0/2 nämnda. Rubrik-SoV ska vara 1.0,
+        # inte utspätt till 0.5 av kontrollfrågorna.
+        answers = [
+            self._ans("affar", True), self._ans("finans", True),
+            self._ans(polling.CONTROL_CATEGORY, False), self._ans(polling.CONTROL_CATEGORY, False),
+        ]
+        res = polling._aggregate("acme", "Acme", answers, {}, runs=1)
+        self.assertAlmostEqual(res.share_of_voice, 1.0)
+        self.assertEqual(res.total_answers, 2)          # bara batteriet
+        self.assertEqual(res.answers_with_mention, 2)
+
+    def test_framing_inflation_components(self):
+        answers = [
+            self._ans("affar", True), self._ans("finans", True),  # framed 2/2 = 1.0
+            self._ans(polling.CONTROL_CATEGORY, True), self._ans(polling.CONTROL_CATEGORY, False),  # control 1/2 = 0.5
+        ]
+        res = polling._aggregate("acme", "Acme", answers, {}, runs=1)
+        fi = res.framing_inflation
+        self.assertAlmostEqual(fi["framed_sov"], 1.0)
+        self.assertAlmostEqual(fi["control_sov"], 0.5)
+        self.assertAlmostEqual(fi["delta"], 0.5)
+        self.assertEqual(fi["framed_n"], 2)
+        self.assertEqual(fi["control_n"], 2)
+
+    def test_control_still_visible_as_category(self):
+        answers = [self._ans("affar", True), self._ans(polling.CONTROL_CATEGORY, False)]
+        res = polling._aggregate("acme", "Acme", answers, {}, runs=1)
+        self.assertIn(polling.CONTROL_CATEGORY, res.category_results)
+
+    def test_no_control_questions_yields_zero_denominator(self):
+        # Veckor utan kontrollfrågor (t.ex. custom innan omläggning): control_n = 0,
+        # inget delta som låtsas vara signal.
+        answers = [self._ans("affar", True), self._ans("affar", False)]
+        res = polling._aggregate("acme", "Acme", answers, {}, runs=1)
+        self.assertEqual(res.framing_inflation["control_n"], 0)
+
+    def test_build_questions_appends_control(self):
+        qs = polling._build_questions({"industry": "X", "topic": "Y", "service_area": "Z"})
+        cats = {c for c, _ in qs}
+        self.assertIn(polling.CONTROL_CATEGORY, cats)
+        controls = [q for c, q in qs if c == polling.CONTROL_CATEGORY]
+        self.assertEqual(len(controls), len(polling.CONTROL_QUESTIONS))
+
+    def test_build_questions_appends_control_for_custom(self):
+        client = {"polling_questions": {"affar": ["Egen fråga om {industry}?"]},
+                  "company_name": "Acme", "industry": "fintech"}
+        qs = polling._build_questions(client)
+        cats = {c for c, _ in qs}
+        self.assertIn(polling.CONTROL_CATEGORY, cats)
+
+
 class SourceSplitTest(unittest.TestCase):
     """P2: SoV separeras per knowledge_source (training vs web_rag), aldrig poolat till ETT tal."""
 

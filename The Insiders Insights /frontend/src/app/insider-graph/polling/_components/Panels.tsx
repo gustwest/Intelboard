@@ -12,6 +12,7 @@ import {
   ViewMode,
   S,
   CATEGORY_SV,
+  CONTROL_CATEGORY,
   JOB_LABEL,
   ACTIVITY_FEED_TYPES,
   cardStyle,
@@ -162,8 +163,15 @@ export function PollingQuestionsPanel({ data, clientId, mode, onOpenSettings }: 
             {categories.map(([cat, qs]) => (
               <div key={cat}>
                 <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
-                  {CATEGORY_SV[cat] || cat} · {qs.length}
+                  {cat === CONTROL_CATEGORY ? 'Kontroll (neutral)' : (CATEGORY_SV[cat] || cat)} · {qs.length}
                 </div>
+                {cat === CONTROL_CATEGORY && (
+                  <div style={{ fontSize: 10, color: C.dim, lineHeight: 1.5, marginBottom: 8 }}>
+                    Neutralt formulerade frågor utan ledande inramning. Mäts varje vecka men
+                    räknas <strong>inte</strong> in i Share of Voice — de mäter hur mycket av
+                    synligheten som drivs av frågekonstruktionen (se inflationsmåttet under Veckovis synlighet).
+                  </div>
+                )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {qs.map((q, i) => (
                     <div key={i} style={{
@@ -182,6 +190,11 @@ export function PollingQuestionsPanel({ data, clientId, mode, onOpenSettings }: 
                       {q.source === 'custom' && (
                         <span style={{ fontSize: 9, fontWeight: 600, color: C.accent, background: 'rgba(224, 142, 121,0.1)', border: `1px solid ${S.inProgress.border}`, borderRadius: 4, padding: '1px 6px', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', alignSelf: 'flex-start' }}>
                           Egen
+                        </span>
+                      )}
+                      {q.source === 'control' && (
+                        <span style={{ fontSize: 9, fontWeight: 600, color: C.muted, background: 'rgba(106,126,138,0.1)', border: `1px solid ${C.border}`, borderRadius: 4, padding: '1px 6px', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', alignSelf: 'flex-start' }}>
+                          Neutral
                         </span>
                       )}
                     </div>

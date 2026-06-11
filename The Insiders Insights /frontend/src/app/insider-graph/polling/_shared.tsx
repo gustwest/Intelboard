@@ -236,7 +236,37 @@ export type PollingWeek = {
   models_used: string[] | null;
   // F3: frågesettets fingerprint — null för veckor före omläggningen
   questions_fingerprint?: string | null;
+  // F2: synlighetsinflation denna vecka (batteri vs neutral kontroll) — null före omläggningen
+  framing_inflation?: FramingInflation | null;
 };
+
+// F2 — synlighetsinflation: hur mycket av Share of Voice som drivs av ledande frågeinramning.
+// Kontrollfrågorna (neutralt formulerade) mäts parallellt men poolas aldrig in i rubrik-SoV.
+export type FramingInflation = {
+  framed_sov: number;
+  control_sov: number;
+  delta: number;
+  framed_n: number;
+  control_n: number;
+};
+
+// Kanonisk summering över ≥4 kontrollbärande veckor (services/sov_inflation.py). UI:t visar
+// bara `insight` — backend har redan tolkat siffrorna och grindat på underlag.
+export type FramingInflationSummary = {
+  status: 'collecting' | 'ready' | 'no_inflation';
+  insight: string;
+  level?: 'none' | 'moderate' | 'high';
+  weeks_with_control?: number;
+  weeks_needed?: number;
+  weeks_averaged?: number;
+  avg_framed_sov?: number;
+  avg_control_sov?: number;
+  delta_pp?: number;
+};
+
+// F2: kontrollfrågornas kategori — ett mätinstrument, inte en konkurrenskategori. Filtreras
+// bort ur de tävlande kategorivyerna (visas i stället som inflations-läsanvisning).
+export const CONTROL_CATEGORY = 'kontroll';
 
 // P1: är veckans SoV-förändring åtskild från run-to-run-brus? `comparable` = samma
 // motoruppsättning mättes båda veckorna (P3). UI grå-tonar pilar när significant=false.
@@ -544,7 +574,7 @@ export type EngineHealthResp = {
 
 // --- Polling-frågor (resolved per kund — speglar services/polling.resolve_polling_questions) ---
 
-export type PollingQuestion = { text: string; source: 'custom' | 'default' };
+export type PollingQuestion = { text: string; source: 'custom' | 'default' | 'control' };
 export type PollingQuestionsResp = {
   client_id: string;
   is_custom: boolean;

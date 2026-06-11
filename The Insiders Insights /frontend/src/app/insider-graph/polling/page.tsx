@@ -10,6 +10,7 @@ import {
   Client,
   Report,
   PollingWeek,
+  FramingInflationSummary,
   SchedulesResp,
   Humanization,
   RecipesResp,
@@ -43,6 +44,7 @@ export default function GraphRiskLoopPage() {
   const [month, setMonth] = useState<string | null>(null);
   const [report, setReport] = useState<Report | null>(null);
   const [polling, setPolling] = useState<PollingWeek[] | null>(null);
+  const [inflation, setInflation] = useState<FramingInflationSummary | null>(null);
   const [schedules, setSchedules] = useState<SchedulesResp | null>(null);
   const [humanization, setHumanization] = useState<Humanization | null>(null);
   const [recipes, setRecipes] = useState<RecipesResp | null>(null);
@@ -176,8 +178,8 @@ export default function GraphRiskLoopPage() {
   useEffect(() => {
     if (!selected) return;
     let cancelled = false;
-    graphFetch<{ weeks: PollingWeek[] }>(`/api/polling/${selected}`)
-      .then((d) => !cancelled && setPolling(d.weeks))
+    graphFetch<{ weeks: PollingWeek[]; framing_inflation_summary?: FramingInflationSummary | null }>(`/api/polling/${selected}`)
+      .then((d) => { if (!cancelled) { setPolling(d.weeks); setInflation(d.framing_inflation_summary ?? null); } })
       .catch(() => { if (!cancelled) { setPolling([]); setSoftError('Vissa data kunde inte laddas — visar det som finns just nu.'); } });
     return () => {
       cancelled = true;
@@ -428,7 +430,7 @@ export default function GraphRiskLoopPage() {
       )}
 
       {/* Veckovis synlighet */}
-      {polling && polling.length > 0 && <div id="synlighet"><WeeklyVisibility weeks={polling} /></div>}
+      {polling && polling.length > 0 && <div id="synlighet"><WeeklyVisibility weeks={polling} inflation={inflation} /></div>}
 
       {/* Konkurrent-analys per kategori (#2, väg A) — egen analytisk yta ur veckodatan */}
       {polling && polling.length > 0 && <CompetitorSurface weeks={polling} />}

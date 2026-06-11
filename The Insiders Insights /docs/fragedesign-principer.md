@@ -34,13 +34,20 @@ frågor om synlighet — inte mallar som råkar ligga i koden.
 8. **Aldrig medeltala över olika mätinstrument.** Bas-kunskap (training) och
    live-signal (web-RAG) redovisas separat; samma sak gäller språk (sv/en, F4) när
    det införs — citerbarhet är motor- och språkspecifik (GEO-citerbarhetsevidensen).
+9. **Kontrollfrågor som referens (F2).** Vid sidan av det ledande-inramade batteriet
+   ställs neutralt formulerade kontrollfrågor (`CONTROL_QUESTIONS`) varje vecka.
+   Skillnaden i nämn-frekvens = den del av Share of Voice som drivs av frågekonstruktion.
+   Kontrollfrågorna poolas ALDRIG in i rubrik-SoV (eget mätinstrument, princip 8) och
+   inflationen rapporteras först efter ≥4 veckors underlag (`services/sov_inflation.py`),
+   aldrig som en tvärsäker siffra på tunt underlag.
 
 ## Kända bias och pågående arbete
 
 - **Ranking-priming i polling-frågorna** ("vilka är de *ledande*…") blåser sannolikt
-  upp Share of Voice. Flaggas nu av F1; **F2** kvantifierar inflationen med
-  kontrollfrågor utan branschinramning (≥4 veckors A/B) och resultatet blir en
-  läsanvisning i cockpit + rapport.
+  upp Share of Voice. Flaggas av F1; **F2 är nu i drift** — neutrala kontrollfrågor
+  mäts varje vecka och `services/sov_inflation.py` summerar inflationen över ≥4 veckor
+  till en läsanvisning i cockpiten (under Veckovis synlighet). Siffran i rapporten
+  väntar tills tillräckligt underlag finns och inramas då som band/insikt, inte rå %.
 - **Ingen rotation.** Stabila frågor ger jämförbarhet men missar nyhetsdrivna
   skiften; kvartalsvis mallöversyn med arkiverad motivering är rutinen (F3),
   fingerprintet gör varje byte spårbart.
@@ -59,3 +66,8 @@ frågor om synlighet — inte mallar som råkar ligga i koden.
 **Ändringslogg**
 - 2026-06-11: Första versionen. F1 (kvalitetsramverk) + F3 (fingerprint, staleness)
   i drift; F2 (kontrollfrågor), F4 (sv/en), F5 (domarstabilitet), F6 (NER-audit) kvar.
+- 2026-06-11: **F2 i drift** — kontrollfrågor (egen `kontroll`-kategori) mäts varje
+  vecka, exkluderas ur rubrik-SoV/per-motor/sentiment/paritet, och inflationen
+  summeras över ≥4 veckor (`services/sov_inflation.py`) med underlagsgrind. Visas som
+  läsanvisning i cockpiten. Kvar: F4 (sv/en), F5 (domarstabilitet), F6 (NER-audit) +
+  inflationssiffran in i rapporten när underlaget vuxit.

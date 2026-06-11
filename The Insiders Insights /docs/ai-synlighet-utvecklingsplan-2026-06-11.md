@@ -22,10 +22,11 @@ Effort: **S** <½ dag · **M** ½–2 dagar · **L** >2 dagar.
 
 > **Status 2026-06-11 (samma dag, em):** Etapp 0 ✅ · Etapp 1 (R1–R5) ✅ `38b97838d` ·
 > E1+M2 ✅ `e39c60996` · M1 ✅ `dee4adc9b` · E2 ✅ `964b25286` · L1–L3 ✅ `bdd3dd707` ·
-> L4 ✅ `627a2be3f` · Etapp 5-start F1+F3+F7 ✅ `49b427e56` (principdok:
-> `docs/fragedesign-principer.md`).
-> **Kvar:** M3 (dokumentram), Etapp 5 forts (F2 kontrollfrågor, F4 sv/en, F5
-> domarstabilitet, F6 NER-audit), E1-kalibrering av bandtrösklarna mot historik.
+> L4 ✅ `627a2be3f` · Etapp 5-start F1+F3+F7 ✅ `49b427e56` · **F2 kontrollfrågor ✅**
+> (principdok: `docs/fragedesign-principer.md`).
+> **Kvar:** M3 (dokumentram), Etapp 5 forts (F4 sv/en, F5 domarstabilitet, F6 NER-audit),
+> E1-kalibrering av bandtrösklarna mot historik, F2:s inflationssiffra in i rapporten
+> när underlaget vuxit (≥4 kontrollbärande veckor).
 
 ## 1. Genomfört — Etapp 0 (2026-06-11, commit `eab56ec26`)
 
@@ -163,10 +164,11 @@ Eget fokuserat arbetsspår: forskningsbaserat och optimerat över tid. Tre fråg
 - Åtgärd: automatiserad ledande-språk-detektor + kvalitetsrubric för frågor; körs som gate vid generering (risk-generate) och vid egna frågor (custom). Flagga, inte blockera, i första versionen.
 - Filer: BE ny `services/question_quality.py`; hooks i `risk_detector.generate_and_store_questions` och `routers/review.py` (custom-frågor).
 
-**F2 — Kontrollfrågor & inflations-A/B** `[P1 · M]`
+**F2 — Kontrollfrågor & inflations-A/B** `[P1 · M]` ✅ (2026-06-11)
 - Problem: "Vilka är de *ledande* bolagen inom {industry}?" primar motorn på konkurrenslandskapet — SoV-siffran kan vara uppblåst av frågekonstruktionen, okänt hur mycket.
-- Åtgärd: 2–3 kontrollfrågor utan branschinramning per kund; mät SoV-skillnaden mot ordinarie battericeller över ≥4 veckor; kvantifiera inflationen och dokumentera den som läsanvisning i rapporten/cockpiten.
-- Filer: BE `services/polling.py` (kontrollkategori), spec + resultat i `docs/`.
+- Åtgärd: 2–3 neutralt formulerade kontrollfrågor per kund (egen `kontroll`-kategori, `CONTROL_QUESTIONS`), mäts varje vecka men poolas ALDRIG in i rubrik-SoV/per-motor/sentiment/paritet. Inflationen = batteri-SoV − kontroll-SoV, summerad över ≥4 veckor med underlagsgrind (`services/sov_inflation.py`) och rapporterad som läsanvisning i cockpiten (under Veckovis synlighet).
+- Status: i drift. Inflationssiffran i den externa rapporten väntar tills underlag finns (≥4 kontrollbärande veckor) och inramas då som band/insikt enligt B2 — inte rå %.
+- Filer: BE `services/polling.py` (CONTROL_QUESTIONS, `_aggregate` exkluderar kontroll, `framing_inflation`), ny `services/sov_inflation.py`, `routers/polling.py` (per-vecka + `framing_inflation_summary`); FE `_shared.tsx` (typer/`CONTROL_CATEGORY`), `WeeklyVisibility.tsx` (`InflationNote`), `Panels.tsx` (kontrollkategori + Neutral-badge), `page.tsx`. Tester: `tests/test_sov_inflation.py`, F2-klasser i `tests/test_polling_sampling.py`.
 
 **F3 — Versionering, rotation & staleness** `[P1 · M]`
 - Problem: samma 12 frågor varje vecka; kundernas industry/topic sätts vid onboarding och uppdateras aldrig; mallbyte skulle idag knäcka jämförbarheten ospårat.
