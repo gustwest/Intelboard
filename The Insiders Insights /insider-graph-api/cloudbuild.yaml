@@ -2,7 +2,10 @@ steps:
   # 1. Bygg och pusha en image som används av både service och alla jobs.
   - name: 'gcr.io/kaniko-project/executor:latest'
     args:
-      - '--dockerfile=The Insiders Insights /insider-graph-api/Dockerfile'
+      # --dockerfile är RELATIV till --context (kaniko:latest skärpte detta 2026-06-11
+      # → "error resolving dockerfile path" med full sökväg). Dockerfile ligger i
+      # context-roten, så bara filnamnet. Relativ form funkar i både gammal och ny kaniko.
+      - '--dockerfile=Dockerfile'
       - '--context=dir://The Insiders Insights /insider-graph-api'
       - '--destination=europe-north1-docker.pkg.dev/$PROJECT_ID/insider-graph-repo/insider-graph-api:$COMMIT_SHA'
       - '--destination=europe-north1-docker.pkg.dev/$PROJECT_ID/insider-graph-repo/insider-graph-api:latest'
