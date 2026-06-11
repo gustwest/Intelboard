@@ -43,6 +43,10 @@ def get_delivery_health(client_id: str) -> dict[str, object]:
     data = snap.to_dict() or {}
     result = delivery_health.check_live(client_id, data)
     result["snippet"] = delivery_health.check_snippet_on_site(client_id, data)
+    # Premium (P5, Väg A): verifiera att kundens EGNA domän serverar profilen via en
+    # äkta reverse-proxy. Lagt bara för premium-kund (annars verdict 'not_premium').
+    if data.get("tier") == "premium" and data.get("profile_base_url"):
+        result["premium_domain"] = delivery_health.check_premium_domain(client_id, data)
     return result
 
 

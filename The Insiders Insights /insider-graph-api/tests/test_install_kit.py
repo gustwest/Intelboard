@@ -76,12 +76,19 @@ class PremiumDomainTest(unittest.TestCase):
         # Kundens profil-länk pekar på deras egen domän (premium-kanonik).
         self.assertIn("profil.acme.se", kit["profile_url"])
 
-    def test_html_has_domain_section_for_premium(self):
+    def test_html_has_path_a_proxy_steps_for_premium(self):
+        """Väg A: exakta reverse-proxy-steg — mål + de tre villkoren."""
         fakefs.reset(client=self._PREMIUM)
         html = install_kit.render_install_kit("acme")
         self.assertIn("er egen domän", html)
         self.assertIn("profil.acme.se", html)
-        self.assertIn("förstaparts", html)  # domänauktoritets-framing
+        self.assertIn("förstaparts", html)              # domänauktoritets-framing
+        self.assertIn("reverse-proxy", html)            # vägen (inte redirect)
+        self.assertIn("redirect", html)                 # varningen "inte en redirect"
+        self.assertIn("Cacha inte", html)               # crawl-health-villkoret
+        self.assertIn("canonical", html)                # "rör inte canonical"
+        # Proxy-målet (den hostade profilen) finns med som konkret adress.
+        self.assertIn(install_kit.build_kit("acme")["hosted_url"], html)
 
     def test_default_tier_has_no_domain_section(self):
         fakefs.reset(client={"company_name": "Acme AB", "website": "https://acme.se"})
@@ -89,11 +96,14 @@ class PremiumDomainTest(unittest.TestCase):
         self.assertEqual(kit["own_domain"], "")
         self.assertNotIn("er egen domän", install_kit.render_install_kit("acme"))
 
-    def test_premium_note_in_email_text(self):
+    def test_premium_proxy_steps_in_email_text(self):
         fakefs.reset(client=self._PREMIUM)
         _subject, _html, text = install_kit.render_install_kit_email("acme")
         self.assertIn("egen domän", text)
         self.assertIn("profil.acme.se", text)
+        self.assertIn("REVERSE-PROXY", text)
+        self.assertIn("redirect", text)                 # "INTE en redirect"
+        self.assertIn(install_kit.build_kit("acme")["hosted_url"], text)
 
 
 if __name__ == "__main__":

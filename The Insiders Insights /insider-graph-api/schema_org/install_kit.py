@@ -40,23 +40,48 @@ def build_kit(client_id: str) -> dict[str, str]:
 
 
 def _premium_domain_html(kit: dict[str, str]) -> str:
-    """Domän-sektion för premium-kund (P5). Tom sträng för default-tier. Ärlig om
-    serveringsvägen: profilen ANKRAS redan till kundens domän (@id/kanonik), och den
-    återstående DNS-/serveringskopplingen samordnas med kundens IT — vi fabricerar inte
-    exakta poster (proxy-vs-CNAME-vägen är en gemensam uppsättning per kund)."""
+    """Domän-sektion för premium-kund (P5, Väg A = reverse-proxy). Tom sträng för
+    default-tier. Ger de EXAKTA stegen: proxy-målet (den hostade profilen) + de tre
+    villkor som avgör om förstaparts-effekten faktiskt uppnås (äkta proxy ej redirect,
+    cacha inte, rör inte canonical). Profilen är redan @id/kanonik-ankrad till kundens
+    domän via profile_base_url — proxyn serverar bara byte:en där."""
     own = kit.get("own_domain")
     if not own:
         return ""
     own_e = html.escape(own)
     hosted_e = html.escape(kit.get("hosted_url") or "")
     return f"""<div class="premium">
-<h2>Er profil på er egen domän</h2>
+<h2>Er profil på er egen domän — så kopplar ni den</h2>
 <p>Er profil är konfigurerad att ligga på <strong>{own_e}</strong> — på er egen domän.
 Det är den starkaste positionen för AI-synlighet: innehållet räknas som <em>förstaparts</em>
 och väger tyngst hos AI-motorer och sök, till skillnad från en tredjeparts-värd.</p>
-<p class="note">Det enda som återstår är en <strong>engångs-DNS-koppling</strong> så att {own_e}
-serverar den hostade profilen ({hosted_e}). Den sätter vi upp tillsammans med er IT —
-kontakta {settings.support_contact_email} så koordinerar vi den korta uppsättningen.</p>
+<p>Tekniskt: sätt upp en <strong>reverse-proxy</strong> så att {own_e} hämtar och visar er
+hostade profil. Peka {own_e} mot:</p>
+<pre>{hosted_e}</pre>
+<p class="note"><strong>Tre saker måste stämma — annars uteblir effekten:</strong></p>
+<ul>
+<li><strong>Äkta reverse-proxy, inte en redirect.</strong> Innehållet ska serveras <em>på</em>
+{own_e} utan att adressen byts i webbläsaren. En 301/302-redirect skickar besökaren och
+AI-motorerna vidare till oss — och då tappas hela förstaparts-värdet.</li>
+<li><strong>Cacha inte — passera igenom.</strong> Vi uppdaterar profilen löpande och märker
+svaren no-cache. Låt proxyn hämta färskt vid varje förfrågan, så ni alltid visar senaste
+versionen (och våra mätningar av AI-crawlers fungerar).</li>
+<li><strong>Rör inte canonical-taggen.</strong> Sidan deklarerar redan {own_e} som kanonisk
+källa — lägg inte till en egen och skriv inte om den.</li>
+</ul>
+<details class="howto">
+<summary>Hur sätter jag upp en reverse-proxy? Välj er plattform</summary>
+<ul>
+<li><strong>Cloudflare:</strong> en <em>Worker</em> (eller origin-/rewrite-regel) som proxar
+{own_e} → {hosted_e}. Använd <em>inte</em> en Redirect Rule.</li>
+<li><strong>nginx:</strong> ett <code>location</code>-block med <code>proxy_pass {hosted_e};</code>
+och <code>proxy_cache off;</code>.</li>
+<li><strong>Annan CDN/plattform:</strong> en <em>origin/upstream-</em> eller <em>rewrite</em>-regel
+(inte "redirect") som hämtar från {hosted_e}.</li>
+</ul>
+</details>
+<p class="note">Osäkra på hur? Vidarebefordra till den som sköter er DNS/webb, eller kontakta
+{settings.support_contact_email} så hjälper vi till med uppsättningen.</p>
 </div>"""
 
 
@@ -148,12 +173,20 @@ def render_install_kit_email(client_id: str) -> tuple[str, str, str]:
     subject = f"Installationsinstruktioner för er Geogiraph AI-profil — {name}"
     premium_text = ""
     if kit.get("own_domain"):
+        own, hosted = kit["own_domain"], kit["hosted_url"]
         premium_text = (
-            f"Er profil på er egen domän ({kit['own_domain']}):\n"
-            f"  Profilen är konfigurerad att ligga på er egen domän — den starkaste positionen\n"
-            f"  för AI-synlighet (förstaparts väger tyngst). Det återstår en engångs-DNS-koppling\n"
-            f"  så att {kit['own_domain']} serverar den hostade profilen ({kit['hosted_url']}).\n"
-            f"  Den sätter vi upp tillsammans med er IT — kontakta {settings.support_contact_email}.\n\n"
+            f"Er profil på er egen domän ({own}) — så kopplar ni den:\n"
+            f"  Profilen ligger på er egen domän, den starkaste positionen för AI-synlighet\n"
+            f"  (förstaparts väger tyngst). Sätt upp en REVERSE-PROXY så att {own} hämtar och\n"
+            f"  visar den hostade profilen. Peka {own} mot:\n"
+            f"    {hosted}\n"
+            f"  Tre saker måste stämma:\n"
+            f"   1) Äkta reverse-proxy, INTE en redirect — adressen får inte bytas till oss,\n"
+            f"      då tappas förstaparts-värdet.\n"
+            f"   2) Cacha inte — passera igenom (vi märker svaren no-cache och uppdaterar löpande).\n"
+            f"   3) Rör inte canonical-taggen — sidan deklarerar redan {own} som kanonisk källa.\n"
+            f"  Exempel: Cloudflare Worker/origin-regel, eller nginx proxy_pass {hosted} + proxy_cache off.\n"
+            f"  Osäkra? Kontakta {settings.support_contact_email} så hjälper vi till.\n\n"
         )
     text = (
         f"Hej!\n\n{premium_text}Här är de tre sakerna att lägga till på er sajt (klistras in en gång):\n\n"

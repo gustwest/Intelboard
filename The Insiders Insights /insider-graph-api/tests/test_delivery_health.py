@@ -92,6 +92,58 @@ class CheckLiveTest(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 404)
 
 
+_PREMIUM_CANON = "https://profil.acme.se"
+_PREMIUM_LD = '{"@type":"Organization","@id":"https://profil.acme.se",' \
+    '"name":"Acme","dateModified":"2026-06-01"}'
+_PREMIUM_CLIENT = {
+    "company_name": "Acme", "tier": "premium", "profile_base_url": "https://profil.acme.se",
+}
+
+
+class EvaluatePremiumTest(unittest.TestCase):
+    def test_redirect_verdict_when_3xx(self):
+        """Väg A-felet: proxyn är en redirect (3xx), inte en äkta proxy → 'redirect'."""
+        r = dh.evaluate_premium(status=301, html="", canonical=_PREMIUM_CANON, company_name="Acme")
+        self.assertEqual(r["verdict"], "redirect")
+        self.assertFalse(r["is_live"])
+
+    def test_live_when_proxy_serves_self_canonical_profile(self):
+        r = dh.evaluate_premium(status=200, html=_page(jsonld=_PREMIUM_LD),
+                                canonical=_PREMIUM_CANON, company_name="Acme")
+        self.assertEqual(r["verdict"], "live")
+        self.assertTrue(r["is_live"])
+
+    def test_mismatch_when_served_page_is_other_entity(self):
+        # Kundens domän serverar något ANNAT (fel @id OCH fel namn) → identiteten glider isär.
+        other = '{"@type":"Organization","@id":"https://x.com/other","name":"Other","dateModified":"2026-06-01"}'
+        r = dh.evaluate_premium(status=200, html=_page(jsonld=other),
+                                canonical=_PREMIUM_CANON, company_name="Acme")
+        self.assertEqual(r["verdict"], "mismatch")
+
+
+class CheckPremiumDomainTest(unittest.TestCase):
+    def test_not_premium_when_default_tier(self):
+        out = dh.check_premium_domain("acme", {"company_name": "Acme"}, fetch=lambda _u: (200, ""))
+        self.assertEqual(out["verdict"], "not_premium")
+        self.assertFalse(out["is_live"])
+
+    def test_fetches_customer_domain_not_geogiraph(self):
+        captured = {}
+
+        def fake_fetch(url):
+            captured["url"] = url
+            return 200, _page(jsonld=_PREMIUM_LD)
+
+        out = dh.check_premium_domain("acme", _PREMIUM_CLIENT, fetch=fake_fetch)
+        self.assertEqual(captured["url"], "https://profil.acme.se")  # kundens domän, inte vår
+        self.assertEqual(out["verdict"], "live")
+        self.assertEqual(out["domain"], "https://profil.acme.se")
+
+    def test_redirect_detected(self):
+        out = dh.check_premium_domain("acme", _PREMIUM_CLIENT, fetch=lambda _u: (302, ""))
+        self.assertEqual(out["verdict"], "redirect")
+
+
 _ORG_ID = "https://profiles.geogiraph.com/acme#org"
 
 

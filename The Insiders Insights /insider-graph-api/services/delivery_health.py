@@ -140,6 +140,61 @@ def check_live(
     }
 
 
+def _http_get_no_redirect(url: str) -> tuple[int, str]:
+    """GET utan att följa redirects, SSRF-grindad. Returnerar (status, text) — en 3xx
+    returneras SOM-ÄR (varken följd eller rest) så premium-kollen kan skilja en äkta
+    reverse-proxy (200 på kundens domän) från en felaktig redirect (3xx → vidare till oss).
+    Nät-/SSRF-fel → (0, "")."""
+    try:
+        safe_fetch.assert_public_url(url)
+        with httpx.Client(timeout=FETCH_TIMEOUT_SEC, follow_redirects=False) as client:
+            resp = client.get(url, headers={"User-Agent": USER_AGENT})
+        return resp.status_code, resp.text or ""
+    except (httpx.HTTPError, safe_fetch.SsrfError) as exc:
+        log.info("delivery-health: premium-hämtning misslyckades för %s: %s", url, exc)
+        return 0, ""
+
+
+def evaluate_premium(*, status: int, html: str, canonical: str, company_name: str) -> dict[str, Any]:
+    """Ren utvärdering av premium-kundens EGNA domän (Väg A, reverse-proxy). Ett 3xx-svar
+    betyder att 'proxyn' är en REDIRECT, inte en äkta proxy — då serveras innehållet inte
+    på kundens domän och förstaparts-värdet tappas (verdict 'redirect', actionable). Annars
+    samma krav som evaluate() men med kundens domän som kanonik."""
+    if 300 <= status < 400:
+        return {
+            "reachable": False, "has_jsonld": False, "identity_match": False,
+            "fresh": False, "jsonld_blocks": 0, "verdict": "redirect", "is_live": False,
+        }
+    return evaluate(status=status, html=html, canonical=canonical, company_name=company_name)
+
+
+def check_premium_domain(
+    client_id: str,
+    client: dict[str, Any] | None = None,
+    *,
+    fetch: Callable[[str], tuple[int, str]] = _http_get_no_redirect,
+) -> dict[str, Any]:
+    """Verifiera att en premium-kunds EGNA domän serverar profilen via en äkta reverse-
+    proxy (Väg A): 200 på kundens domän + canonical = kundens domän + riktig profil.
+    Skiljer en redirect (verdict 'redirect') från en äkta proxy. check_live verifierar
+    BARA vår hostade värd — den här stänger gapet att proxyn aldrig sattes upp/är fel.
+    Icke-premium kund → 'not_premium' (inget att kontrollera). `fetch` injicerbar i test."""
+    client = client or {}
+    base = (client.get("profile_base_url") or "").rstrip("/")
+    is_premium = client.get("tier") == "premium" and bool(base)
+    out: dict[str, Any] = {
+        "client_id": client_id,
+        "domain": base or None,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if not is_premium:
+        return {**out, "reachable": False, "has_jsonld": False, "identity_match": False,
+                "fresh": False, "verdict": "not_premium", "is_live": False}
+    status, html = fetch(base)
+    company = client.get("company_name") or client_id
+    return {**out, **evaluate_premium(status=status, html=html, canonical=base, company_name=company)}
+
+
 def evaluate_snippet(*, status: int, html: str, org_id: str) -> dict[str, Any]:
     """Ren utvärdering: ligger identitets-snutten (org-nodens `@id`) i den hämtade
     sidans JSON-LD? Matchar ENBART på `@id` (vår kanoniska org-IRI) — inte på namn,
