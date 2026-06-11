@@ -23,8 +23,8 @@ Effort: **S** <½ dag · **M** ½–2 dagar · **L** >2 dagar.
 > **Status 2026-06-11 (samma dag, em):** Etapp 0 ✅ · Etapp 1 (R1–R5) ✅ `38b97838d` ·
 > E1+M2 ✅ `e39c60996` · M1 ✅ `dee4adc9b` · E2 ✅ `964b25286` · L1–L3 ✅ `bdd3dd707` ·
 > L4 ✅ `627a2be3f` · Etapp 5-start F1+F3+F7 ✅ `49b427e56` · **F2 kontrollfrågor ✅**
-> (principdok: `docs/fragedesign-principer.md`).
-> **Kvar:** M3 (dokumentram), Etapp 5 forts (F4 sv/en, F5 domarstabilitet, F6 NER-audit),
+> `6ac9eb882` · **M3 dokumentram ✅** (principdok: `docs/fragedesign-principer.md`).
+> **Kvar:** Etapp 5 forts (F4 sv/en, F5 domarstabilitet, F6 NER-audit),
 > E1-kalibrering av bandtrösklarna mot historik, F2:s inflationssiffra in i rapporten
 > när underlaget vuxit (≥4 kontrollbärande veckor).
 
@@ -120,9 +120,9 @@ Auditens kärnfynd (p.6, 9, 12, 13): alla riskboxar läser samma `risk_findings`
 - Åtgärd: ta bort råa exponeringssiffror ur HTML-rapport och kundmejl NU; återinför som E1:s bandskala + insiktsmening när E1 är klar. I fliken behålls interimsvisningen tills E1.
 - Filer: BE `monthly_report.py` HTML/mejl-renderingen.
 
-**M3 — Rapporten inramad som dokument** `[P2 · S]`
+**M3 — Rapporten inramad som dokument** `[P2 · S]` ✅ (2026-06-11)
 - Problem: rapportzonen ser ut som sju boxar till; att den ligger sist framstår som ologiskt (p.10) fast det är pipelinens utdata.
-- Åtgärd: rama in hela zonen med egen bakgrund/ram + rubrik "Månadsrapport {månad} — så ser kunden den" + länk till utskriftsvyn. Beslutssäkerhets-dubbletten (hero + rapportbox) får olika roller: hero = live, rapportboxen = ögonblicksbild, märkt så.
+- Åtgärd: hela zonen inramad med egen pergament-bakgrund/ram + rubrik "Månadsrapport {månad} — så ser kunden den" + utskriftslänk (Utskriftsvy / PDF). En inledande rad reder ut beslutssäkerhets-dubbletten: rapportsiffrorna är rapportmånadens ögonblicksbild, toppbarens hero är den live/löpande.
 - Effekt: placeringen längst ner blir begriplig; dubbletten slutar förvirra.
 - Filer: FE `page.tsx`.
 

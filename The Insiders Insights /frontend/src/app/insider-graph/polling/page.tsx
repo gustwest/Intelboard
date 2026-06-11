@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Radar, Loader2, Check, X, Play } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import * as UI from '../_components/ui';
-import { graphFetch } from '../_lib/api';
+import { graphFetch, proxyShareUrl } from '../_lib/api';
 import { useJobRuns } from '../_lib/jobRuns';
 import {
   Client,
@@ -502,16 +502,36 @@ export default function GraphRiskLoopPage() {
       {months?.length === 0 && (!polling || polling.length === 0) && <EmptyState />}
 
       {report && conf && (
-        <>
-          {/* ===== MÅNADSRAPPORT — ögonblicksbild vid rapporttillfället, skild från de
-               löpande loopen ovan. Beslutssäkerhet → detekterade risker → what-if (projektion
-               av poängen) → vad mjukvaran gjorde → effekt över tid. ===== */}
-          <div id="manadsrapport">
-            <SectionDivider
-              label="Månadsrapport"
-              hint="Beslutssäkerhet och kvarvarande risker vid rapporttillfället — en ögonblicksbild."
-            />
+        // M3: hela rapportzonen inramad som ETT dokument — så blir placeringen sist
+        // begriplig (pipelinens utdata, inte sju lösa boxar). Egen pergament-bakgrund så
+        // de vita korten "ligger på" dokumentet; rubrik + utskriftslänk gör att operatören
+        // ser exakt vad kunden får.
+        <div
+          id="manadsrapport"
+          style={{ margin: '30px 0 16px', background: '#f8f6f0', border: `1px solid ${C.border}`, borderRadius: 16, padding: '18px 20px 22px' }}
+        >
+          {/* ===== MÅNADSRAPPORT — ögonblicksbild vid rapporttillfället, skild från den
+               löpande loopen ovan. Beslutssäkerhet → exponering → risker & åtgärder →
+               effekt över tid → paritet. ===== */}
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 4 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.accent, margin: 0 }}>
+              Månadsrapport {month} — så ser kunden den
+            </h3>
+            {month && selected && (
+              <a
+                href={proxyShareUrl(`/api/reports/${selected}/${month}/html`)}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Öppna utskriftsvyn — Skriv ut eller Spara som PDF där"
+                style={{ fontSize: 11, fontWeight: 600, color: C.muted, textDecoration: 'none', border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 10px', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}
+              >
+                Utskriftsvy / PDF ↗
+              </a>
+            )}
           </div>
+          <p style={{ fontSize: 12, color: C.muted, margin: '0 0 16px', lineHeight: 1.5 }}>
+            Frusen ögonblicksbild vid rapporttillfället, skild från den löpande loopen ovan. Siffrorna här är rapportmånadens — toppbarens beslutssäkerhet är den live, löpande siffran.
+          </p>
           {/* 1. Beslutssäkerhet */}
           <div style={{ ...cardStyle, marginBottom: 16 }}>
             <SectionHead title="Beslutssäkerhet" hint="Hur stor andel av de beslutskritiska frågorna AI-motorerna svarar korrekt och rättvist på. En graderad resa — aldrig helt 'i mål', eftersom motorerna ständigt ändras." />
@@ -643,7 +663,7 @@ export default function GraphRiskLoopPage() {
               </div>
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {/* L4: mätinställnings-drawer — stängning triggar full refresh så att
