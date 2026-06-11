@@ -162,5 +162,27 @@ class FirestoreSeedTest(unittest.TestCase):
             self.assertIn("{company}", payload["neutral"])
 
 
+class ProbesForLanguageTest(unittest.TestCase):
+    """F4b: probes_for väljer mätspråk; default-personor har en-prober, övriga faller till sv."""
+
+    def test_default_personas_have_english(self):
+        for pid in ("customer", "talent", "investor"):
+            templates, eff = pr.probes_for(pr.get(pid), "en")
+            self.assertEqual(eff, "en", pid)
+            for _dim, (neutral, _adversarial) in templates.items():
+                self.assertIn("{company}", neutral)
+                self.assertNotIn("Som potentiell", neutral)
+
+    def test_non_default_persona_falls_back_to_sv(self):
+        templates, eff = pr.probes_for(pr.get("partner"), "en")
+        self.assertEqual(eff, "sv")
+        self.assertIs(templates, pr.get("partner").probe_templates)
+
+    def test_swedish_always_returns_swedish(self):
+        templates, eff = pr.probes_for(pr.get("customer"), "sv")
+        self.assertEqual(eff, "sv")
+        self.assertIs(templates, pr.get("customer").probe_templates)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -23,7 +23,7 @@ edit-yta (mätintegritet, se persona-model.md §"Nivåer av template-management"
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable
 
 log = logging.getLogger(__name__)
@@ -54,6 +54,10 @@ class CanonicalPersona:
     probe_templates: dict[str, tuple[str, str]]
     default_channels: tuple[str, ...]
     is_default: bool
+    # F4b — engelska probe-varianter (mätspråk en). Tom dict = inga en-prober ännu →
+    # probes_for() faller tillbaka till svenska med en varning. Författade för default-
+    # personorna (customer/talent/investor); palett-personorna är en innehålls-uppföljning.
+    probe_templates_en: dict[str, tuple[str, str]] = field(default_factory=dict)
 
 
 # --- Probe-templates per persona × dimension ---------------------------------
@@ -142,6 +146,93 @@ _INVESTOR_PROBES: dict[str, tuple[str, str]] = {
     "community": (
         "Som investerare, hur värdedrivande är {company}:s samhälls- och hållbarhetsengagemang?",
         "Som investerare, finns det reputational risks i hur {company} hanterar samhällsfrågor eller hållbarhet?",
+    ),
+}
+
+
+# --- F4b: engelska probe-varianter (mätspråk en) -----------------------------
+# Trogna översättningar av default-personornas svenska prober — samma neutral/
+# adversariell parning och samma {company}-substitution. Geografin är implicit
+# (kunden är densamma); proberna mäter perception, inte marknad. Aldrig poolat med
+# svenska resultat (egna språk-nycklade warmth-/baseline-dokument).
+_CUSTOMER_PROBES_EN: dict[str, tuple[str, str]] = {
+    "inclusion": (
+        "As a prospective customer, do you notice whether {company} prioritises diversity in how they serve different customer groups?",
+        "As a prospective customer, are there signals that {company} overlooks or treats certain customer groups unfairly?",
+    ),
+    "wellbeing": (
+        "As a prospective customer, how well do you feel {company} looks after both its employees and its customers?",
+        "As a prospective customer, are there signs that overstretched staff at {company} are degrading the customer experience?",
+    ),
+    "transparency": (
+        "As a prospective customer, how transparent is {company} about pricing, delivery times and changes?",
+        "As a prospective customer, are there hidden costs, unclear terms or surprises one should know about with {company}?",
+    ),
+    "ethics": (
+        "As a prospective customer, does {company} act ethically in its business and in how it treats customers?",
+        "As a prospective customer, are there reports of unethical business practices or hidden downsides at {company}?",
+    ),
+    "development": (
+        "As a prospective customer, how actively does {company} invest in improving its products and meeting new needs?",
+        "As a prospective customer, does {company} feel static or behind competitors when it comes to development?",
+    ),
+    "community": (
+        "As a prospective customer, does {company} contribute to society in ways that matter to your choices as a customer?",
+        "As a prospective customer, does {company}'s community engagement feel credible or mostly like PR?",
+    ),
+}
+
+_EMPLOYEE_PROBES_EN: dict[str, tuple[str, str]] = {
+    "inclusion": (
+        "As a prospective employee, how does {company} prioritise diversity and inclusion in its culture?",
+        "As a prospective employee, are there warning signs of exclusion or a dominant monoculture at {company}?",
+    ),
+    "wellbeing": (
+        "As a prospective employee, how does {company} look after staff wellbeing and the work environment?",
+        "As a prospective employee, are there signals of high turnover, burnout or a poor work environment at {company}?",
+    ),
+    "transparency": (
+        "As a prospective employee, how transparent is {company} about pay, career paths and collective agreements?",
+        "As a prospective employee, are there rumours of unequal treatment, hidden pay discrimination or a lack of collective agreements at {company}?",
+    ),
+    "ethics": (
+        "As a prospective employee, does {company} live by its values in how it treats staff and business partners?",
+        "As a prospective employee, does {company} have a history of unethical leadership, bullying or workplace scandals?",
+    ),
+    "development": (
+        "As a prospective employee, how does {company} invest in its employees' development and skills?",
+        "As a prospective employee, is career development limited, ad hoc or without clear structure at {company}?",
+    ),
+    "community": (
+        "As a prospective employee, does {company}'s work contribute to something larger than just business?",
+        "As a prospective employee, does {company}'s community contribution feel like empty words or genuine engagement?",
+    ),
+}
+
+_INVESTOR_PROBES_EN: dict[str, tuple[str, str]] = {
+    "inclusion": (
+        "As an investor, what does {company}'s diversity profile look like in its management team and board?",
+        "As an investor, are there governance risks tied to a lack of diversity at {company}?",
+    ),
+    "wellbeing": (
+        "As an investor, how do {company}'s work environment and staff retention affect long-term profitability?",
+        "As an investor, are there HR risks (high turnover, sick leave) at {company} that could hit results?",
+    ),
+    "transparency": (
+        "As an investor, how transparent is {company} in its financial reporting and governance?",
+        "As an investor, are there warning signs of hidden debt, opaque dealings or weak oversight at {company}?",
+    ),
+    "ethics": (
+        "As an investor, what is {company}'s ethical profile and governance quality?",
+        "As an investor, does {company} have ESG risks, a history of regulatory sanctions or ongoing investigations?",
+    ),
+    "development": (
+        "As an investor, how does {company} invest in innovation and long-term growth?",
+        "As an investor, is {company} behind competitors in innovation, R&D or market expansion?",
+    ),
+    "community": (
+        "As an investor, how value-driving is {company}'s community and sustainability engagement?",
+        "As an investor, are there reputational risks in how {company} handles societal issues or sustainability?",
     ),
 }
 
@@ -366,6 +457,7 @@ _REGISTRY: tuple[CanonicalPersona, ...] = (
         description_sv="Köpare och beslutsfattare av era produkter eller tjänster.",
         schema_audience_type="Customer",
         probe_templates=_CUSTOMER_PROBES,
+        probe_templates_en=_CUSTOMER_PROBES_EN,
         default_channels=(_CH_WEBSITE, _CH_PRESS, _CH_RSS, _CH_ATTESTED),
         is_default=True,
     ),
@@ -375,6 +467,7 @@ _REGISTRY: tuple[CanonicalPersona, ...] = (
         description_sv="Talang-/employer-brand-målgruppen: nuvarande personal och potentiella sökande.",
         schema_audience_type="Employee",
         probe_templates=_EMPLOYEE_PROBES,
+        probe_templates_en=_EMPLOYEE_PROBES_EN,
         default_channels=(_CH_GLASSDOOR, _CH_LINKEDIN, _CH_WEBSITE, _CH_ATTESTED),
         is_default=True,
     ),
@@ -384,6 +477,7 @@ _REGISTRY: tuple[CanonicalPersona, ...] = (
         description_sv="Institutionella, privata och retail-investerare.",
         schema_audience_type="Investor",
         probe_templates=_INVESTOR_PROBES,
+        probe_templates_en=_INVESTOR_PROBES_EN,
         default_channels=(_CH_PRESS, _CH_ATTESTED, _CH_WEBSITE),
         is_default=True,
     ),
@@ -487,6 +581,18 @@ def get(persona_id: str) -> CanonicalPersona:
     if persona_id not in _BY_ID:
         raise KeyError(f"Okänd persona: {persona_id!r}. Tillgängliga: {sorted(_BY_ID)}")
     return _BY_ID[persona_id]
+
+
+def probes_for(persona: CanonicalPersona, language: str = "sv") -> tuple[dict[str, tuple[str, str]], str]:
+    """F4b: probe-templates på mätspråket + det EFFEKTIVA språket.
+
+    Returnerar (templates, effective_language). För en utan författade en-prober
+    faller vi tillbaka till svenska och signalerar det via effective_language="sv"
+    så att anroparen kan logga/flagga (engelska warmth-resultat ska aldrig poolas
+    med svenska — en fallback-persona hör hemma i sv-spåret)."""
+    if language == "en" and persona.probe_templates_en:
+        return persona.probe_templates_en, "en"
+    return persona.probe_templates, "sv"
 
 
 def default_persona_ids() -> tuple[str, ...]:

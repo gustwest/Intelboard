@@ -47,8 +47,13 @@ def _claim_weight(claim: Any) -> float:
     return best
 
 
-def _read_perceived(client_id: str) -> dict[str, Any]:
-    snap = fs.polling_results_col(client_id).document(WARMTH_PROBE_DOC).get()
+def _warmth_doc_id(language: str = "sv") -> str:
+    """F4b: läs warmth-dokumentet för kundens mätspråk (sv = bakåtkompat doknamn)."""
+    return WARMTH_PROBE_DOC if language == "sv" else f"{WARMTH_PROBE_DOC}-{language}"
+
+
+def _read_perceived(client_id: str, language: str = "sv") -> dict[str, Any]:
+    snap = fs.polling_results_col(client_id).document(_warmth_doc_id(language)).get()
     if not getattr(snap, "exists", False):
         return {}
     return (snap.to_dict() or {}).get("dimensions") or {}
@@ -279,12 +284,17 @@ def _inputs_hash(claims: list[Any], perceived_all: dict[str, Any], prior_date: s
 
 def compute(client_id: str) -> dict[str, Any]:
     """Ren beräkning av trust_gap-dokumentet (ingen skrivning)."""
-    if not fs.client_doc(client_id).get().exists:
+    client_snap = fs.client_doc(client_id).get()
+    if not getattr(client_snap, "exists", False):
         raise KeyError(f"client not found: {client_id}")
 
+    # F4b: mätspråk styr vilket warmth-/baseline-dokument vi läser (aldrig poolat sv/en).
+    mlang = (client_snap.to_dict() or {}).get("measurement_language")
+    language = mlang if mlang in ("sv", "en") else "sv"
+
     claims = list(iter_culture_claims(client_id))
-    perceived_all = _read_perceived(client_id)
-    engine_bias = engine_baselines.biases(engine_baselines.load(client_id))
+    perceived_all = _read_perceived(client_id, language)
+    engine_bias = engine_baselines.biases(engine_baselines.load(client_id, language))
     prior = _read_prior_snapshot(client_id)
     prior_dims = (prior or {}).get("dimensions") or {}
     prior_date = (prior or {}).get("date")

@@ -75,7 +75,32 @@ CANARY_QUESTIONS: list[str] = [
     "Vilken bransch är {company} verksamt inom?",
     "Är {company} ett privat företag, börsnoterat eller offentligt ägt?",
 ]
+# F4b: engelska canary-frågor för mätspråk en (samma fakta, annat språk).
+CANARY_QUESTIONS_EN: list[str] = [
+    "In which country does {company} have its headquarters?",
+    "Which industry does {company} operate in?",
+    "Is {company} a private, publicly listed or state-owned company?",
+]
 ANCHOR_QUESTION = CANARY_QUESTIONS[0]  # bakåtkompat — tester/legacy refererar denna
+
+
+def _canary_questions(language: str) -> list[str]:
+    return CANARY_QUESTIONS_EN if language == "en" else CANARY_QUESTIONS
+
+
+SUPPORTED_PROBE_LANGUAGES = ("sv", "en")
+
+
+def _measurement_language(client: dict[str, Any]) -> str:
+    """Kundens mätspråk (sv default), skilt från profilspråket. Speglar polling."""
+    lang = client.get("measurement_language")
+    return lang if lang in SUPPORTED_PROBE_LANGUAGES else "sv"
+
+
+def _warmth_doc_id(language: str = "sv") -> str:
+    """F4b: språk-nyckling av warmth-dokumentet. Svenska behåller doknamnet (bakåtkompat);
+    engelska får ett eget så att sv/en aldrig poolas (egna baselines, egen trust-gap)."""
+    return hc.WARMTH_PROBE_DOC if language == "sv" else f"{hc.WARMTH_PROBE_DOC}-{language}"
 
 # Token-overlap under denna tröskel mellan nuvarande och föregående canary-svar
 # → drift misstänks för den motorn. 0.3 = svaret har bytt mer än 70% av sina
@@ -92,9 +117,15 @@ _JUDGE_SYSTEM = (
 )
 
 
-def _ask(question: str, llm: Any) -> str:
+_ASK_SYSTEM = {
+    "sv": "Du är en sakkunnig svensk analytiker. Svara koncist och konkret.",
+    "en": "You are a knowledgeable analyst covering the Swedish market. Answer concisely and concretely.",
+}
+
+
+def _ask(question: str, llm: Any, language: str = "sv") -> str:
     msg = [
-        SystemMessage(content="Du är en sakkunnig svensk analytiker. Svara koncist och konkret."),
+        SystemMessage(content=_ASK_SYSTEM.get(language, _ASK_SYSTEM["sv"])),
         HumanMessage(content=question),
     ]
     resp = llm.invoke(msg)
@@ -126,11 +157,11 @@ def _clamp(v: Any) -> float:
 # --- Canary-drift-detektion (Fas 2.2b) ---------------------------------------
 
 
-def _read_prior_canaries(client_id: str) -> dict[str, list[str]]:
-    """Föregående körnings canary-svar per motor. Tom dict om ingen tidigare körning
-    eller om dokumentet saknar canaries (pre-2.2b-data). Best-effort."""
+def _read_prior_canaries(client_id: str, language: str = "sv") -> dict[str, list[str]]:
+    """Föregående körnings canary-svar per motor (för drift-jämförelse inom samma språk).
+    Tom dict om ingen tidigare körning eller om dokumentet saknar canaries. Best-effort."""
     try:
-        snap = fs.polling_results_col(client_id).document(hc.WARMTH_PROBE_DOC).get()
+        snap = fs.polling_results_col(client_id).document(_warmth_doc_id(language)).get()
     except Exception:  # noqa: BLE001
         return {}
     if not getattr(snap, "exists", False):
@@ -346,7 +377,9 @@ def run_for_client(
     if not snap.exists:
         log.warning("warmth-probes: klient %s saknas", client_id)
         return None
-    company = (snap.to_dict() or {}).get("company_name") or client_id
+    client = snap.to_dict() or {}
+    company = client.get("company_name") or client_id
+    language = _measurement_language(client)  # F4b: mätspråk för proberna
 
     engines = engines if engines is not None else llm_factory.make_probe_engines()
     if not engines:
@@ -368,29 +401,46 @@ def run_for_client(
         len(engines) * len(active_personas) * len(hc.DIMENSIONS) * runs,
     )
 
-    # Föregående körnings canary-svar (för drift-jämförelse). Tom dict om första körningen.
-    prior_canaries = _read_prior_canaries(client_id)
+    # Föregående körnings canary-svar (för drift-jämförelse inom samma språk).
+    prior_canaries = _read_prior_canaries(client_id, language)
+    canary_questions = _canary_questions(language)
+
+    # F4b: en engelsk mätning får bara probe-personor med författade en-prober. En persona
+    # utan en-prober skulle annars mätas på svenska och förorena det engelska språkspåret.
+    fallback_personas = [
+        p.id for p in active_personas
+        if language == "en" and persona_registry.probes_for(p, language)[1] != "en"
+    ]
+    if fallback_personas:
+        log.warning(
+            "warmth-probes %s: personor utan engelska prober hoppas över i en-mätningen: %s "
+            "(författa en-prober i persona_registry för full täckning)",
+            client_id, fallback_personas,
+        )
+        active_personas = [p for p in active_personas if p.id not in fallback_personas]
+        active_persona_ids = [pid for pid in active_persona_ids if pid not in fallback_personas]
 
     # by_engine_persona[engine][persona_id][dim] = verdict | None
     by_engine_persona: dict[str, dict[str, dict[str, dict | None]]] = {}
-    canaries: dict[str, list[str]] = {}  # engine → lista av canary-svar (samma ordning som CANARY_QUESTIONS)
+    canaries: dict[str, list[str]] = {}  # engine → lista av canary-svar (samma ordning som canary_questions)
     for ename, llm in engines.items():
         # Canary-frågor en gång per motor — persona-oberoende. Driftkontroll.
         engine_canaries: list[str] = []
-        for q in CANARY_QUESTIONS:
+        for q in canary_questions:
             try:
-                engine_canaries.append(_ask(q.format(company=company), llm))
+                engine_canaries.append(_ask(q.format(company=company), llm, language))
             except Exception as exc:  # noqa: BLE001
                 log.warning("canary-fråga misslyckades för %s: %s", ename, exc)
                 engine_canaries.append("")
         canaries[ename] = engine_canaries
 
         for persona in active_personas:
-            for dim, (neutral_q, adversarial_q) in persona.probe_templates.items():
+            templates, _eff = persona_registry.probes_for(persona, language)
+            for dim, (neutral_q, adversarial_q) in templates.items():
                 try:
                     answers = [
-                        _ask(neutral_q.format(company=company), llm),
-                        _ask(adversarial_q.format(company=company), llm),
+                        _ask(neutral_q.format(company=company), llm, language),
+                        _ask(adversarial_q.format(company=company), llm, language),
                     ]
                     verdict = _judge_verdict_calibrated(judge, company, dim, answers, runs)
                 except Exception as exc:  # noqa: BLE001
@@ -406,6 +456,8 @@ def run_for_client(
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "engines": sorted(engines.keys()),
             "personas": active_persona_ids,
+            # F4b — mätspråk proberna ställdes på; sv/en lagras i skilda dokument.
+            "language": language,
             # Canary-suite (Fas 2.2b): nuvarande svar + ev. drift-flagga. anchors
             # behålls som alias (första canary-svaret) för bakåtkompat.
             "canaries": canaries,
@@ -419,10 +471,10 @@ def run_for_client(
             "canary-drift misstänkt för %s — motorer: %s (körningen kan vara ojämförbar)",
             client_id, drift_engines,
         )
-    fs.polling_results_col(client_id).document(hc.WARMTH_PROBE_DOC).set(doc)
+    fs.polling_results_col(client_id).document(_warmth_doc_id(language)).set(doc)
     log.info(
-        "värme-probes skrivna för %s (%d motorer × %d personor)",
-        client_id, len(engines), len(active_personas),
+        "värme-probes skrivna för %s (%d motorer × %d personor, språk=%s)",
+        client_id, len(engines), len(active_personas), language,
     )
 
     # Per-engine-baslinjer (Fas 2.2): EWMA-uppdatera motorernas leniency-snitt ur
@@ -430,7 +482,7 @@ def run_for_client(
     try:
         from services import engine_baselines
 
-        engine_baselines.update_from_dimensions(client_id, doc["dimensions"])
+        engine_baselines.update_from_dimensions(client_id, doc["dimensions"], language)
     except Exception as exc:  # noqa: BLE001
         log.warning("engine-baseline-uppdatering misslyckades (icke-fatal) för %s: %s", client_id, exc)
 

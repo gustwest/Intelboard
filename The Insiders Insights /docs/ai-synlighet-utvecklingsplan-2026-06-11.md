@@ -24,8 +24,9 @@ Effort: **S** <½ dag · **M** ½–2 dagar · **L** >2 dagar.
 > E1+M2 ✅ `e39c60996` · M1 ✅ `dee4adc9b` · E2 ✅ `964b25286` · L1–L3 ✅ `bdd3dd707` ·
 > L4 ✅ `627a2be3f` · Etapp 5-start F1+F3+F7 ✅ `49b427e56` · **F2 kontrollfrågor ✅**
 > `6ac9eb882` · **M3 dokumentram ✅** · **F5 domarstabilitet ✅** · **F6 NER-kvalitet ✅** ·
-> **F4 polling-språk sv/en ✅** (principdok: `docs/fragedesign-principer.md`).
-> **Kvar (datagrindat/uppföljning):** F4b engelska warmth-prober (+ en-baselines),
+> **F4 polling-språk sv/en ✅** · **F4b warmth-språkinfra ✅** (default-personor + språk-
+> nycklade warmth/baseline-dok) (principdok: `docs/fragedesign-principer.md`).
+> **Kvar (datagrindat/innehåll):** F4b-content (en-prober för 7 palett-personor),
 > E1-kalibrering av bandtrösklarna mot historik, F2:s inflationssiffra in i rapporten
 > när underlaget vuxit (≥4 kontrollbärande veckor).
 
@@ -176,11 +177,12 @@ Eget fokuserat arbetsspår: forskningsbaserat och optimerat över tid. Tre fråg
 - Åtgärd: (a) versionera frågemallarna — varje ändring arkiveras med datum + motivering, vecko-resultat taggas med mallversion, trendbrott vid versionsbyte markeras i UI (som modell-bryt-markörerna i WeeklyVisibility); (b) kvartalsvis mallöversyn som rutin; (c) staleness-flagg i fliken när substitutioner är >90 dagar orörda.
 - Filer: BE `services/polling.py` (version i resultatdokumentet), FE `WeeklyVisibility.tsx` (versionsbryt), `Panels.tsx` (staleness i Synlighets-frågor).
 
-**F4 — Språk: sv/en per kund** `[P2 · M]` ✅ polling-spåret (2026-06-11) · F4b warmth kvar
+**F4 — Språk: sv/en per kund** `[P2 · M]` ✅ polling-spåret + F4b warmth-infra (2026-06-11)
 - Problem: allt är svenska — men citerbarhet är motor- och språkspecifik (GEO-evidensen); engelska frågor kan ge en annan synlighetsbild för samma kund.
 - Åtgärd: språkval per kund i mätkonfig; engelska varianter av default-mallarna; resultat taggas med språk och medeltalas aldrig över språk (samma princip som bas-kunskap vs live-signal).
 - Status: **polling-spåret i drift.** `measurement_language` (sv/en) per kund i mätkonfig (skilt från profilspråket), engelska default- + kontrollfrågemallar (geografin "Swedish" behålls = samma marknad), engelsk systemram i `_ask`, resultat taggat med `language` och språk invävt i `questions_fingerprint` (språkbyte = jämförbarhetsbrott). Custom-frågor är språkagnostiska.
-- **F4b (kvar):** engelska warmth-prober (`persona_registry`, 120 kalibrerade adversariella strängar) + egna per-motor-baselines för engelska. Eget mätspår som kräver författande + omkalibrering över veckor — kan inte slås på meningsfullt utan det (språkspecifika EWMA-baselines). Trust-gap mäts tills vidare på svenska oavsett pollingspråk; dokumenterat split.
+- **F4b — warmth-spåret i drift (default-personor).** `persona_registry` har nu engelska prober för de tre default-personorna (customer/talent/investor); `probes_for(persona, lang)` väljer språk med sv-fallback. `warmth_probes` läser `measurement_language`, ställer engelska prober + canary + systemram, och persisterar till **språk-nyckladt** warmth-dokument (`{WARMTH_PROBE_DOC}-en`); EWMA-baselines lagras språk-separerat (`engine-baselines-en`) så engelsk perception aldrig kalibreras mot svensk baseline; `compute_trust_gap` läser rätt språkdokument. En en-mätning hoppar över personor utan en-prober (loggat) så spåret förblir rent. Svenska vägen byte-identisk (default sv → samma doknamn). De engelska baselines konvergerar automatiskt över veckor (EWMA-uppvärmning, inget manuellt).
+- **F4b-content (kvar):** engelska prober för de 7 palett-personorna (partner/media/regulator/patient/student/donor/citizen) — ren innehållsuppföljning; tills dess hoppas de över i en-mätningar.
 - Filer: BE `services/polling.py` (DEFAULT_QUESTIONS_EN, CONTROL_QUESTIONS_EN, `_measurement_language`, `_substitutions`, språk i ask/fingerprint/PollingResult), `routers/clients.py` (measurement_language), `routers/polling.py`; FE `MeasurementConfigEditor.tsx` (språkväljare), `_shared.tsx`, `Panels.tsx`. Tester: `test_polling_sampling.py`, `test_clients_contact_language.py`.
 
 **F5 — Domarstabilitet synliggjord** `[P2 · S]` ✅ (2026-06-11)

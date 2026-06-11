@@ -32,6 +32,13 @@ log = logging.getLogger(__name__)
 # Doc-id i polling_results-collectionen (bredvid warmth-latest).
 ENGINE_BASELINE_DOC = "engine-baselines"
 
+
+def _baseline_doc_id(language: str = "sv") -> str:
+    """F4b: språk-nyckling. Svenska behåller det ursprungliga doknamnet (bakåtkompat);
+    engelska får ett eget dokument så att en motors leniency-baseline byggs SEPARAT per
+    språk — annars kalibreras engelsk perception mot svensk baseline (korrupt gap)."""
+    return ENGINE_BASELINE_DOC if language == "sv" else f"{ENGINE_BASELINE_DOC}-{language}"
+
 # EWMA-vikt för en ny observation. 0.35 → baslinjen rör sig men domineras inte av
 # en enskild brusig körning (≈ effektivt fönster på ~5 körningar).
 BASELINE_ALPHA = 0.35
@@ -46,9 +53,9 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def load(client_id: str) -> dict[str, Any]:
-    """Läs den persisterade baslinje-dokumentet. {} om ingen finns ännu."""
-    snap = fs.polling_results_col(client_id).document(ENGINE_BASELINE_DOC).get()
+def load(client_id: str, language: str = "sv") -> dict[str, Any]:
+    """Läs den persisterade baslinje-dokumentet för mätspråket. {} om ingen finns ännu."""
+    snap = fs.polling_results_col(client_id).document(_baseline_doc_id(language)).get()
     if not getattr(snap, "exists", False):
         return {}
     return snap.to_dict() or {}
@@ -88,13 +95,13 @@ def _observations(dims: dict[str, Any]) -> dict[str, float]:
     }
 
 
-def update_from_dimensions(client_id: str, dims: dict[str, Any]) -> dict[str, Any]:
+def update_from_dimensions(client_id: str, dims: dict[str, Any], language: str = "sv") -> dict[str, Any]:
     """EWMA-uppdatera baslinjen från en färsk värme-probe-körnings `dimensions`-map.
 
     No-op (returnerar befintlig doc) om körningen inte gav någon kvalificerad
-    observation. Skrivs till polling_results/engine-baselines."""
+    observation. Skrivs till språk-nyckladt baseline-dokument (F4b)."""
     obs = _observations(dims)
-    doc = load(client_id)
+    doc = load(client_id, language)
     engines: dict[str, Any] = dict(doc.get("engines") or {})
     if not obs:
         return doc
@@ -113,7 +120,7 @@ def update_from_dimensions(client_id: str, dims: dict[str, Any]) -> dict[str, An
     means = [e["valence_mean"] for e in engines.values() if e.get("valence_mean") is not None]
     panel = round(fmean(means), 4) if means else None
     new_doc = {"engines": engines, "panel_valence_mean": panel, "updated_at": _now_iso()}
-    fs.polling_results_col(client_id).document(ENGINE_BASELINE_DOC).set(new_doc)
+    fs.polling_results_col(client_id).document(_baseline_doc_id(language)).set(new_doc)
     log.info(
         "engine-baselines uppdaterade för %s: %d motorer, panel=%.3f",
         client_id, len(engines), panel if panel is not None else float("nan"),

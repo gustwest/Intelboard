@@ -137,5 +137,40 @@ class CredibilityGapCalibrationTest(unittest.TestCase):
         self.assertEqual(dim["credibility_gap"], 0.8)
 
 
+class BaselineLanguageIsolationTest(unittest.TestCase):
+    """F4b: sv och en baselines lagras i skilda dokument och blandas aldrig."""
+
+    def test_sv_and_en_baselines_independent(self):
+        fakefs.reset(client={"company_name": "Acme AB"}, polling_results={})
+        # MIN_DIMS_FOR_OBS=2 → ge gpt valens på två dimensioner i varje körning.
+        sv = _dims({"ethics": {"gpt": {"valence": 0.9, "salience": 0.7}},
+                    "inclusion": {"gpt": {"valence": 0.9, "salience": 0.7}}})
+        en = _dims({"ethics": {"gpt": {"valence": 0.2, "salience": 0.7}},
+                    "inclusion": {"gpt": {"valence": 0.2, "salience": 0.7}}})
+        eb.update_from_dimensions("acme", sv, "sv")
+        eb.update_from_dimensions("acme", en, "en")
+        self.assertAlmostEqual(eb.load("acme", "sv")["engines"]["gpt"]["valence_mean"], 0.9, places=3)
+        self.assertAlmostEqual(eb.load("acme", "en")["engines"]["gpt"]["valence_mean"], 0.2, places=3)
+        # Default-load (sv) ser inte den engelska baslinjen.
+        self.assertAlmostEqual(eb.load("acme")["engines"]["gpt"]["valence_mean"], 0.9, places=3)
+
+    def test_english_client_reads_english_warmth_and_baseline(self):
+        # compute() för en en-kund läser det engelska warmth- + baseline-dokumentet.
+        fakefs.reset(
+            client={"company_name": "Acme AB", "measurement_language": "en"},
+            claims={},
+            polling_results={
+                f"{hc.WARMTH_PROBE_DOC}-en": {"dimensions": {"ethics": {
+                    "salience": 0.8, "valence": 0.8, "confidence": 0.8,
+                    "by_engine": {"gpt": {"valence": 0.8, "salience": 0.8}},
+                }}},
+                f"{eb.ENGINE_BASELINE_DOC}-en": _BASELINE,
+            },
+        )
+        dim = ctg.compute("acme")["dimensions"]["ethics"]
+        # Engelsk baseline (gpt bias +0.15) appliceras → kalibrerad 0.65.
+        self.assertEqual(dim["perceived"]["valence_calibrated"], 0.65)
+
+
 if __name__ == "__main__":
     unittest.main()
