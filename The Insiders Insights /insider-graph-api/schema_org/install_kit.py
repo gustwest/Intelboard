@@ -16,18 +16,48 @@ import firestore_client as fs
 from config import settings
 from schema_org.badge import profile_url, render_badge
 from schema_org.delivery import render_identity_snippet
+from schema_org.urls import canonical_url
 
 
 def build_kit(client_id: str) -> dict[str, str]:
     """De tre artefakterna + kontext, för rendering och e-post (samma källa)."""
     data = fs.client_doc(client_id).get().to_dict() or {}
     lang = (data.get("language") or "sv").lower()
+    own_domain = (data.get("profile_base_url") or "").rstrip("/")
+    is_premium = (data.get("tier") == "premium") and bool(own_domain)
     return {
         "company_name": data.get("company_name") or client_id,
         "profile_url": profile_url(client_id),
         "identity_snippet": render_identity_snippet(client_id),
         "badge_snippet": render_badge(client_id, lang=lang),
+        # Premium (P5): profilen är konfigurerad att ligga på kundens EGEN domän —
+        # förstaparts = starkast AI-auktoritet (domänauktoritets-beslutet). own_domain
+        # är kundens subdomän; hosted_url är den geogiraph-hostade profilen den ska
+        # peka på. Tom sträng för default-tier (ingen domän-sektion renderas).
+        "own_domain": own_domain if is_premium else "",
+        "hosted_url": canonical_url(client_id, None) if is_premium else "",
     }
+
+
+def _premium_domain_html(kit: dict[str, str]) -> str:
+    """Domän-sektion för premium-kund (P5). Tom sträng för default-tier. Ärlig om
+    serveringsvägen: profilen ANKRAS redan till kundens domän (@id/kanonik), och den
+    återstående DNS-/serveringskopplingen samordnas med kundens IT — vi fabricerar inte
+    exakta poster (proxy-vs-CNAME-vägen är en gemensam uppsättning per kund)."""
+    own = kit.get("own_domain")
+    if not own:
+        return ""
+    own_e = html.escape(own)
+    hosted_e = html.escape(kit.get("hosted_url") or "")
+    return f"""<div class="premium">
+<h2>Er profil på er egen domän</h2>
+<p>Er profil är konfigurerad att ligga på <strong>{own_e}</strong> — på er egen domän.
+Det är den starkaste positionen för AI-synlighet: innehållet räknas som <em>förstaparts</em>
+och väger tyngst hos AI-motorer och sök, till skillnad från en tredjeparts-värd.</p>
+<p class="note">Det enda som återstår är en <strong>engångs-DNS-koppling</strong> så att {own_e}
+serverar den hostade profilen ({hosted_e}). Den sätter vi upp tillsammans med er IT —
+kontakta {settings.support_contact_email} så koordinerar vi den korta uppsättningen.</p>
+</div>"""
 
 
 def render_install_kit(client_id: str) -> str:
@@ -37,6 +67,7 @@ def render_install_kit(client_id: str) -> str:
     profile = html.escape(kit["profile_url"])
     identity = html.escape(kit["identity_snippet"])
     badge = html.escape(kit["badge_snippet"])
+    premium = _premium_domain_html(kit)
 
     return f"""<!doctype html>
 <html lang="sv"><head><meta charset="utf-8">
@@ -60,6 +91,8 @@ def render_install_kit(client_id: str) -> str:
  details.howto li{{margin:.35rem 0}}
  .fallback{{background:#eef4ff;border:1px solid #cfe0ff;border-radius:8px;padding:.85rem 1rem;font-size:.92rem;color:#333;margin-top:1.6rem}}
  .trust{{background:#f0f9f4;border:1px solid #cfe8d8;border-radius:8px;padding:.85rem 1rem;font-size:.92rem;color:#234;margin:1.2rem 0 0}}
+ .premium{{background:#fbf7ef;border:1px solid #ecdcc0;border-radius:8px;padding:.4rem 1.1rem 1rem;margin:1.4rem 0 0}}
+ .premium h2{{margin-top:1rem}}
  .toolbar{{display:flex;justify-content:flex-end;margin-bottom:1rem}}
  .toolbar button{{font:inherit;padding:.4rem .9rem;border:1px solid #ccc;background:#fff;border-radius:6px;cursor:pointer}}
  @media print{{.toolbar{{display:none}} body{{margin:0;max-width:none}} pre{{white-space:pre-wrap}}}}
@@ -73,7 +106,7 @@ och behöver aldrig röras igen — profilsidan uppdaterar vi åt er löpande.</
 exekverande JavaScript, ingen spårning, inga cookies. Den talar bara om för AI-motorerna vem ni
 är och pekar på er verifierade profil. Geogiraph är tjänsten The Insiders använder för att hålla
 er bild korrekt i AI-svar.</p>
-
+{premium}
 <ol>
 <li>
 <h2>Identitets-snutt — klistra in i sidans <code>&lt;head&gt;</code></h2>
@@ -113,8 +146,17 @@ def render_install_kit_email(client_id: str) -> tuple[str, str, str]:
     kit = build_kit(client_id)
     name = kit["company_name"]
     subject = f"Installationsinstruktioner för er Geogiraph AI-profil — {name}"
+    premium_text = ""
+    if kit.get("own_domain"):
+        premium_text = (
+            f"Er profil på er egen domän ({kit['own_domain']}):\n"
+            f"  Profilen är konfigurerad att ligga på er egen domän — den starkaste positionen\n"
+            f"  för AI-synlighet (förstaparts väger tyngst). Det återstår en engångs-DNS-koppling\n"
+            f"  så att {kit['own_domain']} serverar den hostade profilen ({kit['hosted_url']}).\n"
+            f"  Den sätter vi upp tillsammans med er IT — kontakta {settings.support_contact_email}.\n\n"
+        )
     text = (
-        f"Hej!\n\nHär är de tre sakerna att lägga till på er sajt (klistras in en gång):\n\n"
+        f"Hej!\n\n{premium_text}Här är de tre sakerna att lägga till på er sajt (klistras in en gång):\n\n"
         f"1) Identitets-snutt (i sidans <head>):\n{kit['identity_snippet']}\n\n"
         f"2) Badge (t.ex. i footern):\n{kit['badge_snippet']}\n\n"
         f"3) Er publika AI-profil:\n{kit['profile_url']}\n\n"

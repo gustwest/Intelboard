@@ -60,5 +60,41 @@ class InstallKitSendTest(unittest.TestCase):
         self.assertEqual(result["reason"], "no_contact")
 
 
+class PremiumDomainTest(unittest.TestCase):
+    """P5: premium-tier-kit visar kundens egen-domän-sektion; default-tier gör inte det."""
+
+    _PREMIUM = {
+        "company_name": "Acme AB", "website": "https://acme.se",
+        "tier": "premium", "profile_base_url": "https://profil.acme.se",
+    }
+
+    def test_build_kit_exposes_own_domain_for_premium(self):
+        fakefs.reset(client=self._PREMIUM)
+        kit = install_kit.build_kit("acme")
+        self.assertEqual(kit["own_domain"], "https://profil.acme.se")
+        self.assertTrue(kit["hosted_url"])  # geogiraph-hostade målet (proxy-/DNS-mål)
+        # Kundens profil-länk pekar på deras egen domän (premium-kanonik).
+        self.assertIn("profil.acme.se", kit["profile_url"])
+
+    def test_html_has_domain_section_for_premium(self):
+        fakefs.reset(client=self._PREMIUM)
+        html = install_kit.render_install_kit("acme")
+        self.assertIn("er egen domän", html)
+        self.assertIn("profil.acme.se", html)
+        self.assertIn("förstaparts", html)  # domänauktoritets-framing
+
+    def test_default_tier_has_no_domain_section(self):
+        fakefs.reset(client={"company_name": "Acme AB", "website": "https://acme.se"})
+        kit = install_kit.build_kit("acme")
+        self.assertEqual(kit["own_domain"], "")
+        self.assertNotIn("er egen domän", install_kit.render_install_kit("acme"))
+
+    def test_premium_note_in_email_text(self):
+        fakefs.reset(client=self._PREMIUM)
+        _subject, _html, text = install_kit.render_install_kit_email("acme")
+        self.assertIn("egen domän", text)
+        self.assertIn("profil.acme.se", text)
+
+
 if __name__ == "__main__":
     unittest.main()
