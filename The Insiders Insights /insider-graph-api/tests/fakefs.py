@@ -183,6 +183,26 @@ def raw_items_company_col(client_id: str) -> _Col:
     return _Col(STATE.get("company_items"), deletable=True, writable=True)
 
 
+class _QueryCol:
+    """Minimal where()-bar collection — räcker för connector_status (job_runs)."""
+    def __init__(self, docs: dict[str, dict], filters: list[tuple] | None = None):
+        self._docs = docs
+        self._filters = filters or []
+
+    def where(self, field: str, _op: str, value) -> "_QueryCol":
+        return _QueryCol(self._docs, [*self._filters, (field, value)])
+
+    def stream(self) -> list[_Snap]:
+        return [
+            _Snap(i, d) for i, d in self._docs.items()
+            if all((d or {}).get(f) == v for f, v in self._filters)
+        ]
+
+
+def job_runs_col() -> _QueryCol:
+    return _QueryCol(STATE.get("job_runs", {}))
+
+
 def job_feed_state_doc(client_id: str) -> _DocRef:
     return _DocRef(
         "latest",

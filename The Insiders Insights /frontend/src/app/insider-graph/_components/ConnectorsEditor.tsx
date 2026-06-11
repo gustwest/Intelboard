@@ -1,23 +1,41 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plug, Plus, Trash2, Check, AlertCircle } from 'lucide-react';
+import { Plug, Plus, Trash2, Check, AlertCircle, Globe } from 'lucide-react';
 import { graphColors as C } from './GraphPageShell';
 import { graphFetch } from '../_lib/api';
+import { fmtRelative } from '../_lib/jobRuns';
 import { CONNECTOR_NAME as NAME } from '../_lib/connectors';
 import * as UI from './ui';
 
 type InputFieldMeta = { name: string; label: string; type: string; required: boolean; placeholder?: string; help?: string };
 type ConnectorMeta = { id: string; fetch_method: string; output_types: string[]; frequency: string; tier: string; input_fields: InputFieldMeta[] };
 type RssFeed = { url: string; schema_type: string; label?: string };
+// Datatillstånd per connector (från backend): speglar VAD vi har, inte bara att toggeln är på.
+type ConnStatus = { state: 'live' | 'staged' | 'idle'; last_at: string | null; detail?: string; ok?: boolean };
 type State = {
   available: ConnectorMeta[];
   active_connectors: string[];
   rss_feeds: RssFeed[];
   connector_params: Record<string, string | null>;
+  connector_status?: Record<string, ConnStatus>;
 };
 
 const SCHEMA_OPTIONS = ['NewsArticle', 'JobPosting', 'PodcastEpisode', 'Event'];
+
+/** Chip-utseende per tri-state: live (grön, i leverans), staged (amber, uppladdad men
+ *  väntar), idle (påslagen men ingen data) och off (avslagen). Underraden bär datumet. */
+function chipVisual(on: boolean, st?: ConnStatus) {
+  if (!on) return { bg: 'transparent', fg: C.muted, border: C.border, dot: 'rgba(0,0,0,0.18)', sub: '' };
+  const rel = fmtRelative(st?.last_at);
+  if (st?.state === 'live')
+    return { bg: 'rgba(34,197,94,0.14)', fg: '#16a34a', border: 'rgba(34,197,94,0.4)', dot: '#22c55e', sub: rel ? `uppdaterad ${rel}` : 'i leverans' };
+  if (st?.state === 'staged')
+    return { bg: 'rgba(245,158,11,0.14)', fg: '#b45309', border: 'rgba(245,158,11,0.45)', dot: '#f59e0b', sub: rel ? `uppladdad ${rel} · väntar` : 'väntar på inkludering' };
+  // idle: påslagen men ingen färsk/inkluderad data (ev. misslyckad körning).
+  const failed = st?.ok === false;
+  return { bg: 'transparent', fg: C.text, border: C.border, dot: failed ? '#dc2626' : 'rgba(0,0,0,0.25)', sub: failed && rel ? `körning ${rel} · fel` : 'ingen data ännu' };
+}
 
 /** Per-kund connector-konfiguration (välj connectors + RSS-feeds). */
 export default function ConnectorsEditor({ clientId }: { clientId: string }) {
@@ -113,17 +131,38 @@ export default function ConnectorsEditor({ clientId }: { clientId: string }) {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: active.includes('rss') ? 14 : 0 }}>
             {state.available.map((conn) => {
               const on = active.includes(conn.id);
+              const st = on ? state.connector_status?.[conn.id] : undefined;
+              const v = chipVisual(on, st);
               return (
                 <button
                   key={conn.id}
                   onClick={() => toggle(conn.id)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 999, background: on ? 'rgba(34,197,94,0.14)' : 'transparent', color: on ? '#16a34a' : C.muted, border: `1px solid ${on ? 'rgba(34,197,94,0.4)' : C.border}`, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                  title={st?.detail || (on ? 'Påslagen' : 'Avslagen')}
+                  style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, padding: '6px 12px', borderRadius: 12, background: v.bg, color: v.fg, border: `1px solid ${v.border}`, fontSize: 12, fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
                 >
-                  {on && <Check size={12} />} {NAME[conn.id] || conn.id}
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: v.dot, flexShrink: 0 }} />
+                    {NAME[conn.id] || conn.id}
+                  </span>
+                  {v.sub && <span style={{ fontSize: 10, fontWeight: 500, opacity: 0.85, paddingLeft: 13 }}>{v.sub}</span>}
                 </button>
               );
             })}
           </div>
+
+          {active.includes('website') && (
+            <div style={{ marginTop: 14, padding: '12px 14px', background: 'rgba(0,0,0,0.03)', border: `1px solid ${C.border}`, borderRadius: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 6 }}>
+                <Globe size={13} color={C.accent} /> Så crawlas webbplatsen
+              </div>
+              <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11, color: C.muted, lineHeight: 1.7 }}>
+                <li>Startar på start-URL:en och följer interna länkar (sitemap.xml om den finns, annars ~50 sidor, 2 nivåer djupt).</li>
+                <li>Prioriterar startsida + faktasidor: om&nbsp;oss, team, tjänster, kunder, kontakt, press, karriär — de hinner med även när budgeten tar slut.</li>
+                <li>Hoppar över brus: cookie-/villkors-/inloggningssidor och SEO-arkiv (tagg, kategori, paginering, författararkiv).</li>
+                <li>En LLM-grind behåller bara sidor med riktiga företagsfakta. Hela sajten scrapas alltså inte — vi väljer. Körs veckovis.</li>
+              </ul>
+            </div>
+          )}
 
           {textFields.length > 0 && (
             <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
