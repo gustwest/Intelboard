@@ -37,9 +37,22 @@ def run_one(client_id: str, runs: int = 5) -> dict[str, Any]:
     with record_run("lang_probe", client_id) as r:
         result = run_experiment(client_id, runs=runs)
         _persist(client_id, result, runs)
-        winners = {e: d.get("winner") for e, d in result.get("per_engine", {}).items()}
-        r.summary = {"pairs": result.get("pairs", 0), "runs": runs, "winners": winners}
-        log.info("lang-probe %s: pairs=%s winners=%s", client_id, result.get("pairs"), winners)
+        per_engine = result.get("per_engine", {})
+        winners = {e: d.get("winner") for e, d in per_engine.items()}
+        r.summary = {"pairs": result.get("pairs", 0), "runs": runs,
+                     "engines": len(per_engine), "winners": winners}
+        if not per_engine:
+            # Degraderad körning: noll motorer betyder att probe-nycklarna saknades —
+            # nästan alltid att jobbet föll tillbaka till web-tjänsten (utan secrets) i
+            # stället för att köra som Cloud Run-jobb. Logga TYDLIGT i st f tyst "klart".
+            log.warning(
+                "lang-probe %s: 0 motorer — probe-nycklar saknades (kördes detta som "
+                "Cloud Run-jobbet 'lang-probe' eller föll det tillbaka till web-tjänsten?). "
+                "Resultatet blir tomt.", client_id,
+            )
+        else:
+            log.info("lang-probe %s: pairs=%s engines=%s winners=%s",
+                     client_id, result.get("pairs"), len(per_engine), winners)
         return result
 
 
@@ -55,6 +68,9 @@ def _persist(client_id: str, result: dict[str, Any], runs: int) -> None:
                 "company": result.get("company"),
                 "pairs": result.get("pairs", 0),
                 "runs": runs,
+                # Explicit motorräkning: läsvägen/ops-ytan flaggar 0 motorer som degraderad
+                # (probe-nycklar saknades) i st f att visa en tom "ok"-panel.
+                "engines": len(result.get("per_engine", {})),
                 "per_engine": result.get("per_engine", {}),
             },
             merge=True,

@@ -45,6 +45,7 @@ export function LangProbePanel({ data, clientId }: {
 }) {
   const [triggering, setTriggering] = useState(false);
   const [triggered, setTriggered] = useState(false);
+  const [via, setVia] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function run() {
@@ -52,7 +53,12 @@ export function LangProbePanel({ data, clientId }: {
     setTriggering(true);
     setError(null);
     try {
-      await graphFetch(`/api/jobs/lang-probe/${encodeURIComponent(clientId)}`, { method: 'POST' });
+      // `via` säger om körningen gick som Cloud Run-jobb (probe-nycklar via Secret Manager)
+      // eller föll tillbaka till web-tjänsten (utan nycklar → tomt resultat). Surfas nedan.
+      const resp = await graphFetch<{ via?: string }>(
+        `/api/jobs/lang-probe/${encodeURIComponent(clientId)}`, { method: 'POST' },
+      );
+      setVia(resp?.via ?? null);
       setTriggered(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Kunde inte starta — försök igen');
@@ -60,6 +66,9 @@ export function LangProbePanel({ data, clientId }: {
       setTriggering(false);
     }
   }
+
+  // Web-tjänst-fallbacken saknar probe-nycklar → körningen ger garanterat tomt resultat.
+  const fellBack = triggered && via != null && via !== 'cloud_run_job';
 
   if (data.status === 'not_run') {
     return (
@@ -74,9 +83,17 @@ export function LangProbePanel({ data, clientId }: {
           fråga × språk × motor med signifikanstest) och kräver probe-nycklar — den går via Cloud Run-jobbet.
         </p>
         {triggered ? (
-          <div style={{ padding: '10px 14px', background: S.info.bg, border: `1px solid ${S.info.border}`, borderRadius: 8, fontSize: 13, color: S.info.fg, lineHeight: 1.5 }}>
-            Körning startad. Uppdatera om en stund — sv/en-jämförelsen per motor dyker upp här när jobbet är klart.
-          </div>
+          fellBack ? (
+            <div style={{ padding: '10px 14px', background: S.open.bg, border: `1px solid ${S.open.border}`, borderRadius: 8, fontSize: 13, color: S.open.fg, lineHeight: 1.5 }}>
+              Körningen föll tillbaka till web-tjänsten (<code>via={via}</code>) i stället för Cloud Run-jobbet —
+              den saknar probe-nycklar, så resultatet blir tomt. Kontrollera att Cloud Run-jobbet <code>lang-probe</code> finns
+              (<code>scripts/bootstrap.sh</code>).
+            </div>
+          ) : (
+            <div style={{ padding: '10px 14px', background: S.info.bg, border: `1px solid ${S.info.border}`, borderRadius: 8, fontSize: 13, color: S.info.fg, lineHeight: 1.5 }}>
+              Körning startad{via ? ` (${via})` : ''}. Uppdatera om en stund — sv/en-jämförelsen per motor dyker upp här när jobbet är klart.
+            </div>
+          )
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button
@@ -109,7 +126,16 @@ export function LangProbePanel({ data, clientId }: {
       />
       <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {engines.length === 0 ? (
-          <div style={{ fontSize: 13, color: C.muted }}>Inga motorresultat i körningen.</div>
+          // Degraderat: körningen persisterades men utan en enda motor → probe-nycklarna
+          // saknades. Nästan alltid att den kördes som web-tjänst-fallback i st f Cloud
+          // Run-jobbet. Visa det som ett fel, inte en lugn tom rad (annars läses det som "klart").
+          <div style={{ padding: '12px 14px', background: S.open.bg, border: `1px solid ${S.open.border}`, borderRadius: 8, fontSize: 13, color: S.open.fg, lineHeight: 1.5 }}>
+            <strong>Körningen gav inga motorresultat.</strong> Experimentet kördes men utan probe-motorer —
+            probe-nycklarna saknades. Det betyder oftast att körningen inte gick via Cloud Run-jobbet{' '}
+            <code>lang-probe</code> (som har nycklarna ur Secret Manager) utan föll tillbaka till web-tjänsten.
+            Verifiera att jobbet finns: <code>gcloud run jobs describe lang-probe --region=europe-north1</code> —
+            saknas det, kör <code>scripts/bootstrap.sh</code>. Kör sedan experimentet igen.
+          </div>
         ) : engines.map(([engine, r]) => {
           const w = WINNER[r.winner] || WINNER['n/a'];
           return (
