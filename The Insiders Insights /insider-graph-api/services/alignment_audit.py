@@ -29,6 +29,7 @@ Kostnad: aktiv-cap är 5 personor → ≤ 5 × 6 = 30 matcher-anrop per audit.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from dataclasses import asdict, dataclass, field
@@ -37,6 +38,7 @@ from typing import Any, Callable, Optional
 
 import firestore_client as fs
 from schema_org import humanization_config as hc
+from schemas import Claim, ClaimSource
 from schema_org import i18n
 from schema_org.compiler import RenderModel, build_faq, build_render_model
 from services import persona_derivation, persona_registry
@@ -376,3 +378,73 @@ def run_and_store(
         client_id, doc["coverage"]["gaps"], doc["coverage"]["total"],
     )
     return doc
+
+
+def read_latest(client_id: str) -> dict[str, Any] | None:
+    """Senaste persisterade auditen för en kund (polling_results/alignment-latest),
+    eller None om den aldrig körts. Läsvägen för ops-ytan + claim-order-åtgärden."""
+    snap = fs.polling_results_col(client_id).document(hc.ALIGNMENT_AUDIT_DOC).get()
+    if not getattr(snap, "exists", False):
+        return None
+    return snap.to_dict()
+
+
+def build_culture_claim(
+    statement: str,
+    *,
+    dimension: str | None,
+    audience: list[str] | None,
+    source_label: str | None,
+    source_url: str | None,
+    warmth_mode: str = "declared",
+) -> Claim:
+    """Bygg det källförsedda culture-claim som stänger ett alignment-gap. Speglar
+    risk_corrector.build_corrective_claim, men taggat som värme-claim (facet=culture
+    + dimension + audience) så det renderas i rätt persona-/dimensionssektion och
+    väger in i förtroendegapet. Ops är människan i loopen → included/approved."""
+    label = (source_label or "").strip() or "uppgift från bolaget"
+    return Claim(
+        claim_kind="narrative",
+        subject_ref="org",
+        statement=statement.strip()[:200],
+        facet="culture",
+        warmth_mode=warmth_mode if warmth_mode in ("declared", "demonstrated") else "declared",
+        dimension=dimension or None,
+        audience=list(audience or []),
+        source=[ClaimSource(kind="manual", label=label, url=(source_url or None))],
+        confidence=1.0,
+        included_in_output=True,
+        needs_review=False,
+        review_status="approved",
+    )
+
+
+def fulfill_order(
+    client_id: str,
+    statement: str,
+    *,
+    dimension: str | None = None,
+    audience: list[str] | None = None,
+    source_label: str | None = None,
+    source_url: str | None = None,
+    warmth_mode: str = "declared",
+) -> str:
+    """Förvandla en claim-order till ett persisterat, källförsett culture-claim och
+    returnera dess id. Det öppna ops-steget som det konservativa persistens-valet
+    (run_and_store) medvetet sköt hit: ops belägger ordern och publicerar.
+
+    Loopen stängs implicit — nästa audit-körning ser det nya claimet i sidinnehållet
+    och täcker gapet (snapshot-modellen, samma som risk live-vs-rapport). Idempotent
+    via deterministiskt id (samma statement → samma claim, ingen dubblett)."""
+    claim = build_culture_claim(
+        statement,
+        dimension=dimension,
+        audience=audience,
+        source_label=source_label,
+        source_url=source_url,
+        warmth_mode=warmth_mode,
+    )
+    cid = "align-" + hashlib.sha1((claim.statement or statement).strip().encode("utf-8")).hexdigest()[:12]
+    fs.claim_doc(client_id, cid).set(claim.model_dump())
+    log.info("alignment %s: claim-order belagd → culture-claim %s (dim=%s)", client_id, cid, dimension)
+    return cid

@@ -205,5 +205,56 @@ class RunAndStoreTest(unittest.TestCase):
         self.assertEqual(called, [])
 
 
+class ReadLatestTest(unittest.TestCase):
+    def test_returns_none_when_never_run(self):
+        _setup()
+        self.assertIsNone(aa.read_latest("acme"))
+
+    def test_returns_persisted_doc(self):
+        _setup()
+        aa.run_and_store("acme", matcher=lambda b, p, c: None, active_persona_ids=["customer"])
+        doc = aa.read_latest("acme")
+        self.assertIsNotNone(doc)
+        self.assertEqual(doc["client_id"], "acme")
+        self.assertIn("coverage", doc)
+
+
+class FulfillOrderTest(unittest.TestCase):
+    def test_builds_sourced_culture_claim_with_dimension_and_audience(self):
+        _setup()
+        cid = aa.fulfill_order(
+            "acme",
+            "Erbjuder 6 mån föräldralön utöver lag",
+            dimension="wellbeing",
+            audience=["talent"],
+            source_label="HR-policy 2026",
+            source_url="https://acme.se/policy",
+        )
+        written = fakefs.STATE["writes"][cid]
+        self.assertEqual(written["facet"], "culture")
+        self.assertEqual(written["dimension"], "wellbeing")
+        self.assertEqual(written["audience"], ["talent"])
+        self.assertEqual(written["warmth_mode"], "declared")
+        # Ops-belagt → publiceras direkt (samma som risk-åtgärden).
+        self.assertTrue(written["included_in_output"])
+        self.assertEqual(written["review_status"], "approved")
+        # Källan bevarad.
+        self.assertEqual(written["source"][0]["label"], "HR-policy 2026")
+        self.assertEqual(written["source"][0]["url"], "https://acme.se/policy")
+        self.assertTrue(cid.startswith("align-"))
+
+    def test_idempotent_id_for_same_statement(self):
+        _setup()
+        a = aa.fulfill_order("acme", "Samma påstående", dimension="wellbeing")
+        b = aa.fulfill_order("acme", "Samma påstående", dimension="wellbeing")
+        self.assertEqual(a, b)  # deterministiskt id → ingen dubblett
+
+    def test_default_source_label_when_missing(self):
+        _setup()
+        cid = aa.fulfill_order("acme", "Utan källetikett")
+        written = fakefs.STATE["writes"][cid]
+        self.assertEqual(written["source"][0]["label"], "uppgift från bolaget")
+
+
 if __name__ == "__main__":
     unittest.main()

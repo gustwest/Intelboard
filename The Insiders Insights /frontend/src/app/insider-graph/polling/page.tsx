@@ -33,6 +33,7 @@ import { WeeklyVisibility } from './_components/WeeklyVisibility';
 import { CompetitorSurface } from './_components/CompetitorSurface';
 import { TrustGapCockpit } from './_components/TrustGapCockpit';
 import { RiskBoard } from './_components/RiskBoard';
+import { AlignmentPanel, AlignmentAuditResp } from './_components/AlignmentPanel';
 import { ExposureScale } from './_components/ExposureScale';
 import { SettingsDrawer, SettingsTab } from './_components/SettingsDrawer';
 import { Settings2 } from 'lucide-react';
@@ -53,6 +54,7 @@ export default function GraphRiskLoopPage() {
   const [riskTimeline, setRiskTimeline] = useState<RiskTimelineResp | null>(null);
   const [riskQuestions, setRiskQuestions] = useState<RiskQuestionsResp | null>(null);
   const [engineHealth, setEngineHealth] = useState<EngineHealthResp | null>(null);
+  const [alignment, setAlignment] = useState<AlignmentAuditResp | null>(null);
   const [pollingQuestions, setPollingQuestions] = useState<PollingQuestionsResp | null>(null);
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -196,6 +198,17 @@ export default function GraphRiskLoopPage() {
     return () => {
       cancelled = true;
     };
+  }, [selected, refreshTick]);
+
+  // Alignment-audit — svarar profilsidan på det probe-frågorna faktiskt frågar?
+  // (services/alignment_audit; persisterad i polling_results/alignment-latest).
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
+    graphFetch<AlignmentAuditResp>(`/api/review/${selected}/alignment`)
+      .then((d) => !cancelled && setAlignment(d))
+      .catch(() => { if (!cancelled) setAlignment(null); });
+    return () => { cancelled = true; };
   }, [selected, refreshTick]);
 
   // Recept-listan (Fas 1.5) — speglar /api/recipes med intervention attached.
@@ -483,6 +496,16 @@ export default function GraphRiskLoopPage() {
           generatingRecipes={generatingRecipes}
           onTransition={transitionRecipe}
           onRegenerate={regenerateRecipes}
+        />
+      )}
+
+      {/* Frågejustering (alignment-audit): svarar sidan på probe-frågorna? Komplement
+          till förtroendegapet — gap → källfört culture-claim som stänger det. */}
+      {alignment && (
+        <AlignmentPanel
+          data={alignment}
+          clientId={selected}
+          onDone={() => setRefreshTick((t) => t + 1)}
         />
       )}
 

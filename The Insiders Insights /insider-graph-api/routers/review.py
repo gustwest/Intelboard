@@ -493,6 +493,69 @@ def decide_claim(client_id: str, claim_id: str, action: ClaimReviewAction) -> di
     return {"status": "ok", "decision": action.decision}
 
 
+@router.get("/{client_id}/alignment")
+def get_alignment_audit(client_id: str) -> dict[str, Any]:
+    """Senaste alignment-auditen: svarar profilsidan på det probe-frågorna faktiskt
+    frågar? Returnerar täckning + gap + claim-orders (eller status=not_run om jobbet
+    aldrig körts). Ops-ytans läsväg; ingen beräkning här (auditen körs som jobb)."""
+    if not fs.client_doc(client_id).get().exists:
+        raise HTTPException(404, f"client not found: {client_id}")
+    from services import alignment_audit
+
+    doc = alignment_audit.read_latest(client_id)
+    if doc is None:
+        return {"client_id": client_id, "status": "not_run"}
+    return {"client_id": client_id, "status": "ok", **doc}
+
+
+class AlignmentClaimOrder(BaseModel):
+    """Belägg en claim-order → ett källförsett culture-claim (stänger ett gap).
+
+    `statement` krävs (ingen källa/innehåll → inget claim, samma princip som
+    risk-åtgärden). `dimension`/`audience` ärvs från ordern så claimet hamnar i rätt
+    persona-/dimensionssektion. `warmth_mode` default "declared" (en policy/utsaga);
+    sätt "demonstrated" när källan är ett tredjepartsbelagt utfall (väger tyngre)."""
+
+    statement: str
+    dimension: str | None = None
+    audience: list[str] | None = None
+    source_label: str | None = None
+    source_url: str | None = None
+    warmth_mode: Literal["declared", "demonstrated"] = "declared"
+
+
+@router.post("/{client_id}/alignment/claim")
+def fulfill_alignment_order(
+    client_id: str, order: AlignmentClaimOrder, background: BackgroundTasks
+) -> dict[str, Any]:
+    """Förvandla en claim-order till ett publicerat, källförsett culture-claim.
+
+    Det öppna ops-steget som det konservativa persistens-valet sköt hit. Loopen
+    stängs implicit: nästa audit ser claimet i sidinnehållet och täcker gapet."""
+    if not fs.client_doc(client_id).get().exists:
+        raise HTTPException(404, f"client not found: {client_id}")
+    statement = (order.statement or "").strip()
+    if not statement:
+        raise HTTPException(422, "statement krävs (ingen källa → inget claim)")
+
+    from services import alignment_audit
+
+    claim_id = alignment_audit.fulfill_order(
+        client_id,
+        statement,
+        dimension=order.dimension,
+        audience=order.audience,
+        source_label=order.source_label,
+        source_url=order.source_url,
+        warmth_mode=order.warmth_mode,
+    )
+    # Publicera vid nästa kompilering (JSON-LD/FAQ/profil/llms.txt) — samma som risk-åtgärden.
+    from jobs import compile_schema
+
+    background.add_task(compile_schema.run, client_id)
+    return {"status": "ok", "claim_id": claim_id}
+
+
 @router.post("/{client_id}/{employee_id}/{item_id}")
 def decide(client_id: str, employee_id: str, item_id: str, action: ReviewAction) -> dict[str, Any]:
     doc_ref = fs.raw_items_col(client_id, employee_id).document(item_id)
