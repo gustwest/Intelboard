@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { graphColors as C } from '../../_components/GraphPageShell';
 import { proxyShareUrl } from '../../_lib/api';
@@ -14,6 +14,7 @@ import {
   selectStyle,
   knowledgeSourceFor,
 } from '../_shared';
+import { Sparkline } from './common';
 
 export function StickyContextBar({ clients, selected, onSelectClient, months, month, onSelectMonth, onRefresh, isDraft, hero, reportShareUrl, engineHealth, onRefreshEngineHealth }: {
   clients: Client[];
@@ -30,6 +31,23 @@ export function StickyContextBar({ clients, selected, onSelectClient, months, mo
   onRefreshEngineHealth: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  // L1 (UX-audit p.4): vid skroll kollapsar baren till EN rad — kund · månad ·
+  // hero-tal · motorhälsa som prick. Full motorstatus får yta bara när den
+  // avviker eller efterfrågas (klick på pricken).
+  const [scrolled, setScrolled] = useState(false);
+  const [pinnedOpen, setPinnedOpen] = useState(false);
+  useEffect(() => {
+    const onScroll = () => {
+      const s = window.scrollY > 90;
+      setScrolled(s);
+      if (!s) setPinnedOpen(false);
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+  const compact = scrolled && !pinnedOpen;
+
   const fullShareUrl = reportShareUrl ? proxyShareUrl(reportShareUrl) : '';
   async function copyShareLink() {
     if (!fullShareUrl) return;
@@ -42,6 +60,57 @@ export function StickyContextBar({ clients, selected, onSelectClient, months, mo
     }
   }
   const deltaColor = hero.deltaTone === 'up' ? '#16a34a' : hero.deltaTone === 'down' ? '#b91c1c' : C.muted;
+
+  // Motorhälsa till prick-form: grön = alla live-motorer svarar, gul = partiellt, röd = ingen.
+  const liveEngines = engineHealth?.engines.filter((e) => e.status === 'live') ?? [];
+  const liveOk = liveEngines.filter((e) => e.ok === true).length;
+  const engineDot = liveEngines.length === 0 ? null
+    : liveOk === liveEngines.length ? { color: '#16a34a', label: 'Alla probe-motorer svarar' }
+    : liveOk === 0 ? { color: '#b91c1c', label: 'Ingen probe-motor svarar!' }
+    : { color: '#d97706', label: `${liveOk}/${liveEngines.length} probe-motorer svarar` };
+
+  if (compact) {
+    return (
+      <div
+        style={{
+          position: 'sticky', top: 0, zIndex: 10, margin: '0 -24px 20px',
+          padding: '8px 24px',
+          background: 'rgba(248,249,250,0.92)',
+          backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+          borderBottom: `1px solid ${C.border}`,
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+        }}
+      >
+        <select value={selected || ''} onChange={(e) => onSelectClient(e.target.value)} style={{ ...selectStyle, padding: '4px 8px', fontSize: 12 }}>
+          {clients.length === 0 && <option value="">Inga kunder</option>}
+          {clients.map((c) => (
+            <option key={c.client_id} value={c.client_id}>{c.company_name || c.client_id}</option>
+          ))}
+        </select>
+        {months && months.length > 0 && (
+          <select value={month || ''} onChange={(e) => onSelectMonth(e.target.value)} style={{ ...selectStyle, padding: '4px 8px', fontSize: 12 }}>
+            {months.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        )}
+        <div style={{ flex: 1 }} />
+        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.muted }}>{hero.label}</span>
+        <span style={{ fontSize: 18, fontWeight: 600, color: C.text, lineHeight: 1 }}>{hero.primary}</span>
+        {hero.series && <Sparkline series={hero.series} width={56} height={16} />}
+        {hero.delta && <span style={{ fontSize: 10, fontWeight: 600, color: deltaColor }}>{hero.delta.split(' ')[0]}</span>}
+        {engineDot && (
+          <button
+            onClick={() => setPinnedOpen(true)}
+            title={`${engineDot.label} — klicka för full motorstatus`}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', fontSize: 10, fontWeight: 600, color: engineDot.color, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 999, cursor: 'pointer' }}
+          >
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: engineDot.color, boxShadow: `0 0 0 3px ${engineDot.color}22` }} />
+            Motorer
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -121,6 +190,13 @@ export function StickyContextBar({ clients, selected, onSelectClient, months, mo
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 32, fontWeight: 600, letterSpacing: '-0.02em', color: C.text, lineHeight: 1 }}>{hero.primary}</span>
             {hero.unit && <span style={{ fontSize: 12, color: C.muted }}>{hero.unit}</span>}
+            {/* L2: månadstrenden som sparkline — flikens viktigaste fråga ("blir det
+                bättre?") besvaras i hero:n; fulla diagrammet bor kvar i rapportzonen */}
+            {hero.series && (
+              <span title="Beslutssäkerhet månad för månad — fulla diagrammet under Effekt över tid" style={{ alignSelf: 'center' }}>
+                <Sparkline series={hero.series} width={72} height={20} />
+              </span>
+            )}
             {hero.stage && <span style={{ fontSize: 11, fontWeight: 600, color: C.accent, background: 'rgba(224, 142, 121,0.1)', padding: '3px 8px', borderRadius: 5, letterSpacing: '0.04em' }}>{hero.stage}</span>}
             {hero.delta && <span style={{ fontSize: 11, fontWeight: 600, color: deltaColor }}>{hero.delta}</span>}
           </div>

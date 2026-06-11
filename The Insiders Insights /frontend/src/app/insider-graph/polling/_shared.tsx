@@ -749,6 +749,7 @@ export type Hero = {
   deltaTone?: 'up' | 'down' | 'flat';
   stage?: string;
   tagline: string;
+  series?: number[]; // L2: månadsserien (beslutssäkerhet) → sparkline i hero-området
 };
 
 export function buildHero(report: Report | null, riskQuestions: RiskQuestionsResp | null, polling: PollingWeek[] | null): Hero {
@@ -762,6 +763,9 @@ export function buildHero(report: Report | null, riskQuestions: RiskQuestionsRes
       deltaTone = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
       deltaStr = delta > 0 ? `↑${delta} sedan föregående månad` : delta < 0 ? `↓${Math.abs(delta)} sedan föregående månad` : 'oförändrat sedan föregående månad';
     }
+    const series = (report?.trend?.series || [])
+      .map((s) => s.score)
+      .filter((v): v is number => v != null);
     return {
       label: 'Beslutssäkerhet',
       primary: String(conf.score),
@@ -770,6 +774,7 @@ export function buildHero(report: Report | null, riskQuestions: RiskQuestionsRes
       deltaTone,
       stage: conf.stage,
       tagline: 'Hur säkert AI-motorerna svarar om er på beslutskritiska frågor.',
+      series: series.length > 1 ? series : undefined,
     };
   }
   // Fallback 1: godkända frågor finns men ingen rapport än → loopen rullar.
