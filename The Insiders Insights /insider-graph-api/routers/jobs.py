@@ -303,6 +303,39 @@ def trigger_warmth_probes(client_id: str, background: BackgroundTasks) -> dict[s
     }
 
 
+@router.post("/alignment-audit/{client_id}")
+def trigger_alignment_audit(client_id: str, background: BackgroundTasks) -> dict[str, Any]:
+    """Riktad alignment-audit för EN kund. Sluter loopen probe → gap → claim-order:
+    svarar profilsidan på det probe-frågorna faktiskt frågar? Skriver gap + claim-
+    beställningar till polling_results/alignment-latest (ops läser, ingen auto-persistens).
+
+    Speglar warmth-probes-triggern: primärt en riktig Cloud Run Job-execution (override
+    tasks=1, --client-id) så de ~30 matcher-anropen får garanterad CPU utan request-
+    timeout; fallback till BackgroundTask lokalt/utan Admin API. Lättare än warmth
+    (inga shardar-/reap-steg behövs)."""
+    if not fs.client_doc(client_id).get().exists:
+        raise HTTPException(404, "client not found")
+    from services import cloud_run_jobs
+
+    execution = cloud_run_jobs.run_job(
+        "alignment-audit",
+        args=["-m", "jobs.alignment_audit", "--client-id", client_id],
+        task_count=1,
+    )
+    if execution:
+        return {
+            "status": "queued", "job": "alignment_audit", "client_id": client_id,
+            "via": "cloud_run_job", "execution": execution,
+        }
+
+    from services.alignment_audit import run_and_store
+    background.add_task(tracked, "alignment_audit", client_id, run_and_store, client_id)
+    return {
+        "status": "queued", "job": "alignment_audit", "client_id": client_id,
+        "via": "background_task",
+    }
+
+
 @router.post("/monthly-report/{client_id}")
 def trigger_monthly_report(client_id: str, background: BackgroundTasks, month: str | None = None) -> dict[str, Any]:
     """GEO-riskloop skiva 3 — bygg + persistera månadsrapporten (default innevarande månad)."""

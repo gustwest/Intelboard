@@ -32,8 +32,10 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
+import firestore_client as fs
 from schema_org import humanization_config as hc
 from schema_org import i18n
 from schema_org.compiler import RenderModel, build_faq, build_render_model
@@ -339,3 +341,38 @@ def run_alignment_audit(
         coverage=_coverage_summary(results),
         active_personas=list(active_persona_ids),
     )
+
+
+def run_and_store(
+    client_id: str,
+    *,
+    matcher: Matcher | None = None,
+    model: RenderModel | None = None,
+    active_persona_ids: list[str] | None = None,
+    store: Callable[[str, dict], None] | None = None,
+) -> dict[str, Any] | None:
+    """Kör auditen och persistera senaste resultatet (gap + claim-orders) till
+    polling_results/alignment-latest, så ops kan läsa det. Speglar warmth_probes
+    run_for_client: tjänstelagret äger persistensen, jobbet anropar bara hit.
+
+    Vi persisterar BARA resultat-dokumentet — claim-orders blir INTE automatiskt
+    claims (medvetet ops-beslut: hellre en kö ops väljer ur än ~30 obelagda LLM-
+    förslag/kund rakt in i granskningskön). No-op (None) om auditen hoppas över
+    (ingen domarmodell). `store` är injicerbar för test.
+    """
+    audit = run_alignment_audit(
+        client_id, matcher=matcher, model=model, active_persona_ids=active_persona_ids
+    )
+    if audit is None:
+        return None
+    doc = audit.as_dict()
+    doc["captured_at"] = datetime.now(timezone.utc).isoformat()
+    if store is not None:
+        store(client_id, doc)
+    else:
+        fs.polling_results_col(client_id).document(hc.ALIGNMENT_AUDIT_DOC).set(doc)
+    log.info(
+        "alignment-audit skriven för %s: %d gap av %d batterier",
+        client_id, doc["coverage"]["gaps"], doc["coverage"]["total"],
+    )
+    return doc

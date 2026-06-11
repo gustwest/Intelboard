@@ -163,5 +163,47 @@ class LlmMatcherTest(unittest.TestCase):
         self.assertEqual(verdict["confidence"], 0.8)
 
 
+class RunAndStoreTest(unittest.TestCase):
+    def test_persists_result_doc_with_captured_at(self):
+        """run_and_store skriver gap + claim-orders + tidsstämpel till
+        polling_results/alignment-latest (default-vägen, mot fakefs)."""
+        _setup()
+        doc = aa.run_and_store(
+            "acme", matcher=lambda b, p, c: None, active_persona_ids=["customer"]
+        )
+        self.assertIsNotNone(doc)
+        self.assertEqual(doc["coverage"]["gaps"], 6)
+        self.assertIn("captured_at", doc)
+        # Skriven till rätt polling_results-dokument och återläsbar.
+        from schema_org import humanization_config as hc
+        stored = fakefs.STATE["polling_results"][hc.ALIGNMENT_AUDIT_DOC]
+        self.assertEqual(stored["client_id"], "acme")
+        self.assertEqual(len(stored["claim_orders"]), 6)
+
+    def test_injected_store_receives_doc(self):
+        """`store` är injicerbar — jobbet/test kan fånga doc utan Firestore."""
+        _setup()
+        captured: dict = {}
+        doc = aa.run_and_store(
+            "acme",
+            matcher=_covers(dimension="wellbeing", needle="föräldralön"),
+            active_persona_ids=["talent"],
+            store=lambda cid, d: captured.update({"cid": cid, "doc": d}),
+        )
+        self.assertEqual(captured["cid"], "acme")
+        self.assertIs(captured["doc"], doc)
+        # Minst wellbeing-dimensionen täcks → färre än alla 6 är gap.
+        self.assertLess(doc["coverage"]["gaps"], 6)
+
+    def test_no_op_returns_none_and_does_not_store(self):
+        """Ingen domarmodell → run_alignment_audit None → run_and_store no-op."""
+        _setup()
+        called: list = []
+        with mock.patch("services.llm.make_validator", return_value=None):
+            doc = aa.run_and_store("acme", store=lambda cid, d: called.append(cid))
+        self.assertIsNone(doc)
+        self.assertEqual(called, [])
+
+
 if __name__ == "__main__":
     unittest.main()
