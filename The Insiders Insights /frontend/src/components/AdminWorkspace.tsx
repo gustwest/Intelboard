@@ -728,7 +728,7 @@ function AgentTab({ product }: { product: string }) {
   }, [modelKey, model]);
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [sending, setSending] = useState(false);
-  const [composingNew, setComposingNew] = useState(false);
+  const [composingNew, setComposingNewState] = useState(false);
   const [pendingImage, setPendingImage] = useState<{ base64: string; previewUrl: string; name: string; contentType: string } | null>(null);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
@@ -736,36 +736,67 @@ function AgentTab({ product }: { product: string }) {
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Read at fetch-resolve time instead of capturing in closures, so in-flight
+  // responses can't act on a stale composingNew value
+  const composingNewRef = useRef(false);
+  const setComposingNew = useCallback((v: boolean) => {
+    composingNewRef.current = v;
+    setComposingNewState(v);
+  }, []);
+  // Monotonic counter: responses from superseded requests are discarded
+  const sessionsFetchSeqRef = useRef(0);
+  // Raw payload of last applied response — skip setState when nothing changed
+  const sessionsRawRef = useRef('');
+  const statusRawRef = useRef('');
 
-  // Poll status every 5s
+  // Poll status every 5s — only re-render when the payload actually changed
   useEffect(() => {
-    const poll = () => fetch(`/api/admin/agent/status?product=${encodeURIComponent(product)}`).then(r => r.json()).then(setStatus).catch(() => {});
+    let cancelled = false;
+    const poll = () => fetch(`/api/admin/agent/status?product=${encodeURIComponent(product)}`)
+      .then(r => r.text())
+      .then(text => {
+        if (cancelled || text === statusRawRef.current) return;
+        statusRawRef.current = text;
+        setStatus(JSON.parse(text));
+      })
+      .catch(() => {});
     poll();
     const iv = setInterval(poll, 5000);
-    return () => clearInterval(iv);
+    return () => { cancelled = true; clearInterval(iv); };
   }, [product]);
 
   // Load sessions
   const loadSessions = useCallback(() => {
+    const seq = ++sessionsFetchSeqRef.current;
     fetch(`/api/admin/agent?product=${encodeURIComponent(product)}`)
-      .then(r => r.json())
-      .then(data => {
+      .then(r => r.text())
+      .then(text => {
+        // A newer request or local mutation has superseded this response
+        if (seq !== sessionsFetchSeqRef.current) return;
+        if (text === sessionsRawRef.current) return;
+        const data = JSON.parse(text);
+        if (!Array.isArray(data)) return;
+        sessionsRawRef.current = text;
         setSessions(data);
         setActiveSession(prev => {
           // Don't auto-select while user is composing a fresh session
-          if (composingNew) return prev;
+          if (composingNewRef.current) return prev;
           if (!prev && data.length > 0) return data[0].id;
+          // Active session was deleted elsewhere — fall back to the first one
+          if (prev && !data.some((s: AgentSession) => s.id === prev)) return data[0]?.id ?? null;
           return prev;
         });
       })
       .catch(() => {});
-  }, [composingNew, product]);
+  }, [product]);
 
+  // Poll faster while a task is in flight so statuses update promptly
+  const hasActiveTask = sessions.some(s => s.tasks.some(t => t.status === 'PENDING' || t.status === 'RUNNING'));
   useEffect(() => {
     loadSessions();
-    const iv = setInterval(loadSessions, 4000);
+    const iv = setInterval(loadSessions, hasActiveTask ? 1500 : 5000);
     return () => clearInterval(iv);
-  }, [loadSessions]);
+  }, [loadSessions, hasActiveTask]);
 
   // Track whether user is pinned to the bottom of the chat
   useEffect(() => {
@@ -779,18 +810,24 @@ function AgentTab({ product }: { product: string }) {
     return () => c.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Auto-scroll to bottom — only if user hasn't scrolled up
-  useEffect(() => {
-    if (isAtBottomRef.current) {
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [sessions]);
-
   // When switching conversation, jump to bottom and reset pin state
   useEffect(() => {
     isAtBottomRef.current = true;
     chatEndRef.current?.scrollIntoView({ behavior: 'auto' });
   }, [activeSession]);
+
+  // Auto-scroll only when the active chat's content actually changed
+  // (not on every poll), and only if the user hasn't scrolled up
+  const currentSession = sessions.find(s => s.id === activeSession);
+  const lastTask = currentSession?.tasks[currentSession.tasks.length - 1];
+  const chatSignature = currentSession
+    ? `${currentSession.id}|${currentSession.tasks.length}|${lastTask?.status ?? ''}|${lastTask?.response?.length ?? 0}|${lastTask?.logs.length ?? 0}`
+    : '';
+  useEffect(() => {
+    if (chatSignature && isAtBottomRef.current) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatSignature]);
 
   const sendTask = async () => {
     if (!prompt.trim() || sending) return;
@@ -813,8 +850,26 @@ function AgentTab({ product }: { product: string }) {
       });
       const data = await res.json();
       if (data.session) {
-        setActiveSession(data.session.id);
+        // Invalidate in-flight session polls that predate this task, then
+        // merge the returned session locally so the UI switches immediately
+        sessionsFetchSeqRef.current++;
+        sessionsRawRef.current = '';
+        setSessions(prev => {
+          const existing = prev.find(s => s.id === data.session.id);
+          const incomingTasks: AgentTaskItem[] | null = Array.isArray(data.session.tasks) && data.session.tasks.length > 0
+            ? data.session.tasks
+            : null;
+          const baseTasks = incomingTasks ?? existing?.tasks ?? [];
+          const tasks = data.task && !baseTasks.some(t => t.id === data.task.id)
+            ? [...baseTasks, data.task]
+            : baseTasks;
+          const session: AgentSession = { ...existing, ...data.session, tasks };
+          return existing
+            ? prev.map(s => (s.id === session.id ? session : s))
+            : [session, ...prev];
+        });
         setComposingNew(false);
+        setActiveSession(data.session.id);
       }
       setPrompt('');
       setPendingImage(null);
@@ -870,7 +925,11 @@ function AgentTab({ product }: { product: string }) {
     setTimeout(async () => {
       if (!confirm('Ta bort denna session?')) return;
       await fetch(`/api/admin/agent/${id}`, { method: 'DELETE' });
-      if (activeSession === id) setActiveSession(null);
+      // Invalidate in-flight polls fetched before the delete, then drop locally
+      sessionsFetchSeqRef.current++;
+      sessionsRawRef.current = '';
+      setSessions(prev => prev.filter(s => s.id !== id));
+      setActiveSession(prev => (prev === id ? null : prev));
       loadSessions();
     }, 10);
   };
@@ -891,7 +950,10 @@ function AgentTab({ product }: { product: string }) {
     if (!title) return;
     const session = sessions.find(s => s.id === id);
     if (session && title === session.title) return;
-    // Optimistic update so the new name shows immediately
+    // Optimistic update so the new name shows immediately; invalidate
+    // in-flight polls fetched before the rename so they can't revert it
+    sessionsFetchSeqRef.current++;
+    sessionsRawRef.current = '';
     setSessions(prev => prev.map(s => (s.id === id ? { ...s, title } : s)));
     try {
       await fetch(`/api/admin/agent/${id}`, {
@@ -902,8 +964,6 @@ function AgentTab({ product }: { product: string }) {
     } catch { /* ignore — next poll reconciles */ }
     loadSessions();
   };
-
-  const currentSession = sessions.find(s => s.id === activeSession);
 
   const statusColor = status?.online ? '#22c55e' : '#ef4444';
   const statusText = status?.online ? 'Online' : 'Offline';
