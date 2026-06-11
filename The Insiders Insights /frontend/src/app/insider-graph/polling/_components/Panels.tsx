@@ -239,15 +239,28 @@ export function PollingQuestionsPanel({ data, clientId, mode }: { data: PollingQ
 }
 
 export function ActivityFeed({ runs }: { runs: import('../../_lib/jobRuns').JobRun[] | null }) {
+  // Visa få händelser som default — full historik bakom "Visa fler" (UX-audit p.5).
+  const [expanded, setExpanded] = useState(false);
   if (runs === null) return <div style={{ fontSize: 12, color: C.dim, marginBottom: 16 }}>Laddar händelser…</div>;
-  const filtered = runs.filter((r) => ACTIVITY_FEED_TYPES.has(r.job_type)).slice(0, 12);
-  if (filtered.length === 0) {
+  const all = runs.filter((r) => ACTIVITY_FEED_TYPES.has(r.job_type)).slice(0, 12);
+  const filtered = expanded ? all : all.slice(0, 4);
+  if (all.length === 0) {
     return <div style={{ fontSize: 12, color: C.dim, marginBottom: 16 }}>Inga händelser ännu.</div>;
   }
   return (
     <div style={{ ...cardStyle, padding: '12px 16px', marginBottom: 16 }}>
-      <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginBottom: 10 }}>
-        Senaste händelser
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>
+          Senaste händelser
+        </div>
+        {all.length > 4 && (
+          <button
+            onClick={() => setExpanded((e) => !e)}
+            style={{ marginLeft: 'auto', padding: '2px 8px', fontSize: 10, fontWeight: 600, color: C.muted, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 5, cursor: 'pointer', letterSpacing: '0.02em' }}
+          >
+            {expanded ? 'Visa färre' : `Visa fler (${all.length - 4})`}
+          </button>
+        )}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {filtered.map((r) => {

@@ -660,7 +660,6 @@ export const SEVERITY: Record<string, { label: string; color: string; bg: string
 export type ViewMode = 'ops' | 'customer';
 
 export const LS_CLIENT = 'ig-polling-client';
-export const LS_MODE = 'ig-polling-mode';
 
 // --- Recept-UI (Fas 1.5) ------------------------------------------------------
 

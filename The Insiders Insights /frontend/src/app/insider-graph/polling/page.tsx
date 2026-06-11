@@ -17,11 +17,9 @@ import {
   RiskQuestionsResp,
   EngineHealthResp,
   PollingQuestionsResp,
-  ViewMode,
   PERSONAS,
   PERSONA_SV,
   LS_CLIENT,
-  LS_MODE,
   buildHero,
   harmLabel,
   cardStyle,
@@ -30,7 +28,7 @@ import {
 import { SectionHead, SectionDivider, StageScale, EmptyState } from './_components/common';
 import { StickyContextBar } from './_components/ContextBar';
 import { SchedulesPanel, ActivityFeed, PollingQuestionsPanel, RiskTable, TrendView } from './_components/Panels';
-import { RiskLoopStatus, ApprovedQuestionsPanel } from './_components/RiskLoop';
+import { RiskLoopStatus, RiskQuestionsPanel } from './_components/RiskLoop';
 import { WeeklyVisibility } from './_components/WeeklyVisibility';
 import { CompetitorSurface } from './_components/CompetitorSurface';
 import { TrustGapCockpit } from './_components/TrustGapCockpit';
@@ -53,19 +51,16 @@ export default function GraphRiskLoopPage() {
   const [riskQuestions, setRiskQuestions] = useState<RiskQuestionsResp | null>(null);
   const [engineHealth, setEngineHealth] = useState<EngineHealthResp | null>(null);
   const [pollingQuestions, setPollingQuestions] = useState<PollingQuestionsResp | null>(null);
-  const [mode, setMode] = useState<ViewMode>('ops');
   const [error, setError] = useState<string | null>(null);
   const [softError, setSoftError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const { latest, runs: jobRuns, active: jobActive, trigger: runJob } = useJobRuns(selected);
 
-  // Återställ sparat kund-val + läge innan första render (en gång).
+  // Återställ sparat kund-val innan första render (en gång).
   // ?client=<id>-deep-link har företräde över sparat val (enhetlig konvention
   // med /review?client=…), så att t.ex. risk-chippen på kundkortet landar rätt.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const m = window.localStorage.getItem(LS_MODE);
-    if (m === 'ops' || m === 'customer') setMode(m);
     const qsClient = new URLSearchParams(window.location.search).get('client');
     const c = qsClient || window.localStorage.getItem(LS_CLIENT);
     if (c) setSelected(c);
@@ -88,13 +83,10 @@ export default function GraphRiskLoopPage() {
   // fel nedan sätter den igen om något faktiskt misslyckas.
   useEffect(() => { setSoftError(null); }, [selected, refreshTick]);
 
-  // Persist kund-val + läge.
+  // Persist kund-val.
   useEffect(() => {
     if (typeof window !== 'undefined' && selected) window.localStorage.setItem(LS_CLIENT, selected);
   }, [selected]);
-  useEffect(() => {
-    if (typeof window !== 'undefined') window.localStorage.setItem(LS_MODE, mode);
-  }, [mode]);
 
   // Schemastatus (globalt, ej kundberoende) — verkligt Cloud Scheduler-läge + paus.
   useEffect(() => {
@@ -117,28 +109,41 @@ export default function GraphRiskLoopPage() {
   }
 
   // Jobbknapp med progress (delas av polling/risk-detect/månadsrapport).
-  function renderJobBtn(label: string, key: string, path: string, jobType: string, opts?: { needsClient?: boolean; onDone?: () => void }) {
+  // `title` förklarar vad jobbet faktiskt gör; `doneHint` länkar till ytan där
+  // resultatet landar så att handling → effekt-loopen sluts (UX-audit p.3).
+  function renderJobBtn(label: string, key: string, path: string, jobType: string, opts?: { needsClient?: boolean; onDone?: () => void; title?: string; doneHint?: { text: string; href: string } }) {
     const st = jobActive[key] || 'idle';
     const Icon = st === 'running' ? Loader2 : st === 'success' ? Check : st === 'failed' ? X : Play;
     const color = st === 'failed' ? '#dc2626' : st === 'success' ? '#16a34a' : undefined;
     return (
-      <button
-        onClick={async () => {
-          await runJob(key, path, jobType);
-          opts?.onDone?.();
-        }}
-        disabled={(opts?.needsClient && !selected) || st === 'running'}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px',
-          background: st === 'success' ? 'rgba(224, 142, 121,0.18)' : 'transparent',
-          color: st === 'success' ? C.accent : C.text,
-          border: `1px solid ${st === 'success' ? 'rgba(224, 142, 121,0.3)' : C.border}`,
-          borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: st === 'running' ? 'wait' : 'pointer',
-        }}
-      >
-        <Icon size={12} color={color} style={st === 'running' ? { animation: 'spin 0.8s linear infinite' } : undefined} />
-        {st === 'running' ? 'Kör…' : label}
-      </button>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        <button
+          onClick={async () => {
+            await runJob(key, path, jobType);
+            opts?.onDone?.();
+          }}
+          disabled={(opts?.needsClient && !selected) || st === 'running'}
+          title={opts?.title}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px',
+            background: st === 'success' ? 'rgba(224, 142, 121,0.18)' : 'transparent',
+            color: st === 'success' ? C.accent : C.text,
+            border: `1px solid ${st === 'success' ? 'rgba(224, 142, 121,0.3)' : C.border}`,
+            borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: st === 'running' ? 'wait' : 'pointer',
+          }}
+        >
+          <Icon size={12} color={color} style={st === 'running' ? { animation: 'spin 0.8s linear infinite' } : undefined} />
+          {st === 'running' ? 'Kör…' : label}
+        </button>
+        {st === 'success' && opts?.doneHint && (
+          <a href={opts.doneHint.href} style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+            {opts.doneHint.text}
+          </a>
+        )}
+        {st === 'failed' && (
+          <span style={{ fontSize: 11, fontWeight: 600, color: '#dc2626', whiteSpace: 'nowrap' }}>misslyckades — se Senaste händelser</span>
+        )}
+      </span>
     );
   }
 
@@ -318,7 +323,7 @@ export default function GraphRiskLoopPage() {
   const hasRiskSection =
     !!riskTimeline ||
     !!humanization?.available ||
-    (!!riskQuestions && (riskQuestions.counts.approved > 0 || mode === 'ops'));
+    !!riskQuestions;
 
   return (
     <GraphPageShell
@@ -335,27 +340,40 @@ export default function GraphRiskLoopPage() {
         onSelectMonth={setMonth}
         onRefresh={() => setRefreshTick((t) => t + 1)}
         isDraft={!!report?.is_draft}
-        mode={mode}
-        onModeChange={setMode}
         hero={buildHero(report, riskQuestions, polling)}
         reportShareUrl={month && selected && report ? `/api/reports/${selected}/${month}/html` : null}
         engineHealth={engineHealth}
         onRefreshEngineHealth={refreshEngineHealth}
       />
 
-      {/* Jobbkontroller + aktivitetsfeed (endast ops-läge) */}
-      {mode === 'ops' && (
-      <>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-          <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-          {renderJobBtn('Kör polling', 'polling', '/api/jobs/polling', 'polling', { onDone: () => setRefreshTick((t) => t + 1) })}
-          {renderJobBtn('Generera frågor', 'generate', `/api/jobs/risk-generate/${selected}`, 'risk_generate', { needsClient: true, onDone: () => setRefreshTick((t) => t + 1) })}
-          {renderJobBtn('Kör risk-detect', 'risk', `/api/jobs/risk-detect/${selected}`, 'risk_detect', { needsClient: true, onDone: () => setRefreshTick((t) => t + 1) })}
-          {renderJobBtn('Bygg månadsrapport', 'report', `/api/jobs/monthly-report/${selected}`, 'monthly_report', { needsClient: true, onDone: () => setRefreshTick((t) => t + 1) })}
-        </div>
-        <ActivityFeed runs={jobRuns} />
-      </>
-      )}
+      {/* Jobbkontroller i pipeline-ordning: frågor → riskmätning → synlighet → rapport */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+        {renderJobBtn('Generera risk-frågor', 'generate', `/api/jobs/risk-generate/${selected}`, 'risk_generate', {
+          needsClient: true,
+          onDone: () => setRefreshTick((t) => t + 1),
+          title: 'Skapar nya beslutskritiska frågeförslag för vald kund (LLM). Förslagen hamnar under Risk-frågor → Väntar granskning och körs INTE förrän du godkänt dem.',
+          doneHint: { text: 'klart — granska frågorna ↓', href: '#risk-fragor' },
+        })}
+        {renderJobBtn('Mät risker (detect)', 'risk', `/api/jobs/risk-detect/${selected}`, 'risk_detect', {
+          needsClient: true,
+          onDone: () => setRefreshTick((t) => t + 1),
+          title: 'Ställer kundens godkända risk-frågor till AI-motorerna (flera körningar per fråga), klassar svaren mot skademodellen och uppdaterar öppna risker + beslutssäkerheten. Tar några minuter.',
+          doneHint: { text: 'klart — se riskerna ↓', href: '#risk-livscykel' },
+        })}
+        {renderJobBtn('Mät synlighet (polling)', 'polling', '/api/jobs/polling', 'polling', {
+          onDone: () => setRefreshTick((t) => t + 1),
+          title: 'Mäter Share of Voice: ställer synlighets-frågorna till AI-motorerna och räknar hur ofta kunden nämns. Körs för ALLA kunder, inte bara vald. Tar några minuter.',
+          doneHint: { text: 'klart — se synligheten ↓', href: '#synlighet' },
+        })}
+        {renderJobBtn('Bygg månadsrapport', 'report', `/api/jobs/monthly-report/${selected}`, 'monthly_report', {
+          needsClient: true,
+          onDone: () => setRefreshTick((t) => t + 1),
+          title: 'Sammanställer månadens rapport (internt utkast): beslutssäkerhet, risker, åtgärder, trend och narrativ. Ersätter tidigare utkast för samma månad.',
+          doneHint: { text: 'klart — rapporten nedan ↓', href: '#manadsrapport' },
+        })}
+      </div>
+      <ActivityFeed runs={jobRuns} />
 
       {error && <div style={errorStyle}>{error}</div>}
 
@@ -373,8 +391,8 @@ export default function GraphRiskLoopPage() {
         </>
       )}
 
-      {/* Schemalagda körningar — endast ops-läge (admin-info) */}
-      {mode === 'ops' && schedules?.available && schedules.schedules.length > 0 && (
+      {/* Schemalagda körningar (admin-info) */}
+      {schedules?.available && schedules.schedules.length > 0 && (
         <SchedulesPanel rows={schedules.schedules} onToggle={toggleSchedule} />
       )}
 
@@ -387,14 +405,14 @@ export default function GraphRiskLoopPage() {
       )}
 
       {/* Veckovis synlighet */}
-      {polling && polling.length > 0 && <WeeklyVisibility weeks={polling} />}
+      {polling && polling.length > 0 && <div id="synlighet"><WeeklyVisibility weeks={polling} /></div>}
 
       {/* Konkurrent-analys per kategori (#2, väg A) — egen analytisk yta ur veckodatan */}
       {polling && polling.length > 0 && <CompetitorSurface weeks={polling} />}
 
       {/* Synlighets-frågor (Share of Voice) — transparens, direkt efter veckovis synlighet den driver */}
       {pollingQuestions && pollingQuestions.total > 0 && selected && (
-        <PollingQuestionsPanel data={pollingQuestions} clientId={selected} mode={mode} />
+        <PollingQuestionsPanel data={pollingQuestions} clientId={selected} mode="ops" />
       )}
 
       {/* ===== RISKER & ÅTGÄRDER — den slutna live-loopen samlad: upptäckt → åtgärd → löst (F3-2).
@@ -409,33 +427,31 @@ export default function GraphRiskLoopPage() {
         />
       )}
 
-      {/* Riskloop-status — endast ops-läge (intern admin-loop, ej kundens öga) */}
-      {mode === 'ops' && (riskQuestions || riskTimeline) && (
+      {/* Riskloop-status — pipelinens lägesbild; godkännandet sker i Risk-frågor nedan */}
+      {(riskQuestions || riskTimeline) && (
         <RiskLoopStatus
           questions={riskQuestions}
           findings={riskTimeline}
           latestDetect={latest('risk_detect')}
           latestGenerate={latest('risk_generate')}
           clientId={selected}
-          onChanged={() => setRefreshTick((t) => t + 1)}
         />
       )}
 
-      {/* Risk-frågor (beslutssäkerhet) — transparens, direkt efter riskloopen den hör till */}
-      {riskQuestions && (riskQuestions.counts.approved > 0) && (
-        <ApprovedQuestionsPanel
-          questions={riskQuestions.questions.filter((q) => q.status === 'approved')}
+      {/* Risk-frågor — hela frågelivscykeln (väntar/godkända/avvisade) i EN vy */}
+      {riskQuestions && riskQuestions.questions.length > 0 && (
+        <RiskQuestionsPanel
+          questions={riskQuestions.questions}
           clientId={selected}
-          mode={mode}
           onChanged={() => setRefreshTick((t) => t + 1)}
         />
       )}
 
-      {/* Förtroendegap-cockpit (recept/åtgärd) — staplar i ops, bara plain-text i kund-läge */}
+      {/* Förtroendegap-cockpit (recept/åtgärd) */}
       {humanization?.available && (
         <TrustGapCockpit
           model={humanization}
-          mode={mode}
+          mode="ops"
           recipes={recipes}
           recipeBusyId={recipeBusyId}
           generatingRecipes={generatingRecipes}
@@ -445,7 +461,7 @@ export default function GraphRiskLoopPage() {
       )}
 
       {/* Closed-loop tidslinje per risk — detektion → åtgärd → resolved, oberoende av månadsrapport */}
-      {riskTimeline && <RiskLifecycleTimeline data={riskTimeline} approvedQuestions={riskQuestions?.counts.approved ?? null} />}
+      {riskTimeline && <div id="risk-livscykel"><RiskLifecycleTimeline data={riskTimeline} approvedQuestions={riskQuestions?.counts.approved ?? null} /></div>}
 
       {months?.length === 0 && (!polling || polling.length === 0) && <EmptyState />}
 
@@ -454,10 +470,12 @@ export default function GraphRiskLoopPage() {
           {/* ===== MÅNADSRAPPORT — ögonblicksbild vid rapporttillfället, skild från de
                löpande loopen ovan. Beslutssäkerhet → detekterade risker → what-if (projektion
                av poängen) → vad mjukvaran gjorde → effekt över tid. ===== */}
-          <SectionDivider
-            label="Månadsrapport"
-            hint="Beslutssäkerhet och kvarvarande risker vid rapporttillfället — en ögonblicksbild."
-          />
+          <div id="manadsrapport">
+            <SectionDivider
+              label="Månadsrapport"
+              hint="Beslutssäkerhet och kvarvarande risker vid rapporttillfället — en ögonblicksbild."
+            />
+          </div>
           {/* 1. Beslutssäkerhet */}
           <div style={{ ...cardStyle, marginBottom: 16 }}>
             <SectionHead title="Beslutssäkerhet" hint="Hur stor andel av de beslutskritiska frågorna AI-motorerna svarar korrekt och rättvist på. En graderad resa — aldrig helt 'i mål', eftersom motorerna ständigt ändras." />
@@ -482,25 +500,41 @@ export default function GraphRiskLoopPage() {
             )}
           </div>
 
-          {/* 2. Risk Exposure per persona */}
+          {/* 2. Risk-exponering per persona. OBS: backendens score = allvarlighets-
+              poäng/svar — en OBEGRÄNSAD kvot, inte en procentandel (kan bli 14+ vid
+              få svar). Visas därför som poäng + underlag, aldrig som %, med
+              tunt-underlag-flagg när nämnaren är liten (UX-audit p.11). */}
           {exposure && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
-              {PERSONAS.map((p) => {
-                const e = exposure.per_persona[p];
-                return (
-                  <div key={p} style={cardStyle}>
-                    <div style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>
-                      {PERSONA_SV[p]}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginBottom: 8 }}>
+                Risk-exponering per persona
+                <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: 8 }}>
+                  — öppna riskers allvarlighetspoäng (hög 3 · medel 2 · låg 1) mot antal uppmätta svar
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                {PERSONAS.map((p) => {
+                  const e = exposure.per_persona[p];
+                  const measured = !!e && e.answers > 0;
+                  const thin = measured && e.answers < 5;
+                  return (
+                    <div key={p} style={cardStyle}>
+                      <div style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>
+                        {PERSONA_SV[p]}
+                      </div>
+                      <div style={{ fontSize: 28, fontWeight: 600, color: C.text, marginTop: 8, letterSpacing: '-0.02em' }}>
+                        {measured ? e.weighted : '—'}
+                        {measured && <span style={{ fontSize: 13, fontWeight: 500, color: C.muted, marginLeft: 6 }}>riskpoäng</span>}
+                      </div>
+                      <div style={{ fontSize: 12, color: thin ? '#b45309' : C.dim, marginTop: 4 }}>
+                        {measured
+                          ? `på ${e.answers} svar${thin ? ' · tunt underlag — tolka med försiktighet' : ''}`
+                          : 'Ej mätt än'}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 28, fontWeight: 600, color: C.text, marginTop: 8, letterSpacing: '-0.02em' }}>
-                      {e?.score != null ? `${Math.round(e.score * 100)}%` : '—'}
-                    </div>
-                    <div style={{ fontSize: 12, color: C.dim, marginTop: 4 }}>
-                      {e?.answers ? `Risk-exponering · ${e.answers} frågor` : 'Ej mätt än'}
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -514,9 +548,8 @@ export default function GraphRiskLoopPage() {
             )}
           </div>
 
-          {/* 3b. What-if — projicerad beslutssäkerhet före åtgärd. Ops-only (F3-1):
-              en operatörs-sandlåda hör inte hemma i den presentationsklara Kundvyn. */}
-          {selected && mode === 'ops' && <WhatIfPanel clientId={selected} conf={conf} detected={report.detected} />}
+          {/* 3b. What-if — projicerad beslutssäkerhet före åtgärd */}
+          {selected && <WhatIfPanel clientId={selected} conf={conf} detected={report.detected} />}
 
           {/* 4. Vad mjukvaran gjorde */}
           {report.actions.length > 0 && (

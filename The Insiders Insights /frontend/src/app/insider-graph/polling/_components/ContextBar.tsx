@@ -10,13 +10,12 @@ import {
   EngineHealth,
   EngineHealthResp,
   Hero,
-  ViewMode,
   S,
   selectStyle,
   knowledgeSourceFor,
 } from '../_shared';
 
-export function StickyContextBar({ clients, selected, onSelectClient, months, month, onSelectMonth, onRefresh, isDraft, mode, onModeChange, hero, reportShareUrl, engineHealth, onRefreshEngineHealth }: {
+export function StickyContextBar({ clients, selected, onSelectClient, months, month, onSelectMonth, onRefresh, isDraft, hero, reportShareUrl, engineHealth, onRefreshEngineHealth }: {
   clients: Client[];
   selected: string | null;
   onSelectClient: (v: string) => void;
@@ -25,8 +24,6 @@ export function StickyContextBar({ clients, selected, onSelectClient, months, mo
   onSelectMonth: (v: string) => void;
   onRefresh: () => void;
   isDraft: boolean;
-  mode: ViewMode;
-  onModeChange: (m: ViewMode) => void;
   hero: Hero;
   reportShareUrl: string | null;
   engineHealth: EngineHealthResp | null;
@@ -115,32 +112,6 @@ export function StickyContextBar({ clients, selected, onSelectClient, months, mo
         </div>
 
         <div style={{ flex: 1 }} />
-
-        {/* Ops/Kund segmented toggle */}
-        <div style={{ display: 'inline-flex', background: 'rgba(106,126,138,0.08)', borderRadius: 8, padding: 3, border: `1px solid ${C.border}` }}>
-          {(['ops', 'customer'] as ViewMode[]).map((m) => (
-            <button
-              key={m}
-              onClick={() => onModeChange(m)}
-              title={m === 'ops' ? 'Ops-läge: full insyn, jobbknappar, raw siffror' : 'Kundvy: så här ser kundens rapport ut — bara plain-text + trender'}
-              style={{
-                padding: '6px 14px',
-                background: mode === m ? '#ffffff' : 'transparent',
-                color: mode === m ? C.text : C.muted,
-                border: 'none',
-                borderRadius: 6,
-                fontSize: 11,
-                fontWeight: 600,
-                cursor: 'pointer',
-                letterSpacing: '0.04em',
-                textTransform: 'uppercase',
-                boxShadow: mode === m ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-              }}
-            >
-              {m === 'ops' ? 'Ops' : 'Kundvy'}
-            </button>
-          ))}
-        </div>
 
         {/* Hero-tal — metriknamn (label) ovanför så talet alltid är självförklarande */}
         <div style={{ minWidth: 0 }}>

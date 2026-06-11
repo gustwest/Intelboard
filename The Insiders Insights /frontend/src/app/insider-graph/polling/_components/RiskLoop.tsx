@@ -6,7 +6,6 @@ import { graphFetch } from '../../_lib/api';
 import {
   RiskQuestionsResp,
   RiskTimelineResp,
-  ViewMode,
   S,
   PERSONA_SV,
   cardStyle,
@@ -14,15 +13,13 @@ import {
 } from '../_shared';
 import { SectionHead, FormRow, LoopStat } from './common';
 
-export function RiskLoopStatus({ questions, findings, latestDetect, latestGenerate, clientId, onChanged }: {
+export function RiskLoopStatus({ questions, findings, latestDetect, latestGenerate, clientId }: {
   questions: RiskQuestionsResp | null;
   findings: RiskTimelineResp | null;
   latestDetect: { status: string; started_at: string | null } | null | undefined;
   latestGenerate: { status: string; started_at: string | null } | null | undefined;
   clientId: string | null;
-  onChanged: () => void;
 }) {
-  const [showApprover, setShowApprover] = useState(false);
   const qc = questions?.counts || { open: 0, approved: 0, rejected: 0 };
   const fc = findings?.counts || { open: 0, actioned: 0, resolved: 0, dismissed: 0 };
   const totalApproved = qc.approved;
@@ -36,7 +33,7 @@ export function RiskLoopStatus({ questions, findings, latestDetect, latestGenera
   if (!hasApproved && !hasPending) {
     nextStep = { label: 'Generera frågor — loopen är inte aktiverad än', tone: 'urgent' };
   } else if (hasPending) {
-    nextStep = { label: `Granska & godkänn ${qc.open} väntande fråga${qc.open === 1 ? '' : 'or'} — direkt här eller i Granska-fliken`, tone: 'urgent' };
+    nextStep = { label: `Granska & godkänn ${qc.open} väntande fråga${qc.open === 1 ? '' : 'or'} — i Risk-frågor nedan eller i Granska-fliken`, tone: 'urgent' };
   } else if (hasOpenRisks) {
     nextStep = { label: `Granska ${fc.open} öppna risk${fc.open === 1 ? '' : 'er'} — agera i Granska-fliken`, tone: 'urgent' };
   } else if (hasApproved) {
@@ -74,36 +71,29 @@ export function RiskLoopStatus({ questions, findings, latestDetect, latestGenera
         <strong style={{ color: nextStep.tone === 'urgent' ? '#b45309' : nextStep.tone === 'good' ? '#16a34a' : C.muted, letterSpacing: '0.02em' }}>NÄSTA STEG:</strong>
         <span>{nextStep.label}</span>
         {hasPending && clientId && (
-          <button
-            onClick={() => setShowApprover((s) => !s)}
+          <a
+            href="#risk-fragor"
             style={{
               marginLeft: 'auto',
               padding: '4px 10px',
               fontSize: 11,
               fontWeight: 600,
-              color: showApprover ? C.text : S.waiting.fg,
-              background: showApprover ? '#ffffff' : S.waiting.bg,
-              border: `1px solid ${showApprover ? C.border : S.waiting.border}`,
+              color: S.waiting.fg,
+              background: S.waiting.bg,
+              border: `1px solid ${S.waiting.border}`,
               borderRadius: 6,
               cursor: 'pointer',
               letterSpacing: '0.02em',
               display: 'inline-flex',
               alignItems: 'center',
               gap: 4,
+              textDecoration: 'none',
             }}
           >
-            {showApprover ? 'Dölj inline-godkännande' : `Godkänn ${qc.open} fråga${qc.open === 1 ? '' : 'or'} inline →`}
-          </button>
+            Granska {qc.open} fråga{qc.open === 1 ? '' : 'or'} nedan ↓
+          </a>
         )}
       </div>
-
-      {showApprover && hasPending && clientId && questions && (
-        <RiskQuestionsInlineApprover
-          clientId={clientId}
-          questions={questions.questions.filter((q) => q.status === 'open')}
-          onChanged={onChanged}
-        />
-      )}
     </div>
   );
 }
@@ -292,19 +282,25 @@ function singleBtn(tone: { fg: string; bg: string; border: string }, disabled: b
   };
 }
 
-export function ApprovedQuestionsPanel({ questions, clientId, mode, onChanged }: {
+// Samlad frågevy med statusflikar: hela frågelivscykeln (väntar → godkänd →
+// avvisad) på ETT ställe, istället för godkännare i en box och godkänd lista i
+// en annan. RiskLoopStatus ankarlänkar hit (#risk-fragor).
+export function RiskQuestionsPanel({ questions, clientId, onChanged }: {
   questions: RiskQuestionsResp['questions'];
   clientId: string | null;
-  mode: ViewMode;
   onChanged: () => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const pending = questions.filter((q) => q.status === 'open');
+  const approved = questions.filter((q) => q.status === 'approved');
+  const rejected = questions.filter((q) => q.status === 'rejected');
+
+  const [open, setOpen] = useState(pending.length > 0);
+  const [tab, setTab] = useState<'open' | 'approved' | 'rejected'>(pending.length > 0 ? 'open' : 'approved');
   const [inFlight, setInFlight] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
 
-  // Kund-läge: bara kategorisummering, ingen drill-down och inga avvisa-knappar.
   const byPersona = new Map<string, number>();
-  for (const q of questions) {
+  for (const q of approved) {
     const p = q.persona || 'okänd';
     byPersona.set(p, (byPersona.get(p) || 0) + 1);
   }
@@ -330,41 +326,46 @@ export function ApprovedQuestionsPanel({ questions, clientId, mode, onChanged }:
     }
   }
 
+  const tabs: { id: 'open' | 'approved' | 'rejected'; label: string; count: number; tone: { fg: string; bg: string; border: string } }[] = [
+    { id: 'open', label: 'Väntar granskning', count: pending.length, tone: S.waiting },
+    { id: 'approved', label: 'Godkända', count: approved.length, tone: S.resolved },
+    { id: 'rejected', label: 'Avvisade', count: rejected.length, tone: S.neutral },
+  ];
+
   return (
-    <div style={{ ...cardStyle, marginBottom: 18 }}>
+    <div id="risk-fragor" style={{ ...cardStyle, marginBottom: 18 }}>
       <SectionHead
         title={`Risk-frågor — mäter beslutssäkerhet`}
         hint={open
-          ? "De godkända, beslutskritiska frågorna som risk-detect kör mot motorerna varje vecka — de driver beslutssäkerheten (skilt från synlighets-frågorna nedan som mäter Share of Voice). Avvisa en fråga som visat sig vara dålig — den körs inte längre och kan ersättas med en ny via Generera frågor."
-          : `${questions.length} godkända risk-${questions.length === 1 ? 'fråga' : 'frågor'} mäts veckovis · ${Array.from(byPersona.entries()).map(([p, n]) => `${n} ${PERSONA_SV[p] || p}`).join(' · ')}`
+          ? "Hela frågelivscykeln på ett ställe: genererade frågor väntar på granskning, godkända körs av risk-detect mot motorerna varje vecka (de driver beslutssäkerheten — skilt från synlighets-frågorna nedan som mäter Share of Voice), avvisade körs aldrig. Avvisa en godkänd fråga som visat sig dålig — den slutar köras och kan ersättas via Generera risk-frågor."
+          : `${approved.length} godkända mäts veckovis${pending.length > 0 ? ` · ${pending.length} väntar på granskning` : ''} · ${Array.from(byPersona.entries()).map(([p, n]) => `${n} ${PERSONA_SV[p] || p}`).join(' · ')}`
         }
         collapsible
         open={open}
         onToggle={() => setOpen((o) => !o)}
-        badge={`${questions.length}`}
+        badge={pending.length > 0 ? `${approved.length} · ${pending.length} väntar` : `${approved.length}`}
       />
 
       {open && (
-        mode === 'customer' ? (
-          // Kund-läge: bara kategori-summering, ingen rad-för-rad-text
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-            {(['customer', 'talent', 'investor'] as const).map((p) => {
-              const n = byPersona.get(p) || 0;
-              return (
-                <div key={p} style={{ padding: '12px 14px', background: 'rgba(224, 142, 121,0.04)', border: `1px solid ${S.inProgress.border}`, borderRadius: 8 }}>
-                  <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginBottom: 4 }}>
-                    {PERSONA_SV[p]}
-                  </div>
-                  <div style={{ fontSize: 24, fontWeight: 600, color: S.inProgress.fg, letterSpacing: '-0.02em' }}>{n}</div>
-                  <div style={{ fontSize: 10, color: C.dim, marginTop: 2 }}>{n === 1 ? 'fråga mäts' : 'frågor mäts'}</div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          // Ops-läge: full lista med avvisa-knapp per rad + "Lägg till egen"
-          <>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+        <>
+          {/* Statusflikar — gör synligt VAR i livscykeln varje fråga är */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+            {tabs.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                style={{
+                  padding: '5px 12px', fontSize: 11, fontWeight: 600,
+                  color: tab === t.id ? t.tone.fg : C.muted,
+                  background: tab === t.id ? t.tone.bg : 'transparent',
+                  border: `1px solid ${tab === t.id ? t.tone.border : C.border}`,
+                  borderRadius: 999, cursor: 'pointer', letterSpacing: '0.02em',
+                }}
+              >
+                {t.label} · {t.count}
+              </button>
+            ))}
+            <div style={{ flex: 1 }} />
             <button
               onClick={() => setAdding(true)}
               disabled={!clientId}
@@ -378,59 +379,105 @@ export function ApprovedQuestionsPanel({ questions, clientId, mode, onChanged }:
               + Lägg till egen fråga
             </button>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {questions.map((q) => {
-              const busy = inFlight.has(q.id);
-              const personaLabel = q.persona ? PERSONA_SV[q.persona] || q.persona : '—';
-              const typeLabel = q.type === 'comparative' ? 'jämförelse' : q.type === 'open' ? 'öppen' : q.type || '';
-              return (
-                <div
-                  key={q.id}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '80px 70px 1fr auto',
-                    gap: 10,
-                    alignItems: 'center',
-                    padding: '8px 10px',
-                    background: 'rgba(22,163,74,0.04)',
-                    border: `1px solid ${S.resolved.border}`,
-                    borderRadius: 6,
-                    fontSize: 12,
-                    opacity: busy ? 0.5 : 1,
-                    transition: 'opacity 0.2s',
-                  }}
-                >
-                  <span style={{ fontSize: 10, fontWeight: 600, color: S.inProgress.fg, background: S.inProgress.bg, border: `1px solid ${S.inProgress.border}`, borderRadius: 5, padding: '2px 7px', letterSpacing: '0.04em', whiteSpace: 'nowrap', textAlign: 'center' }}>
-                    {personaLabel}
-                  </span>
-                  <span style={{ fontSize: 10, color: C.muted, fontStyle: 'italic' }}>{typeLabel}</span>
-                  <span style={{ color: C.text, lineHeight: 1.5 }}>
-                    {q.text || <span style={{ color: C.dim, fontStyle: 'italic' }}>(saknar fråge-text)</span>}
-                    {q.custom && (
-                      <span style={{ marginLeft: 8, fontSize: 9, fontWeight: 600, color: C.accent, background: 'rgba(224, 142, 121,0.1)', border: `1px solid ${S.inProgress.border}`, borderRadius: 4, padding: '1px 6px', letterSpacing: '0.04em', textTransform: 'uppercase', verticalAlign: 'middle' }}>
-                        Egen
+
+          {tab === 'open' && (
+            pending.length === 0 ? (
+              <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>Inga frågor väntar på granskning. Kör Generera risk-frågor för att få nya förslag.</p>
+            ) : clientId ? (
+              <RiskQuestionsInlineApprover clientId={clientId} questions={pending} onChanged={onChanged} />
+            ) : null
+          )}
+
+          {tab === 'approved' && (
+            approved.length === 0 ? (
+              <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>Inga godkända frågor än — godkänn väntande frågor så börjar risk-detect mäta dem veckovis.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {approved.map((q) => {
+                  const busy = inFlight.has(q.id);
+                  const personaLabel = q.persona ? PERSONA_SV[q.persona] || q.persona : '—';
+                  const typeLabel = q.type === 'comparative' ? 'jämförelse' : q.type === 'open' ? 'öppen' : q.type || '';
+                  return (
+                    <div
+                      key={q.id}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '80px 70px 1fr auto',
+                        gap: 10,
+                        alignItems: 'center',
+                        padding: '8px 10px',
+                        background: 'rgba(22,163,74,0.04)',
+                        border: `1px solid ${S.resolved.border}`,
+                        borderRadius: 6,
+                        fontSize: 12,
+                        opacity: busy ? 0.5 : 1,
+                        transition: 'opacity 0.2s',
+                      }}
+                    >
+                      <span style={{ fontSize: 10, fontWeight: 600, color: S.inProgress.fg, background: S.inProgress.bg, border: `1px solid ${S.inProgress.border}`, borderRadius: 5, padding: '2px 7px', letterSpacing: '0.04em', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                        {personaLabel}
                       </span>
-                    )}
-                  </span>
-                  <button
-                    onClick={() => reject(q.id)}
-                    disabled={busy || !clientId}
-                    title="Avvisa frågan — den körs inte längre"
+                      <span style={{ fontSize: 10, color: C.muted, fontStyle: 'italic' }}>{typeLabel}</span>
+                      <span style={{ color: C.text, lineHeight: 1.5 }}>
+                        {q.text || <span style={{ color: C.dim, fontStyle: 'italic' }}>(saknar fråge-text)</span>}
+                        {q.custom && (
+                          <span style={{ marginLeft: 8, fontSize: 9, fontWeight: 600, color: C.accent, background: 'rgba(224, 142, 121,0.1)', border: `1px solid ${S.inProgress.border}`, borderRadius: 4, padding: '1px 6px', letterSpacing: '0.04em', textTransform: 'uppercase', verticalAlign: 'middle' }}>
+                            Egen
+                          </span>
+                        )}
+                      </span>
+                      <button
+                        onClick={() => reject(q.id)}
+                        disabled={busy || !clientId}
+                        title="Avvisa frågan — den körs inte längre"
+                        style={{
+                          padding: '4px 10px', fontSize: 11, fontWeight: 600,
+                          color: S.open.fg, background: 'white',
+                          border: `1px solid ${S.open.border}`, borderRadius: 5,
+                          cursor: busy ? 'wait' : 'pointer', letterSpacing: '0.02em',
+                        }}
+                      >
+                        ✗ Avvisa
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          )}
+
+          {tab === 'rejected' && (
+            rejected.length === 0 ? (
+              <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>Inga avvisade frågor.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {rejected.map((q) => (
+                  <div
+                    key={q.id}
                     style={{
-                      padding: '4px 10px', fontSize: 11, fontWeight: 600,
-                      color: S.open.fg, background: 'white',
-                      border: `1px solid ${S.open.border}`, borderRadius: 5,
-                      cursor: busy ? 'wait' : 'pointer', letterSpacing: '0.02em',
+                      display: 'grid',
+                      gridTemplateColumns: '80px 70px 1fr',
+                      gap: 10,
+                      alignItems: 'center',
+                      padding: '8px 10px',
+                      background: 'rgba(106,126,138,0.04)',
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 6,
+                      fontSize: 12,
+                      opacity: 0.7,
                     }}
                   >
-                    ✗ Avvisa
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-          </>
-        )
+                    <span style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      {q.persona ? PERSONA_SV[q.persona] || q.persona : '—'}
+                    </span>
+                    <span style={{ fontSize: 10, color: C.dim, fontStyle: 'italic' }}>{q.type || '—'}</span>
+                    <span style={{ color: C.muted, lineHeight: 1.5, textDecoration: 'line-through' }}>{q.text || '(ingen text)'}</span>
+                  </div>
+                ))}
+              </div>
+            )
+          )}
+        </>
       )}
 
       {adding && clientId && (
