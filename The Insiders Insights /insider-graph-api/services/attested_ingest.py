@@ -38,7 +38,6 @@ from schemas import Claim, ClaimSource
 log = logging.getLogger(__name__)
 
 DEFAULT_ATTESTED_LABEL = "LinkedIn-data, verifierad av Geogiraph"
-TOP_SEGMENTS_PER_DIMENSION = 5
 MIN_VALUE = 1
 
 # Fliknamn (LinkedIn-export) → vår dimension.
@@ -50,26 +49,86 @@ _SHEET_TO_DIM: dict[str, str] = {
     "company size": "company_size",
 }
 
-# Vi emitterar ANDEL (sammansättning), inte rått antal. Rå-antalet ("523 följare")
-# är ett fåfänge-mätvärde — overifierbart, citeras inte av AI och läser som skryt.
-# Andelen ("ca 40 % av följarna är beslutsfattare") är äkta social proof: den säger
-# vilka som följer, inte hur många. Tredje person + källfäst (BuildCtx.source) +
-# persona-riktad (DEMOGRAPHIC_AUDIENCE) → fyller persona-sektionerna (A7).
+# Vi emitterar en KVALITATIV sammansättningssignal, inte siffror. Rå-antal ("523
+# följare") är fåfänge; per-segment-procent ("94 % … Director") späder ut sidan, läser
+# som vanity och — enligt GEO-evidensen — sänker LLM-bedömd trovärdighet. Ett kvalitativt
+# claim per dimension om den DOMINERANDE gruppen ("till stor del på chefs- och direktörs-
+# nivå") bär det enda värdet som finns (vilka som engagerar sig), persona-riktat mot
+# köparen, utan utspädning. {quantifier} sätts av toppsegmentets andel; {segment}
+# humaniseras (LinkedIns råa etiketter → läsbar svenska). En claim per dimension.
 _FOLLOWER_TEMPLATES: dict[str, str] = {
-    "seniority": "Ca {share} % av {company}s LinkedIn-följare är på nivån {segment}.",
-    "function": "Ca {share} % av {company}s LinkedIn-följare arbetar inom {segment}.",
-    "industry": "Ca {share} % av {company}s LinkedIn-följare verkar inom branschen {segment}.",
-    "location": "Ca {share} % av {company}s LinkedIn-följare finns i {segment}.",
-    "company_size": "Ca {share} % av {company}s LinkedIn-följare arbetar på företag med {segment} anställda.",
+    "seniority": "{company}s följare på LinkedIn är {quantifier} {segment}.",
+    "function": "{company}s följare på LinkedIn arbetar {quantifier} inom {segment}.",
+    "industry": "{company}s följare på LinkedIn verkar {quantifier} inom {segment}.",
+    "location": "{company}s följare på LinkedIn finns {quantifier} i {segment}.",
+    "company_size": "{company}s följare på LinkedIn arbetar {quantifier} på {segment}.",
 }
 
 _VISITOR_TEMPLATES: dict[str, str] = {
-    "seniority": "Ca {share} % av besökarna på {company}s LinkedIn-sida är på nivån {segment}.",
-    "function": "Ca {share} % av besökarna på {company}s LinkedIn-sida arbetar inom {segment}.",
-    "industry": "Ca {share} % av besökarna på {company}s LinkedIn-sida verkar inom branschen {segment}.",
-    "location": "Ca {share} % av besökarna på {company}s LinkedIn-sida finns i {segment}.",
-    "company_size": "Ca {share} % av besökarna på {company}s LinkedIn-sida arbetar på företag med {segment} anställda.",
+    "seniority": "Besökarna på {company}s LinkedIn-sida är {quantifier} {segment}.",
+    "function": "Besökarna på {company}s LinkedIn-sida arbetar {quantifier} inom {segment}.",
+    "industry": "Besökarna på {company}s LinkedIn-sida verkar {quantifier} inom branschen {segment}.",
+    "location": "Besökarna på {company}s LinkedIn-sida finns {quantifier} i {segment}.",
+    "company_size": "Besökarna på {company}s LinkedIn-sida arbetar {quantifier} på {segment}.",
 }
+
+# Kvalitativ kvantifierare ur toppsegmentets andel (hela dimensionens summa i nämnaren).
+# Under 20 % = för spritt för att hävda ett mönster → dimensionen hoppas över (inget
+# svagt/missvisande claim). Inga siffror når sidan; bucketen styr bara ordvalet.
+def _quantifier(share: int) -> str | None:
+    if share >= 50:
+        return "till största delen"
+    if share >= 33:
+        return "till stor del"
+    if share >= 20:
+        return "i hög grad"
+    return None
+
+
+# LinkedIns råa segment-etiketter → läsbar svenska. Best-effort: okända etiketter
+# faller tillbaka på en säker generisk form så meningen aldrig blir trasig.
+_SENIORITY_SV: dict[str, str] = {
+    "director": "på chefs- och direktörsnivå",
+    "cxo": "på lednings- och CXO-nivå",
+    "vp": "på VP-nivå",
+    "owner": "på ägar- och grundarnivå",
+    "partner": "på partnernivå",
+    "senior": "i seniora specialistroller",
+    "manager": "på chefsnivå",
+    "entry": "i juniora roller",
+    "training": "under utbildning",
+    "unpaid": "i ideella roller",
+}
+_COMPANY_SIZE_SV: dict[str, str] = {
+    "1": "mindre bolag",
+    "1-10": "mindre bolag",
+    "2-10": "mindre bolag",
+    "11-50": "mindre och medelstora bolag",
+    "51-200": "medelstora bolag",
+    "201-500": "större bolag",
+    "501-1000": "större bolag",
+    "1001-5000": "stora bolag",
+    "5001-10000": "stora koncerner",
+    "10001+": "globala koncerner",
+    "10,001+": "globala koncerner",
+}
+
+
+def _humanize_segment(dim: str, seg: str) -> str:
+    """Råetikett → läsbart segment-uttryck. seniority/company_size mappas; geografi
+    rensas ('Greater Stockholm Metropolitan Area, Sweden' → 'Stockholm'); funktion/
+    bransch används direkt (redan läsbara)."""
+    key = seg.strip().lower()
+    if dim == "seniority":
+        return _SENIORITY_SV.get(key, f"på nivån {seg.strip()}")
+    if dim == "company_size":
+        return _COMPANY_SIZE_SV.get(key.replace(" ", ""), f"bolag med {seg.strip()} anställda")
+    if dim == "location":
+        s = re.sub(r"\bGreater\b|\bMetropolitan Area\b|\bArea\b", "", seg, flags=re.IGNORECASE)
+        s = re.sub(r",?\s*Sweden\s*$", "", s, flags=re.IGNORECASE)
+        s = re.sub(r"\s+", " ", s).strip(" ,")
+        return {"Gothenburg": "Göteborg"}.get(s, s) or seg.strip()
+    return seg.strip()
 
 # Följar-/besökardemografi är social proof riktad mot KÖPAREN ("beslutsfattare
 # engagerar sig med oss") → taggas customer-personan så den landar i rätt
@@ -166,35 +225,29 @@ def _demographic_build(
     # Kanoniskt CSV-format (dimension,segment,value) → gruppera per dimension.
     for rows in sheets.values():
         if rows and _is_canonical_header(rows[0]):
-            return _canonical_build(rows, ctx, key, templates)
+            return _qualitative_claims(_canonical_by_dim(rows, templates), ctx, key, templates)
 
     # Native multi-flik: fliknamnet är dimensionen, rad = [segment, värde].
-    writes: list[Write] = []
+    by_dim: dict[str, list[tuple[str, int]]] = {}
     for sheet_name, rows in sheets.items():
         dim = _SHEET_TO_DIM.get(sheet_name.strip().lower())
         if not dim or dim not in templates or len(rows) < 2:
             continue
-        parsed: list[tuple[str, int]] = []
         for r in rows[1:]:  # rad 0 = rubrik
             if len(r) < 2:
                 continue
             seg = r[0].strip()
             val = _to_int(r[1])
             if seg and val is not None and val >= MIN_VALUE:
-                parsed.append((seg, val))
-        # Andel beräknas mot HELA dimensionens summa (före topp-5-trunkering) så
-        # procenttalet är ärligt — inte mot bara de segment vi råkar visa.
-        total = sum(v for _seg, v in parsed)
-        for seg, val in sorted(parsed, key=lambda x: x[1], reverse=True)[:TOP_SEGMENTS_PER_DIMENSION]:
-            writes.append(_demo_claim(ctx, key, dim, seg, _share(val, total), templates))
-    return writes
+                by_dim.setdefault(dim, []).append((seg, val))
+    return _qualitative_claims(by_dim, ctx, key, templates)
 
 
 def _is_canonical_header(row: list[str]) -> bool:
     return {"dimension", "segment", "value"} <= {c.strip().lower() for c in row}
 
 
-def _canonical_build(rows: list[list[str]], ctx: BuildCtx, key: str, templates: dict[str, str]) -> list[Write]:
+def _canonical_by_dim(rows: list[list[str]], templates: dict[str, str]) -> dict[str, list[tuple[str, int]]]:
     header = [c.strip().lower() for c in rows[0]]
     di, si, vi = header.index("dimension"), header.index("segment"), header.index("value")
     by_dim: dict[str, list[tuple[str, int]]] = {}
@@ -206,26 +259,39 @@ def _canonical_build(rows: list[list[str]], ctx: BuildCtx, key: str, templates: 
         val = _to_int(r[vi])
         if dim in templates and seg and val is not None and val >= MIN_VALUE:
             by_dim.setdefault(dim, []).append((seg, val))
-    writes: list[Write] = []
-    for dim, segs in by_dim.items():
-        total = sum(v for _seg, v in segs)
-        for seg, val in sorted(segs, key=lambda x: x[1], reverse=True)[:TOP_SEGMENTS_PER_DIMENSION]:
-            writes.append(_demo_claim(ctx, key, dim, seg, _share(val, total), templates))
-    return writes
+    return by_dim
 
 
 def _share(value: int, total: int) -> int:
-    """Segmentets andel av dimensionens total, i hela procent (minst 1 % så ett
-    litet-men-närvarande segment inte avrundas till 0 % och läser som frånvaro)."""
+    """Toppsegmentets andel av dimensionens total, i hela procent. Styr enbart
+    {quantifier}-ordvalet — siffran når aldrig sidan."""
     if total <= 0:
         return 0
     return max(1, round(100 * value / total))
 
 
-def _demo_claim(ctx: BuildCtx, key: str, dimension: str, segment: str, share: int, templates: dict[str, str]) -> Write:
-    statement = templates[dimension].format(company=ctx.company, share=share, segment=segment)
-    # Deterministiskt id på (typ, dimension, segment) → omkörning skriver över.
-    claim_id = "att-" + hashlib.sha1(f"{key}|{dimension}|{segment.lower()}".encode("utf-8")).hexdigest()[:14]
+def _qualitative_claims(
+    by_dim: dict[str, list[tuple[str, int]]], ctx: BuildCtx, key: str, templates: dict[str, str]
+) -> list[Write]:
+    """En kvalitativ claim per dimension om den dominerande gruppen. Dimensioner där
+    toppsegmentet är för svagt (<20 %) hoppas över — inget utspätt/missvisande claim."""
+    writes: list[Write] = []
+    for dim, segs in by_dim.items():
+        if dim not in templates or not segs:
+            continue
+        total = sum(v for _seg, v in segs)
+        top_seg, top_val = max(segs, key=lambda x: x[1])
+        quantifier = _quantifier(_share(top_val, total))
+        if quantifier is None:
+            continue  # för spritt för att hävda ett mönster
+        writes.append(_demo_claim(ctx, key, dim, _humanize_segment(dim, top_seg), quantifier, templates))
+    return writes
+
+
+def _demo_claim(ctx: BuildCtx, key: str, dimension: str, segment: str, quantifier: str, templates: dict[str, str]) -> Write:
+    statement = templates[dimension].format(company=ctx.company, quantifier=quantifier, segment=segment)
+    # Deterministiskt id på (typ, dimension) → EN claim per dimension; omkörning skriver över.
+    claim_id = "att-" + hashlib.sha1(f"{key}|{dimension}".encode("utf-8")).hexdigest()[:14]
     claim = Claim(
         claim_kind="narrative",
         subject_ref="org",

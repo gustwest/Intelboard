@@ -42,6 +42,15 @@ _STRINGS: dict[str, dict[str, Any]] = {
         "heading_faq": "Vanliga frågor",
         "heading_roles": "Aktuella roller",
         "audience_heading": "För {persona}",
+        # Persona-etiketter per språk (nyckel = persona.id). Tidigare hårdkodades
+        # persona.label_sv även på engelska profiler → svenska rubriker. Fallback i
+        # anroparen på label_sv om id saknas här.
+        "persona_labels": {
+            "customer": "Kund", "talent": "Talang", "investor": "Investerare",
+            "partner": "Partner", "media": "Media", "regulator": "Myndighet",
+            "patient": "Patient", "student": "Student", "donor": "Givare",
+            "citizen": "Medborgare",
+        },
         # Trust-rad.
         "trust_compiled_one": "Sammanställd från 1 källa",
         "trust_compiled_many": "Sammanställd från {n} källor",
@@ -101,6 +110,12 @@ _STRINGS: dict[str, dict[str, Any]] = {
         "heading_faq": "Frequently asked questions",
         "heading_roles": "Open roles",
         "audience_heading": "For {persona}",
+        "persona_labels": {
+            "customer": "customer", "talent": "talent", "investor": "investor",
+            "partner": "partner", "media": "media", "regulator": "regulator",
+            "patient": "patient", "student": "student", "donor": "donor",
+            "citizen": "citizen",
+        },
         "trust_compiled_one": "Compiled from 1 source",
         "trust_compiled_many": "Compiled from {n} sources",
         "trust_updated": "last updated {date}",

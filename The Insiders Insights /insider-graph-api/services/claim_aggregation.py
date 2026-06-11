@@ -282,7 +282,7 @@ def _build_aggregated_source(originals: list[tuple[str, dict[str, Any]]]) -> dic
         label = best_attested.get("label") or "verifierad av Geogiraph"
         return {
             "kind": "attested",
-            "label": f"Sammanfattning av {len(originals)} datapunkter — {label}",
+            "label": f"Sammanfattning av {len(originals)} datapunkter — {_strip_summary_prefix(label)}",
             "attested_at": best_attested_at,
             "url": best_attested.get("url"),
         }
@@ -290,6 +290,16 @@ def _build_aggregated_source(originals: list[tuple[str, dict[str, Any]]]) -> dic
         "kind": "manual",
         "label": f"Sammanfattning av {len(originals)} datapunkter",
     }
+
+
+def _strip_summary_prefix(label: str) -> str:
+    """Ta bort redan pålagda 'Sammanfattning av N datapunkter — '-prefix så att en
+    aggregering av redan-aggregerade claims inte kapslar etiketten ('Sammanfattning av
+    6 — Sammanfattning av 11 — LinkedIn-data …'). Vi vill ha EN summeringsnivå + bas-
+    källan, inte en kedja."""
+    import re
+
+    return re.sub(r"^(Sammanfattning av \d+ datapunkter\s*—\s*)+", "", label or "").strip()
 
 
 def _build_aggregated_id(narrative: str, original_ids: list[str]) -> str:

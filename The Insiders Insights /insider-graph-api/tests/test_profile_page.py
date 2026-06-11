@@ -131,6 +131,105 @@ class LeadIngressTest(unittest.TestCase):
         model = build_render_model("acme")
         self.assertEqual(model.lead, "Hjälper fordonstillverkare med inbyggda system.")
 
+    def test_lead_aggregates_split_knowsabout_facts(self):
+        """A3-regression: knowsAbout kommer ofta som flera enkel-värda Fact (ett per
+        skill ur derive_skill_claims). Ingressen ska lista ALLA, inte bara det första
+        (gammal setdefault-bugg gav "verksamt inom AI" trots full kompetensbredd)."""
+        fakefs.reset(
+            client={"company_name": "Acme AB", "website": "https://acme.se"},
+            claims={
+                "k1": {"claim_kind": "property", "subject_ref": "org", "predicate": "knowsAbout",
+                       "value": "AI", "source": [{"kind": "manual"}], "included_in_output": True},
+                "k2": {"claim_kind": "property", "subject_ref": "org", "predicate": "knowsAbout",
+                       "value": "Sales", "source": [{"kind": "manual"}], "included_in_output": True},
+                "k3": {"claim_kind": "property", "subject_ref": "org", "predicate": "knowsAbout",
+                       "value": "Marketing", "source": [{"kind": "manual"}], "included_in_output": True},
+            },
+        )
+        model = build_render_model("acme")
+        self.assertEqual(model.lead, "Acme AB är verksamt inom AI, Sales, Marketing.")
+
+    def test_facts_panel_consolidates_repeated_predicate(self):
+        """2b: flera enkel-värda knowsAbout-fakta blir EN faktarad (ett predikat = en
+        dt/dd), inte upprepade "Verksamhet:"-rader."""
+        fakefs.reset(
+            client={"company_name": "Acme AB", "website": "https://acme.se"},
+            claims={
+                "k1": {"claim_kind": "property", "subject_ref": "org", "predicate": "knowsAbout",
+                       "value": "AI", "source": [{"kind": "manual"}], "included_in_output": True},
+                "k2": {"claim_kind": "property", "subject_ref": "org", "predicate": "knowsAbout",
+                       "value": "Sales", "source": [{"kind": "manual"}], "included_in_output": True},
+            },
+        )
+        html = render_profile_html("acme")
+        facts = html.split('class="facts"', 1)[1].split("</section>", 1)[0]
+        self.assertEqual(facts.count("<dt>"), 1)
+        self.assertIn("AI, Sales", facts)
+
+
+class Spar3FixesTest(unittest.TestCase):
+    def test_faq_answers_carry_inline_source(self):
+        """A6: FAQ-svar visar synlig källattribution (namn · datum), inte bara [n]."""
+        _setup()  # c1 narrative med item-källa bv1 → FAQ-intro källförsedd
+        html = render_profile_html("acme")
+        faq = html.split('class="faq"', 1)[1].split("</section>", 1)[0]
+        self.assertIn('class="cite"', faq)
+
+    def test_og_image_and_favicon_when_logo(self):
+        fakefs.reset(client={"company_name": "Acme AB", "logo_url": "https://acme.se/logo.svg",
+                             "website": "https://acme.se"})
+        html = render_profile_html("acme")
+        self.assertIn('property="og:image"', html)
+        self.assertIn('rel="icon"', html)
+        self.assertIn("https://acme.se/logo.svg", html)
+
+    def test_no_og_image_without_logo(self):
+        _setup()
+        self.assertNotIn('property="og:image"', render_profile_html("acme"))
+
+    def test_empty_sources_section_omitted(self):
+        """Källlös profil får ingen tom Källor-rubrik (motsade annars trust-raden)."""
+        fakefs.reset(client={"company_name": "Acme AB"},
+                     claims={"s1": {"claim_kind": "property", "subject_ref": "org",
+                                    "predicate": "slogan", "value": "Människor först",
+                                    "source": [{"kind": "manual"}], "included_in_output": True}})
+        html = render_profile_html("acme")
+        self.assertNotIn('class="sources"', html)
+        self.assertNotIn("<h2>Källor</h2>", html)
+
+    def test_main_landmark_present(self):
+        _setup()
+        self.assertIn("<main>", render_profile_html("acme"))
+
+    def test_english_persona_heading_localized(self):
+        """i18n: engelsk profil får engelsk persona-rubrik (ej hårdkodad label_sv)."""
+        fakefs.reset(
+            client={"company_name": "Acme Inc", "website": "https://acme.com", "language": "en"},
+            company_items={"bv1": {"schema_type": "Organization", "url": "https://allabolag.se/1",
+                                   "published_at": datetime(2024, 3, 1, tzinfo=timezone.utc),
+                                   "included_in_output": True, "extra": {"name": "Allabolag"}}},
+            claims={"c1": {"claim_kind": "narrative", "subject_ref": "org",
+                           "statement": "Fast delivery to customers", "audience": ["customer"],
+                           "source": [{"kind": "item", "item_id": "bv1"}], "included_in_output": True}},
+        )
+        html = render_profile_html("acme")
+        self.assertIn("For customer", html)
+        self.assertNotIn("För kund", html)
+
+
+class AlternateNameTest(unittest.TestCase):
+    def test_alternate_name_emitted_and_deduped(self):
+        """2d: varumärkes-/kortnamn → Organization.alternateName; legala namnet filtreras."""
+        fakefs.reset(client={"company_name": "The Insiders Hub AB",
+                             "alternate_names": ["The Insiders", "The Insiders Hub AB"]})
+        org = compile_client("acme")["@graph"][1]
+        self.assertEqual(org["alternateName"], "The Insiders")  # legala namnet bortfiltrerat
+
+    def test_no_alternate_name_without_field(self):
+        _setup()
+        org = compile_client("acme")["@graph"][1]
+        self.assertNotIn("alternateName", org)
+
 
 class StructureAndFreshnessTest(unittest.TestCase):
     def test_section_headings_present(self):

@@ -106,7 +106,7 @@ def _audience_sections(model: RenderModel) -> list[str]:
         texts = by_persona.get(persona.id)
         if not texts:
             continue
-        out.append("## " + loc["audience_heading"].format(persona=persona.label_sv.lower()))
+        out.append("## " + loc["audience_heading"].format(persona=loc["persona_labels"].get(persona.id, persona.label_sv).lower()))
         # Dedup inom sektionen (samma claim kan ha mergeats in flera gånger).
         seen: set[str] = set()
         for t in texts:
@@ -159,7 +159,7 @@ def _audience_sections_html(model: RenderModel, by_number) -> str:
                 seen.add(k)
                 lis.append(f"<li>{item}</li>")
         if lis:
-            heading = html.escape(loc["audience_heading"].format(persona=persona.label_sv.lower()))
+            heading = html.escape(loc["audience_heading"].format(persona=loc["persona_labels"].get(persona.id, persona.label_sv).lower()))
             out.append(
                 f'<section class="audience"><h2>{heading}</h2>'
                 f'<ul>{"".join(lis)}</ul></section>'
@@ -182,7 +182,7 @@ def _render(model: RenderModel, graph: dict) -> str:
     by_number = {s.number: s for s in model.sources}
     # A4: faktapanel + "Om"-sektion med egna rubriker; prosan bryts i flera stycken
     # (ett per claim) i stället för en namnlös klump — bättre densitet + chunking.
-    facts_rows = "\n".join(_fact_row(f, by_number, loc) for f in model.facts)
+    facts_rows = "\n".join(_fact_row(f, by_number, loc) for f in _merge_facts_by_predicate(model.facts))
     facts_section = (
         f'<h2>{loc["heading_facts"]}</h2>\n<section class="facts">\n<dl>\n{facts_rows}\n</dl>\n</section>'
         if model.facts else ""
@@ -193,7 +193,7 @@ def _render(model: RenderModel, graph: dict) -> str:
         if model.prose else ""
     )
     sources_html = "\n".join(_source_item(s, loc) for s in model.sources)
-    faq_html = _faq_section(model)
+    faq_html = _faq_section(model, by_number)
     roles_html = _roles_section(model)
     trust = _trust_line(model)
     # A7: persona-sektioner även i HTML (fanns bara i llms.txt) — Googlebot/människor
@@ -204,6 +204,17 @@ def _render(model: RenderModel, graph: dict) -> str:
     org_node = next((n for n in graph.get("@graph") or [] if n.get("@type") == "Organization"), {})
     logo_url = org_node.get("logo")
     logo_html = f'<img class="logo" src="{html.escape(str(logo_url))}" alt="{name}">' if logo_url else ""
+    # Delningskort + favicon (människolagret — växande user-action-trafik). Loggan finns
+    # redan i grafen; utan og:image blir delningar bildlösa. Tom sträng = rent fallback.
+    logo_esc = html.escape(str(logo_url)) if logo_url else ""
+    og_image = f'\n<meta property="og:image" content="{logo_esc}">' if logo_url else ""
+    favicon = f'\n<link rel="icon" href="{logo_esc}">' if logo_url else ""
+    # Källsektionen renderas BARA när det finns källor — annars fick en källlös profil
+    # en tom rubrik + tom <ol> som motsade trust-raden.
+    sources_section = (
+        f'<section class="sources">\n<h2>{loc["heading_sources"]}</h2>\n<ol>\n{sources_html}\n</ol>\n</section>'
+        if model.sources else ""
+    )
 
     return f"""<!doctype html>
 <html lang="{loc['html_lang']}">
@@ -217,7 +228,7 @@ def _render(model: RenderModel, graph: dict) -> str:
 <meta property="og:type" content="profile">
 <meta property="og:title" content="{name} — {loc['title_suffix']}">
 <meta property="og:description" content="{desc}">
-<meta property="og:url" content="{canonical}">
+<meta property="og:url" content="{canonical}">{og_image}{favicon}
 <script type="application/ld+json">{jsonld}</script>
 <style>
   body {{ font-family: -apple-system, system-ui, sans-serif; max-width: 720px;
@@ -241,6 +252,8 @@ def _render(model: RenderModel, graph: dict) -> str:
   .cite {{ color: #555; font-size: .85em; }}
   .cite a {{ color: #555; text-decoration: none; border-bottom: 1px dotted #bbb; }}
   .quote {{ font-style: italic; color: #444; }}
+  .roles ul {{ margin: .3rem 0; padding-left: 1.2rem; }}
+  .roleskills {{ color: #555; }}
   .faq {{ margin-top: 2rem; }}
   .faq dt {{ font-weight: 600; margin-top: .75rem; }}
   .faq dd {{ margin: .15rem 0 0; color: #333; }}
@@ -253,6 +266,7 @@ def _render(model: RenderModel, graph: dict) -> str:
 </head>
 <body>
 <header class="brand">{logo_html}<h1>{name}</h1></header>
+<main>
 {lead_html}
 <p class="trust">{trust}</p>
 {facts_section}
@@ -260,13 +274,8 @@ def _render(model: RenderModel, graph: dict) -> str:
 {audience_html}
 {roles_html}
 {faq_html}
-<section class="sources">
-<h2>{loc['heading_sources']}</h2>
-<ol>
-{sources_html}
-</ol>
-</section>
-
+{sources_section}
+</main>
 <footer><p class="whatis">{loc['what_is_this']}</p>{loc['footer']}</footer>
 </body>
 </html>
@@ -287,14 +296,18 @@ def _roles_section(model: RenderModel) -> str:
     return f'<section class="roles"><h2>{loc["heading_roles"]}</h2><ul>{rows}</ul></section>'
 
 
-def _faq_section(model: RenderModel) -> str:
+def _faq_section(model: RenderModel, by_number) -> str:
+    """A6: FAQ är en bärare av tät, KÄLLFÖRSEDD text. Tidigare visades bara fotnots-
+    siffran [n] i svaret — den synliga inline-källan (namn · datum), som är hela poängen
+    med evidensen inuti FAQ:n, saknades. Nu speglas A2-bevisningen även här."""
     faq = build_faq(model)
     if not faq:
         return ""
     loc = i18n.strings(model.language)
     rows = "".join(
         f'<div class="qa"><dt>{html.escape(e.question)}</dt>'
-        f'<dd>{html.escape(e.answer)}{_footnote_marks(e.footnotes, loc)}</dd></div>'
+        f'<dd>{html.escape(e.answer)}{_footnote_marks(e.footnotes, loc)}'
+        f'{_inline_sources(e.footnotes, by_number, loc)}</dd></div>'
         for e in faq
     )
     return f'<section class="faq"><h2>{loc["heading_faq"]}</h2><dl>{rows}</dl></section>'
@@ -305,6 +318,41 @@ def _footnote_marks(footnotes, loc) -> str:
         f'<sup><a href="#src-{n}" title="{loc["source_fallback"].format(n=n)}">[{n}]</a></sup>'
         for n in footnotes
     )
+
+
+def _merge_facts_by_predicate(facts):
+    """Slå ihop fakta med samma predikat till en rad (ett predikat = en dt/dd).
+
+    knowsAbout kommer som flera enkel-värda Fact (ett per skill ur derive_skill_claims),
+    vilket annars ger 9 upprepade "Verksamhet:"-rader i panelen i stället för en
+    konsoliderad "Verksamhet: AI, AIO, …" (= det grafen och ingressen redan visar).
+    Värden unionas (ordningsbevarat), fotnoter/citat slås ihop så A2-bevisningen står
+    kvar, första manuella etiketten behålls. Predikat-ordningen = första förekomst
+    (fakta är redan konfidens-sorterade, så starkaste predikatet kommer först)."""
+    from schema_org.compiler import Fact
+
+    order: list[str] = []
+    by_pred: dict[str, Fact] = {}
+    for f in facts:
+        merged = by_pred.get(f.predicate)
+        if merged is None:
+            merged = Fact(predicate=f.predicate, value=[], statement=None,
+                          manual_label=f.manual_label, confidence=f.confidence)
+            by_pred[f.predicate] = merged
+            order.append(f.predicate)
+        for v in (f.value if isinstance(f.value, list) else [f.value]):
+            if v not in merged.value:
+                merged.value.append(v)
+        for n in f.footnotes:
+            if n not in merged.footnotes:
+                merged.footnotes.append(n)
+        for n, q in (getattr(f, "quotes", None) or {}).items():
+            merged.quotes.setdefault(n, q)
+        if merged.manual_label is None and f.manual_label:
+            merged.manual_label = f.manual_label
+    for merged in by_pred.values():
+        merged.footnotes.sort()
+    return [by_pred[p] for p in order]
 
 
 def _fact_row(fact, by_number, loc) -> str:

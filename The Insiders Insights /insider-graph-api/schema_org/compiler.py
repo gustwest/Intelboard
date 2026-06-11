@@ -374,21 +374,29 @@ def _build_lead(name: str, facts: list[Fact], prose: list[Prose], lang: str) -> 
     Bygger "{namn} är verksamt inom {knowsAbout} med säte i {address}, grundat
     {foundingDate}." av de fakta som finns. Kräver knowsAbout som verb-ankare för
     grammatisk korrekthet — saknas det faller vi tillbaka på starkaste prosan (redan
-    sorterad starkast först). None om varken finns. Mallen väljs per språk (A1)."""
-    by_pred: dict[str, Any] = {}
-    for f in facts:
-        by_pred.setdefault(f.predicate, f.value)
+    sorterad starkast först). None om varken finns. Mallen väljs per språk (A1).
 
-    def _txt(v: Any) -> str:
-        return ", ".join(str(x) for x in v) if isinstance(v, list) else str(v)
+    Aggregerar ALLA värden per predikat — knowsAbout kommer ofta som flera enkel-värda
+    Fact (ett per skill ur derive_skill_claims), inte ett list-värt. Att bara ta det
+    första (gammalt beteende) gav "verksamt inom AI" trots att grafen listar hela
+    kompetensbredden. Verb-ankaret (knowsAbout) listar alla värden; säte/grundande är
+    singulära → första värdet räcker (undviker "säte i Göteborg, Stockholm")."""
+    by_pred: dict[str, list[Any]] = {}
+    for f in facts:
+        values = f.value if isinstance(f.value, list) else [f.value]
+        bag = by_pred.setdefault(f.predicate, [])
+        for v in values:
+            if v not in bag:
+                bag.append(v)
 
     loc = i18n.strings(lang)
     if "knowsAbout" in by_pred:
-        lead = loc["lead_activity"].format(name=name, value=_txt(by_pred["knowsAbout"]))
+        activity = ", ".join(str(v) for v in by_pred["knowsAbout"])
+        lead = loc["lead_activity"].format(name=name, value=activity)
         if "address" in by_pred:
-            lead += loc["lead_location"].format(value=_txt(by_pred["address"]))
+            lead += loc["lead_location"].format(value=str(by_pred["address"][0]))
         if "foundingDate" in by_pred:
-            lead += loc["lead_founded"].format(value=_txt(by_pred["foundingDate"]))
+            lead += loc["lead_founded"].format(value=str(by_pred["foundingDate"][0]))
         return lead + "."
     return (prose[0].statement.rstrip(".") + ".") if prose else None
 
@@ -486,6 +494,17 @@ def compile_client(client_id: str) -> dict[str, Any]:
         # vet vilket språk fakta/beskrivning är skrivna på var de än läser noden.
         "inLanguage": model.language,
     }
+    # Varumärkes-/kortnamn (t.ex. "The Insiders" för "The Insiders Hub AB") → alternateName
+    # så motorerna konsoliderar de olika ytformerna till EN entitet i stället för att
+    # splittra signalen. Källtexterna (LinkedIn/webb) använder ofta kortnamnet; utan detta
+    # ankare läser motorn "The Insiders" och "The Insiders Hub AB" som potentiellt skilda.
+    alt_names = [a for a in (data.get("alternate_names") or []) if isinstance(a, str) and a.strip()]
+    if alt_names:
+        # Dedupa mot det legala namnet (skiftlägesokänsligt) — ingen poäng att lista sig själv.
+        legal = (model.company_name or "").strip().lower()
+        alts = [a.strip() for a in alt_names if a.strip().lower() != legal]
+        if alts:
+            organization["alternateName"] = alts if len(alts) > 1 else alts[0]
     website = resolve_website(data)
     if website:
         # Canonical homepage. Snippet i kundens <head> delar samma `url` — så

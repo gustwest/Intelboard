@@ -24,7 +24,7 @@ class AttestedIngestTest(unittest.TestCase):
             "acme", "linkedin_follower_demographics", CSV,
             attested_at="2026-05-01", url="https://www.linkedin.com/company/acme",
         )
-        self.assertEqual(result["written"], 4)  # 2 seniority + 1 function + 1 location; okänd dim ignoreras
+        self.assertEqual(result["written"], 3)  # en kvalitativ claim per dimension (seniority/function/location); okänd dim ignoreras
         claims = list(fakefs.writes().values())
         sample = claims[0]
         src = sample["source"][0]
@@ -34,15 +34,29 @@ class AttestedIngestTest(unittest.TestCase):
         self.assertFalse(sample["included_in_output"])  # staged tills "Inkludera i leverans" bekräftas
         self.assertFalse(sample["needs_review"])
 
-    def test_statement_uses_company_and_share_not_raw_count(self):
+    def test_statement_is_qualitative_no_numbers(self):
         _setup()
         ai.ingest_attested_csv("acme", "linkedin_follower_demographics", CSV, attested_at="2026-05-01")
         statements = [c["statement"] for c in fakefs.writes().values()]
-        # Andel av dimensionens total (Director 1500 av 1900 → 79 %), inte rått antal.
-        self.assertTrue(any("Ca 79 % av Acme ABs LinkedIn-följare är på nivån Director" in s for s in statements))
-        self.assertTrue(any("Engineering" in s for s in statements))
-        # Rå-antalet (fåfänge-mätvärdet) får ALDRIG läcka ut i prosan.
-        self.assertFalse(any("1500" in s for s in statements))
+        joined = " ".join(statements)
+        # Dominerande gruppen kvalitativt (Director 1500 av 1900 → 79 % → "till största
+        # delen"), humaniserad etikett — INGEN siffra, inget procenttecken, ingen råetikett.
+        self.assertTrue(any(
+            "Acme ABs följare på LinkedIn är till största delen på chefs- och direktörsnivå" in s
+            for s in statements))
+        self.assertTrue(any("arbetar till största delen inom Engineering" in s for s in statements))
+        self.assertNotIn("1500", joined)
+        self.assertNotIn("%", joined)
+        self.assertNotIn("Ca ", joined)
+        self.assertNotIn("Director", joined)  # rå LinkedIn-etikett humaniseras bort
+
+    def test_fragmented_dimension_is_skipped(self):
+        """Ingen dominerande grupp (<20 %) → inget utspätt claim för den dimensionen."""
+        ctx = ai.BuildCtx(company="Acme AB", attested_at="2026-05-01", url=None)
+        # 6 jämnstora segment (~17 % var) → toppsegmentet under tröskeln.
+        sheets = {"Job function": [["Function", "Total"]] + [[f"Seg{i}", "100"] for i in range(6)]}
+        writes = ai.SOURCE_TYPES["linkedin_follower_demographics"].build(sheets, ctx)
+        self.assertEqual(writes, [])
 
     def test_demographic_claims_are_audience_targeted(self):
         _setup()
@@ -151,10 +165,12 @@ class NativeSheetsTest(unittest.TestCase):
         }
         writes = ai.SOURCE_TYPES["linkedin_visitor_demographics"].build(sheets, self.CTX)
         statements = [p["statement"] for tgt, _id, p in writes if tgt == "claim"]
-        self.assertEqual(len(writes), 3)  # 2 seniority + 1 location; tidsserien räknas inte
-        self.assertTrue(any("besökarna på Acme ABs LinkedIn-sida är på nivån Senior" in s for s in statements))
-        # Andel (Senior 262 av 356 → 74 %), inte rått antal — rå-siffran får inte läcka.
-        self.assertTrue(any("Ca 74 %" in s for s in statements))
+        self.assertEqual(len(writes), 2)  # en kvalitativ claim per dimension (seniority/location); tidsserien räknas inte
+        # Dominerande gruppen (Senior 262 av 356 → 74 % → "till största delen"), humaniserad.
+        self.assertTrue(any(
+            "Besökarna på Acme ABs LinkedIn-sida är till största delen i seniora specialistroller" in s
+            for s in statements))
+        self.assertTrue(any("finns till största delen i Stockholm" in s for s in statements))
         self.assertFalse(any("262" in s for s in statements))
 
     def test_content_posts_become_socialmediaposting_without_author(self):
