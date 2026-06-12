@@ -145,7 +145,12 @@ _MATCH_SYSTEM = (
     "covered=true ENDAST om sidan har konkret, citerbar information som FAKTISKT svarar "
     "på frågan — inte bara nämner ämnet. Generella floskler räcker inte. suggested_answer "
     "ska vara en specifik assertion (t.ex. 'X erbjuder 6 månaders föräldralön utöver lag'), "
-    "inte en uppmaning att skriva mer."
+    "inte en uppmaning att skriva mer. "
+    "VIKTIGT om suggested_answer: den ska handla om EXAKT det bolag som anges i 'företag' "
+    "och svara på JUST den ställda frågans ämne (dimensionen). Hitta ALDRIG på andra bolags "
+    "namn, siffror, mål eller policyer, och blanda inte in en annan dimension. Om du inte kan "
+    "formulera ett trovärdigt, ämnesrätt påstående grundat i det angivna bolaget — returnera "
+    "null i stället för att gissa."
 )
 
 
