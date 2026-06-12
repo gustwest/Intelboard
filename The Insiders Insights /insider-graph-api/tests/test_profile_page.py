@@ -217,6 +217,23 @@ class Spar3FixesTest(unittest.TestCase):
         self.assertNotIn("För kund", html)
 
 
+class DemographicRenderTest(unittest.TestCase):
+    def test_follower_demographic_claim_survives_social_metric_gate(self):
+        """Regression: kvalitativ följar-demografi ('LinkedIn-följare …') måste RENDERAS —
+        compilerns demografi-undantag släpper den förbi social-metric-spärren. Buggen var
+        att mallen sa 'följare på LinkedIn' (matchar ej undantaget) → tyst bortfiltrerad."""
+        fakefs.reset(
+            client={"company_name": "Acme AB"},
+            claims={"d1": {"claim_kind": "narrative", "subject_ref": "org",
+                           "statement": "Acme ABs LinkedIn-följare är i hög grad i seniora specialistroller.",
+                           "audience": ["customer"],
+                           "source": [{"kind": "attested", "label": "LinkedIn-data, verifierad av Geogiraph",
+                                       "attested_at": "2026-05-01"}],
+                           "included_in_output": True, "review_status": "approved"}},
+        )
+        self.assertIn("i seniora specialistroller", render_profile_html("acme"))
+
+
 class AlternateNameTest(unittest.TestCase):
     def test_alternate_name_emitted_and_deduped(self):
         """2d: varumärkes-/kortnamn → Organization.alternateName; legala namnet filtreras."""

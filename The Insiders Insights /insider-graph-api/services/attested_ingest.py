@@ -56,12 +56,16 @@ _SHEET_TO_DIM: dict[str, str] = {
 # nivå") bär det enda värdet som finns (vilka som engagerar sig), persona-riktat mot
 # köparen, utan utspädning. {quantifier} sätts av toppsegmentets andel; {segment}
 # humaniseras (LinkedIns råa etiketter → läsbar svenska). En claim per dimension.
+# OBS: skriv "LinkedIn-följare" (med bindestreck), INTE "följare på LinkedIn". Compilerns
+# demografi-undantag (schema_org/compiler.py) släpper förbi social-metric-spärren bara när
+# texten innehåller exakt "linkedin-följare"/"linkedin-sida". Annars fångar spärren ordet
+# "följare" och claimet filtreras bort tyst.
 _FOLLOWER_TEMPLATES: dict[str, str] = {
-    "seniority": "{company}s följare på LinkedIn är {quantifier} {segment}.",
-    "function": "{company}s följare på LinkedIn arbetar {quantifier} inom {segment}.",
-    "industry": "{company}s följare på LinkedIn verkar {quantifier} inom {segment}.",
-    "location": "{company}s följare på LinkedIn finns {quantifier} i {segment}.",
-    "company_size": "{company}s följare på LinkedIn arbetar {quantifier} på {segment}.",
+    "seniority": "{company}s LinkedIn-följare är {quantifier} {segment}.",
+    "function": "{company}s LinkedIn-följare arbetar {quantifier} inom {segment}.",
+    "industry": "{company}s LinkedIn-följare verkar {quantifier} inom {segment}.",
+    "location": "{company}s LinkedIn-följare finns {quantifier} i {segment}.",
+    "company_size": "{company}s LinkedIn-följare arbetar {quantifier} på {segment}.",
 }
 
 _VISITOR_TEMPLATES: dict[str, str] = {

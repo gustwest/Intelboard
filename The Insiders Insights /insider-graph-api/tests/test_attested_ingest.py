@@ -42,9 +42,12 @@ class AttestedIngestTest(unittest.TestCase):
         # Dominerande gruppen kvalitativt (Director 1500 av 1900 → 79 % → "till största
         # delen"), humaniserad etikett — INGEN siffra, inget procenttecken, ingen råetikett.
         self.assertTrue(any(
-            "Acme ABs följare på LinkedIn är till största delen på chefs- och direktörsnivå" in s
+            "Acme ABs LinkedIn-följare är till största delen på chefs- och direktörsnivå" in s
             for s in statements))
         self.assertTrue(any("arbetar till största delen inom Engineering" in s for s in statements))
+        # Måste innehålla "LinkedIn-följare" (bindestreck) så compilerns demografi-undantag
+        # släpper förbi social-metric-spärren (annars filtreras "följare" bort).
+        self.assertTrue(all("LinkedIn-följare" in s for s in statements if "följare" in s.lower()))
         self.assertNotIn("1500", joined)
         self.assertNotIn("%", joined)
         self.assertNotIn("Ca ", joined)
