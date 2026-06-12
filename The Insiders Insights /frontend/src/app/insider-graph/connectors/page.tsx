@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plug, Check, X, Clock } from 'lucide-react';
+import { Plug, Check, X, Clock, Globe } from 'lucide-react';
 import GraphPageShell, { graphColors as C } from '../_components/GraphPageShell';
 import * as UI from '../_components/ui';
 import { graphFetch } from '../_lib/api';
@@ -138,6 +138,22 @@ export default function GraphConnectorsPage() {
             </div>
           );
         })}
+      </UI.Card>
+
+      {/* Hur webbplats-crawlern väljer sidor — speglar förklaringen på kundkortet (Datakällor). */}
+      <UI.Card
+        padding="18px 22px"
+        style={{ marginTop: 16 }}
+        icon={<Globe size={15} color={C.accent} />}
+        title="Så väljer webbplats-crawlern sidor"
+        hint="Hela sajten scrapas inte — vi väljer. Samma förklaring visas på kundkortets Datakällor-flik."
+      >
+        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: C.muted, lineHeight: 1.8 }}>
+          <li>Startar på kundens start-URL och följer interna länkar (sitemap.xml om den finns, annars ~50 sidor, 2 nivåer djupt).</li>
+          <li>Prioriterar startsida + faktasidor: om&nbsp;oss, team, tjänster, kunder, kontakt, press, karriär — de hinner med även när chunk-budgeten tar slut.</li>
+          <li>Hoppar över brus: cookie-/villkors-/inloggningssidor och SEO-arkiv (tagg, kategori, paginering, författararkiv).</li>
+          <li>En LLM-grind behåller bara sidor med riktiga företagsfakta. Körs veckovis.</li>
+        </ul>
       </UI.Card>
     </GraphPageShell>
   );
