@@ -28,6 +28,11 @@ steps:
       - '--region=europe-north1'
       - '--allow-unauthenticated'
       - '--platform=managed'
+      # Håll minst en instans varm → inga kallstarter (FastAPI+pydantic+langchain tar
+      # flera sekunder att starta). --cpu-boost ger extra CPU under uppstart så en ev.
+      # ny instans blir redo snabbare. Tog bort den dominerande "sega"-känslan i UI:t.
+      - '--min-instances=1'
+      - '--cpu-boost'
       # Clean-URL-cutover (docs/clean-url-cutover.md steg 4): profilsidorna serveras på
       # egen domän via HTTPS-LB + Cloud CDN, med rena katalog-URL:er (utan clients/-prefix).
       # NOTIFY_FROM_EMAIL = verifierad Brevo-avsändare (B1/B2-mejl).
