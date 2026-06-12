@@ -15,6 +15,7 @@ from google.cloud import storage
 import firestore_client as fs
 from config import settings
 from jobs.compile_schema import run as compile_one
+from schema_org.urls import served_url
 
 log = logging.getLogger("jobs.compile_all")
 
@@ -40,7 +41,9 @@ def _write_discoverability(client_ids: list[str]) -> None:
     robots = f"User-agent: *\nAllow: /\n\nSitemap: {base}/sitemap.xml\n"
     _put(bucket, "robots.txt", robots, "text/plain; charset=utf-8")
 
-    urls = "".join(f"  <url><loc>{base}/clients/{cid}/</loc></url>\n" for cid in client_ids)
+    # served_url respekterar CDN_CLEAN_URLS → samma rena URL som sidans <link rel=canonical>.
+    # (Hårdkodat /clients/{cid}/ gav HTTP 404 i clean-läge → crawlers hittade aldrig profilerna.)
+    urls = "".join(f"  <url><loc>{served_url(cid)}</loc></url>\n" for cid in client_ids)
     sitemap = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
