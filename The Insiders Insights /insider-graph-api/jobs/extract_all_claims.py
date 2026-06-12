@@ -17,7 +17,7 @@ log = logging.getLogger("jobs.extract_all_claims")
 
 
 def run() -> None:
-    written = clients = 0
+    written = clients = deduped = 0
     for client_id, _ in fs.iter_clients():
         try:
             result = extract_claims_for_client(client_id)
@@ -25,7 +25,20 @@ def run() -> None:
             clients += 1
         except Exception:  # en kund får inte fälla hela fan-outen
             log.exception("claim-extraktion misslyckades för %s", client_id)
-    log.info("extract-all-claims: %d claim(s) skrivna över %d kund(er)", written, clients)
+            continue
+        # Semantisk dedup direkt efter extraktion → compile-all (senare i kedjan)
+        # compilerar det deduplicerade setet, så profilsidans prosa-vägg inte växer
+        # tillbaka av dagliga parafras-dubbletter. Best-effort per kund (no-op om
+        # validator-LLM saknas; får aldrig fälla fan-outen).
+        try:
+            from services.semantic_dedup import dedup_client
+
+            dd = dedup_client(client_id, apply=True)
+            deduped += int(dd.get("clusters", 0))
+        except Exception:
+            log.exception("semantic_dedup misslyckades för %s", client_id)
+    log.info("extract-all-claims: %d claim(s) skrivna, %d kluster deduplicerade över %d kund(er)",
+             written, deduped, clients)
 
 
 if __name__ == "__main__":

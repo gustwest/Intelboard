@@ -31,6 +31,20 @@ def run(client_id: str) -> None:
         log.info("culture extraction for %s: %s", client_id, culture)
         r.summary = {"result": str(culture)[:300]}
 
+    # Semantisk dedup av nya parafras-dubbletter FÖRE compile → profilsidan håller sig
+    # ren över tid i stället för att väggen växer tillbaka vid varje extraktion. Redan
+    # deduplicerade claims (review_status=aggregated) exkluderas som kandidater → bara
+    # nya dubbletter klustras, det konvergerar. Best-effort: no-op om validator-LLM saknas.
+    try:
+        with record_run("semantic_dedup", client_id) as r:
+            from services.semantic_dedup import dedup_client
+
+            dd = dedup_client(client_id, apply=True)
+            log.info("semantic dedup for %s: %s", client_id, dd)
+            r.summary = {"result": str(dd)[:300]}
+    except Exception as exc:  # noqa: BLE001
+        log.warning("semantic_dedup failed for %s (non-fatal): %s", client_id, exc)
+
     # Projicera de nya claimsen in i leveransen (JSON-LD/profilsida/llms.txt).
     # Best-effort — får aldrig fälla extraktionen, som redan är registrerad ovan.
     # compile_schema öppnar sin egen record_run så körningen syns separat i job_runs.
