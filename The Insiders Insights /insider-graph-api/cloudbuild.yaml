@@ -1,16 +1,20 @@
 steps:
-  # 1. Bygg och pusha en image som används av både service och alla jobs.
-  - name: 'gcr.io/kaniko-project/executor:latest'
+  # 1. Bygg image som används av både service och alla jobs. Docker-buildern (inte
+  #    kaniko): -f skiljt från context, annars plockas rot-Dockerfilen i monorepot.
+  - name: 'gcr.io/cloud-builders/docker'
     args:
-      - '--dockerfile=The Insiders Insights /insider-graph-api/Dockerfile'
-      - '--context=dir://The Insiders Insights /insider-graph-api'
-      - '--destination=europe-north1-docker.pkg.dev/$PROJECT_ID/insider-graph-repo/insider-graph-api:$COMMIT_SHA'
-      - '--destination=europe-north1-docker.pkg.dev/$PROJECT_ID/insider-graph-repo/insider-graph-api:latest'
-      - '--cache=true'
-      - '--cache-ttl=720h'
-      - '--compressed-caching=false'
-      - '--snapshot-mode=redo'
-      - '--use-new-run'
+      - 'build'
+      - '-f'
+      - 'The Insiders Insights /insider-graph-api/Dockerfile'
+      - '-t'
+      - 'europe-north1-docker.pkg.dev/$PROJECT_ID/insider-graph-repo/insider-graph-api:$COMMIT_SHA'
+      - '-t'
+      - 'europe-north1-docker.pkg.dev/$PROJECT_ID/insider-graph-repo/insider-graph-api:latest'
+      - 'The Insiders Insights /insider-graph-api'
+
+  # 1b. Push båda taggarna.
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '--all-tags', 'europe-north1-docker.pkg.dev/$PROJECT_ID/insider-graph-repo/insider-graph-api']
 
   # 2. Deploy service (FastAPI, always-on). COMMIT_SHA exponeras som env-var så
   #    post-deploy-checken kan verifiera att rätt revision faktiskt serveras.

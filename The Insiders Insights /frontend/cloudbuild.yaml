@@ -1,21 +1,25 @@
 # Cloud Build — auto-deploy Insiders Insights Frontend on push to main
-# Uses Kaniko for Docker layer caching
 # Triggered only when files in The Insiders Insights /frontend/ change
-# Context set to subfolder since this is a monorepo
+# Monorepo: bygg med Docker-buildern så -f (dockerfile) kan ligga åtskilt från
+# context (subkatalogen). Kaniko resolverar --dockerfile relativt /workspace och
+# plockade då rot-Dockerfilen i stället för frontend/Dockerfile — därav fel image.
 
 steps:
-  # 1. Build + push with Kaniko (context = subfolder)
-  - name: 'gcr.io/kaniko-project/executor:latest'
+  # 1. Build (context = subkatalog, dockerfile = explicit -f)
+  - name: 'gcr.io/cloud-builders/docker'
     args:
-      - '--dockerfile=The Insiders Insights /frontend/Dockerfile'
-      - '--context=dir://The Insiders Insights /frontend'
-      - '--destination=europe-north1-docker.pkg.dev/$PROJECT_ID/insiders-frontend-repo/insiders-frontend:$COMMIT_SHA'
-      - '--destination=europe-north1-docker.pkg.dev/$PROJECT_ID/insiders-frontend-repo/insiders-frontend:latest'
-      - '--cache=true'
-      - '--cache-ttl=720h'
-      - '--compressed-caching=false'
-      - '--snapshot-mode=redo'
-      - '--use-new-run'
+      - 'build'
+      - '-f'
+      - 'The Insiders Insights /frontend/Dockerfile'
+      - '-t'
+      - 'europe-north1-docker.pkg.dev/$PROJECT_ID/insiders-frontend-repo/insiders-frontend:$COMMIT_SHA'
+      - '-t'
+      - 'europe-north1-docker.pkg.dev/$PROJECT_ID/insiders-frontend-repo/insiders-frontend:latest'
+      - 'The Insiders Insights /frontend'
+
+  # 1b. Push båda taggarna (Docker-buildern pushar inte själv).
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '--all-tags', 'europe-north1-docker.pkg.dev/$PROJECT_ID/insiders-frontend-repo/insiders-frontend']
 
   # 2. Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
