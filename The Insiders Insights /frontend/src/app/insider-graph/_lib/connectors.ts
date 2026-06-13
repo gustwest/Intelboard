@@ -9,6 +9,7 @@ export const CONNECTOR_NAME: Record<string, string> = {
   website: 'Webbplats',
   gleif: 'GLEIF (org-data)',
   wikipedia: 'Wikipedia/Wikidata',
+  ted: 'TED (vunna upphandlingar)',
 };
 
 export function connectorLabel(id: string): string {

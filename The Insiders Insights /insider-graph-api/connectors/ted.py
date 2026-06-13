@@ -69,10 +69,16 @@ class TedConnector(BaseConnector):
         if not org:
             return []
 
-        # winner-identifier stöder bara exakt matchning (ingen contains-operator), och
-        # TED lagrar svenska vinnare i olika former: streck-org.nr (556569-3792),
-        # VAT (SE556569379201) och rentsiffrigt. OR:a de troliga formerna.
-        forms = [f'winner-identifier="{f}"' for f in (_dashed(org), f"SE{org}01", org)]
+        # winner-identifier stöder bara exakt matchning (ingen contains-operator, inga
+        # wildcards), och TED lagrar svenska vinnare i FYRA former som varierar över tid
+        # och formulär (verifierat mot live-API:t 2026-06-13): streck-org.nr (556569-3792),
+        # rentsiffrigt (5565693792), "SE"+org+filial (SE556569379201) och "SE-"+org+filial
+        # (SE-556569172101). Ingen form fångar alla — OR:a samtliga (dedup sker via
+        # publication-number). Utan "SE-"-formen tappas vinster helt (live-verifierat).
+        forms = [
+            f'winner-identifier="{f}"'
+            for f in (_dashed(org), org, f"SE{org}01", f"SE-{org}01")
+        ]
         query = (
             f'({" OR ".join(forms)}) AND publication-date>={_cutoff_yyyymmdd()} '
             f"SORT BY publication-date DESC"

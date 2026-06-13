@@ -40,6 +40,7 @@ const NAME: Record<string, string> = {
   pressrum: 'Pressrum', careers: 'Karriärsida', instagram: 'Instagram',
   youtube: 'YouTube', facebook: 'Facebook', substack: 'Substack', podcast: 'Podcast', glassdoor: 'Glassdoor',
   github: 'GitHub', crunchbase: 'Crunchbase', scholar: 'Google Scholar', prv: 'PRV / Patent', vinnova: 'Vinnova',
+  ted: 'TED (vunna upphandlingar)',
 };
 
 // Globala/batch-jobb (körs för alla kunder) — hör hemma på den här globala sidan.

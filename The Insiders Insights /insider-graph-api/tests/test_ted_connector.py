@@ -63,6 +63,7 @@ class TedFetchTest(unittest.TestCase):
         q = cap["query"]
         self.assertIn('winner-identifier="556569-3792"', q)   # streckform
         self.assertIn('winner-identifier="SE556569379201"', q)  # VAT-form
+        self.assertIn('winner-identifier="SE-556569379201"', q)  # "SE-"-form (annars tappas vinster, live-verifierat)
         self.assertIn('winner-identifier="5565693792"', q)    # rentsiffrig
         self.assertIn(" OR ", q)
         self.assertIn("SORT BY publication-date DESC", q)
