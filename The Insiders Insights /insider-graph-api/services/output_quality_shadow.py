@@ -129,8 +129,13 @@ def _resolve_connector(raw: dict[str, Any]) -> str:
         return "verification"
     if origin == "source:upload":
         return "manual_upload"
-    # Saknad origin → härled ur källan
+    # Saknad origin → härled ur källan. Källposter SKA vara dicts, men äldre/trasig
+    # data kan ha en bar sträng eller None i source[] — en sådan post fick `.get` att
+    # kasta AttributeError och fällde HELA extract-all-claims-jobbet (nattlig krasch).
+    # Heuristiken får aldrig fälla extraktionen → hoppa tyst över icke-dict-poster.
     for src in raw.get("source") or []:
+        if not isinstance(src, dict):
+            continue
         url = (src.get("url") or "").lower()
         if "linkedin.com" in url:
             return "linkedin"

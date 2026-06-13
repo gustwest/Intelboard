@@ -141,6 +141,20 @@ class ShadowLoggingTest(unittest.TestCase):
         )
         self.assertEqual(shadow._resolve_connector({"source": []}), "extraction")
 
+    def test_resolves_connector_tolerates_non_dict_source(self):
+        """Regression: en bar sträng/None i source[] (äldre/trasig data) fick `.get` att
+        kasta AttributeError och fällde HELA extract-all-claims-jobbet. Icke-dict-poster
+        ska hoppas över tyst — heuristiken får aldrig krascha extraktionen."""
+        self.assertEqual(
+            shadow._resolve_connector({"source": ["https://linkedin.com/x", None]}),
+            "extraction",  # inga giltiga dict-källor → fallback, ingen krasch
+        )
+        # Blandat: en trasig sträng-post + en giltig dict → den giltiga vinner.
+        self.assertEqual(
+            shadow._resolve_connector({"source": ["bad", {"url": "https://kund.se"}]}),
+            "website",
+        )
+
     def test_per_connector_aggregation(self):
         fakefs.reset(
             client={"company_name": "Acme AB", "audience_priorities": _audience()},
