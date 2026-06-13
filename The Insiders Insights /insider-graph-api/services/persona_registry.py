@@ -969,6 +969,12 @@ DIMENSION_PERSONA_RELEVANCE: dict[str, frozenset[str]] = {
 # evergreen. Connector-specifika predikat (revenue/contractAward/patent/climateTarget)
 # läggs till när respektive connector (A4: Bolagsverket → TED → SBTi) byggs.
 OPERATIONAL_PERSONA_RELEVANCE: dict[str, frozenset[str]] = {
+    # Verksamhetsområde = kundens #1-fråga ("vad gör bolaget — kan de hjälpa mig?").
+    # Avgränsat/lågt brus: bara den övergripande `industry`-knowsAbout (via
+    # derive_property_claims) taggas — de granulära skill-claimen (derive_skill_claims,
+    # ej wire:ad) förblir evergreen, så kund-sektionen får rubriken "vad vi gör", inte
+    # en lista med alla kompetenser.
+    "knowsAbout": frozenset({"customer"}),
     "jobBenefits": frozenset({"talent"}),
     "hasCredential": frozenset({"customer", "investor", "partner"}),
     "memberOf": frozenset({"talent", "regulator", "partner"}),

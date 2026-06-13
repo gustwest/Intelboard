@@ -47,6 +47,17 @@ class DerivePropertyClaimsTest(unittest.TestCase):
         self.assertEqual(by_pred["foundingDate"].audience, ["investor"])
         self.assertEqual(by_pred["address"].audience, [])  # okartlagt predikat → evergreen
 
+    def test_industry_knowsabout_tagged_customer(self):
+        """(b) 2026-06-12: övergripande verksamhetsområde (industry→knowsAbout via
+        derive_property_claims) taggas customer — kundens #1-fråga "vad gör bolaget"."""
+        fakefs.reset(
+            client={"company_name": "Acme AB"},  # defaults inkl. customer
+            company_items={"bv1": {"schema_type": "Organization", "included_in_output": True,
+                                   "extra": {"industries": "Molninfrastruktur"}}},
+        )
+        by_pred = {c.predicate: c for c in derive_property_claims("acme")}
+        self.assertEqual(by_pred["knowsAbout"].audience, ["customer"])
+
     def test_operational_audience_respects_active_personas(self):
         """foundingDate→investor men investor måste vara aktiv hos kunden."""
         fakefs.reset(
