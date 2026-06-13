@@ -96,6 +96,47 @@ class DeriveClaimAudienceTest(unittest.TestCase):
         self.assertIn("talent", out)
         self.assertIn("customer", out)
 
+    # --- A1-utökning 2026-06-12: operationella claims taggas via PREDIKAT ---------
+
+    def test_operational_mapped_predicate_is_tagged(self):
+        """Operationellt property-claim med kartlagt predikat når persona-sektionen."""
+        out = pd.derive_claim_audience(
+            _claim(facet="operational", dimension=None, predicate="hasCredential"),
+            active_personas=None,
+        )
+        self.assertEqual(out, ["customer", "investor", "partner"])  # registry-ordning
+
+    def test_operational_unmapped_predicate_is_evergreen(self):
+        """Predikat utan kartläggning (t.ex. address) förblir evergreen."""
+        out = pd.derive_claim_audience(
+            _claim(facet="operational", dimension=None, predicate="address"),
+            active_personas=None,
+        )
+        self.assertEqual(out, [])
+
+    def test_operational_narrative_without_predicate_is_evergreen(self):
+        """Narrative-claim utan predikat (operationellt) förblir evergreen."""
+        out = pd.derive_claim_audience(
+            _claim(facet="operational", dimension=None, claim_kind="narrative"),
+            active_personas=None,
+        )
+        self.assertEqual(out, [])
+
+    def test_financial_predicate_targets_investor(self):
+        out = pd.derive_claim_audience(
+            _claim(facet="operational", dimension=None, predicate="revenue"),
+            active_personas=None,
+        )
+        self.assertEqual(out, ["investor"])
+
+    def test_operational_predicate_respects_active_personas(self):
+        """hasCredential → {customer, investor, partner}, men aktiv-set begränsar."""
+        out = pd.derive_claim_audience(
+            _claim(facet="operational", dimension=None, predicate="hasCredential"),
+            active_personas=["customer", "talent"],
+        )
+        self.assertEqual(out, ["customer"])  # investor/partner ej aktiva, talent ej relevant
+
 
 class GetActivePersonasTest(unittest.TestCase):
 

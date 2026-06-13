@@ -959,6 +959,27 @@ DIMENSION_PERSONA_RELEVANCE: dict[str, frozenset[str]] = {
 }
 
 
+# --- Predikat → persona-relevans för OPERATIONELLA claims (A1, Fas 2-utökning 2026-06-12)
+# Tidigare taggades BARA värme-/kultur-claims (via dimension) — alla operationella
+# fakta blev evergreen och nådde aldrig persona-sektionerna. Den här kartan öppnar
+# grinden för property-claims (företagsfakta + connector-claims) så t.ex. ett
+# finansiellt claim landar i investor-sektionen. Samma precision-före-recall-princip
+# som DIMENSION_PERSONA_RELEVANCE: lägg bara med predikat som GENUINT flyttar nålen
+# för personan — annars blir audience-fältet brus. Predikat utan kartläggning förblir
+# evergreen. Connector-specifika predikat (revenue/contractAward/patent/climateTarget)
+# läggs till när respektive connector (A4: Bolagsverket → TED → SBTi) byggs.
+OPERATIONAL_PERSONA_RELEVANCE: dict[str, frozenset[str]] = {
+    "jobBenefits": frozenset({"talent"}),
+    "hasCredential": frozenset({"customer", "investor", "partner"}),
+    "memberOf": frozenset({"talent", "regulator", "partner"}),
+    "aggregateRating": frozenset({"talent", "investor"}),       # eNPS o.dyl. → HR-signal
+    "numberOfEmployees": frozenset({"investor", "talent"}),
+    # Finansiella nyckeltal (A6 / finans-connector) — verbatim-källförsedda.
+    "revenue": frozenset({"investor"}),
+    "foundingDate": frozenset({"investor"}),                    # stabilitet/historik
+}
+
+
 # --- Publikt API --------------------------------------------------------------
 
 

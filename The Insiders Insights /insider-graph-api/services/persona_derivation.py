@@ -311,15 +311,21 @@ def derive_claim_audience(
 
     facet = claim_data.get("facet") or "operational"
     dimension = claim_data.get("dimension")
+    predicate = claim_data.get("predicate")
 
-    # Operational claims (företagsfakta, produkter, tjänster) är default evergreen.
-    # Värme-claims är de som har persona-relevans genom dimensionen.
-    if facet != "culture":
-        return []
-    if not dimension or dimension not in pr.DIMENSION_PERSONA_RELEVANCE:
-        return []
-
-    relevant = pr.DIMENSION_PERSONA_RELEVANCE[dimension]
+    # Värme-/kultur-claims får persona-relevans via dimensionen (Fas 2.1b).
+    if facet == "culture":
+        if not dimension or dimension not in pr.DIMENSION_PERSONA_RELEVANCE:
+            return []
+        relevant = pr.DIMENSION_PERSONA_RELEVANCE[dimension]
+    else:
+        # Operationella claims (A1-utökning 2026-06-12): persona-relevans via PREDIKAT,
+        # så företagsfakta + connector-claims (finans→investor, certifieringar→kund/
+        # investerare) når persona-sektionerna i stället för att alltid bli evergreen.
+        # Narrative-claims utan predikat + predikat utan kartläggning → evergreen.
+        if not predicate or predicate not in pr.OPERATIONAL_PERSONA_RELEVANCE:
+            return []
+        relevant = pr.OPERATIONAL_PERSONA_RELEVANCE[predicate]
 
     # Begränsa till kundens aktiva personor. None = ingen begränsning (testläge).
     if active_personas is not None:
