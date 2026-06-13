@@ -11,10 +11,8 @@ import VerificationCockpit from '../../_components/VerificationCockpit';
 import ESGAddon from '../../_components/ESGAddon';
 import PipelineStatus from '../../_components/PipelineStatus';
 import ConnectorsEditor from '../../_components/ConnectorsEditor';
-import MeasurementConfigEditor from '../../_components/MeasurementConfigEditor';
 import IdentityMetadataEditor from '../../_components/IdentityMetadataEditor';
 import AudiencePrioritiesEditor from '../../_components/AudiencePrioritiesEditor';
-import PersonaPaletteEditor from '../../_components/PersonaPaletteEditor';
 import OutputQualityPanel from '../../_components/OutputQualityPanel';
 import * as UI from '../../_components/ui';
 import { graphFetch } from '../../_lib/api';
@@ -50,7 +48,7 @@ type ClientDetail = {
   employees: Employee[];
 };
 
-type DetailTab = 'oversikt' | 'datakallor' | 'konfiguration' | 'kvalitet' | 'esg' | 'fara';
+type DetailTab = 'oversikt' | 'datakallor' | 'kvalitet' | 'esg' | 'fara';
 
 export default function ClientDetailPage() {
   const params = useParams<{ client_id: string }>();
@@ -178,7 +176,7 @@ export default function ClientDetailPage() {
     <GraphPageShell
       title={client?.company_name || clientId}
       icon={<Users size={22} />}
-      subtitle="Översikt, datakällor, konfiguration, kvalitet och medarbetare för kunden."
+      subtitle="Översikt, datakällor, leverans & kvalitet, ESG och radering för kunden."
     >
       <UI.Breadcrumb
         items={[
@@ -206,10 +204,9 @@ export default function ClientDetailPage() {
             options={[
               { value: 'oversikt', label: 'Översikt' },
               { value: 'datakallor', label: 'Datakällor' },
-              { value: 'konfiguration', label: 'Konfiguration' },
-              { value: 'kvalitet', label: 'Kvalitet & verifiering' },
+              { value: 'kvalitet', label: 'Leverans & kvalitet' },
               { value: 'esg', label: 'ESG' },
-              { value: 'fara', label: 'Fara' },
+              { value: 'fara', label: 'Radera kund' },
             ]}
           />
 
@@ -267,6 +264,17 @@ export default function ClientDetailPage() {
               )}
             </div>
           </UI.Card>
+
+          {/* B6: AI-synlighetens mätkonfiguration + persona-palett flyttade till AI-synlighet-vyns
+              ⚙-drawer (enda hemvist). Pekare så ops hittar dit. */}
+          <UI.Card padding="14px 18px" style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
+              Mätkonfiguration &amp; persona-palett (AI-synlighet) finns under{' '}
+              <a href={`/insider-graph/polling?client=${clientId}`} style={{ color: C.accent, fontWeight: 600 }}>
+                AI-synlighet → ⚙ Inställningar
+              </a>.
+            </div>
+          </UI.Card>
           </>)}
 
           {tab === 'datakallor' && (<>
@@ -274,22 +282,18 @@ export default function ClientDetailPage() {
           <ConnectorsEditor clientId={clientId} />
           </>)}
 
-          {tab === 'konfiguration' && (<>
-          {/* Mätkonfiguration — bransch-platshållare, personas, egna pollingfrågor (AI-synlighet) */}
-          <MeasurementConfigEditor clientId={clientId} />
+          {tab === 'kvalitet' && (<>
+          {/* B6: Mätkonfiguration + Persona-palett (AI-synlighet) bor nu i AI-synlighet-vyns
+              ⚙-drawer (enda hemvist) — inte här. Konfigurations-fliken upplöst. */}
 
-          {/* Identitetsmetadata — logotyp + svenskt org.nr (drivs in i schema.org-grafen) */}
+          {/* Identitetsmetadata — logotyp + svenskt org.nr (drivs in i schema.org-grafen).
+              B4 (Pass 2): kontakter/frekvens bryts ut härifrån till en Mejlutskick-flik. */}
           <IdentityMetadataEditor clientId={clientId} />
 
-          {/* Audience-priorities — vem ska bli citerad av AI-motorer (driver output-kvalitet) */}
+          {/* B5: Målgrupp-prioritet — vem ska bli citerad av AI-motorer (driver output-kvalitet) */}
           <AudiencePrioritiesEditor clientId={clientId} />
 
-          {/* Persona-palett — vilka målgrupper warmth-probarna mäter (Fas 2.1) */}
-          <PersonaPaletteEditor clientId={clientId} />
-          </>)}
-
-          {tab === 'kvalitet' && (<>
-          {/* Output-kvalitet — senaste rubric-scoring + länk till detaljvyn */}
+          {/* B7: Output-kvalitet — senaste rubric-scoring + länk till detaljvyn */}
           <OutputQualityPanel clientId={clientId} />
           </>)}
 
@@ -303,8 +307,9 @@ export default function ClientDetailPage() {
           <AttestedUpload clientId={clientId} />
           </>)}
 
-          {tab === 'kvalitet' && (<>
-          {/* Verifierings-cockpit — manuell "Manually verified by Geogiraph" (ops, §7) */}
+          {tab === 'datakallor' && (<>
+          {/* B8: Verifierings-cockpit — ett uppladdningsställe, hör hemma bland Datakällor.
+              Manuell "Manually verified by Geogiraph" (ops, §7) */}
           <VerificationCockpit clientId={clientId} />
 
           {/* Bevisarkiv — granskningsbar provenans för denna kunds verifierade claims (D3) */}
@@ -332,8 +337,9 @@ export default function ClientDetailPage() {
           <LinkedInCapacityUpload clientId={clientId} />
           </>)}
 
-          {tab === 'oversikt' && (<>
-          {/* Medarbetare */}
+          {tab === 'datakallor' && (<>
+          {/* B3: Medarbetare hör hemma bland Datakällor — det är en CV/bio-datakälla
+              (genererar person-expertis-claims, nu synliga på profilsidan via A3). */}
           <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 4 }}>
               Medarbetare ({client.employees.length})
@@ -608,23 +614,23 @@ function SetupChecklist({ client }: { client: ClientDetail }) {
     {
       done: !!client.contact_email,
       label: 'Kontakt-e-post',
-      hint: 'Krävs för leverans — installationskit och månadsmejl går hit. Sätts under Identitetsmetadata nedan.',
+      hint: 'Krävs för leverans — installationskit och månadsmejl går hit. Sätts under Leverans & kvalitet → Identitetsmetadata.',
       critical: true,
     },
     {
       done: client.active_connectors.length > 0,
       label: 'Connectors valda',
-      hint: 'Välj vilka källor kunden hämtar data från (Connectors nedan).',
+      hint: 'Välj vilka källor kunden hämtar data från (Datakällor → Connectors).',
     },
     {
       done: !!client.industry,
       label: 'Bransch ifylld',
-      hint: 'Fyller platshållarna i mätfrågorna. Sätts under Mätkonfiguration nedan.',
+      hint: 'Fyller platshållarna i mätfrågorna. Sätts under AI-synlighet → ⚙ Inställningar.',
     },
     {
       done: Array.isArray(client.audience_priorities) && client.audience_priorities.length > 0,
       label: 'Audience-targets satta',
-      hint: 'Vilka målgrupper ni vill bli citerade av i AI-svar. Sätts under Persona-targets nedan.',
+      hint: 'Vilka målgrupper ni vill bli citerade av i AI-svar. Sätts under Leverans & kvalitet → Målgrupp-prioritet.',
     },
     {
       done: !!client.last_compiled,
