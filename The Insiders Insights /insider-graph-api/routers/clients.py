@@ -485,9 +485,13 @@ def _build_pipeline(client_id: str) -> dict[str, Any]:
         },
         {
             "key": "review",
-            "label": "Granskad",
+            # C4: "Granskad N" lästes som ett blockerande steg (eller AI-synlighetens
+            # riskanalys) FÖRE kompilering. N är i själva verket claim-gransknings-KÖN
+            # (review-grinden). Tydligare: "Granskning" (pågående grind, ej dåtid) +
+            # detail som säger att det är claims i kö, inte ett färdig-antal.
+            "label": "Granskning",
             "state": "attention" if pending else "done",
-            "detail": f"{pending} att granska" if pending else "Inget väntar",
+            "detail": f"{pending} claims att granska" if pending else "Inget i kö",
             "at": None,
         },
         {
