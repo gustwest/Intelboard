@@ -160,6 +160,11 @@ export default function OutputQualityPanel({ clientId }: { clientId: string }) {
               ))}
             </div>
           </div>
+          {/* A9: skuggläge vs aktiv grind — annars läses drop-staplarna som att claims FAKTISKT tas bort. */}
+          <p style={{ fontSize: 10, color: C.dim, margin: '0 0 8px', lineHeight: 1.5 }}>
+            Skuggläge (diagnos): staplarna visar vad grinden <em>skulle</em> göra. Bara LinkedIn-demografi körs i{' '}
+            <strong>aktiv grind</strong> (agerar på riktigt) — övriga connectors observeras tills de promotas.
+          </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {connectorRows.map((c) => {
               const total = (c.action_counts?.publish ?? 0) + (c.action_counts?.transform ?? 0) + (c.action_counts?.drop ?? 0) || 1;

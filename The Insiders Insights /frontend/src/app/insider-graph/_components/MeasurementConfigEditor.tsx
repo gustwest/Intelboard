@@ -23,6 +23,7 @@ type ClientConfig = {
   industry: string | null;
   topic: string | null;
   service_area: string | null;
+  measurement_ack_generic?: boolean | null;
   risk_personas: string[];
   polling_questions: Record<string, string[]>;
   measurement_language?: string | null;
@@ -34,6 +35,8 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
   const [industry, setIndustry] = useState('');
   const [topic, setTopic] = useState('');
   const [serviceArea, setServiceArea] = useState('');
+  // A7: kvittens att tom bransch/område/tjänsteområde är medvetet (annars generisk mätning).
+  const [ackGeneric, setAckGeneric] = useState(false);
   const [language, setLanguage] = useState('sv');  // F4: mätspråk för polling
   const [personas, setPersonas] = useState<string[]>([]);
   const [questions, setQuestions] = useState<Record<string, string[]>>({});
@@ -51,6 +54,7 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
         setIndustry(d.industry || '');
         setTopic(d.topic || '');
         setServiceArea(d.service_area || '');
+        setAckGeneric(!!d.measurement_ack_generic);
         setLanguage(d.measurement_language || 'sv');
         setPersonas(d.risk_personas || []);
         setQuestions(d.polling_questions || {});
@@ -79,6 +83,11 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
   }
 
   async function save() {
+    // A7: tom bransch/område/tjänsteområde → kräv medveten kvittens (annars generisk mätning).
+    if (!industry.trim() && !topic.trim() && !serviceArea.trim() && !ackGeneric) {
+      setMsg({ tone: 'error', text: 'Fyll i bransch/område/tjänsteområde — eller kryssa i att mätningen får vara generisk.' });
+      return;
+    }
     setSaving(true);
     setMsg(null);
     try {
@@ -95,6 +104,7 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
           industry,
           topic,
           service_area: serviceArea,
+          measurement_ack_generic: ackGeneric,
           risk_personas: PERSONAS.map((p) => p.id).filter((id) => personas.includes(id)),
           polling_questions: cleaned,
           measurement_language: language,
@@ -166,9 +176,18 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
               <UI.Input value={serviceArea} onChange={(e) => { setServiceArea(e.target.value); setDirty(true); }} placeholder="t.ex. molnmigrering" style={{ width: '100%' }} />
             </div>
           </div>
-          <p style={{ fontSize: 11, color: C.dim, margin: '-10px 0 18px' }}>
-            Fyller platshållarna i default-frågebatteriet. Lämna tomt → generiska formuleringar (&quot;branschen&quot; m.fl.).
+          {/* A7: förklara EFFEKTEN + visa en live exempel-fråga så "rätt beskrivning" blir konkret. */}
+          <p style={{ fontSize: 11, color: C.dim, margin: '-6px 0 8px', lineHeight: 1.5 }}>
+            Fyller frågorna AI-motorerna får om er marknad — ju mer specifikt, desto mer meningsfull mätning.
+            Exempel: <em style={{ color: C.muted }}>&quot;Vilka är de ledande svenska bolagen inom {industry.trim() || 'branschen'}?&quot;</em>{' '}
+            <em style={{ color: C.muted }}>&quot;Vilka företag rekommenderar du för {serviceArea.trim() || 'deras tjänster'}?&quot;</em>
           </p>
+          {!industry.trim() && !topic.trim() && !serviceArea.trim() && (
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 11, color: '#b45309', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 8, padding: '8px 10px', margin: '0 0 18px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={ackGeneric} onChange={(e) => { setAckGeneric(e.target.checked); setDirty(true); }} style={{ marginTop: 2, cursor: 'pointer' }} />
+              <span>Inga fält ifyllda. Jag förstår att AI-synlighetsmätningen då blir <strong>generisk och inte meningsfull</strong> för den här kunden.</span>
+            </label>
+          )}
 
           {/* Målgrupper som riskloopen ställer frågor som */}
           <UI.FieldLabel>Målgrupper i riskloopen</UI.FieldLabel>

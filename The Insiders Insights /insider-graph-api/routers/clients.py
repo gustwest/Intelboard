@@ -70,6 +70,9 @@ class ClientConfigUpdate(BaseModel):
     industry: str | None = None
     topic: str | None = None
     service_area: str | None = None
+    # A7: ops-kvittens att tom bransch/område/tjänsteområde är ett medvetet val (generisk
+    # AI-synlighetsmätning accepteras). Loggas så valet är spårbart, inte en tyst tom.
+    measurement_ack_generic: bool | None = None
     risk_personas: list[str] | None = None
     polling_questions: dict[str, list[str]] | None = None
     audience_priorities: list[AudiencePriority] | None = None
@@ -178,6 +181,7 @@ def get_client(client_id: str) -> dict[str, Any]:
         "industry": data.get("industry"),
         "topic": data.get("topic"),
         "service_area": data.get("service_area"),
+        "measurement_ack_generic": bool(data.get("measurement_ack_generic")),
         "risk_personas": data.get("risk_personas") or list(MEASUREMENT_PERSONAS),
         "polling_questions": data.get("polling_questions") or {},
         # F4 — mätspråk för polling (sv/en), skilt från profilspråket ovan. Default sv.
@@ -240,6 +244,9 @@ def update_client_config(client_id: str, payload: ClientConfigUpdate) -> dict[st
             if kept:
                 cleaned[cat] = kept
         update["polling_questions"] = cleaned  # tomt dict = återgå till defaults
+
+    if payload.measurement_ack_generic is not None:
+        update["measurement_ack_generic"] = bool(payload.measurement_ack_generic)
 
     # F3 (frågedesign): stämpla när mätkontexten senast sågs över — driver
     # staleness-flaggan i AI-synlighet ("substitutioner orörda >90 dagar").

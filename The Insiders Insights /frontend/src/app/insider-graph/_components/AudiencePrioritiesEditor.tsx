@@ -190,8 +190,10 @@ export default function AudiencePrioritiesEditor({ clientId }: { clientId: strin
         </div>
       </div>
 
-      <p style={{ fontSize: 11, color: C.dim, margin: '0 0 14px' }}>
-        Driver output-kvalitets-rubric:en — vilka målgrupper (kunder/kandidater/investerare) ni vill bli citerade av i AI-svar.
+      <p style={{ fontSize: 11, color: C.dim, margin: '0 0 14px', lineHeight: 1.5 }}>
+        Driver output-kvalitets-rubric:en: <strong style={{ color: C.muted }}>berättelseaxlarna</strong> definierar vad ett bra claim är
+        (det ni vill bli kända för), <strong style={{ color: C.muted }}>vikten</strong> vilka målgrupper (kunder/talang/investerare) som
+        prioriteras när AI-svar bedöms. Tomt → rubric:en saknar mål och kvalitetspoängen blir oriktad — använd <strong>Auto-härled</strong> om du är osäker.
         {setAt && <> Senast sparat: {fmtDateTime(setAt)}.</>}
       </p>
 
