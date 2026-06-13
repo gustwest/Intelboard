@@ -14,6 +14,7 @@ import ConnectorsEditor from '../../_components/ConnectorsEditor';
 import IdentityMetadataEditor from '../../_components/IdentityMetadataEditor';
 import AudiencePrioritiesEditor from '../../_components/AudiencePrioritiesEditor';
 import OutputQualityPanel from '../../_components/OutputQualityPanel';
+import MejlutskickEditor from '../../_components/MejlutskickEditor';
 import * as UI from '../../_components/ui';
 import { graphFetch } from '../../_lib/api';
 import { useJobRuns, fmtRelative } from '../../_lib/jobRuns';
@@ -48,7 +49,7 @@ type ClientDetail = {
   employees: Employee[];
 };
 
-type DetailTab = 'oversikt' | 'datakallor' | 'kvalitet' | 'esg' | 'fara';
+type DetailTab = 'oversikt' | 'datakallor' | 'kvalitet' | 'mejlutskick' | 'esg' | 'fara';
 
 export default function ClientDetailPage() {
   const params = useParams<{ client_id: string }>();
@@ -205,6 +206,7 @@ export default function ClientDetailPage() {
               { value: 'oversikt', label: 'Översikt' },
               { value: 'datakallor', label: 'Datakällor' },
               { value: 'kvalitet', label: 'Leverans & kvalitet' },
+              { value: 'mejlutskick', label: 'Mejlutskick' },
               { value: 'esg', label: 'ESG' },
               { value: 'fara', label: 'Radera kund' },
             ]}
@@ -304,6 +306,12 @@ export default function ClientDetailPage() {
 
           {/* B7: Output-kvalitet — senaste rubric-scoring + länk till detaljvyn */}
           <OutputQualityPanel clientId={clientId} />
+          </>)}
+
+          {tab === 'mejlutskick' && (<>
+          {/* B4: Mejlutskick — kundkontakter (mottagare av kit + månadsmejl). Utbrutet ur
+              Identitetsmetadata; språk stannar i Leverans & kvalitet. */}
+          <MejlutskickEditor clientId={clientId} />
           </>)}
 
           {tab === 'esg' && (<>

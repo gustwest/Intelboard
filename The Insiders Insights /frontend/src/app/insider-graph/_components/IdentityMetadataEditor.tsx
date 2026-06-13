@@ -24,7 +24,6 @@ type ClientIdentity = {
 };
 
 type Contact = { email: string; name: string | null; role: string | null; is_primary: boolean };
-type ContactRow = { email: string; name: string; role: string; is_primary: boolean };
 
 type EnrichResponse = {
   client_id: string;
@@ -45,7 +44,6 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
   const [identity, setIdentity] = useState<ClientIdentity | null>(null);
   const [logoUrl, setLogoUrl] = useState('');
   const [orgNumber, setOrgNumber] = useState('');
-  const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [language, setLanguage] = useState('sv');
   // Paritets-baseline: procent som text i UI:t (45 = 45 %), andel 0–1 mot API:t.
   const [parityPct, setParityPct] = useState('');
@@ -63,37 +61,12 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
     setIdentity(d);
     setLogoUrl(d.logo_url || '');
     setOrgNumber(d.org_number || '');
-    setContacts((d.contacts || []).map((c) => ({
-      email: c.email || '', name: c.name || '', role: c.role || '', is_primary: !!c.is_primary,
-    })));
     setLanguage(d.language || 'sv');
     setParityPct(d.parity_baseline ? String(Math.round(d.parity_baseline.value * 1000) / 10) : '');
     setParitySource(d.parity_baseline?.source || '');
     setParityAsOf(d.parity_baseline?.as_of || '');
     setLoaded(true);
     setDirty(false);
-  }
-
-  // N2-kontakthjälpare — en huvudkontakt upprätthålls i UI:t (backend saniterar också).
-  function updateContact(i: number, patch: Partial<ContactRow>) {
-    setContacts((cs) => cs.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
-    setDirty(true);
-  }
-  function setPrimary(i: number) {
-    setContacts((cs) => cs.map((c, idx) => ({ ...c, is_primary: idx === i })));
-    setDirty(true);
-  }
-  function addContact() {
-    setContacts((cs) => [...cs, { email: '', name: '', role: '', is_primary: cs.length === 0 }]);
-    setDirty(true);
-  }
-  function removeContact(i: number) {
-    setContacts((cs) => {
-      const next = cs.filter((_, idx) => idx !== i);
-      if (next.length && !next.some((c) => c.is_primary)) next[0] = { ...next[0], is_primary: true };
-      return next;
-    });
-    setDirty(true);
   }
 
   useEffect(() => {
@@ -120,10 +93,6 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
         body: JSON.stringify({
           logo_url: logoUrl,
           org_number: orgNumber,
-          // N2: skicka kontakter; backend speglar huvudkontakten → contact_email/name.
-          contacts: contacts
-            .map((c) => ({ email: c.email.trim(), name: c.name.trim() || null, role: c.role.trim() || null, is_primary: c.is_primary }))
-            .filter((c) => c.email),
           language,
           parity_baseline: pct === null
             ? { value: null }
@@ -252,38 +221,8 @@ export default function IdentityMetadataEditor({ clientId }: { clientId: string 
             </div>
           </div>
 
-          {/* Leverans: kundkontakter (utskick) + profilsidans språk (Spår B/C, N2) */}
+          {/* Leverans: profilsidans språk. Kundkontakter (utskick) flyttade till Mejlutskick-fliken (B4). */}
           <div style={{ borderTop: `1px solid ${C.border}`, margin: '18px 0 14px' }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 4 }}>
-            Kundkontakter &amp; språk (leverans)
-          </div>
-          <p style={{ fontSize: 11, color: C.dim, margin: '0 0 12px' }}>
-            <strong style={{ color: C.text }}>Huvudkontakten</strong> får installationskit och månadsmejl. Lägg till fler vid behov (t.ex. webbansvarig) och välj vem som är huvudkontakt. Felnotiser går aldrig hit — de hanteras internt av oss.
-          </p>
-
-          {contacts.length === 0 ? (
-            <p style={{ fontSize: 12, color: C.muted, margin: '0 0 10px', fontStyle: 'italic' }}>
-              Inga kontakter ännu — leveransen når ingen förrän en huvudkontakt lagts till.
-            </p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
-              {contacts.map((c, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: 'auto 1.4fr 1fr 1fr auto', gap: 8, alignItems: 'center', padding: '8px 10px', background: c.is_primary ? 'rgba(224, 142, 121,0.06)' : '#fff', border: `1px solid ${c.is_primary ? C.accent : C.border}`, borderRadius: 8 }}>
-                  <label title="Huvudkontakt — får kit + månadsmejl" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: c.is_primary ? C.accent : C.muted, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                    <input type="radio" name="primary-contact" checked={c.is_primary} onChange={() => setPrimary(i)} style={{ accentColor: C.accent, cursor: 'pointer' }} />
-                    Huvud
-                  </label>
-                  <UI.Input type="email" value={c.email} onChange={(e) => updateContact(i, { email: e.target.value })} placeholder="vd@kund.se" style={{ width: '100%' }} />
-                  <UI.Input value={c.name} onChange={(e) => updateContact(i, { name: e.target.value })} placeholder="Namn" style={{ width: '100%' }} />
-                  <UI.Input value={c.role} onChange={(e) => updateContact(i, { role: e.target.value })} placeholder="Roll (valfritt)" style={{ width: '100%' }} />
-                  <button onClick={() => removeContact(i)} title="Ta bort kontakt" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 6, cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
-                </div>
-              ))}
-            </div>
-          )}
-          <button onClick={addContact} style={{ padding: '6px 12px', background: 'transparent', color: C.accent, border: `1px solid ${C.accent}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-            + Lägg till kontakt
-          </button>
 
           <div style={{ marginTop: 18 }}>
             <UI.FieldLabel>Profilsidans språk</UI.FieldLabel>
