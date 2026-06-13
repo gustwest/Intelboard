@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { graphColors as C } from '../../_components/GraphPageShell';
 import { graphFetch } from '../../_lib/api';
 import {
@@ -106,6 +106,10 @@ export function RiskBoard({ data, approvedQuestions, clientId, conf, reportFindi
     filter === 'all' ? data.findings
     : filter === 'report' ? data.findings.filter(inReport)
     : data.findings.filter((r) => r.status === filter);
+  // C1: gruppera per fråga — datamodellen har en rad per (fråga × motor), vilket gav
+  // samma fråga upprepad en gång per motor. Visa frågan EN gång med motorernas svar
+  // under. Gruppering sker EFTER filtreringen så statusfiltren fortsatt fungerar.
+  const groups = groupByQuestion(rows);
 
   return (
     <div id="risk-board" style={{ ...cardStyle, marginBottom: 18 }}>
@@ -151,21 +155,25 @@ export function RiskBoard({ data, approvedQuestions, clientId, conf, reportFindi
         <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>Inga risker i den här statusen.</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-          {rows.map((r, i) => (
-            <RiskCard
-              key={r.id}
-              row={r}
-              isLast={i === rows.length - 1}
-              inReport={inReport(r)}
-              simChecked={simSelected.has(r.id)}
-              onToggleSim={canSimulate && r.status === 'open' ? () => toggleSim(r.id) : undefined}
-              busy={busyId === r.id}
-              confirmDismiss={confirmDismissId === r.id}
-              onAction={clientId && r.status === 'open' ? () => setActioning(r) : undefined}
-              onDismiss={clientId && r.status === 'open'
-                ? () => (confirmDismissId === r.id ? dismiss(r) : setConfirmDismissId(r.id))
-                : undefined}
-            />
+          {groups.map((g, gi) => (
+            <RiskQuestionGroup key={g.key} group={g} isLast={gi === groups.length - 1}>
+              {g.rows.map((r, ri) => (
+                <RiskEngineRow
+                  key={r.id}
+                  row={r}
+                  isLast={ri === g.rows.length - 1}
+                  inReport={inReport(r)}
+                  simChecked={simSelected.has(r.id)}
+                  onToggleSim={canSimulate && r.status === 'open' ? () => toggleSim(r.id) : undefined}
+                  busy={busyId === r.id}
+                  confirmDismiss={confirmDismissId === r.id}
+                  onAction={clientId && r.status === 'open' ? () => setActioning(r) : undefined}
+                  onDismiss={clientId && r.status === 'open'
+                    ? () => (confirmDismissId === r.id ? dismiss(r) : setConfirmDismissId(r.id))
+                    : undefined}
+                />
+              ))}
+            </RiskQuestionGroup>
           ))}
         </div>
       )}
@@ -197,7 +205,44 @@ export function RiskBoard({ data, approvedQuestions, clientId, conf, reportFindi
   );
 }
 
-function RiskCard({ row, isLast, inReport, simChecked, onToggleSim, busy, confirmDismiss, onAction, onDismiss }: {
+type RiskGroup = { key: string; question: string | null; persona: string | null; rows: RiskTimelineRow[] };
+
+/** C1: slå ihop rader med samma (persona, track, fråga) — dubbletterna är en rad per
+ * motor. Bevarar första-förekomst-ordningen. */
+function groupByQuestion(rows: RiskTimelineRow[]): RiskGroup[] {
+  const map = new Map<string, RiskGroup>();
+  const order: string[] = [];
+  for (const r of rows) {
+    const key = `${r.persona ?? ''}|${r.track ?? ''}|${r.question ?? ''}`;
+    let g = map.get(key);
+    if (!g) {
+      g = { key, question: r.question, persona: r.persona, rows: [] };
+      map.set(key, g);
+      order.push(key);
+    }
+    g.rows.push(r);
+  }
+  return order.map((k) => map.get(k)!);
+}
+
+/** C1: frågan som rubrik EN gång, motorernas svar listade under (indragna). */
+function RiskQuestionGroup({ group, isLast, children }: { group: RiskGroup; isLast: boolean; children: ReactNode }) {
+  const n = group.rows.length;
+  return (
+    <div style={{ padding: '14px 0', borderBottom: isLast ? 'none' : `1px solid ${C.border}` }}>
+      <div style={{ fontSize: 13, color: C.text, lineHeight: 1.5, fontWeight: 600 }}>{group.question || '—'}</div>
+      <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
+        {group.persona ? PERSONA_SV[group.persona] || group.persona : '—'}
+        {` · ${n} ${n === 1 ? 'motor' : 'motorer'}`}
+      </div>
+      <div style={{ marginTop: 10, paddingLeft: 12, borderLeft: `2px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 0 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function RiskEngineRow({ row, isLast, inReport, simChecked, onToggleSim, busy, confirmDismiss, onAction, onDismiss }: {
   row: RiskTimelineRow;
   isLast: boolean;
   inReport: boolean;
@@ -214,14 +259,13 @@ function RiskCard({ row, isLast, inReport, simChecked, onToggleSim, busy, confir
   const events = buildLifecycleEvents(row);
 
   return (
-    <div style={{ padding: '14px 0', borderBottom: isLast ? 'none' : `1px solid ${C.border}`, opacity: busy ? 0.5 : 1, transition: 'opacity 0.2s' }}>
+    <div style={{ padding: '10px 0', borderBottom: isLast ? 'none' : `1px solid ${C.border}`, opacity: busy ? 0.5 : 1, transition: 'opacity 0.2s' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, color: C.text, lineHeight: 1.5 }}>{row.question || '—'}</div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
-            {row.persona ? PERSONA_SV[row.persona] || row.persona : '—'}
-            {row.engine && ` · ${ENGINE_SV[row.engine] || row.engine}`}
-            {row.harm && ` · ${harmLabel(row.harm)}`}
+          {/* C1: frågan står i gruppens rubrik — här leder motorn (+ ev. skadetyp). */}
+          <div style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>
+            {row.engine ? ENGINE_SV[row.engine] || row.engine : '—'}
+            {row.harm && <span style={{ fontWeight: 400, color: C.muted }}> · {harmLabel(row.harm)}</span>}
           </div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
