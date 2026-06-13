@@ -92,6 +92,10 @@ class ClientConfigUpdate(BaseModel):
     # Kundkontakt för leverans-utskick (installationskit + månadsmejl, Spår B).
     # Felnotiser går ALDRIG hit — de stannar internt hos ops. Tom sträng = rensa.
     contact_email: str | None = None
+    # B4b: mejlutskickets kadens ("monthly"/"quarterly"/"off") + om de frivilliga
+    # alignment-åtgärdsförslagen följer med. Styrs i Mejlutskick-fliken (Spår B).
+    email_cadence: str | None = None
+    email_include_alignment: bool | None = None
     contact_name: str | None = None
     # Flera kontaktpersoner med en huvudkontakt (N2). När satt driver den
     # contact_email/contact_name (huvudkontakten speglas dit) så alla befintliga läsare
@@ -182,6 +186,8 @@ def get_client(client_id: str) -> dict[str, Any]:
         "topic": data.get("topic"),
         "service_area": data.get("service_area"),
         "measurement_ack_generic": bool(data.get("measurement_ack_generic")),
+        "email_cadence": data.get("email_cadence") or "monthly",
+        "email_include_alignment": bool(data.get("email_include_alignment", True)),
         "risk_personas": data.get("risk_personas") or list(MEASUREMENT_PERSONAS),
         "polling_questions": data.get("polling_questions") or {},
         # F4 — mätspråk för polling (sv/en), skilt från profilspråket ovan. Default sv.
@@ -247,6 +253,14 @@ def update_client_config(client_id: str, payload: ClientConfigUpdate) -> dict[st
 
     if payload.measurement_ack_generic is not None:
         update["measurement_ack_generic"] = bool(payload.measurement_ack_generic)
+
+    if payload.email_cadence is not None:
+        cadence = payload.email_cadence.strip().lower()
+        if cadence not in ("monthly", "quarterly", "off"):
+            raise HTTPException(400, f"invalid email_cadence: {cadence}")
+        update["email_cadence"] = cadence
+    if payload.email_include_alignment is not None:
+        update["email_include_alignment"] = bool(payload.email_include_alignment)
 
     # F3 (frågedesign): stämpla när mätkontexten senast sågs över — driver
     # staleness-flaggan i AI-synlighet ("substitutioner orörda >90 dagar").

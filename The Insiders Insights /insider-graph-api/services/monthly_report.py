@@ -248,7 +248,8 @@ def build_report_model(client_id: str, month: str | None = None) -> dict[str, An
         "humanization": trust_gap_report.build_report_model(client_id),
         # Frivilliga, kund-säkra åtgärdsförslag ur alignment-auditen (frågor profilen inte
         # svarar på). Tom om auditen aldrig körts → kundmejlets sektion utelämnas.
-        "alignment": _alignment_actions(client_id),
+        # B4b: kunden kan stänga av sektionen i Mejlutskick-fliken (email_include_alignment).
+        "alignment": _alignment_actions(client_id) if client.get("email_include_alignment", True) else {},
     }
 
 

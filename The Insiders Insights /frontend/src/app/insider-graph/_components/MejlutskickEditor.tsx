@@ -13,10 +13,12 @@ type ContactRow = { email: string; name: string; role: string; is_primary: boole
  * Bröts ut ur IdentityMetadataEditor: kontakter (utskicks-MOTTAGARE) hör till mejlutskick,
  * medan profilsidans språk är leverans-/output-config och stannar i Leverans & kvalitet.
  * Sparar BARA `contacts` via PUT /config (partiell merge — backend rör ej logo/org.nr/
- * språk/parity som utelämnas). Utskicksfrekvens + innehåll = separat steg (B4b, ej beslutat). */
+ * språk/parity som utelämnas). Utskicksfrekvens (kadens) + innehåll (B4b) styrs i samma flik. */
 export default function MejlutskickEditor({ clientId }: { clientId: string }) {
   const [loaded, setLoaded] = useState(false);
   const [contacts, setContacts] = useState<ContactRow[]>([]);
+  const [cadence, setCadence] = useState('monthly');               // B4b: utskicksfrekvens
+  const [includeAlignment, setIncludeAlignment] = useState(true);  // B4b: frivilliga åtgärdsförslag
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error' | 'info'; text: string } | null>(null);
@@ -26,11 +28,13 @@ export default function MejlutskickEditor({ clientId }: { clientId: string }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const d = await graphFetch<{ contacts: Contact[] }>(`/api/clients/${clientId}`);
+      const d = await graphFetch<{ contacts: Contact[]; email_cadence?: string; email_include_alignment?: boolean }>(`/api/clients/${clientId}`);
       if (cancelled) return;
       setContacts((d.contacts || []).map((c) => ({
         email: c.email || '', name: c.name || '', role: c.role || '', is_primary: !!c.is_primary,
       })));
+      setCadence(d.email_cadence || 'monthly');
+      setIncludeAlignment(d.email_include_alignment !== false);
       setLoaded(true);
     })().catch((e) => { if (!cancelled) setMsg({ tone: 'error', text: e instanceof Error ? e.message : String(e) }); });
     return () => { cancelled = true; };
@@ -70,6 +74,8 @@ export default function MejlutskickEditor({ clientId }: { clientId: string }) {
           contacts: contacts
             .map((c) => ({ email: c.email.trim(), name: c.name.trim() || null, role: c.role.trim() || null, is_primary: c.is_primary }))
             .filter((c) => c.email),
+          email_cadence: cadence,
+          email_include_alignment: includeAlignment,
         }),
       });
       setDirty(false);
@@ -118,9 +124,26 @@ export default function MejlutskickEditor({ clientId }: { clientId: string }) {
         + Lägg till kontakt
       </button>
 
-      <p style={{ fontSize: 10, color: C.dim, margin: '14px 0 0' }}>
-        Utskicksfrekvens och vad som följer med konfigureras här i ett senare steg.
+      {/* B4b: hur ofta + vad. Mottagarna (ovan) = VILKA; detta = FREKVENS + INNEHÅLL. */}
+      <div style={{ borderTop: `1px solid ${C.border}`, margin: '18px 0 12px' }} />
+      <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 8 }}>Utskick</div>
+      <UI.FieldLabel>Hur ofta</UI.FieldLabel>
+      <UI.SegmentedToggle
+        value={cadence}
+        onChange={(v: string) => { setCadence(v); setDirty(true); }}
+        options={[
+          { value: 'monthly', label: 'Månadsvis' },
+          { value: 'quarterly', label: 'Kvartalsvis' },
+          { value: 'off', label: 'Av' },
+        ]}
+      />
+      <p style={{ fontSize: 10, color: C.dim, margin: '6px 0 14px' }}>
+        Kvartalsvis = mars/juni/sep/dec. Av = inga återkommande utskick. Manuell sändning påverkas inte.
       </p>
+      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: C.text, cursor: 'pointer' }}>
+        <input type="checkbox" checked={includeAlignment} onChange={(e) => { setIncludeAlignment(e.target.checked); setDirty(true); }} style={{ marginTop: 2, cursor: 'pointer' }} />
+        <span>Inkludera frivilliga åtgärdsförslag (frågor AI-motorer ställer som profilen inte svarar på)</span>
+      </label>
     </UI.Card>
   );
 }
