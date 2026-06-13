@@ -174,7 +174,7 @@ export default function ClientDetailPage() {
 
   return (
     <GraphPageShell
-      title={client?.company_name || clientId}
+      title={client?.company_name ? `${client.company_name} (${client.client_id})` : clientId}
       icon={<Users size={22} />}
       subtitle="Översikt, datakällor, leverans & kvalitet, ESG och radering för kunden."
     >
@@ -251,7 +251,7 @@ export default function ClientDetailPage() {
           {/* Företagsöversikt */}
           <UI.Card padding="18px 20px" style={{ marginBottom: 16 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: C.muted }}>
-              <Row label="client_id" value={client.client_id} mono />
+              {/* B1: client_id flyttat till sidrubriken (inom parentes) — bort härifrån för mindre dev-brus. */}
               <Row label="Tier" value={client.tier} />
               <Row label="Connectors" value={client.active_connectors.join(', ') || '—'} />
               {client.company_linkedin_url && (
@@ -259,6 +259,15 @@ export default function ClientDetailPage() {
                   <span>LinkedIn</span>
                   <a href={client.company_linkedin_url} target="_blank" rel="noreferrer" style={{ color: C.accent, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                     Företagssida <ExternalLink size={12} />
+                  </a>
+                </div>
+              )}
+              {/* B2: direktlänk till den publika profilen + färskhet — ops kan hoppa dit och se senaste kompilering. */}
+              {client.profile_url && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Profil{client.last_compiled ? ` · kompilerad ${fmtRelative(client.last_compiled)}` : ''}</span>
+                  <a href={client.profile_url} target="_blank" rel="noreferrer" style={{ color: C.accent, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    Visa publik profil <ExternalLink size={12} />
                   </a>
                 </div>
               )}
