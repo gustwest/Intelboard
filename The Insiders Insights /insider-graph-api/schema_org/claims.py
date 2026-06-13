@@ -17,6 +17,7 @@ from typing import Any, Iterator
 import firestore_client as fs
 from schemas import Claim, ClaimSource, LinkedInStatus
 from services import confidence_scorer
+from services.persona_derivation import derive_claim_audience, get_active_personas
 
 # extra-fält → (schema.org-predikat, visningstext-mall). Källfält som saknas
 # i mappen ignoreras; followers/likes finns medvetet inte med.
@@ -132,7 +133,14 @@ def iter_culture_claims(client_id: str) -> Iterator[Claim]:
 
 
 def derive_property_claims(client_id: str) -> Iterator[Claim]:
-    """Yielda property-claims för företagsnivå ur godkända företags-raw_items."""
+    """Yielda property-claims för företagsnivå ur godkända företags-raw_items.
+
+    Persona-taggning (A1, wire:ad 2026-06-12): operationella property-claims taggas
+    via predikat (`OPERATIONAL_PERSONA_RELEVANCE`) mot kundens aktiva personor, så de
+    når persona-sektionerna i stället för att alltid bli evergreen. Sker här vid
+    derivationen (compile-time) → omedelbar effekt utan re-extraktion. Predikat utan
+    kartläggning → tom audience (evergreen), oförändrat beteende."""
+    active = get_active_personas(client_id)
     for snap in fs.raw_items_company_col(client_id).stream():
         raw = snap.to_dict() or {}
         if not raw.get("included_in_output", True):
@@ -152,6 +160,9 @@ def derive_property_claims(client_id: str) -> Iterator[Claim]:
                 statement=template.format(value=_display(value)),
                 source=[source],
                 confidence=1.0,
+                audience=derive_claim_audience(
+                    {"facet": "operational", "predicate": predicate}, active
+                ),
             )
         # Koncernstruktur (GLEIF Level 2): moder/dotter är schema.org-Organization-
         # objekt, inte skalärer → egen härledning utanför _COMPANY_FIELD_MAP.

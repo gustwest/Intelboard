@@ -35,6 +35,28 @@ class DerivePropertyClaimsTest(unittest.TestCase):
             self.assertEqual(c.source[0].kind, "item")
             self.assertEqual(c.source[0].item_id, "bv1")
 
+    def test_operational_claims_get_persona_audience(self):
+        """A1-wiring (2026-06-12): deriverade operationella property-claims taggas via
+        predikat mot aktiva personor. foundingDate→investor; address (okartlagt)→evergreen."""
+        fakefs.reset(
+            client={"company_name": "Acme AB"},  # inga personas konf. → defaults (customer/talent/investor)
+            company_items={"bv1": {"schema_type": "Organization", "included_in_output": True,
+                                   "extra": {"founded": "2014", "address": "Göteborg"}}},
+        )
+        by_pred = {c.predicate: c for c in derive_property_claims("acme")}
+        self.assertEqual(by_pred["foundingDate"].audience, ["investor"])
+        self.assertEqual(by_pred["address"].audience, [])  # okartlagt predikat → evergreen
+
+    def test_operational_audience_respects_active_personas(self):
+        """foundingDate→investor men investor måste vara aktiv hos kunden."""
+        fakefs.reset(
+            client={"company_name": "Acme AB", "personas": {"active": ["customer", "talent"]}},
+            company_items={"bv1": {"schema_type": "Organization", "included_in_output": True,
+                                   "extra": {"founded": "2014"}}},
+        )
+        by_pred = {c.predicate: c for c in derive_property_claims("acme")}
+        self.assertEqual(by_pred["foundingDate"].audience, [])  # investor ej aktiv → evergreen
+
     def test_lei_and_corporate_structure(self):
         fakefs.reset(
             company_items={

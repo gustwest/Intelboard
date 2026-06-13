@@ -327,8 +327,20 @@ class FaqPersonaLogoTest(unittest.TestCase):
         self.assertIn("Snabb leverans till kunder", audience)
 
     def test_no_persona_sections_when_evergreen(self):
-        """A7: utan persona-taggar renderas inga audience-sektioner."""
-        _setup()
+        """A7: utan persona-taggar renderas inga audience-sektioner. Fixturet måste vara
+        GENUINT evergreen — bara ett narrative-claim utan predikat, inget `founded`-fält
+        (annars taggar A1-utökningen foundingDate→investor och en sektion dyker upp)."""
+        fakefs.reset(
+            client={"company_name": "Acme AB", "website": "https://acme.se"},
+            company_items={"bv1": {"schema_type": "Organization",
+                                   "url": "https://www.allabolag.se/5566778899",
+                                   "published_at": datetime(2024, 3, 1, tzinfo=timezone.utc),
+                                   "included_in_output": True, "extra": {"name": "Acme AB"}}},
+            claims={"c1": {"claim_kind": "narrative", "subject_ref": "org",
+                           "statement": "Hjälper fordonstillverkare med inbyggda system",
+                           "source": [{"kind": "item", "item_id": "bv1"}],
+                           "included_in_output": True}},
+        )
         self.assertNotIn('class="audience"', render_profile_html("acme"))
 
     def test_logo_rendered_when_set(self):
