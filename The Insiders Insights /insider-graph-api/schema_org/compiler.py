@@ -778,6 +778,12 @@ def _persona_faq_entries(model: RenderModel, name: str) -> list[FaqEntry]:
 
 def _iter_output_claims(client_id: str) -> Iterator[Claim]:
     """Persisterade claims (godkända) + deterministiskt härledda property-claims."""
+    # Backfill (A1/paket 2): persisterade claims lagrade FÖRE persona-taggningen har tom
+    # audience trots dimension/predikat som mappar mot personor. Tagga dem vid LÄSNING med
+    # samma regel som vid skapande → persona-sektioner + persona-FAQ populeras på recompile,
+    # ingen re-extraktion eller DB-kirurgi. Deterministiskt (inga LLM-anrop), no-op om inget mappar.
+    from services.persona_derivation import derive_claim_audience, get_active_personas
+    active = get_active_personas(client_id)
     for _claim_id, raw in fs.iter_claims(client_id):
         if not raw.get("included_in_output", True):
             continue
@@ -793,7 +799,16 @@ def _iter_output_claims(client_id: str) -> Iterator[Claim]:
         if not (raw.get("source") or []):
             log.info("claim %s saknar källa — släpps (inget claim utan källa)", _claim_id)
             continue
-        yield Claim(**raw)
+        claim = Claim(**raw)
+        if not claim.audience:
+            tagged = derive_claim_audience(
+                {"facet": getattr(claim, "facet", None), "dimension": getattr(claim, "dimension", None),
+                 "predicate": getattr(claim, "predicate", None)},
+                active,
+            )
+            if tagged:
+                claim.audience = tagged
+        yield claim
     yield from derive_property_claims(client_id)
     yield from derive_skill_claims(client_id)
     # Humaniseringslager (§5.3): culture-taggade claims rider på samma maskineri —
