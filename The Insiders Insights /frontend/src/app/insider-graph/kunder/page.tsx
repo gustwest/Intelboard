@@ -223,7 +223,9 @@ function compactSteps(client: Client, pending: number): PipelineStep[] {
   return [
     { key: 'onboarded', label: 'Onboardad', state: 'done' },
     { key: 'connectors', label: 'Connectors', state: hasConnectors ? 'done' : 'todo', detail: `${client.active_connectors.length} aktiva` },
-    { key: 'review', label: 'Granskad', state: pending > 0 ? 'attention' : 'done', detail: pending > 0 ? `${pending} att granska` : undefined },
+    // C4: "Granskning" (steget), inte "Granskad" (motsade "N att granska"). Detaljen
+    // säger "claims" så talet inte förväxlas med AI-synlighetens risker.
+    { key: 'review', label: 'Granskning', state: pending > 0 ? 'attention' : 'done', detail: pending > 0 ? `${pending} claims att granska` : undefined },
     { key: 'compiled', label: 'Kompilerad', state: client.last_compiled ? 'done' : 'todo' },
     { key: 'delivered', label: 'Levererad', state: client.cdn_url ? 'done' : 'todo' },
   ];
