@@ -65,12 +65,21 @@ def run(client_id: str) -> None:
 
         bucket = storage.Client().bucket(settings.cdn_bucket)
         schema_blob = bucket.blob(urls.schema_object(client_id))
+        page_blob = bucket.blob(urls.page_object(client_id))
+        llms_blob = bucket.blob(urls.llms_object(client_id))
 
-        # Change-agent: hoppa över de dyra uppladdningarna om grafen är oförändrad.
-        # Firestore-metadatan (URL:erna) skrivs ändå alltid — den är idempotent och
-        # billig, och måste få spegla nuvarande URL-form även när grafen inte ändrats
-        # (annars sitter äldre kunder kvar på en tidigare URL tills grafen råkar ändras).
-        unchanged = schema_blob.exists() and schema_blob.download_as_text() == payload
+        # Change-agent: hoppa över de dyra uppladdningarna BARA om ALLA tre serverade
+        # artefakterna (JSON-LD + HTML + llms.txt) är oförändrade. Tidigare jämfördes
+        # ENBART JSON-LD-grafen → en ren HTML-/mall-ändring (ny renderkod som inte rör
+        # grafen, t.ex. A3:s org.nr-rad + medarbetarexpertis-sektion) re-uploadades
+        # ALDRIG, så kodförändringar nådde inte den serverade sidan trots deploy +
+        # recompile. Renderingen är deterministisk givet Firestore-staten, så detta
+        # ger inga falska re-uploads. Firestore-metadatan (URL:erna) skrivs ändå alltid.
+        unchanged = (
+            schema_blob.exists() and schema_blob.download_as_text() == payload
+            and page_blob.exists() and page_blob.download_as_text() == profile_html
+            and llms_blob.exists() and llms_blob.download_as_text() == llms_txt
+        )
         if unchanged:
             log.info("no change for %s — skipping upload, refreshing metadata only", client_id)
         else:
@@ -79,13 +88,11 @@ def run(client_id: str) -> None:
             schema_blob.patch()
 
             # Profilsidan (lager 2): statisk HTML bredvid schema.json, samma render-modell.
-            page_blob = bucket.blob(urls.page_object(client_id))
             page_blob.upload_from_string(profile_html, content_type="text/html; charset=utf-8")
             page_blob.cache_control = PROFILE_CACHE_CONTROL
             page_blob.patch()
 
             # llms.txt: markdown-summering för AI-crawlers (discoverability).
-            llms_blob = bucket.blob(urls.llms_object(client_id))
             llms_blob.upload_from_string(llms_txt, content_type="text/plain; charset=utf-8")
             llms_blob.cache_control = PROFILE_CACHE_CONTROL
             llms_blob.patch()
