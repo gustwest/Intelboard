@@ -11,6 +11,7 @@ import VerificationCockpit from '../../_components/VerificationCockpit';
 import ESGAddon from '../../_components/ESGAddon';
 import PipelineStatus from '../../_components/PipelineStatus';
 import ConnectorsEditor from '../../_components/ConnectorsEditor';
+import AllaKallorOversikt from '../../_components/AllaKallorOversikt';
 import IdentityMetadataEditor from '../../_components/IdentityMetadataEditor';
 import AudiencePrioritiesEditor from '../../_components/AudiencePrioritiesEditor';
 import OutputQualityPanel from '../../_components/OutputQualityPanel';
@@ -289,6 +290,8 @@ export default function ClientDetailPage() {
           </>)}
 
           {tab === 'datakallor' && (<>
+          {/* C2+C3: Alla källor-översikt — samlad leveransstatus över connectors + uppladdningar. */}
+          <AllaKallorOversikt clientId={clientId} />
           {/* Connectors — vilka datakällor den här kunden hämtar från */}
           <ConnectorsEditor clientId={clientId} />
           </>)}
