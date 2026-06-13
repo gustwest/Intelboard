@@ -49,6 +49,9 @@ _CULTURE_FIELD_MAP: dict[str, tuple[str, str, str | None, str]] = {
 def derive_culture_claims(client_id: str) -> Iterator[Claim]:
     """Yielda culture-taggade property-claims ur företags-raw_items (connector-fält +
     jobbförmåner). Item-källa (självverifierande); ingen assurance-nivå."""
+    # A1: persona-tagga culture-claims via dimension (DIMENSION_PERSONA_RELEVANCE) mot
+    # aktiva personor → de når persona-sektionerna OCH den persona-fråge-drivna FAQ:n.
+    active = get_active_personas(client_id)
     for snap in fs.raw_items_company_col(client_id).stream():
         raw = snap.to_dict() or {}
         if not raw.get("included_in_output", True):
@@ -65,6 +68,7 @@ def derive_culture_claims(client_id: str) -> Iterator[Claim]:
                 claim_kind="property", subject_ref="org", predicate=predicate, value=value,
                 statement=template.format(value=_display(value)), source=[source], confidence=1.0,
                 facet="culture", warmth_mode=warmth_mode, dimension=dimension,
+                audience=derive_claim_audience({"facet": "culture", "dimension": dimension}, active),
             )
 
         # Jobbförmåner i en levande annons = demonstrerad (item-källa). Förmånerna ligger
@@ -80,6 +84,7 @@ def derive_culture_claims(client_id: str) -> Iterator[Claim]:
                     claim_kind="property", subject_ref="org", predicate="jobBenefits",
                     value=benefit, statement=f"Erbjuder: {benefit}", source=[source], confidence=1.0,
                     facet="culture", warmth_mode="demonstrated", dimension="wellbeing",
+                    audience=derive_claim_audience({"facet": "culture", "dimension": "wellbeing"}, active),
                 )
 
 
@@ -95,6 +100,7 @@ def culture_claims_from_esg(client_id: str) -> Iterator[Claim]:
         return
     _sid, sub = max(subs, key=lambda kv: (kv[1].get("phase_reached") or 0))
     src = ClaimSource(kind="manual", label="uppgift från bolaget")
+    active = get_active_personas(client_id)  # A1: persona-tagga ESG-culture-claims via dimension
     core = sub.get("core") or {}
     basic = sub.get("csrd_basic") or {}
 
@@ -111,6 +117,7 @@ def culture_claims_from_esg(client_id: str) -> Iterator[Claim]:
             claim_kind="narrative", subject_ref="org", statement=statement[:200], source=[src],
             confidence=1.0, included_in_output=True, needs_review=False, review_status="approved",
             facet="culture", warmth_mode="demonstrated", dimension=dimension,
+            audience=derive_claim_audience({"facet": "culture", "dimension": dimension}, active),
         )
 
 
