@@ -29,6 +29,7 @@ import firestore_client as fs
 from schema_org import i18n
 from schema_org.claims import (
     culture_claims_from_esg,
+    derive_contract_claims,
     derive_culture_claims,
     derive_property_claims,
     derive_skill_claims,
@@ -816,6 +817,9 @@ def _iter_output_claims(client_id: str) -> Iterator[Claim]:
     # hasCredential) blir org-egenskaper, ESG-återanvändning blir prosa.
     yield from derive_culture_claims(client_id)
     yield from culture_claims_from_esg(client_id)
+    # Social proof (A4): vunna offentliga upphandlingar ur TED → narrative-claims med
+    # TED-notisen som källnod (tredjepartsverifierat, customer-taggat).
+    yield from derive_contract_claims(client_id)
 
 
 def _apply_property(node: dict[str, Any], predicate: str, value: Any) -> None:

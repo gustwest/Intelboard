@@ -121,6 +121,37 @@ def culture_claims_from_esg(client_id: str) -> Iterator[Claim]:
         )
 
 
+def derive_contract_claims(client_id: str) -> Iterator[Claim]:
+    """Yielda social-proof-claims ur TED-raw_items (vunna offentliga upphandlingar).
+
+    Tredjepartsverifierad social proof: en offentlig köpare valde bolaget i en
+    EU-annonserad upphandling. Källnod = TED-notisen (kind="item" → fotnot), alltså
+    STARKT källförsett — motsatsen till självdeklarerat. Taggas customer (om aktiv
+    persona); upphandlingsvinster är kundvänd social proof. Narrative → renderas som
+    prosa med klickbar TED-källa. Deterministiskt, ingen LLM (verbatim köpar-/årsdata).
+    """
+    active = get_active_personas(client_id)
+    audience = ["customer"] if "customer" in active else []
+    for snap in fs.raw_items_company_col(client_id).stream():
+        raw = snap.to_dict() or {}
+        if raw.get("source") != "ted" or not raw.get("included_in_output", True):
+            continue
+        extra = raw.get("extra") or {}
+        buyer = (extra.get("buyer") or "").strip()
+        if not buyer:
+            continue
+        year = extra.get("notice_year")
+        when = f" {year}" if year else ""
+        many = " (en av flera leverantörer)" if extra.get("multiple_winners") else ""
+        statement = f"Vald som leverantör av {buyer} i en offentlig upphandling{when}{many}."
+        yield Claim(
+            claim_kind="narrative", subject_ref="org", statement=statement[:200],
+            source=[ClaimSource(kind="item", item_id=snap.id, employee_id=None)],
+            confidence=1.0, included_in_output=True, needs_review=False,
+            review_status="approved", warmth_mode="demonstrated", audience=audience,
+        )
+
+
 def iter_culture_claims(client_id: str) -> Iterator[Claim]:
     """Alla culture-taggade claims: persisterade (godkända, ej rejected) + deterministiskt
     deriverade (connector-fält/jobbförmåner + ESG-återanvändning). Konsumeras av
