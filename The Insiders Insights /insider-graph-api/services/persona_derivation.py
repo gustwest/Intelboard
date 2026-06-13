@@ -72,6 +72,57 @@ def derive_audience_priorities(client_id: str, company_name: str | None = None) 
     return DerivationResult(audience_priorities=suggested, source_counts=source_counts)
 
 
+def derive_measurement_context(client_id: str, company_name: str | None = None) -> dict[str, Any]:
+    """A7: föreslå industry/topic/service_area ur hemsidedata för AI-synlighetsmätningens
+    platshållare. Persisterar inget — routern returnerar förslaget till UI:t (operatören
+    sparar via PUT /config eller redigerar fritt). Återanvänder samma scrape-input +
+    validator-LLM som derive_audience_priorities. Fält = None om datan inte räcker."""
+    website_items = _collect_website_items(client_id)
+    out: dict[str, Any] = {"source_counts": {"website": len(website_items)}}
+    if not website_items:
+        out["insufficient_data"] = True
+        return out
+    llm = make_validator()
+    if llm is None:
+        out["llm_unavailable"] = True
+        return out
+    raw = invoke_json(llm, _build_measurement_system_prompt(),
+                      _build_measurement_user_prompt(website_items, company_name))
+    if not raw:
+        out["llm_unavailable"] = True
+        return out
+    for key in ("industry", "topic", "service_area"):
+        val = raw.get(key)
+        out[key] = val.strip() if isinstance(val, str) and val.strip() else None
+    return out
+
+
+def _build_measurement_system_prompt() -> str:
+    return (
+        "Du analyserar ett bolags hemsidedata och föreslår de tre fält som fyller AI-"
+        "synlighetsmätningens frågor om bolagets MARKNAD (t.ex. 'Vilka är de ledande svenska "
+        "bolagen inom {industry}?' och 'Vilka företag rekommenderar du för {service_area}?'). "
+        "Förslagen ska vara SPECIFIKA marknadstermer en riktig köpare/kandidat söker på — "
+        "aldrig generiskt ('tjänster', 'IT').\n\n"
+        "- industry: bolagets bransch/marknad (1–3 ord), t.ex. 'molninfrastruktur'\n"
+        "- topic: området bolaget vill bli känt inom (1–3 ord), t.ex. 'AI-säkerhet'\n"
+        "- service_area: den konkreta tjänsten/leveransen (1–3 ord), t.ex. 'molnmigrering'\n\n"
+        "Returnera ENDAST ett JSON-objekt: {\"industry\": \"…\", \"topic\": \"…\", "
+        "\"service_area\": \"…\"}. Sätt ett fält till null om datan inte räcker för en specifik "
+        "term — gissa aldrig generiskt."
+    )
+
+
+def _build_measurement_user_prompt(website_items: list[dict[str, Any]], company_name: str | None) -> str:
+    parts: list[str] = [f"Bolag: {company_name or '(okänt)'}", f"\n[WEBSITE — {len(website_items)} sidor]"]
+    for it in website_items:
+        content = it.get("content", "")
+        snippet = content[:SNIPPET_CHARS] + ("…" if len(content) > SNIPPET_CHARS else "")
+        parts.append(f"URL: {it['url']}\nTitel: {it['title']}\nText: {snippet}\n")
+    parts.append("\nFöreslå industry/topic/service_area (specifika marknadstermer).")
+    return "\n".join(parts)
+
+
 # --- Datainsamling ur Firestore -----------------------------------------------
 
 

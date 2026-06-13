@@ -460,6 +460,22 @@ def derive_personas(client_id: str) -> dict[str, Any]:
     }
 
 
+@router.post("/{client_id}/derive-measurement-context")
+def derive_measurement_context_endpoint(client_id: str) -> dict[str, Any]:
+    """A7: föreslå industry/topic/service_area ur hemsidedata (persisterar inget — UI:t
+    visar förslaget, operatören sparar via PUT /config eller redigerar fritt)."""
+    snap = fs.client_doc(client_id).get()
+    if not snap.exists:
+        raise HTTPException(404, f"client not found: {client_id}")
+    data = snap.to_dict() or {}
+    result = persona_derivation.derive_measurement_context(client_id, company_name=data.get("company_name"))
+    if result.get("llm_unavailable"):
+        raise HTTPException(503, "derivering LLM otillgänglig (Vertex AI EU ej konfigurerad)")
+    if result.get("insufficient_data"):
+        raise HTTPException(422, "för lite hemsidedata — kör website-connectorn först")
+    return {"client_id": client_id, **result, "derived_at": datetime.now(timezone.utc).isoformat()}
+
+
 @router.get("/{client_id}/pipeline")
 def get_pipeline(client_id: str) -> dict[str, Any]:
     """Kundens läge i pipelinen, steg för steg, ur befintlig data.

@@ -37,6 +37,7 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
   const [serviceArea, setServiceArea] = useState('');
   // A7: kvittens att tom bransch/område/tjänsteområde är medvetet (annars generisk mätning).
   const [ackGeneric, setAckGeneric] = useState(false);
+  const [deriving, setDeriving] = useState(false);  // A7: auto-härled-anrop pågår
   const [language, setLanguage] = useState('sv');  // F4: mätspråk för polling
   const [personas, setPersonas] = useState<string[]>([]);
   const [questions, setQuestions] = useState<Record<string, string[]>>({});
@@ -80,6 +81,24 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
   function removeQ(cat: string, i: number) {
     setQuestions((p) => ({ ...p, [cat]: (p[cat] || []).filter((_, idx) => idx !== i) }));
     setDirty(true);
+  }
+
+  async function deriveContext() {
+    setDeriving(true);
+    setMsg(null);
+    try {
+      const d = await graphFetch<{ industry?: string | null; topic?: string | null; service_area?: string | null }>(
+        `/api/clients/${clientId}/derive-measurement-context`, { method: 'POST' });
+      if (d.industry) setIndustry(d.industry);
+      if (d.topic) setTopic(d.topic);
+      if (d.service_area) setServiceArea(d.service_area);
+      setDirty(true);
+      setMsg({ tone: 'ok', text: 'Förslag inhämtat ur hemsidedata — granska och spara.' });
+    } catch (e) {
+      setMsg({ tone: 'error', text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setDeriving(false);
+    }
   }
 
   async function save() {
@@ -161,7 +180,14 @@ export default function MeasurementConfigEditor({ clientId }: { clientId: string
             </p>
           </div>
 
-          {/* Bransch-platshållare — fyller {industry}/{topic}/{service_area} i default-frågorna */}
+          {/* A7: bransch-platshållare + auto-härled-förslag ur hemsidedata. */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+            <UI.FieldLabel>Bransch / område / tjänsteområde</UI.FieldLabel>
+            <button onClick={deriveContext} disabled={deriving} title="Föreslå värden ur bolagets hemsidedata (kräver website-connectorn)"
+              style={{ padding: '4px 10px', background: 'rgba(224,142,121,0.18)', color: C.accent, border: '1px solid rgba(224,142,121,0.4)', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: deriving ? 'wait' : 'pointer' }}>
+              {deriving ? 'Härleder…' : 'Auto-härled'}
+            </button>
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 18 }}>
             <div>
               <UI.FieldLabel>Bransch (industry)</UI.FieldLabel>
