@@ -584,5 +584,42 @@ class A2BudgetTest(unittest.TestCase):
         self.assertEqual(about.count("<p>"), 1)
 
 
+class PersonaFaqTest(unittest.TestCase):
+    """A1: en claim taggad (persona × dimension) blir en persona-fråge-FAQ — personans
+    NEUTRALA probe-fråga (samma som risk-frågor) besvarad av claimet, augmenterar de
+    fasta predikat-frågorna. Frågor utan svarande claim tas inte med."""
+
+    def test_persona_question_becomes_faq_entry(self):
+        fakefs.reset(
+            client={"company_name": "Acme AB", "website": "https://acme.se",
+                    "personas": {"active": ["customer"]}},
+            company_items={"bv1": {"schema_type": "Organization", "url": "https://acme.se/om",
+                                   "published_at": datetime(2024, 3, 1, tzinfo=timezone.utc),
+                                   "included_in_output": True, "extra": {"name": "Acme AB"}}},
+            claims={"c1": {"claim_kind": "narrative", "subject_ref": "org",
+                           "statement": "Acme publicerar priser och leveranstider öppet på webben",
+                           "audience": ["customer"], "facet": "culture", "dimension": "transparency",
+                           "source": [{"kind": "item", "item_id": "bv1"}], "included_in_output": True}},
+        )
+        html = render_profile_html("acme")
+        faq = html.split('class="faq"', 1)[1].split("</section>", 1)[0]
+        # Kundens transparens-fråga, utan "Som potentiell kund,"-prefix, + svaret + källa.
+        self.assertIn("Hur transparenta är Acme AB", faq)
+        self.assertIn("publicerar priser och leveranstider", faq)
+        self.assertNotIn("Som potentiell kund", faq)  # persona-prefixet ska strippas
+
+    def test_no_dimension_no_persona_faq(self):
+        """Claim med audience men UTAN dimension (t.ex. demografi) ger ingen persona-FAQ."""
+        fakefs.reset(
+            client={"company_name": "Acme AB", "website": "https://acme.se"},
+            claims={"c1": {"claim_kind": "narrative", "subject_ref": "org",
+                           "statement": "Något kundtaggat utan dimension",
+                           "audience": ["customer"],
+                           "source": [{"kind": "manual"}], "included_in_output": True}},
+        )
+        html = render_profile_html("acme")
+        self.assertNotIn("Hur transparenta är", html)
+
+
 if __name__ == "__main__":
     unittest.main()

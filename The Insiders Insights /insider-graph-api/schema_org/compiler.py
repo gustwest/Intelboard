@@ -116,6 +116,9 @@ class Fact:
     # stödjer JUST detta claims bruk av källan. Starkare än Source.excerpt (käll-nivå,
     # A2) → visas inline vid claimet. Tom = visa bara namn+datum.
     quotes: dict[int, str] = field(default_factory=dict)
+    # Värmedimension (A1): culture-claimens dimension (inclusion/wellbeing/…). Bärs hit
+    # så build_faq kan matcha en persona-fråga (persona × dimension) mot ett svarande claim.
+    dimension: str | None = None
 
 
 @dataclass
@@ -131,6 +134,8 @@ class Prose:
     verification_id: str | None = None
     # Claim-nivå-citat (A2.1) — som Fact. Vid dedup unionas mappen (se _merge_prose).
     quotes: dict[int, str] = field(default_factory=dict)
+    # Värmedimension (A1) — som Fact. Bärs hit för persona-fråge-matchning i build_faq.
+    dimension: str | None = None
 
 
 @dataclass
@@ -306,11 +311,12 @@ def build_render_model(client_id: str) -> RenderModel:
                 manual_label = label
 
         audience = list(getattr(claim, "audience", None) or [])
+        dimension = getattr(claim, "dimension", None)  # A1: culture-dimension för persona-FAQ-matchning
         assurance_level, verification_id = _strongest_assurance(claim.source)
         if claim.claim_kind == "property" and claim.predicate:
             facts.append(Fact(claim.predicate, claim.value, claim.statement, footnotes,
                               manual_label, claim.confidence, audience,
-                              assurance_level, verification_id, quotes))
+                              assurance_level, verification_id, quotes, dimension))
         elif claim.claim_kind == "narrative" and claim.statement:
             statement = claim.statement.strip()
             # Undanta BARA attesterad demografi (andel av LinkedIn-följare/-besökare) —
@@ -329,7 +335,7 @@ def build_render_model(client_id: str) -> RenderModel:
             # claims renderas i tredje person vid recompile — utan re-extraktion.
             statement = claim_voice.neutralize(statement, data.get("company_name") or client_id)
             _merge_prose(prose_by_key, statement, footnotes, manual_label,
-                         audience, assurance_level, verification_id, quotes)
+                         audience, assurance_level, verification_id, quotes, dimension)
 
     # Starkast bevisade fakta först. Stabil sortering → värden med samma vikt
     # behåller upptäcktsordningen. Avgör ordningen på t.ex. knowsAbout-listan
@@ -708,7 +714,66 @@ def build_faq(model: RenderModel) -> list[FaqEntry]:
         entries.append(
             FaqEntry(q_tmpl.format(name=name), a_tmpl.format(name=name, value=value), sorted(grouped[predicate]["footnotes"]))
         )
+
+    # A1: persona-fråge-drivna entries — de AKTIVA personornas faktiska frågor (probe-
+    # batterierna, samma som risk-frågor/AI-synlighet) besvarade av källförsedda claims
+    # taggade för (persona × dimension). Augmenterar de fasta predikat-frågorna ovan;
+    # bara frågor som FAKTISKT besvaras tas med (gap hanteras av alignment_audit).
+    entries.extend(_persona_faq_entries(model, name))
     return entries
+
+
+def _strip_persona_prefix(q: str) -> str:
+    """Probe-frågorna inleds "Som potentiell kund, …" (persona-vinkel för mätning). Som
+    FAQ-fråga på bolagets egen sida läser det renare utan prefixet — personan är implicit."""
+    m = re.match(r"^Som [^,]+,\s*(.+)$", q)
+    if m:
+        s = m.group(1).strip()
+        return (s[0].upper() + s[1:]) if s else q
+    return q
+
+
+def _persona_faq_entries(model: RenderModel, name: str) -> list[FaqEntry]:
+    """FAQ-poster ur de aktiva personornas NEUTRALA probe-frågor, besvarade av
+    källförsedda claims taggade för samma (persona × dimension). Bara frågor med ett
+    svarande claim tas med. Aktiva personor härleds ur claims audience-fält
+    (derive_claim_audience taggar bara aktiva personor), så ingen extra Firestore-läsning."""
+    from services import persona_registry as pr
+
+    by_pd: dict[tuple[str, str], tuple[str, list[int]]] = {}
+    order: list[tuple[str, str]] = []
+    for entry in [*model.facts, *model.prose]:
+        dim = getattr(entry, "dimension", None)
+        if not dim:
+            continue
+        stmt = (entry.statement or "").strip()
+        if not stmt:
+            continue
+        for pid in getattr(entry, "audience", None) or []:
+            key = (pid, dim)
+            if key not in by_pd:
+                by_pd[key] = (stmt, list(entry.footnotes))
+                order.append(key)
+
+    reg_order = {p.id: i for i, p in enumerate(pr.all_personas())}
+    out: list[FaqEntry] = []
+    seen_q: set[str] = set()
+    for pid, dim in sorted(order, key=lambda k: (reg_order.get(k[0], 999), k[1])):
+        try:
+            persona = pr.get(pid)
+        except KeyError:
+            continue
+        templates, _lang = pr.probes_for(persona, model.language)
+        tpl = templates.get(dim)
+        if not tpl:
+            continue
+        question = _strip_persona_prefix(tpl[0].format(company=name))
+        if question in seen_q:
+            continue
+        seen_q.add(question)
+        stmt, footnotes = by_pd[(pid, dim)]
+        out.append(FaqEntry(question, stmt.rstrip(".") + ".", sorted(set(footnotes))))
+    return out
 
 
 def _iter_output_claims(client_id: str) -> Iterator[Claim]:
@@ -756,7 +821,7 @@ def _merge_prose(
     bag: dict[str, "Prose"], statement: str, footnotes: list[int],
     manual_label: str | None, audience: list[str] | None = None,
     assurance_level: str | None = None, verification_id: str | None = None,
-    quotes: dict[int, str] | None = None,
+    quotes: dict[int, str] | None = None, dimension: str | None = None,
 ) -> None:
     """Slå ihop snarlika narrative-claims (samma normaliserade text) och förena källor.
     Audience-fältet unionas — ett sammanslaget påstående är relevant för alla personor
@@ -769,7 +834,7 @@ def _merge_prose(
     existing = bag.get(key)
     if existing is None:
         bag[key] = Prose(statement, list(footnotes), manual_label, list(audience),
-                         assurance_level, verification_id, dict(quotes))
+                         assurance_level, verification_id, dict(quotes), dimension)
         return
     for n in footnotes:
         if n not in existing.footnotes:
@@ -786,6 +851,8 @@ def _merge_prose(
     if _ASSURANCE_RANK.get(assurance_level, -1) > _ASSURANCE_RANK.get(existing.assurance_level, -1):
         existing.assurance_level = assurance_level
         existing.verification_id = verification_id
+    if existing.dimension is None and dimension:
+        existing.dimension = dimension
 
 
 def _strongest_assurance(sources: list[ClaimSource]) -> tuple[str | None, str | None]:
