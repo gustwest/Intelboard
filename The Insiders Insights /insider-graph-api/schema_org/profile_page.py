@@ -11,16 +11,50 @@ from __future__ import annotations
 
 import html
 import json
+from dataclasses import dataclass
 from datetime import datetime
 
 from schema_org import i18n
-from schema_org.compiler import RenderModel, build_faq, build_render_model, compile_client
+from schema_org.compiler import _ASSURANCE_RANK, RenderModel, build_faq, build_render_model, compile_client
 
 
-def render_profile_html(client_id: str) -> str:
+@dataclass(frozen=True)
+class RenderBudget:
+    """A2: innehållsbudget = *prioritering, inte hård trunkering*. Default = inga tak
+    (no-truncation-default behålls — evidensbackat beslut 2026-06-12: längd i sig är
+    inte hävstången, grundning + position är). När ett tak SÄTTS behålls det citerbara
+    kärnskelettet (ledmening, faktapanel, källförsedda claims, källor) alltid; prosan
+    beskärs efter prioritet (assurance-nivå, sedan antal källor) men renderas i
+    originalordning; FAQ/persona-sektioner är redan prioritetsordnade."""
+
+    max_prose: int | None = None
+    max_faq: int | None = None
+    max_persona_sections: int | None = None
+
+
+DEFAULT_BUDGET = RenderBudget()
+
+
+def render_profile_html(client_id: str, budget: RenderBudget = DEFAULT_BUDGET) -> str:
     model = build_render_model(client_id)
     graph = compile_client(client_id)
-    return _render(model, graph)
+    return _render(model, graph, budget)
+
+
+def _prose_priority(p) -> tuple[int, int]:
+    """A2-rankningssignal för vilken prosa som behålls när max_prose biter.
+    `Prose` saknar `confidence` (bara `Fact` har det) → proxy: (assurance-rank, antal
+    källor). Starkare bestyrkt + fler källor = behålls först."""
+    return (_ASSURANCE_RANK.get(getattr(p, "assurance_level", None), -1), len(p.footnotes))
+
+
+def _budgeted_prose(prose: list, max_prose: int | None) -> list:
+    """Välj de max_prose högst-rankade styckena men BEHÅLL originalordningen (läsbarhet).
+    None eller färre än taket → orörd lista (no-op, default)."""
+    if max_prose is None or len(prose) <= max_prose:
+        return prose
+    keep = set(id(p) for p in sorted(prose, key=_prose_priority, reverse=True)[:max_prose])
+    return [p for p in prose if id(p) in keep]
 
 
 def render_llms_txt(client_id: str) -> str:
@@ -122,12 +156,15 @@ def _fact_value_text(value) -> str:
     return ", ".join(str(v) for v in value) if isinstance(value, list) else str(value)
 
 
-def _audience_sections_html(model: RenderModel, by_number) -> str:
+def _audience_sections_html(model: RenderModel, by_number, max_sections: int | None = None) -> str:
     """A7: persona-sektioner i HTML — spegling av llms.txt:s `_audience_sections`.
 
     Grupperar persona-taggade facts + prose under "För {persona}"-rubriker med synlig
     källattribution (A2). Samma medvetna redundans (en claim taggad för flera personor
-    visas under varje). Tom sträng om inga persona-taggade claims (allt evergreen)."""
+    visas under varje). Tom sträng om inga persona-taggade claims (allt evergreen).
+
+    A2: max_sections beskär antalet persona-sektioner (registry-ordning = prioritet).
+    None = inget tak (default)."""
     from services import persona_registry as pr
 
     loc = i18n.strings(model.language)
@@ -164,10 +201,12 @@ def _audience_sections_html(model: RenderModel, by_number) -> str:
                 f'<section class="audience"><h2>{heading}</h2>'
                 f'<ul>{"".join(lis)}</ul></section>'
             )
+            if max_sections is not None and len(out) >= max_sections:
+                break
     return "\n".join(out)
 
 
-def _render(model: RenderModel, graph: dict) -> str:
+def _render(model: RenderModel, graph: dict, budget: RenderBudget = DEFAULT_BUDGET) -> str:
     loc = i18n.strings(model.language)
     name = html.escape(model.company_name or model.client_id)
     jsonld = json.dumps(graph, ensure_ascii=False, default=str)
@@ -187,18 +226,28 @@ def _render(model: RenderModel, graph: dict) -> str:
         f'<h2>{loc["heading_facts"]}</h2>\n<section class="facts">\n<dl>\n{facts_rows}\n</dl>\n</section>'
         if model.facts else ""
     )
-    about_paras = "\n".join(f"<p>{_prose_paragraph(p, by_number, loc)}</p>" for p in model.prose)
+    # A2: innehållsbudget på prosan (default = inga tak → orörd lista).
+    prose = _budgeted_prose(model.prose, budget.max_prose)
+    about_paras = "\n".join(f"<p>{_prose_paragraph(p, by_number, loc)}</p>" for p in prose)
     about_section = (
         f'<h2>{loc["heading_about"].format(name=name)}</h2>\n<section class="about">\n{about_paras}\n</section>'
-        if model.prose else ""
+        if prose else ""
     )
     sources_html = "\n".join(_source_item(s, loc) for s in model.sources)
-    faq_html = _faq_section(model, by_number)
+    faq_html = _faq_section(model, by_number, budget.max_faq)
     roles_html = _roles_section(model)
+    # A3: medarbetarexpertis (R1) som synlig sektion — speglar Claim-noderna (about →
+    # Person) som tidigare bara fanns i JSON-LD.
+    expertise_html = _person_expertise_section(model, by_number)
     trust = _trust_line(model)
+    # A3: org.nr som synlig rad — entitetsdisambiguering, tidigare bara i JSON-LD identifier.
+    orgnr_html = (
+        f'<p class="orgnr">{loc["orgnr_label"]}: {html.escape(str(model.org_number))}</p>'
+        if model.org_number else ""
+    )
     # A7: persona-sektioner även i HTML (fanns bara i llms.txt) — Googlebot/människor
     # ser samma målgruppsstruktur som AI-crawlers. A9: logotyp ur Organization-noden.
-    audience_html = _audience_sections_html(model, by_number)
+    audience_html = _audience_sections_html(model, by_number, budget.max_persona_sections)
     # Hämta org-noden via @type, inte via index 0 — grafen kan ha en ProfilePage-
     # container före Organization.
     org_node = next((n for n in graph.get("@graph") or [] if n.get("@type") == "Organization"), {})
@@ -249,6 +298,13 @@ def _render(model: RenderModel, graph: dict) -> str:
   .facts dd {{ margin: 0; }}
   sup a {{ color: #2563eb; text-decoration: none; font-size: .7em; padding: 0 .1em; }}
   .manual {{ color: #888; font-size: .8em; font-style: italic; white-space: nowrap; }}
+  .assurance {{ color: #15803d; font-size: .8em; font-weight: 600; white-space: nowrap; }}
+  .orgnr {{ color: #777; font-size: .8rem; margin: -.75rem 0 1rem; }}
+  .expertise {{ margin-top: 2rem; }}
+  .expertise h3 {{ font-size: .98rem; margin: 1rem 0 .2rem; }}
+  .expertise .ptitle {{ color: #666; font-weight: 400; }}
+  .expertise ul {{ margin: .2rem 0; padding-left: 1.2rem; }}
+  .expertise li {{ margin: .25rem 0; }}
   .cite {{ color: #555; font-size: .85em; }}
   .cite a {{ color: #555; text-decoration: none; border-bottom: 1px dotted #bbb; }}
   .quote {{ font-style: italic; color: #444; }}
@@ -269,9 +325,11 @@ def _render(model: RenderModel, graph: dict) -> str:
 <main>
 {lead_html}
 <p class="trust">{trust}</p>
+{orgnr_html}
 {facts_section}
 {about_section}
 {audience_html}
+{expertise_html}
 {roles_html}
 {faq_html}
 {sources_section}
@@ -296,13 +354,56 @@ def _roles_section(model: RenderModel) -> str:
     return f'<section class="roles"><h2>{loc["heading_roles"]}</h2><ul>{rows}</ul></section>'
 
 
-def _faq_section(model: RenderModel, by_number) -> str:
+def _person_expertise_section(model: RenderModel, by_number) -> str:
+    """A3: godkända person-expertis-claims (R1) som SYNLIG sektion — speglar Claim-
+    noderna (about → Person) i grafen, som tidigare bara fanns maskinläsbart. Grupperar
+    per medarbetare med namn + ev. titel och källförsedd evidens (A2). Person utan
+    namnnod (opt-out/raderad → GDPR) hoppas över. Tom sträng = inga person-claims."""
+    if not model.person_claims:
+        return ""
+    loc = i18n.strings(model.language)
+    by_pid = {p["@id"]: p for p in model.persons}  # @id → Person-nod (namn, titel)
+    grouped: dict[str, list] = {}
+    order: list[str] = []
+    for pc in model.person_claims:
+        if pc.person_id not in grouped:
+            grouped[pc.person_id] = []
+            order.append(pc.person_id)
+        grouped[pc.person_id].append(pc)
+
+    blocks: list[str] = []
+    for pid in order:
+        node = by_pid.get(pid) or {}
+        person_name = node.get("name")
+        if not person_name:
+            continue  # ingen publik Person-nod (opt-out/raderad) → claim publiceras ej
+        title = node.get("jobTitle")
+        heading = html.escape(person_name) + (
+            f' — <span class="ptitle">{html.escape(title)}</span>' if title else ""
+        )
+        items = "".join(
+            f"<li>{html.escape(pc.statement.rstrip('.'))}"
+            f"{_footnote_marks(pc.footnotes, loc)}{_inline_sources(pc.footnotes, by_number, loc)}</li>"
+            for pc in grouped[pid]
+        )
+        blocks.append(f'<div class="person"><h3>{heading}</h3><ul>{items}</ul></div>')
+    if not blocks:
+        return ""
+    return f'<section class="expertise"><h2>{loc["heading_person_expertise"]}</h2>{"".join(blocks)}</section>'
+
+
+def _faq_section(model: RenderModel, by_number, max_faq: int | None = None) -> str:
     """A6: FAQ är en bärare av tät, KÄLLFÖRSEDD text. Tidigare visades bara fotnots-
     siffran [n] i svaret — den synliga inline-källan (namn · datum), som är hela poängen
-    med evidensen inuti FAQ:n, saknades. Nu speglas A2-bevisningen även här."""
+    med evidensen inuti FAQ:n, saknades. Nu speglas A2-bevisningen även här.
+
+    A2: max_faq beskär listan (FAQ är redan prioritetsordnad: intro + `_FAQ_ORDER`).
+    None = inget tak (default)."""
     faq = build_faq(model)
     if not faq:
         return ""
+    if max_faq is not None:
+        faq = faq[:max_faq]
     loc = i18n.strings(model.language)
     rows = "".join(
         f'<div class="qa"><dt>{html.escape(e.question)}</dt>'
@@ -328,8 +429,11 @@ def _merge_facts_by_predicate(facts):
     konsoliderad "Verksamhet: AI, AIO, …" (= det grafen och ingressen redan visar).
     Värden unionas (ordningsbevarat), fotnoter/citat slås ihop så A2-bevisningen står
     kvar, första manuella etiketten behålls. Predikat-ordningen = första förekomst
-    (fakta är redan konfidens-sorterade, så starkaste predikatet kommer först)."""
-    from schema_org.compiler import Fact
+    (fakta är redan konfidens-sorterade, så starkaste predikatet kommer först).
+
+    Bestyrkandenivån (A3) tas som den STARKASTE bland de sammanslagna värdena så
+    assurance-etiketten inte tappas när flera enkel-värda Fact slås till en rad."""
+    from schema_org.compiler import _ASSURANCE_RANK, Fact
 
     order: list[str] = []
     by_pred: dict[str, Fact] = {}
@@ -350,6 +454,8 @@ def _merge_facts_by_predicate(facts):
             merged.quotes.setdefault(n, q)
         if merged.manual_label is None and f.manual_label:
             merged.manual_label = f.manual_label
+        if _ASSURANCE_RANK.get(f.assurance_level, -1) > _ASSURANCE_RANK.get(merged.assurance_level, -1):
+            merged.assurance_level = f.assurance_level
     for merged in by_pred.values():
         merged.footnotes.sort()
     return [by_pred[p] for p in order]
@@ -381,6 +487,14 @@ def _evidence(entry, by_number, loc) -> str:
         out += inline
     if entry.manual_label:
         out += f' <span class="manual">({html.escape(entry.manual_label)})</span>'
+    # Bestyrkandenivå (A3, Bron #1) som synlig text — den starkaste trovärdighets-
+    # signalen, tidigare bara maskinläsbar i ClaimReview (numera död markup). Visas
+    # bara för manuellt verifierade claims (auto-deriverade saknar nivå → ingen etikett).
+    level = getattr(entry, "assurance_level", None)
+    if level:
+        label = loc["assurance_labels"].get(level)
+        if label:
+            out += f' <span class="assurance">✓ {html.escape(label)}</span>'
     return out
 
 

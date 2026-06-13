@@ -41,7 +41,18 @@ _STRINGS: dict[str, dict[str, Any]] = {
         "heading_sources": "Källor",
         "heading_faq": "Vanliga frågor",
         "heading_roles": "Aktuella roller",
+        "heading_person_expertise": "Medarbetarnas expertis",
         "audience_heading": "För {persona}",
+        # Org.nr-rad (A3) — synlig entitetsdisambiguering.
+        "orgnr_label": "Org.nr",
+        # Bestyrkandenivå (A3, Bron #1) som SYNLIG text — ClaimReview-markup är död
+        # (Google la ned fact-check juni 2025), så assurance lyfts som läsbar etikett
+        # inline vid claimet i stället. Nyckel = assurance_level.
+        "assurance_labels": {
+            "self_declared": "Självdeklarerad",
+            "third_party_reviewed": "Tredjepartsgranskad",
+            "independently_assured": "Oberoende bestyrkt",
+        },
         # Persona-etiketter per språk (nyckel = persona.id). Tidigare hårdkodades
         # persona.label_sv även på engelska profiler → svenska rubriker. Fallback i
         # anroparen på label_sv om id saknas här.
@@ -109,7 +120,14 @@ _STRINGS: dict[str, dict[str, Any]] = {
         "heading_sources": "Sources",
         "heading_faq": "Frequently asked questions",
         "heading_roles": "Open roles",
+        "heading_person_expertise": "Team expertise",
         "audience_heading": "For {persona}",
+        "orgnr_label": "Company reg. no.",
+        "assurance_labels": {
+            "self_declared": "Self-declared",
+            "third_party_reviewed": "Third-party reviewed",
+            "independently_assured": "Independently assured",
+        },
         "persona_labels": {
             "customer": "customer", "talent": "talent", "investor": "investor",
             "partner": "partner", "media": "media", "regulator": "regulator",

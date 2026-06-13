@@ -170,6 +170,9 @@ class RenderModel:
     org_id: str
     company_name: str | None
     same_as: list[str]
+    # Svenskt org.nr (A3): exponeras synligt på profilsidan som entitetsdisambiguering,
+    # inte bara i JSON-LD `identifier`. Offentlig uppgift → ingen integritetsrisk.
+    org_number: str | None
     facts: list[Fact]
     prose: list[Prose]
     sources: list[Source]
@@ -355,6 +358,7 @@ def build_render_model(client_id: str) -> RenderModel:
         org_id=org_id,
         company_name=data.get("company_name"),
         same_as=same_as,
+        org_number=data.get("org_number"),
         facts=facts,
         prose=prose,
         sources=ordered_sources,

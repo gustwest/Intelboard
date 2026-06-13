@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import fakefs  # installerar fake firestore_client — måste importeras först
 from schema_org.compiler import build_render_model, compile_client
-from schema_org.profile_page import render_llms_txt, render_profile_html
+from schema_org.profile_page import RenderBudget, render_llms_txt, render_profile_html
 
 
 def _setup():
@@ -466,6 +466,110 @@ class ClaimLevelCitationTest(unittest.TestCase):
         html = render_profile_html("acme")
         before_sources = html.split('class="sources"')[0]
         self.assertNotIn("Marknadsledande", before_sources)
+
+
+class A3VisibilityTest(unittest.TestCase):
+    """A3 (2026-06-12): data som tidigare bara fanns i JSON-LD ska nu synas i HTML."""
+
+    def _setup_a3(self):
+        fakefs.reset(
+            client={"company_name": "Acme AB", "website": "https://acme.se",
+                    "org_number": "5566778899"},
+            employees={"e1": {"name": "Anna Svensson", "title": "Forskningschef"}},
+            company_items={
+                "bv1": {
+                    "schema_type": "Organization",
+                    "url": "https://www.allabolag.se/5566778899",
+                    "published_at": datetime(2024, 3, 1, tzinfo=timezone.utc),
+                    "included_in_output": True,
+                    "extra": {"name": "Acme AB"},
+                }
+            },
+            claims={
+                "pc1": {"claim_kind": "narrative", "subject_ref": "e1",
+                        "statement": "Leder bolagets forskning inom maskininlärning",
+                        "source": [{"kind": "item", "item_id": "bv1"}],
+                        "included_in_output": True},
+                "cert": {"claim_kind": "property", "subject_ref": "org",
+                         "predicate": "hasCredential", "value": "ISO 27001",
+                         "source": [{"kind": "item", "item_id": "bv1",
+                                     "assurance_level": "independently_assured"}],
+                         "included_in_output": True},
+            },
+        )
+
+    def test_person_expertise_section_visible(self):
+        """Person-expertis-claims (R1) renderas synligt, inte bara i grafen."""
+        self._setup_a3()
+        html = render_profile_html("acme")
+        before_sources = html.split('class="sources"')[0]
+        self.assertIn("Medarbetarnas expertis", before_sources)
+        self.assertIn("Anna Svensson", before_sources)
+        self.assertIn("Forskningschef", before_sources)
+        self.assertIn("Leder bolagets forskning inom maskininlärning", before_sources)
+        self.assertIn('class="expertise"', html)
+
+    def test_assurance_level_visible_as_text(self):
+        """Bestyrkandenivån (Bron #1) syns som läsbar text inline vid claimet."""
+        self._setup_a3()
+        html = render_profile_html("acme")
+        self.assertIn('class="assurance"', html)
+        self.assertIn("Oberoende bestyrkt", html)
+
+    def test_org_number_visible(self):
+        self._setup_a3()
+        html = render_profile_html("acme")
+        self.assertIn('class="orgnr"', html)
+        self.assertIn("Org.nr", html)
+        self.assertIn("5566778899", html)
+
+    def test_no_assurance_no_label(self):
+        """Auto-deriverade claims utan assurance får ingen etikett (proportionellt)."""
+        _setup()  # claim-källa utan assurance_level
+        self.assertNotIn('class="assurance"', render_profile_html("acme"))
+
+    def test_no_org_number_no_row(self):
+        _setup()  # ingen org_number i fixturet
+        self.assertNotIn('class="orgnr"', render_profile_html("acme"))
+
+
+class A2BudgetTest(unittest.TestCase):
+    """A2 (2026-06-12): budget = prioritering, default INGA tak (no-truncation)."""
+
+    def _setup_two_prose(self):
+        fakefs.reset(
+            client={"company_name": "Acme AB", "website": "https://acme.se"},
+            company_items={
+                "bv1": {"schema_type": "Organization", "url": "https://acme.se/om",
+                        "published_at": datetime(2024, 3, 1, tzinfo=timezone.utc),
+                        "included_in_output": True, "extra": {"name": "Acme AB"}},
+            },
+            claims={
+                "p1": {"claim_kind": "narrative", "subject_ref": "org",
+                       "statement": "Levererar inbyggda system till fordonsindustrin",
+                       "source": [{"kind": "item", "item_id": "bv1",
+                                   "assurance_level": "independently_assured"}],
+                       "included_in_output": True},
+                "p2": {"claim_kind": "narrative", "subject_ref": "org",
+                       "statement": "Erbjuder konsulttjänster inom mjukvara",
+                       "source": [{"kind": "manual"}], "included_in_output": True},
+            },
+        )
+
+    def test_default_budget_keeps_all_prose(self):
+        self._setup_two_prose()
+        about = render_profile_html("acme").split('class="about"', 1)[1].split("</section>", 1)[0]
+        self.assertIn("Levererar inbyggda system", about)
+        self.assertIn("Erbjuder konsulttjänster", about)
+
+    def test_max_prose_keeps_highest_priority(self):
+        """max_prose=1 behåller det starkast bestyrkta stycket (assurance > antal källor)."""
+        self._setup_two_prose()
+        html = render_profile_html("acme", RenderBudget(max_prose=1))
+        about = html.split('class="about"', 1)[1].split("</section>", 1)[0]
+        self.assertIn("Levererar inbyggda system", about)        # independently_assured
+        self.assertNotIn("Erbjuder konsulttjänster", about)      # manual, lägre prioritet
+        self.assertEqual(about.count("<p>"), 1)
 
 
 if __name__ == "__main__":
